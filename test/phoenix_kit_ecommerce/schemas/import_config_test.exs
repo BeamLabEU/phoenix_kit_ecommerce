@@ -77,6 +77,48 @@ defmodule PhoenixKitEcommerce.Schemas.ImportConfigTest do
     end
   end
 
+  describe "keyword list length cap" do
+    test "accepts a list at the 100-entry limit" do
+      cs =
+        ImportConfig.changeset(%ImportConfig{}, %{
+          name: "x",
+          include_keywords: for(i <- 1..100, do: "kw#{i}")
+        })
+
+      assert cs.valid?
+    end
+
+    test "rejects an include_keywords list over the limit" do
+      cs =
+        ImportConfig.changeset(%ImportConfig{}, %{
+          name: "x",
+          include_keywords: for(i <- 1..101, do: "kw#{i}")
+        })
+
+      assert "cannot contain more than 100 entries" in errors_on(cs).include_keywords
+    end
+
+    test "rejects an exclude_keywords list over the limit" do
+      cs =
+        ImportConfig.changeset(%ImportConfig{}, %{
+          name: "x",
+          exclude_keywords: for(i <- 1..101, do: "kw#{i}")
+        })
+
+      assert "cannot contain more than 100 entries" in errors_on(cs).exclude_keywords
+    end
+
+    test "rejects an exclude_phrases list over the limit" do
+      cs =
+        ImportConfig.changeset(%ImportConfig{}, %{
+          name: "x",
+          exclude_phrases: for(i <- 1..101, do: "phrase #{i}")
+        })
+
+      assert "cannot contain more than 100 entries" in errors_on(cs).exclude_phrases
+    end
+  end
+
   describe "factory helpers" do
     test "from_legacy_defaults/0 and no_filter_config/0 build valid structs" do
       assert %ImportConfig{is_default: true} = ImportConfig.from_legacy_defaults()

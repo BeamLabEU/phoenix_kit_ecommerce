@@ -19,6 +19,11 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   @per_page 25
 
+  # Last-resort currency symbol used only when no default currency is
+  # configured in Billing (i.e. `@currency` resolved to nil at mount).
+  # When a currency struct is present we always defer to its own symbol.
+  @default_currency_symbol "$"
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -915,7 +920,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   defp format_price(price, nil) do
     # Fallback if no currency configured
-    "$#{Decimal.round(price, 2)}"
+    "#{@default_currency_symbol}#{Decimal.round(price, 2)}"
   end
 
   defp format_price(price, currency) do
