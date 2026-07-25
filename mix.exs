@@ -159,7 +159,9 @@ defmodule PhoenixKitEcommerce.MixProject do
   defp docs do
     [
       main: "PhoenixKitEcommerce",
-      source_ref: "v#{@version}",
+      # Tags in this repo are bare version numbers, not v-prefixed — a "v" ref
+      # points at a tag that does not exist and 404s every HexDocs source link.
+      source_ref: @version,
       source_url: @source_url
     ]
   end
