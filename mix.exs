@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.1.11"
+  @version "0.1.12"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -103,7 +103,10 @@ defmodule PhoenixKitEcommerce.MixProject do
   defp deps do
     [
       # PhoenixKit provides the Module behaviour and Settings API.
-      pk_dep(:phoenix_kit, "~> 1.7.189"),
+      # 1.7.214+ required: Scope.can_access_admin_area?/1 (the rename of the
+      # now-`@deprecated` Scope.admin?/1) — an older core has no such function,
+      # so this is an UndefinedFunctionError at runtime, not a warning.
+      pk_dep(:phoenix_kit, "~> 1.7.214"),
 
       # Gettext for per-module i18n of sidebar tab labels.
       {:gettext, "~> 1.0"},

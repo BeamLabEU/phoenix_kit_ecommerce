@@ -102,7 +102,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("delete", %{"uuid" => uuid}, socket) do
-    if Scope.admin?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
       category = Shop.get_category!(uuid)
 
       case Shop.delete_category(category) do
@@ -162,7 +162,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_change_status", %{"status" => status}, socket) do
-    if Scope.admin?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
       uuids = socket.assigns.bulk_uuids
       count = Shop.bulk_update_category_status(uuids, status)
 
@@ -190,7 +190,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
-    if Scope.admin?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
       uuids = socket.assigns.bulk_uuids
       parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
       count = Shop.bulk_update_category_parent(uuids, parent_uuid)
@@ -209,7 +209,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_delete", _params, socket) do
-    if Scope.admin?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
       uuids = socket.assigns.bulk_uuids
       count = Shop.bulk_delete_categories(uuids)
 

@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.12 - 2026-07-27
+
+### Changed
+- **Stop calling the deprecated `PhoenixKit.Users.Auth.Scope.admin?/1`.** All 4
+  call sites (`Web.Categories`) now call `Scope.can_access_admin_area?/1`, the
+  name core renamed it to in phoenix_kit 1.7.214. The old name is a pure
+  `@deprecated` delegate, so **no behavior change** — this only silences the
+  deprecation warning host apps were eating on every compile of this library,
+  with no way to fix it themselves.
+- **Dependency floor raised to `phoenix_kit ~> 1.7.214`** (from `~> 1.7.189`) —
+  `can_access_admin_area?/1` does not exist below it, so an older core would be
+  an `UndefinedFunctionError` at call time rather than a warning. This was not
+  hypothetical: the lockfile was resolving 1.7.194.
+- Dependency lockfile bumps: `phoenix_kit` 1.7.194 → 1.7.216, `phoenix_live_view`
+  1.2.7 → 1.2.8, `beamlab_ex_aws_sqs` 4.0.0 → 5.0.0, `beamlab_countries` 1.0.8 →
+  1.1.0, `fresco` 0.8.0 → 0.10.0, `etcher` 0.7.2 → 0.9.0, `ex_ast` 0.12.10 →
+  0.13.1, `elixir_make` 0.9.0 → 0.10.0, `mdex` 0.13.3 → 0.13.4, `mdex_native`
+  0.2.5 → 0.2.6, `hackney` 4.5.2 → 4.6.0, `req` 0.6.2 → 0.6.3, `tessera` 0.3.2 →
+  0.3.4, `bandit` 1.12.0 → 1.12.4, `igniter` 0.8.2 → 0.8.3, `leaf` 0.3.0 → 0.3.2,
+  plus `plug_crypto`, `mint`, `quic`, `lazy_html`, `glob_ex`, `earmark_parser`.
+
 ## 0.1.11 - 2026-07-16
 
 ### Added

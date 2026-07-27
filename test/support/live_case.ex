@@ -57,7 +57,7 @@ defmodule PhoenixKitEcommerce.LiveCase do
   Returns a real `PhoenixKit.Users.Auth.Scope` struct for testing.
 
   Shop LVs read `socket.assigns[:phoenix_kit_current_user]` to thread
-  the user UUID into activity logging. They don't call `Scope.admin?/1`
+  the user UUID into activity logging. They don't call `Scope.can_access_admin_area?/1`
   themselves — the production `live_session :phoenix_kit_admin`
   on_mount hook gates that — but per workspace AGENTS.md `cached_roles`
   must be a list of role-name strings if `admin?/1` ever gets called,
