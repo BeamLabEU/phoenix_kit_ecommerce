@@ -111,15 +111,23 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     assert fresh.title["de"] == "Vase DE"
   end
 
-  test "a non-Latin title still yields a non-empty per-language slug" do
+  test "accented Latin titles transliterate in the slug" do
     product = create_product()
 
-    {:ok, updated} =
-      AITranslatable.put_translation(product, "ru", %{"title" => "Ваза Деревянная"}, [])
+    {:ok, fr} =
+      AITranslatable.put_translation(product, "fr", %{"title" => "Étagère décorative"}, [])
 
-    # slugify strips non-ASCII to "" — must fall back, not leave the language slugless
-    assert updated.slug["ru"] not in [nil, ""]
-    assert updated.slug["ru"] =~ "ru"
+    assert fr.slug["fr"] == "etagere-decorative"
+
+    {:ok, de} = AITranslatable.put_translation(product, "de", %{"title" => "Größe Fußball"}, [])
+    assert de.slug["de"] == "groesse-fussball"
+  end
+
+  test "Cyrillic titles transliterate to a readable slug" do
+    product = create_product()
+
+    {:ok, ru} = AITranslatable.put_translation(product, "ru", %{"title" => "Ваза Деревянная"}, [])
+    assert ru.slug["ru"] == "vaza-derevyannaya"
   end
 
   test "an extremely long title produces a capped slug" do
