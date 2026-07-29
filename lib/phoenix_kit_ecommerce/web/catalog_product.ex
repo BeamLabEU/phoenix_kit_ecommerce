@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.SEOHelpers
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
@@ -65,9 +66,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       Events.subscribe_inventory()
     end
 
+    seo = SEOHelpers.product_seo(product, current_language)
+
     socket =
       socket
-      |> assign(:page_title, localized_title)
+      |> assign(:page_title, seo.page_title)
+      |> assign(:canonical_url, seo.canonical_url)
+      |> assign(:hreflang_links, seo.hreflang_links)
+      |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
       |> assign(:localized_title, localized_title)
@@ -206,9 +212,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       Events.subscribe_inventory()
     end
 
+    seo = SEOHelpers.product_seo(product, current_language)
+
     socket =
       socket
-      |> assign(:page_title, localized_title)
+      |> assign(:page_title, seo.page_title)
+      |> assign(:canonical_url, seo.canonical_url)
+      |> assign(:hreflang_links, seo.hreflang_links)
+      |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
       |> assign(:localized_title, localized_title)
