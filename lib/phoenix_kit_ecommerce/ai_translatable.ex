@@ -34,11 +34,21 @@ defmodule PhoenixKitEcommerce.AITranslatable do
 
   The seo fields are not in the shared translation prompt's vocabulary, so
   this adapter ships its own prompt (`ensure_prompt/0`, slug
-  `#{"phoenixkit-translate-shop-product"}`). Host forms must pass its uuid
+  `phoenixkit-shop-product-translation`). Host forms must pass its uuid
   per job — the global `ai_translation_prompt_uuid` setting stays untouched.
+
+  Requires the optional `phoenix_kit_ai` plugin: `ensure_prompt/0` returns
+  `{:error, :ai_not_installed}` when it is absent, and the whole adapter is
+  only reached through duck-typed discovery, which never runs without it.
   """
 
-  @behaviour PhoenixKitAI.Translatable
+  # Structurally implements the `PhoenixKitAI.Translatable` behaviour, but we
+  # DON'T declare `@behaviour` — phoenix_kit_ai is an optional dependency and a
+  # declared behaviour would force it at compile time. Discovery is duck-typed
+  # (`ai_translatables/0` + `PhoenixKitAI.Translatables`), so this module is
+  # only ever exercised when the plugin is present; the guarded PhoenixKitAI
+  # calls in ensure_prompt/0 are quietened for the plugin-absent build.
+  @compile {:no_warn_undefined, PhoenixKitAI}
 
   import Ecto.Query, only: [where: 3, lock: 2, from: 2]
 
@@ -67,7 +77,6 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   @doc "The resource-type key this adapter registers under."
   def resource_type, do: @resource_type
 
-  @impl true
   def fetch(@resource_type, product_uuid) when is_binary(product_uuid) do
     case repo().get(Product, product_uuid) do
       nil -> {:error, :resource_not_found}
@@ -77,7 +86,6 @@ defmodule PhoenixKitEcommerce.AITranslatable do
 
   def fetch(_resource_type, _uuid), do: {:error, :resource_not_found}
 
-  @impl true
   def source_fields(%Product{} = product, source_lang) do
     # Read the source language DIRECTLY, without Translations.get/3's
     # exact→default→first fallback: translating with the prompt saying
@@ -91,7 +99,6 @@ defmodule PhoenixKitEcommerce.AITranslatable do
     |> Map.new()
   end
 
-  @impl true
   def put_translation(%Product{uuid: uuid}, target_lang, fields, opts)
       when is_binary(target_lang) do
     translated =
