@@ -125,7 +125,10 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   def canonical_absolute_url(language, relative_url) do
     case resolve_canonical_host(language) do
       nil ->
-        Routes.url(relative_url)
+        # relative_url is already locale-prefixed — Routes.url/1 would
+        # re-apply path/1 and double the prefix; base_url/0 is the
+        # documented absolutizer for pre-built paths.
+        Routes.base_url() <> relative_url
 
       host ->
         "https://#{host}#{strip_language_prefix(relative_url, language)}"

@@ -73,6 +73,13 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpersTest do
     refute fr.url =~ "/fr/"
   end
 
+  test "resolver-nil canonical never doubles the locale prefix" do
+    p = product(%{"en-US" => "vase", "fr" => "le-vase"})
+    seo = SEOHelpers.product_seo(p, "fr")
+
+    refute seo.canonical_url =~ "/fr/fr/"
+  end
+
   test "seo_title wins over title for page_title and og" do
     p = %{product(%{"en-US" => "vase"}) | seo_title: %{"en-US" => "Buy Vase Online"}}
     seo = SEOHelpers.product_seo(p, "en-US")
