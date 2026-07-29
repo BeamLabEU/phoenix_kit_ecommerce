@@ -15,6 +15,8 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   entry mislabelling the fallback URL as a translation.
   """
 
+  require Logger
+
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Utils.Routes
@@ -141,7 +143,13 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
       _ -> nil
     end
   rescue
-    _ -> nil
+    error ->
+      Logger.warning(
+        "[Ecommerce] canonical_host_resolver raised, falling back to site base: " <>
+          Exception.message(error)
+      )
+
+      nil
   end
 
   defp strip_language_prefix(url, language) when is_binary(url) and is_binary(language) do
