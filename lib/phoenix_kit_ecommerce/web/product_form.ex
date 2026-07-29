@@ -7,6 +7,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   """
 
   use PhoenixKitEcommerce.Web, :live_view
+  use PhoenixKitAI.Components.AITranslate.Embed
+
+  @behaviour PhoenixKitAI.Components.AITranslate.FormBinding
 
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
@@ -16,7 +19,18 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.AITranslatable
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
+
+  import PhoenixKitAI.Components.AITranslate,
+    only: [
+      ai_translate_button: 1,
+      ai_translate_progress: 1,
+      ai_translate_hint: 1,
+      ai_translate_modal: 1
+    ]
+
+  import PhoenixKitAI.Components.AITranslate.FormGlue, only: [ai_translate_config: 1]
 
   import TranslationTabs
 
@@ -134,7 +148,95 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:enabled_languages, enabled_languages)
     |> assign(:default_language, default_language)
     |> assign(:current_translation_language, default_language)
+    |> assign(:current_lang, default_language)
     |> assign(:show_translation_tabs, show_translations)
+    |> assign(:product_translations, translations_map)
+    |> assign_ai_state(product)
+  end
+
+  # AI-translate mount state: :edit gets the full pipeline wiring, :new (no
+  # uuid yet) degrades to unavailable. The product-specific prompt overrides
+  # the shared default — seo fields are outside its vocabulary.
+  defp assign_ai_state(socket, %Product{uuid: uuid} = product) when is_binary(uuid) do
+    socket =
+      PhoenixKitAI.Components.AITranslate.FormGlue.assign_ai_translation(
+        socket,
+        AITranslatable.resource_type(),
+        product,
+        __MODULE__
+      )
+
+    if socket.assigns[:ai_translation_available?] and connected?(socket) do
+      case AITranslatable.ensure_prompt() do
+        {:ok, prompt_uuid} -> assign(socket, :ai_selected_prompt, prompt_uuid)
+        _ -> socket
+      end
+    else
+      socket
+    end
+  end
+
+  defp assign_ai_state(socket, _product) do
+    PhoenixKitAI.Components.AITranslate.FormGlue.assign_ai_translation(
+      socket,
+      AITranslatable.resource_type(),
+      nil,
+      __MODULE__
+    )
+  end
+
+  # ── PhoenixKitAI.Components.AITranslate.FormBinding callbacks ─────────
+
+  @impl PhoenixKitAI.Components.AITranslate.FormBinding
+  def existing_translation_langs(_resource_type, assigns) do
+    title_map =
+      Ecto.Changeset.get_field(assigns.changeset, :title) ||
+        (assigns[:product] && assigns.product.title) || %{}
+
+    title_map |> Map.keys() |> Enum.filter(&(Map.get(title_map, &1) not in [nil, ""]))
+  end
+
+  @impl PhoenixKitAI.Components.AITranslate.FormBinding
+  def apply_translation(_resource_type, changeset, lang, fields) do
+    field_map = %{
+      "title" => :title,
+      "description" => :description,
+      "body" => :body_html,
+      "seo_title" => :seo_title,
+      "seo_description" => :seo_description
+    }
+
+    Enum.reduce(fields, changeset, fn {prompt_field, value}, cs ->
+      case field_map[prompt_field] do
+        nil ->
+          cs
+
+        schema_field when is_binary(value) and value != "" ->
+          merged =
+            (Ecto.Changeset.get_field(cs, schema_field) || %{}) |> Map.put(lang, value)
+
+          Ecto.Changeset.put_change(cs, schema_field, merged)
+
+        _ ->
+          cs
+      end
+    end)
+  end
+
+  @impl PhoenixKitAI.Components.AITranslate.FormBinding
+  def actor_uuid(socket), do: Activity.actor_uuid(socket)
+
+  # FormGlue resync override: the translation tabs read @product_translations,
+  # not the changeset — rebuild it alongside the standard form assigns or the
+  # translated text stays invisible until an unrelated validate.
+  def ai_translate_assign_form(socket, changeset) do
+    translations_map =
+      changeset
+      |> Ecto.Changeset.apply_changes()
+      |> TranslationTabs.build_translations_map(Translations.product_fields())
+
+    socket
+    |> assign_form(changeset)
     |> assign(:product_translations, translations_map)
   end
 
@@ -886,6 +988,15 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                     "Translate product content for different languages. The default language uses the main fields above."
                   )}
                 </p>
+
+                <%!-- AI translate (standalone row: core multilang tabs push a
+                     different switch_language param shape, so the existing
+                     tabs stay and only the AI controls are added) --%>
+                <div :if={@ai_translation_available?} class="mb-4 flex items-center gap-3">
+                  <.ai_translate_button ai_translate={ai_translate_config(assigns)} />
+                  <.ai_translate_progress ai_translate={ai_translate_config(assigns)} />
+                  <.ai_translate_hint ai_translate={ai_translate_config(assigns)} />
+                </div>
 
                 <%!-- Language Tabs --%>
                 <.translation_tabs
@@ -1685,6 +1796,11 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
             </button>
           </div>
         </.form>
+
+        <.ai_translate_modal
+          :if={@ai_translation_available?}
+          ai_translate={ai_translate_config(assigns)}
+        />
 
         <%!-- Media Selector Modal --%>
         <.live_component

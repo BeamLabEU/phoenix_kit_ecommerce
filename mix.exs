@@ -113,6 +113,7 @@ defmodule PhoenixKitEcommerce.MixProject do
 
       # Billing integration for checkout and order conversion.
       pk_dep(:phoenix_kit_billing, "~> 0.1"),
+      pk_dep(:phoenix_kit_ai, "~> 0.4"),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
