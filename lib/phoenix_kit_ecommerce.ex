@@ -314,6 +314,14 @@ defmodule PhoenixKitEcommerce do
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitEcommerce.Web.Routes
 
+  @doc """
+  PhoenixKitAI translation adapters (duck-typed discovery — see
+  `PhoenixKitAI.Translatables`).
+  """
+  def ai_translatables do
+    [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+  end
+
   # ============================================
   # PRODUCTS
   # ============================================
