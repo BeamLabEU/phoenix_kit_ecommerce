@@ -95,6 +95,33 @@ defmodule PhoenixKitEcommerce.Web.FormLvsTest do
     end
   end
 
+  describe "ProductForm AI-translate UI" do
+    test "mounts with manual tabs and no AI button when no endpoint configured", %{conn: conn} do
+      # No AI endpoint in the test DB ⇒ Translations.available?/0 is false.
+      {:ok, _view, html} = live(conn, "/en/admin/shop/products/new")
+
+      refute html =~ "AI Translate"
+      # the manual translation UI still renders (form did not crash)
+      assert html =~ ~s(name="product[title]")
+    end
+
+    test "switching a translation tab keeps current_lang in sync", %{conn: conn} do
+      {:ok, product} =
+        Shop.create_product(%{
+          title: %{"en" => "Widget"},
+          price: Decimal.new("10.00"),
+          status: "active"
+        })
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/products/#{product.uuid}/edit")
+
+      # If enabled languages include a non-default one, switching to it must
+      # update current_lang (regression guard for the AI quick-translate).
+      render_hook(view, "switch_language", %{"language" => "fr"})
+      assert :sys.get_state(view.pid).socket.assigns.current_lang == "fr"
+    end
+  end
+
   describe "ProductForm validate errors" do
     test "renders inline error for negative compare-at price on validate", %{conn: conn} do
       {:ok, view, html} = live(conn, "/en/admin/shop/products/new")
