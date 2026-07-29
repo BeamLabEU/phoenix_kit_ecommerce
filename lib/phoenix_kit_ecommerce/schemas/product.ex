@@ -275,17 +275,100 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
+  # Transliteration map for slug generation: accented Latin + German
+  # umlauts (German URL convention ä→ae, ö→oe, ü→ue, ß→ss) + Cyrillic, so a
+  # non-ASCII title yields a readable ASCII slug instead of having its
+  # characters stripped (e.g. "Étagère"→"etagere", not "tagre").
+  @translit %{
+    "à" => "a",
+    "á" => "a",
+    "â" => "a",
+    "ã" => "a",
+    "å" => "a",
+    "ā" => "a",
+    "ä" => "ae",
+    "è" => "e",
+    "é" => "e",
+    "ê" => "e",
+    "ë" => "e",
+    "ē" => "e",
+    "ì" => "i",
+    "í" => "i",
+    "î" => "i",
+    "ï" => "i",
+    "ī" => "i",
+    "ò" => "o",
+    "ó" => "o",
+    "ô" => "o",
+    "õ" => "o",
+    "ø" => "o",
+    "ō" => "o",
+    "ö" => "oe",
+    "ù" => "u",
+    "ú" => "u",
+    "û" => "u",
+    "ū" => "u",
+    "ü" => "ue",
+    "ç" => "c",
+    "ñ" => "n",
+    "ý" => "y",
+    "ÿ" => "y",
+    "ß" => "ss",
+    "æ" => "ae",
+    "œ" => "oe",
+    "а" => "a",
+    "б" => "b",
+    "в" => "v",
+    "г" => "g",
+    "д" => "d",
+    "е" => "e",
+    "ё" => "e",
+    "ж" => "zh",
+    "з" => "z",
+    "и" => "i",
+    "й" => "y",
+    "к" => "k",
+    "л" => "l",
+    "м" => "m",
+    "н" => "n",
+    "о" => "o",
+    "п" => "p",
+    "р" => "r",
+    "с" => "s",
+    "т" => "t",
+    "у" => "u",
+    "ф" => "f",
+    "х" => "h",
+    "ц" => "ts",
+    "ч" => "ch",
+    "ш" => "sh",
+    "щ" => "sch",
+    "ъ" => "",
+    "ы" => "y",
+    "ь" => "",
+    "э" => "e",
+    "ю" => "yu",
+    "я" => "ya"
+  }
+
   @doc "Slug generation used for per-language slugs (public for the AI adapter)."
   def slugify(text) when is_binary(text) do
     text
     |> String.downcase()
-    |> String.replace(~r/[^\w\s-]/, "")
+    |> transliterate()
+    |> String.replace(~r/[^a-z0-9\s-]/u, "")
     |> String.replace(~r/\s+/, "-")
     |> String.replace(~r/-+/, "-")
     |> String.trim("-")
   end
 
   def slugify(_), do: ""
+
+  defp transliterate(text) do
+    text
+    |> String.graphemes()
+    |> Enum.map_join("", fn g -> Map.get(@translit, g, g) end)
+  end
 
   defp default_language do
     alias PhoenixKit.Modules.Languages
