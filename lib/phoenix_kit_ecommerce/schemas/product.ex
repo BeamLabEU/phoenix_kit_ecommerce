@@ -275,7 +275,8 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
-  defp slugify(text) when is_binary(text) do
+  @doc "Slug generation used for per-language slugs (public for the AI adapter)."
+  def slugify(text) when is_binary(text) do
     text
     |> String.downcase()
     |> String.replace(~r/[^\w\s-]/, "")
@@ -284,7 +285,7 @@ defmodule PhoenixKitEcommerce.Product do
     |> String.trim("-")
   end
 
-  defp slugify(_), do: ""
+  def slugify(_), do: ""
 
   defp default_language do
     alias PhoenixKit.Modules.Languages
