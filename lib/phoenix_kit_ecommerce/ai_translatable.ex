@@ -45,7 +45,6 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Product
-  alias PhoenixKitEcommerce.Translations
 
   @resource_type "shop_product"
   @prompt_name "PhoenixKit Shop Product Translation"

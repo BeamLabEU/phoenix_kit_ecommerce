@@ -146,6 +146,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         current_base = DialectMapper.extract_base(current_language)
         redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
 
+        # The language the user explicitly requested via the URL locale prefix,
+        # IF the product is actually translated into it. Without this the
+        # language switcher can never leave the slug's own language: a
+        # `/fr/<en-slug>` request bounces to `best_redirect_language` (which
+        # prefers the default) → back to `/en/…`, so the visitor sees English
+        # even though a French translation exists.
+        requested_lang = requested_translation_lang(product, current_language)
+
         cond do
           # No valid redirect language found
           is_nil(redirect_lang) ->
@@ -154,12 +162,22 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
              |> put_flash(:error, "Product not found")
              |> push_navigate(to: Shop.catalog_url(current_language))}
 
+          # Product IS translated into the requested language — honor the
+          # explicit choice and redirect to that language's slug.
+          not is_nil(requested_lang) ->
+            slug = SlugResolver.product_slug(product, requested_lang)
+
+            {:ok,
+             push_navigate(socket,
+               to: Helpers.build_lang_url("/shop/product/#{slug}", requested_lang)
+             )}
+
           # Same base language (e.g., "en" vs "en-US") - use product without redirect
           current_base == redirect_base ->
             # Re-run mount with found product to avoid redirect loop
             mount_with_product(product, current_language, params, socket)
 
-          # Different language - redirect to correct URL
+          # Requested language has no translation - fall back to best language
           true ->
             slug = SlugResolver.product_slug(product, redirect_lang)
 
@@ -169,6 +187,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
              )}
         end
     end
+  end
+
+  # The requested language (base-matched) when the product has a non-empty
+  # slug for it — i.e. it is genuinely translated into what the URL asked for.
+  # Returns the product's own language code (e.g. "fr-FR") or nil.
+  defp requested_translation_lang(product, current_language) do
+    base = DialectMapper.extract_base(current_language)
+    slug_map = product.slug || %{}
+
+    Enum.find(Map.keys(slug_map), fn code ->
+      DialectMapper.extract_base(code) == base and Map.get(slug_map, code) not in [nil, ""]
+    end)
   end
 
   # Mount product page using already-found product (avoids redirect loop)
