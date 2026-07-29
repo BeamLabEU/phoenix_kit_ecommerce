@@ -131,6 +131,17 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     assert String.length(updated.slug["fr"]) <= 80
   end
 
+  test "ensure_prompt/0 is idempotent (slug must match create_prompt's name-derived slug)" do
+    case AITranslatable.ensure_prompt() do
+      {:ok, uuid1} ->
+        assert {:ok, ^uuid1} = AITranslatable.ensure_prompt()
+
+      {:error, :ai_not_installed} ->
+        # AI plugin/schema not present in this test env — nothing to assert.
+        :ok
+    end
+  end
+
   test "blank translations are rejected" do
     product = create_product()
 

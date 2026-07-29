@@ -48,8 +48,13 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   alias PhoenixKitEcommerce.Translations
 
   @resource_type "shop_product"
-  @prompt_slug "phoenixkit-translate-shop-product"
   @prompt_name "PhoenixKit Shop Product Translation"
+  # MUST equal slugify(@prompt_name): create_prompt derives the stored slug
+  # from the NAME, so the idempotent get_prompt_by_slug re-read only finds
+  # the row when the lookup slug matches that derived value. A mismatch makes
+  # ensure_prompt/0 fail with :prompt_create_failed on every call after the
+  # first (unique-name violation, then a slug miss).
+  @prompt_slug "phoenixkit-shop-product-translation"
 
   # field name in the prompt/pipeline => schema field
   @field_map %{
