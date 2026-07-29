@@ -111,6 +111,26 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     assert fresh.title["de"] == "Vase DE"
   end
 
+  test "a non-Latin title still yields a non-empty per-language slug" do
+    product = create_product()
+
+    {:ok, updated} =
+      AITranslatable.put_translation(product, "ru", %{"title" => "Ваза Деревянная"}, [])
+
+    # slugify strips non-ASCII to "" — must fall back, not leave the language slugless
+    assert updated.slug["ru"] not in [nil, ""]
+    assert updated.slug["ru"] =~ "ru"
+  end
+
+  test "an extremely long title produces a capped slug" do
+    product = create_product()
+    long = String.duplicate("vase ", 2000)
+
+    {:ok, updated} = AITranslatable.put_translation(product, "fr", %{"title" => long}, [])
+
+    assert String.length(updated.slug["fr"]) <= 80
+  end
+
   test "blank translations are rejected" do
     product = create_product()
 

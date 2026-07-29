@@ -75,9 +75,13 @@ defmodule PhoenixKitEcommerce.AITranslatable do
 
   @impl true
   def source_fields(%Product{} = product, source_lang) do
+    # Read the source language DIRECTLY, without Translations.get/3's
+    # exact→default→first fallback: translating with the prompt saying
+    # "from {{SourceLanguage}}" while feeding another language's text would
+    # silently corrupt the result.
     @field_map
     |> Enum.map(fn {prompt_field, schema_field} ->
-      {prompt_field, Translations.get(product, schema_field, source_lang)}
+      {prompt_field, Map.get(Map.get(product, schema_field) || %{}, source_lang)}
     end)
     |> Enum.filter(fn {_k, v} -> is_binary(v) and String.trim(v) != "" end)
     |> Map.new()
@@ -178,14 +182,30 @@ defmodule PhoenixKitEcommerce.AITranslatable do
         changes
 
       true ->
-        base = Product.slugify(translated_title)
+        base = slug_base(translated_title, slug_map, target_lang)
+        slug = unique_slug(base, target_lang, fresh.uuid)
+        Map.put(changes, :slug, Map.put(slug_map, target_lang, slug))
+    end
+  end
 
-        if base == "" do
-          changes
-        else
-          slug = unique_slug(base, target_lang, fresh.uuid)
-          Map.put(changes, :slug, Map.put(slug_map, target_lang, slug))
-        end
+  @slug_max_len 80
+
+  # A URL slug from the translated title, capped to a sane length. Titles with
+  # no ASCII-slug characters (Cyrillic/CJK/Arabic slugify to "" under the
+  # ASCII-only rule) fall back to the default-language slug + a language
+  # suffix, so the language always gets a non-empty per-language slug instead
+  # of silently serving the default-language URL.
+  defp slug_base(translated_title, slug_map, target_lang) do
+    case translated_title |> Product.slugify() |> String.slice(0, @slug_max_len) do
+      "" -> "#{default_lang_slug(slug_map)}-#{target_lang}"
+      base -> base
+    end
+  end
+
+  defp default_lang_slug(slug_map) do
+    case slug_map |> Map.values() |> Enum.find(&(is_binary(&1) and &1 != "")) do
+      nil -> "product"
+      slug -> slug
     end
   end
 

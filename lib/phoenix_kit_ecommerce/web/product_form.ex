@@ -380,7 +380,11 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # ===========================================
 
   def handle_event("switch_language", %{"language" => language}, socket) do
-    {:noreply, assign(socket, :current_translation_language, language)}
+    # Keep :current_lang in sync — FormGlue's AI config reads it for the
+    # "translate current tab" quick action; without this it stays pinned to
+    # the default language and that action always hits the source-language
+    # guard after the first tab switch.
+    {:noreply, assign(socket, current_translation_language: language, current_lang: language)}
   end
 
   # IMAGE MANAGEMENT
