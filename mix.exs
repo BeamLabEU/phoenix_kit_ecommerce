@@ -113,7 +113,10 @@ defmodule PhoenixKitEcommerce.MixProject do
 
       # Billing integration for checkout and order conversion.
       pk_dep(:phoenix_kit_billing, "~> 0.1"),
-      pk_dep(:phoenix_kit_ai, "~> 0.4"),
+      # Optional: only the AI-translate UI/adapter use it, and both compile out
+      # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
+      # the actual API used (Translatable behaviour, AITranslate components).
+      pk_dep(:phoenix_kit_ai, "~> 0.17", optional: true),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
