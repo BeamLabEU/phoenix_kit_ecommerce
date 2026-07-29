@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.SEOHelpers
 
   @impl true
   def mount(%{"slug" => slug} = params, _session, socket) do
@@ -75,9 +76,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           socket.assigns[:url_path] ||
             "/shop/category/#{Translations.get(category, :slug, current_language)}"
 
+        seo = SEOHelpers.category_seo(category, current_language)
+
         socket =
           socket
           |> assign(:page_title, localized_name)
+          |> assign(:canonical_url, seo.canonical_url)
+          |> assign(:hreflang_links, seo.hreflang_links)
+          |> assign(:og, seo.og)
           |> assign(:category, category)
           |> assign(:current_language, current_language)
           |> assign(:localized_name, localized_name)
