@@ -23,12 +23,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
 
   import PhoenixKitAI.Components.AITranslate,
-    only: [
-      ai_translate_button: 1,
-      ai_translate_progress: 1,
-      ai_translate_hint: 1,
-      ai_translate_modal: 1
-    ]
+    only: [ai_translate_progress: 1, ai_translate_modal: 1]
 
   import PhoenixKitAI.Components.AITranslate.FormGlue, only: [ai_translate_config: 1]
 
@@ -986,21 +981,28 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
           <%= if @show_translation_tabs do %>
             <div class="card bg-base-100 shadow-xl">
               <div class="card-body">
-                <h2 class="card-title text-xl mb-4">{gettext("Translations")}</h2>
+                <%!-- Header row: title + a prominent AI-translate button so it's
+                     easy to find (the core ai_translate_button is a tiny ghost
+                     link; we render a primary button that opens the same modal
+                     via the ai_toggle_modal event the Embed hook handles). --%>
+                <div class="flex items-center justify-between gap-4 mb-4 flex-wrap">
+                  <h2 class="card-title text-xl">{gettext("Translations")}</h2>
+                  <div :if={@ai_translation_available?} class="flex items-center gap-3">
+                    <.ai_translate_progress ai_translate={ai_translate_config(assigns)} />
+                    <button type="button" class="btn btn-primary gap-2" phx-click="ai_toggle_modal">
+                      <.icon name="hero-language" class="w-5 h-5" />
+                      {gettext("Translate with AI")}
+                    </button>
+                  </div>
+                </div>
                 <p class="text-base-content/60 text-sm mb-4">
                   {gettext(
                     "Translate product content for different languages. The default language uses the main fields above."
                   )}
+                  <span :if={@ai_translation_available?}>
+                    {gettext("Use \"Translate with AI\" to fill the missing languages automatically.")}
+                  </span>
                 </p>
-
-                <%!-- AI translate (standalone row: core multilang tabs push a
-                     different switch_language param shape, so the existing
-                     tabs stay and only the AI controls are added) --%>
-                <div :if={@ai_translation_available?} class="mb-4 flex items-center gap-3">
-                  <.ai_translate_button ai_translate={ai_translate_config(assigns)} />
-                  <.ai_translate_progress ai_translate={ai_translate_config(assigns)} />
-                  <.ai_translate_hint ai_translate={ai_translate_config(assigns)} />
-                </div>
 
                 <%!-- Language Tabs --%>
                 <.translation_tabs
