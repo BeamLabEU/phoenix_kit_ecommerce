@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, humanize_key: 1, get_current_user: 1]
@@ -67,7 +68,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   @impl true
   def handle_event("update_quantity", %{"item_uuid" => item_uuid, "quantity" => quantity}, socket) do
-    quantity = max(1, String.to_integer(quantity))
+    quantity = max(1, Helpers.parse_int(quantity, 1))
 
     update_item_quantity(socket, item_uuid, quantity)
   end

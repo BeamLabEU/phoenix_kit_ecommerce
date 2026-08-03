@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -205,16 +206,23 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
   @impl true
   def handle_event("remove_category_rule", %{"index" => idx}, socket) do
     form_data = socket.assigns.form_data
-    index = String.to_integer(idx)
-    updated = %{form_data | category_rules: List.delete_at(form_data.category_rules, index)}
-    {:noreply, assign(socket, :form_data, updated)}
+    index = Helpers.parse_int(idx, -1)
+
+    if index < 0 do
+      {:noreply, socket}
+    else
+      updated = %{form_data | category_rules: List.delete_at(form_data.category_rules, index)}
+      {:noreply, assign(socket, :form_data, updated)}
+    end
   end
 
   @impl true
   def handle_event("update_category_rule", %{"index" => idx} = params, socket) do
     form_data = socket.assigns.form_data
-    index = String.to_integer(idx)
-    rule = Enum.at(form_data.category_rules, index)
+    index = Helpers.parse_int(idx, -1)
+    # `index >= 0` matters as much as the nil check: a negative index would
+    # resolve to a rule counted from the END of the list and edit the wrong one.
+    rule = if index >= 0, do: Enum.at(form_data.category_rules, index)
 
     if rule do
       keywords_text = params["keywords"] || Map.get(rule, "keywords_text", "")

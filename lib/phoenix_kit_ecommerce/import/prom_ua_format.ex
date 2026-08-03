@@ -262,15 +262,92 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
     price_str = row["Ціна"] || "0"
     discount_str = row["Знижка"] || ""
 
-    price =
-      case Decimal.parse(String.trim(price_str)) do
-        {decimal, _} -> decimal
-        :error -> Decimal.new(0)
-      end
+    price = parse_money(price_str) || Decimal.new(0)
 
     compare_at_price = calculate_compare_at_price(price, String.trim(discount_str))
 
     {price, compare_at_price}
+  end
+
+  @doc false
+  # Parse a money value from a supplier CSV, tolerating the formats
+  # suppliers actually send while REFUSING to silently truncate.
+  #
+  # `Decimal.parse/1` returns `{decimal, remainder}` and every call site
+  # here matched `{decimal, _}`, discarding the remainder — so "12,50"
+  # imported as 12 and "1,234.56" imported as 1. No error surfaced: the
+  # product simply went on sale at a fraction of its price.
+  #
+  # Separator handling: whichever of `.` or `,` appears LAST is the decimal
+  # separator and the other is a thousands separator; a lone `,` followed
+  # by exactly two digits is a decimal comma. Anything still unparsed after
+  # normalisation returns nil rather than a truncated number.
+  def parse_money(value) when is_binary(value) do
+    normalized =
+      value
+      |> String.trim()
+      # currency symbols/codes and spacing, incl. non-breaking spaces
+      |> String.replace(~r/[^\d.,\-]/u, "")
+      |> normalize_separators()
+
+    case Decimal.parse(normalized) do
+      {decimal, ""} -> decimal
+      _ -> nil
+    end
+  end
+
+  def parse_money(_), do: nil
+
+  defp normalize_separators(str) do
+    last_dot = last_index(str, ".")
+    last_comma = last_index(str, ",")
+
+    cond do
+      is_nil(last_dot) and is_nil(last_comma) ->
+        str
+
+      is_nil(last_comma) ->
+        # dots only — decimal dot if the tail looks like decimals, else thousands
+        collapse(str, ".", tail_len(str, ".") in [1, 2])
+
+      is_nil(last_dot) ->
+        collapse(str, ",", tail_len(str, ",") in [1, 2])
+
+      last_dot > last_comma ->
+        # "1,234.56" — comma is thousands, dot is decimal
+        str |> String.replace(",", "") |> collapse(".", true)
+
+      true ->
+        # "1.234,56" — dot is thousands, comma is decimal
+        str |> String.replace(".", "") |> collapse(",", true)
+    end
+  end
+
+  # Keep the final separator as a decimal point, or drop them all.
+  defp collapse(str, sep, decimal?) do
+    if decimal? do
+      case String.split(str, sep) do
+        [single] -> single
+        parts -> Enum.join(Enum.drop(parts, -1), "") <> "." <> List.last(parts)
+      end
+    else
+      String.replace(str, sep, "")
+    end
+  end
+
+  # Byte position of the LAST occurrence, or nil. Must be a position, not a
+  # count: the whole point is comparing where `.` and `,` sit relative to
+  # each other, and "1,234.56" has one of each, so any count-based version
+  # reports a tie and picks the wrong separator as the decimal one.
+  defp last_index(str, sep) do
+    case :binary.matches(str, sep) do
+      [] -> nil
+      matches -> matches |> List.last() |> elem(0)
+    end
+  end
+
+  defp tail_len(str, sep) do
+    str |> String.split(sep) |> List.last() |> String.length()
   end
 
   defp calculate_compare_at_price(_price, ""), do: nil
@@ -284,26 +361,26 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
   end
 
   defp calculate_percentage_compare_price(price, percent_str) do
-    case Decimal.parse(percent_str) do
-      {percent, _} ->
+    case parse_money(percent_str) do
+      nil ->
+        nil
+
+      percent ->
         divisor = Decimal.sub(Decimal.new(1), Decimal.div(percent, Decimal.new(100)))
 
         if Decimal.gt?(divisor, Decimal.new(0)),
           do: Decimal.div(price, divisor) |> Decimal.round(2)
-
-      :error ->
-        nil
     end
   end
 
   defp calculate_absolute_compare_price(price, discount_str) do
-    case Decimal.parse(discount_str) do
-      {absolute_discount, _} ->
+    case parse_money(discount_str) do
+      nil ->
+        nil
+
+      absolute_discount ->
         if Decimal.gt?(absolute_discount, Decimal.new(0)),
           do: Decimal.add(price, absolute_discount)
-
-      :error ->
-        nil
     end
   end
 

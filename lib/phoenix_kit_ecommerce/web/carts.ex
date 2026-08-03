@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.Carts do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -39,7 +40,7 @@ defmodule PhoenixKitEcommerce.Web.Carts do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    page = String.to_integer(params["page"] || "1")
+    page = Helpers.parse_page(params["page"])
     status = params["status"]
     search = params["search"] || ""
 

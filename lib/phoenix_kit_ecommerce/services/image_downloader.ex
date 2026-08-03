@@ -22,11 +22,19 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   require Logger
 
   alias PhoenixKit.Modules.Storage
+  alias PhoenixKitEcommerce.Policy
 
   @default_timeout 30_000
   # 50 MB max
   @max_file_size 50 * 1024 * 1024
-  @allowed_content_types ~w(image/jpeg image/png image/gif image/webp image/svg+xml)
+  @allowed_content_types ~w(image/jpeg image/png image/gif image/webp)
+
+  # SVG is an XML document that can carry script, and stored files are
+  # served inline with their stored MIME type — so an accepted SVG is a
+  # stored-XSS channel independent of the description sanitizer. Off by
+  # default; `shop_allow_svg_uploads` re-enables it for shops that need
+  # vector assets and trust their import sources.
+  @svg_content_type "image/svg+xml"
 
   @doc """
   Downloads an image from a URL to a temporary file.
@@ -317,6 +325,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       is_nil(uri.host) or uri.host == "" ->
         {:error, :invalid_host}
 
+      not Policy.image_import_allow_private_networks?() and private_host?(uri.host) ->
+        {:error, :private_address_blocked}
+
       true ->
         # Upgrade HTTP to HTTPS for security
         url =
@@ -327,6 +338,52 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
         {:ok, url}
     end
   end
+
+  @doc false
+  # Whether a host resolves into a network range the importer must not
+  # reach. Checking scheme and non-empty host only made this a working
+  # SSRF: a CSV row pointing at http://127.0.0.1:5432/ or the cloud
+  # metadata address made the server fetch it and store the response,
+  # which is a port scanner and a credential reader for anyone who can
+  # upload an import file.
+  #
+  # Both the literal and the resolved addresses are checked, so a
+  # public hostname with a private A record does not slip through.
+  # Off by default only via `shop_image_import_allow_private_networks`,
+  # for shops importing from a genuinely internal image host.
+  def private_host?(host) do
+    host = String.trim_trailing(host, ".")
+
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, address} ->
+        private_address?(address)
+
+      {:error, _} ->
+        # Not a literal — resolve and check every answer. Fail CLOSED on a
+        # resolution error: a name we cannot resolve is not a name we can
+        # vouch for.
+        case :inet.getaddrs(String.to_charlist(host), :inet) do
+          {:ok, addresses} -> Enum.any?(addresses, &private_address?/1)
+          {:error, _} -> true
+        end
+    end
+  end
+
+  # Loopback, RFC1918, link-local (incl. 169.254.169.254 metadata),
+  # carrier-grade NAT, and the various reserved ranges.
+  defp private_address?({127, _, _, _}), do: true
+  defp private_address?({10, _, _, _}), do: true
+  defp private_address?({192, 168, _, _}), do: true
+  defp private_address?({169, 254, _, _}), do: true
+  defp private_address?({172, b, _, _}) when b >= 16 and b <= 31, do: true
+  defp private_address?({100, b, _, _}) when b >= 64 and b <= 127, do: true
+  defp private_address?({0, _, _, _}), do: true
+  defp private_address?({a, _, _, _}) when a >= 224, do: true
+  defp private_address?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  defp private_address?({0, 0, 0, 0, 0, 0, 0, 0}), do: true
+  defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFC00..0xFDFF, do: true
+  defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFE80..0xFEBF, do: true
+  defp private_address?(_), do: false
 
   defp do_http_request(url, timeout) do
     opts = [
@@ -394,6 +451,14 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   end
 
   defp validate_content_type(content_type) when content_type in @allowed_content_types, do: :ok
+
+  defp validate_content_type(@svg_content_type) do
+    if Policy.allow_svg_uploads?() do
+      :ok
+    else
+      {:error, {:invalid_content_type, @svg_content_type}}
+    end
+  end
 
   defp validate_content_type(content_type) do
     Logger.warning("Invalid content type for image download: #{content_type}")

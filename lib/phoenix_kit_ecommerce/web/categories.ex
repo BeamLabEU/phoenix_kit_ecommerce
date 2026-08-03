@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -90,7 +91,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
+    page = Helpers.parse_page(page)
 
     socket =
       socket
