@@ -2904,10 +2904,26 @@ defmodule PhoenixKitEcommerce do
 
     shipping_amount = calculate_shipping(cart, subtotal, total_weight)
 
-    # Calculate tax
+    # Calculate tax over the TAXABLE portion of the cart only.
+    #
+    # `CartItem` snapshots the product's `taxable` flag at add-to-cart
+    # time, and every product form exposes it — but tax was charged on the
+    # whole subtotal regardless, so a mixed cart over-collected on its
+    # zero-rated lines. This was invisible until now only because tax was
+    # always zero (the cart's shipping_country was never set), so fixing
+    # that fix makes this one load-bearing.
+    #
+    # The discount is apportioned to the taxable share rather than
+    # subtracted whole: taking it all off the taxable base would let a
+    # discount on a zero-rated item wipe out tax owed on a standard-rated
+    # one.
     tax_rate = get_tax_rate(cart)
-    taxable_amount = Decimal.sub(subtotal, cart.discount_amount || Decimal.new("0"))
-    tax_amount = Decimal.mult(taxable_amount, tax_rate) |> Decimal.round(2)
+
+    tax_amount =
+      items
+      |> taxable_base(subtotal, cart.discount_amount || Decimal.new("0"))
+      |> Decimal.mult(tax_rate)
+      |> Decimal.round(2)
 
     # Calculate total
     total =
@@ -2927,6 +2943,34 @@ defmodule PhoenixKitEcommerce do
     })
     |> repo().update!()
     |> repo().preload([:items, :shipping_method], force: true)
+  end
+
+  # The portion of the cart tax actually applies to.
+  #
+  # `CartItem` snapshots the product's `taxable` flag, but tax used to be
+  # charged on the whole subtotal, so a mixed cart over-collected on its
+  # zero-rated lines.
+  #
+  # The discount is apportioned to the taxable share rather than subtracted
+  # whole: taking it all off the taxable base would let a discount on a
+  # zero-rated item wipe out tax owed on a standard-rated one.
+  defp taxable_base(items, subtotal, discount) do
+    taxable_subtotal =
+      Enum.reduce(items, Decimal.new("0"), fn i, acc ->
+        if i.taxable == false, do: acc, else: Decimal.add(acc, i.line_total || Decimal.new("0"))
+      end)
+
+    zero = Decimal.new("0")
+
+    if Decimal.equal?(taxable_subtotal, zero) or Decimal.equal?(subtotal, zero) do
+      zero
+    else
+      share = Decimal.div(taxable_subtotal, subtotal)
+
+      taxable_subtotal
+      |> Decimal.sub(Decimal.mult(discount, share))
+      |> Decimal.max(zero)
+    end
   end
 
   defp calculate_shipping(cart, subtotal, total_weight) do
