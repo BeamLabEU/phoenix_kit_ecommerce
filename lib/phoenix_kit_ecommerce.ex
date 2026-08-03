@@ -50,6 +50,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.ImportConfig
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Options.MetadataValidator
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
@@ -1500,8 +1501,18 @@ defmodule PhoenixKitEcommerce do
         # First try to find by user_uuid
         case base_query |> where([c], c.user_uuid == ^user_uuid) |> repo().one() do
           nil when not is_nil(session_id) ->
-            # Fallback: try session_id (cart created before login)
-            base_query |> where([c], c.session_id == ^session_id) |> repo().one()
+            # Fallback: a cart this session started before logging in.
+            #
+            # `is_nil(c.user_uuid)` is load-bearing and was missing. A
+            # logged-in user's cart carries BOTH user_uuid and session_id,
+            # and the shop_session_id cookie outlives logout by 30 days —
+            # so on a shared browser, the next user to log in without a cart
+            # of their own matched the PREVIOUS user's cart here and could
+            # edit it and check out against it. Only claim carts that are
+            # still unowned.
+            base_query
+            |> where([c], c.session_id == ^session_id and is_nil(c.user_uuid))
+            |> repo().one()
 
           result ->
             result
@@ -2244,11 +2255,12 @@ defmodule PhoenixKitEcommerce do
       with :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
+           {:ok, cart} <- apply_checkout_shipping_country(cart, opts),
+           {:ok, cart} <- validate_shipping_method_available(cart),
            line_items <- build_order_line_items(cart),
            order_attrs <- build_order_attrs(cart, line_items, opts),
            {:ok, order} <- do_create_order(user_uuid, order_attrs),
-           {:ok, _cart} <- mark_cart_converted(cart, order.uuid),
-           :ok <- maybe_send_guest_confirmation(user_uuid) do
+           {:ok, _cart} <- mark_cart_converted(cart, order.uuid) do
         {:ok, order}
       else
         {:error, reason} ->
@@ -2262,8 +2274,67 @@ defmodule PhoenixKitEcommerce do
     end)
     # unwrap the transaction result
     |> case do
-      {:ok, {:ok, order}} -> {:ok, order}
-      {:error, reason} -> {:error, reason}
+      {:ok, {:ok, order}} ->
+        # Deliberately AFTER the transaction commits, not inside it.
+        #
+        # This used to be the last step of the `with` above, which meant an
+        # SMTP failure rolled back an order the customer had already paid
+        # for, and a slow mail server held the cart row lock open for the
+        # length of the network round-trip. A confirmation email is a
+        # notification about a committed fact — it must not be able to undo
+        # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
+        _ = maybe_send_guest_confirmation(order.user_uuid)
+        {:ok, order}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Persist the checkout address's country onto the cart, then recompute
+  # totals, BEFORE the order is built from those totals.
+  #
+  # `set_cart_shipping_country/2` existed but had no caller: the cart page
+  # deliberately leaves `shipping_country` nil ("set at checkout based on
+  # billing info") and checkout never set it. Since `get_tax_rate/1`
+  # returns 0 for a nil-country cart, every order was created tax-free
+  # however billing tax was configured.
+  #
+  # Resolution order is: the address actually being used for this checkout,
+  # then whatever the cart already had, then the admin's configured
+  # fallback (`Policy.default_tax_country/0`, unset by default). When none
+  # of those yields a country the behaviour is unchanged — no country, no
+  # tax — because charging tax against a guessed jurisdiction would be
+  # worse than charging none.
+  defp apply_checkout_shipping_country(%Cart{} = cart, opts) do
+    billing_profile_uuid = Keyword.get(opts, :billing_profile_uuid)
+    billing_data = Keyword.get(opts, :billing_data)
+
+    country =
+      get_shipping_country(billing_profile_uuid, billing_data, cart) ||
+        Policy.default_tax_country()
+
+    cond do
+      is_nil(country) or country == "" ->
+        {:ok, cart}
+
+      country == cart.shipping_country ->
+        {:ok, cart}
+
+      true ->
+        case set_cart_shipping_country(cart, country) do
+          {:ok, updated} ->
+            # `set_cart_shipping_country/2` only writes the column — the
+            # stored tax_amount/total were computed while the country was
+            # still nil, so they must be recomputed before the order copies
+            # them. Reload afterwards so line items are present for
+            # `build_order_line_items/1`.
+            _ = recalculate_cart_totals!(updated)
+            {:ok, get_cart!(updated.uuid)}
+
+          {:error, _} = error ->
+            error
+        end
     end
   end
 
@@ -2280,6 +2351,44 @@ defmodule PhoenixKitEcommerce do
 
       true ->
         :ok
+    end
+  end
+
+  # Re-validate the shipping method AFTER the checkout country has been
+  # applied, not before: a method may be eligible for a country-less cart
+  # and ineligible once the billing address supplies a country it does not
+  # serve, and running this too early would also wrongly reject that case
+  # in reverse.
+  defp validate_shipping_method_available(%Cart{} = cart) do
+    if selected_shipping_method_available?(cart) do
+      {:ok, cart}
+    else
+      {:error, :shipping_method_unavailable}
+    end
+  end
+
+  # A selected shipping method must still be eligible for the cart AS IT IS
+  # NOW, not as it was when the customer picked it.
+  #
+  # Checking only that `shipping_method_uuid` is set was exploitable:
+  # `calculate_method_shipping/4` zeroes the cost of a method the cart has
+  # outgrown while LEAVING it selected, so a customer could choose a cheap
+  # light-parcel method, then load the cart past that method's weight or
+  # subtotal cap, and check out with the shipping charge silently at zero.
+  # Nothing downstream re-checked. Repeatable, and straight off the margin.
+  defp selected_shipping_method_available?(%Cart{shipping_method_uuid: nil}), do: true
+
+  defp selected_shipping_method_available?(%Cart{} = cart) do
+    case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
+      nil ->
+        false
+
+      method ->
+        ShippingMethod.available_for?(method, %{
+          weight_grams: cart.total_weight_grams || 0,
+          subtotal: cart.subtotal || Decimal.new("0"),
+          country: cart.shipping_country
+        })
     end
   end
 
@@ -2338,6 +2447,11 @@ defmodule PhoenixKitEcommerce do
       "metadata" => %{
         "source" => "shop_checkout",
         "cart_uuid" => cart.uuid,
+        # The shop session that placed this order. This is what lets the
+        # confirmation page recognise a guest as the person who just checked
+        # out, instead of treating knowledge of the order uuid as proof.
+        # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+        "session_id" => cart.session_id,
         "shipping_country" => shipping_country,
         "shipping_method_uuid" => cart.shipping_method_uuid
       }

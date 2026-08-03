@@ -7,6 +7,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
 
   import PhoenixKitEcommerce.Web.Helpers,
@@ -16,47 +17,74 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKit.Utils.Routes
 
   @impl true
-  def mount(%{"uuid" => uuid}, _session, socket) do
+  def mount(%{"uuid" => uuid}, session, socket) do
     user = get_current_user(socket)
+    shop_session_id = session["shop_session_id"]
 
     case Billing.get_order_by_uuid(uuid) do
       nil ->
         {:ok, redirect_with_error(socket, "Order not found")}
 
       order ->
-        handle_order_access(socket, order, user)
+        handle_order_access(socket, order, user, shop_session_id)
     end
   end
 
-  defp handle_order_access(socket, order, user) do
-    if has_order_access?(order, user) do
+  defp handle_order_access(socket, order, user, shop_session_id) do
+    if has_order_access?(order, user, shop_session_id) do
       {:ok, setup_order_assigns(socket, order)}
     else
       {:ok, redirect_with_error(socket, "You don't have access to this order")}
     end
   end
 
-  defp has_order_access?(order, user) do
+  # Who may read an order confirmation — including its billing snapshot
+  # (name, address, phone, email), which this page renders.
+  #
+  # Ownership by the logged-in user always grants access. Beyond that the
+  # behaviour is an admin choice; see
+  # `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+  #
+  #   :strict (default) — the visitor must hold the shop session that
+  #     placed the order. This is what makes a guest's own confirmation
+  #     page work right after checkout without making it world-readable.
+  #
+  #   :link — knowing the uuid is enough, for shops that deliberately mail
+  #     "view your order" links and accept the URL as the credential.
+  #
+  # The previous behaviour was unconditionally :link for guests, and worse
+  # than it looked: `guest_user_order?` returned true for ANY order whose
+  # owner had `confirmed_at: nil`, and guest checkout creates exactly such
+  # users — so every guest order, and every order of a registered but
+  # unconfirmed user, was readable forever by anyone with the uuid.
+  defp has_order_access?(order, user, shop_session_id) do
     cond do
-      # No user_uuid on order - legacy guest order
-      is_nil(order.user_uuid) -> true
-      # Logged-in user owns the order
       not is_nil(user) and order.user_uuid == user.uuid -> true
-      # Guest checkout - order belongs to unconfirmed user (allow access to confirmation page)
-      guest_user_order?(order) -> true
+      placed_in_session?(order, shop_session_id) -> true
+      Policy.order_lookup_policy() == :link -> true
       true -> false
     end
   end
 
-  # Check if order belongs to an unconfirmed guest user
-  defp guest_user_order?(%{user_uuid: nil}), do: false
+  # Orders record the shop session that placed them (see the metadata built
+  # in `PhoenixKitEcommerce.build_order_attrs/*`). Orders created before
+  # that was recorded have no session to match, so under :strict they are
+  # reachable only by their owner — which is the exposure being closed, not
+  # a regression to work around.
+  defp placed_in_session?(_order, nil), do: false
+  defp placed_in_session?(_order, ""), do: false
 
-  defp guest_user_order?(%{user_uuid: user_uuid}) do
-    case Auth.get_user(user_uuid) do
-      %{confirmed_at: nil} -> true
-      _ -> false
+  defp placed_in_session?(%{metadata: metadata}, shop_session_id) when is_map(metadata) do
+    case Map.get(metadata, "session_id") do
+      stored when is_binary(stored) and stored != "" ->
+        Plug.Crypto.secure_compare(stored, shop_session_id)
+
+      _ ->
+        false
     end
   end
+
+  defp placed_in_session?(_order, _shop_session_id), do: false
 
   defp setup_order_assigns(socket, order) do
     currency = Shop.get_default_currency()
