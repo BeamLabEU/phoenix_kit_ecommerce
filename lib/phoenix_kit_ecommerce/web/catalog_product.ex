@@ -42,6 +42,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> put_flash(:error, "Product not found")
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
+      {:ok, %{status: status}} when status != "active" ->
+        # The storefront must only serve ACTIVE products. `SlugResolver`
+        # applies a status filter only when a `:status` option is passed,
+        # and this call passes only `:preload` — so draft, inactive and
+        # archived products were reachable by URL, and since neither
+        # add-to-cart nor cart→order conversion re-checks status, they were
+        # also purchasable. The category's hidden status was checked; the
+        # product's own never was.
+        {:ok,
+         socket
+         |> put_flash(:error, "Product not found")
+         |> push_navigate(to: Shop.catalog_url(current_language))}
+
       {:ok, product} ->
         mount_product(product, params, session, socket, current_language)
     end
@@ -248,7 +261,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   @impl true
   def handle_event("set_quantity", %{"quantity" => quantity}, socket) do
-    quantity = String.to_integer(quantity) |> max(1)
+    quantity = Helpers.parse_int(quantity, 1) |> max(1)
     {:noreply, assign(socket, :quantity, quantity)}
   end
 

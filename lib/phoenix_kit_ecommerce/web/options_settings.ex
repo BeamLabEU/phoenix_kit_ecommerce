@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.OptionTypes
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -236,9 +237,14 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   @impl true
   def handle_event("remove_option", %{"index" => idx}, socket) do
     form_data = socket.assigns.form_data
-    index = String.to_integer(idx)
-    updated = %{form_data | options: List.delete_at(form_data.options, index)}
-    {:noreply, assign(socket, :form_data, updated)}
+    index = Helpers.parse_int(idx, -1)
+
+    if index < 0 do
+      {:noreply, socket}
+    else
+      updated = %{form_data | options: List.delete_at(form_data.options, index)}
+      {:noreply, assign(socket, :form_data, updated)}
+    end
   end
 
   defp save_option_change(nil, current, opt) do

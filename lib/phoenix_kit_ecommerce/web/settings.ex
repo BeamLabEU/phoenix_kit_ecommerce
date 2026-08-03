@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Policy
 
   @impl true
   def mount(_params, _session, socket) do
@@ -35,8 +36,21 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
+      |> assign_policy()
 
     {:ok, socket}
+  end
+
+  # Read every policy toggle through PhoenixKitEcommerce.Policy so the admin
+  # UI and the enforcement points can never disagree about a default.
+  defp assign_policy(socket) do
+    socket
+    |> assign(:order_lookup_strict, Policy.order_lookup_policy() == :strict)
+    |> assign(:allow_raw_html, Policy.allow_raw_html_descriptions?())
+    |> assign(:allow_svg, Policy.allow_svg_uploads?())
+    |> assign(:allow_private_networks, Policy.image_import_allow_private_networks?())
+    |> assign(:cleanup_auto_created_only, Policy.import_cleanup_scope() == :auto_created)
+    |> assign(:default_tax_country, Policy.default_tax_country() || "")
   end
 
   defp get_category_name_display do
@@ -49,6 +63,76 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp get_sidebar_show_categories do
     Settings.get_setting_cached("shop_sidebar_show_categories", "true") == "true"
+  end
+
+  @impl true
+  def handle_event("toggle_order_lookup_policy", _params, socket) do
+    # Checkbox ON means the SAFE value, so the stored value is inverted
+    # relative to the toggle: checked -> "strict".
+    next = if socket.assigns.order_lookup_strict, do: "link", else: "strict"
+
+    save_policy(socket, "shop_order_lookup_policy", next, gettext("Order access policy updated"))
+  end
+
+  @impl true
+  def handle_event("toggle_allow_raw_html", _params, socket) do
+    save_policy(
+      socket,
+      "shop_allow_raw_html_descriptions",
+      flip(socket.assigns.allow_raw_html),
+      gettext("Product description rendering updated")
+    )
+  end
+
+  @impl true
+  def handle_event("toggle_allow_svg", _params, socket) do
+    save_policy(
+      socket,
+      "shop_allow_svg_uploads",
+      flip(socket.assigns.allow_svg),
+      gettext("SVG import policy updated")
+    )
+  end
+
+  @impl true
+  def handle_event("toggle_allow_private_networks", _params, socket) do
+    save_policy(
+      socket,
+      "shop_image_import_allow_private_networks",
+      flip(socket.assigns.allow_private_networks),
+      gettext("Image import network policy updated")
+    )
+  end
+
+  @impl true
+  def handle_event("toggle_import_cleanup_scope", _params, socket) do
+    next = if socket.assigns.cleanup_auto_created_only, do: "all_empty", else: "auto_created"
+
+    save_policy(
+      socket,
+      "shop_import_cleanup_scope",
+      next,
+      gettext("Import cleanup scope updated")
+    )
+  end
+
+  @impl true
+  def handle_event("save_default_tax_country", %{"country" => country}, socket) do
+    normalized = country |> to_string() |> String.trim() |> String.upcase()
+
+    # Only a blank value or a two-letter code; anything else is a typo, and a
+    # bad country code silently means "no tax" rather than a visible error.
+    if normalized == "" or normalized =~ ~r/^[A-Z]{2}$/ do
+      save_policy(
+        socket,
+        "shop_default_tax_country",
+        normalized,
+        gettext("Tax fallback country updated")
+      )
+    else
+      {:noreply,
+       put_flash(socket, :error, gettext("Enter a two-letter country code, or leave it blank."))}
+    end
   end
 
   @impl true
@@ -230,6 +314,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
+  defp flip(true), do: "false"
+  defp flip(false), do: "true"
+
+  defp save_policy(socket, key, value, message) do
+    case Settings.update_setting(key, value) do
+      {:ok, _} ->
+        {:noreply, socket |> assign_policy() |> put_flash(:info, message)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -263,6 +360,156 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 />
               </label>
             </div>
+          </div>
+        </div>
+
+        <%!-- Security & Privacy --%>
+        <div class="card bg-base-100 shadow-xl mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-2">
+              <.icon name="hero-shield-check" class="w-6 h-6" />
+              {gettext("Security & Privacy")}
+            </h2>
+            <p class="text-sm text-base-content/70 mb-6">
+              {gettext(
+                "These default to the safe option. Change one only if you understand what it opens up — each is explained below."
+              )}
+            </p>
+
+            <div class="form-control mb-4">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">{gettext("Order pages need the buyer's session")}</span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "On: an order confirmation page opens only for the person who placed the order. Off: anyone with the order link can read its name, address, phone and email — turn this off only if you deliberately mail shareable order links."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-secondary"
+                  checked={@order_lookup_strict}
+                  phx-click="toggle_order_lookup_policy"
+                />
+              </label>
+            </div>
+
+            <div class="form-control mb-4">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">{gettext("Allow raw HTML in product descriptions")}</span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "Off (recommended): descriptions are sanitized before display. On: descriptions render as-is, which trusts everyone who can edit a product — or supply a CSV import — with running scripts in every shopper's browser."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-warning"
+                  checked={@allow_raw_html}
+                  phx-click="toggle_allow_raw_html"
+                />
+              </label>
+            </div>
+
+            <div class="form-control mb-4">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">{gettext("Allow SVG images from import")}</span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "Off (recommended): SVG files are rejected by the image importer. SVG can carry scripts and stored images are served inline."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-warning"
+                  checked={@allow_svg}
+                  phx-click="toggle_allow_svg"
+                />
+              </label>
+            </div>
+
+            <div class="form-control">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">
+                    {gettext("Let image import reach internal addresses")}
+                  </span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "Off (recommended): the importer refuses private and loopback addresses. Turn on only when importing from an image host inside your own network."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-warning"
+                  checked={@allow_private_networks}
+                  phx-click="toggle_allow_private_networks"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <%!-- Import behaviour --%>
+        <div class="card bg-base-100 shadow-xl mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-6">
+              <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
+              {gettext("Import Behaviour")}
+            </h2>
+
+            <div class="form-control">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">
+                    {gettext("Cleanup removes only categories the import created")}
+                  </span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "On (recommended): the post-import cleanup only deletes empty categories that the import itself created. Off: it deletes every empty category in your catalog, including ones you left empty on purpose."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-secondary"
+                  checked={@cleanup_auto_created_only}
+                  phx-click="toggle_import_cleanup_scope"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <%!-- Tax fallback --%>
+        <div class="card bg-base-100 shadow-xl mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-2">
+              <.icon name="hero-receipt-percent" class="w-6 h-6" />
+              {gettext("Tax Fallback Country")}
+            </h2>
+            <p class="text-sm text-base-content/70 mb-4">
+              {gettext(
+                "Optional. Tax is normally calculated from the address collected at checkout. Set a two-letter country code here if your shop is single-jurisdiction and should charge tax even before an address is supplied. Leave blank to charge tax only against a real address."
+              )}
+            </p>
+            <form phx-submit="save_default_tax_country" class="flex gap-2 items-center">
+              <input
+                type="text"
+                name="country"
+                value={@default_tax_country}
+                maxlength="2"
+                placeholder={gettext("e.g. EE")}
+                class="input input-bordered w-32 uppercase"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
+            </form>
           </div>
         </div>
 

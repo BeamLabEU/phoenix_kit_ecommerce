@@ -27,6 +27,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Services.ImageMigration
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Workers.CSVImportWorker
 
   require Logger
@@ -146,32 +147,45 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
   @impl true
   def handle_event("update_mapping", %{"index" => index_str} = params, socket) do
-    index = String.to_integer(index_str)
+    index = Helpers.parse_int(index_str, -1)
     mappings = socket.assigns.option_mappings
 
-    updated_mapping =
-      mappings
-      |> Enum.at(index)
-      |> update_mapping_from_params(params)
+    # An index that does not resolve to a row is ignored. Previously a
+    # non-numeric value raised out of handle_event/3 and killed the socket,
+    # and a negative one would have addressed a row from the END of the list.
+    case Enum.at(mappings, index) do
+      nil ->
+        {:noreply, socket}
 
-    updated_mappings = List.replace_at(mappings, index, updated_mapping)
+      mapping when index >= 0 ->
+        updated_mappings =
+          List.replace_at(mappings, index, update_mapping_from_params(mapping, params))
 
-    {:noreply, assign(socket, :option_mappings, updated_mappings)}
+        {:noreply, assign(socket, :option_mappings, updated_mappings)}
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   @impl true
   def handle_event("toggle_auto_add", %{"index" => index_str}, socket) do
-    index = String.to_integer(index_str)
+    index = Helpers.parse_int(index_str, -1)
     mappings = socket.assigns.option_mappings
 
-    updated_mapping =
-      mappings
-      |> Enum.at(index)
-      |> Map.update!(:auto_add, &(!&1))
+    case Enum.at(mappings, index) do
+      nil ->
+        {:noreply, socket}
 
-    updated_mappings = List.replace_at(mappings, index, updated_mapping)
+      mapping when index >= 0 ->
+        updated_mappings =
+          List.replace_at(mappings, index, Map.update!(mapping, :auto_add, &(!&1)))
 
-    {:noreply, assign(socket, :option_mappings, updated_mappings)}
+        {:noreply, assign(socket, :option_mappings, updated_mappings)}
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   @impl true

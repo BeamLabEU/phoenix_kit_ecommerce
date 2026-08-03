@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
+  alias PhoenixKit.Utils.HtmlSanitizer
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
@@ -869,7 +870,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
     if Policy.allow_raw_html_descriptions?() do
       Phoenix.HTML.raw(html)
     else
-      html |> PhoenixKit.Utils.HtmlSanitizer.sanitize() |> Phoenix.HTML.raw()
+      html |> HtmlSanitizer.sanitize() |> Phoenix.HTML.raw()
     end
   end
 end
