@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
           new_id = generate_session_id()
 
           conn
-          |> put_resp_cookie(@cookie_name, new_id, max_age: @cookie_max_age, http_only: true)
+          |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
           |> put_session("shop_session_id", new_id)
 
         existing_id ->
@@ -39,9 +39,34 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
     end
   end
 
+  # This cookie is a cart identity, and since orders are now recognised by
+  # the session that placed them (see `Policy.order_lookup_policy/0`) it is
+  # also what proves "I am the guest who just checked out". It is therefore
+  # signed: unsigned, a forged value picked up someone else's guest cart.
+  #
+  # `same_site: "Lax"` keeps it off cross-site requests, and `secure:` is
+  # set whenever the request arrived over HTTPS — conditional rather than
+  # hardcoded so plain-HTTP local development still gets a working cart.
+  defp cookie_opts(conn) do
+    [
+      max_age: @cookie_max_age,
+      http_only: true,
+      same_site: "Lax",
+      secure: conn.scheme == :https,
+      sign: true
+    ]
+  end
+
   defp get_shop_session_id(conn) do
-    # Try cookie first
-    conn = fetch_cookies(conn)
+    # Try the signed cookie first, then the Phoenix session.
+    #
+    # A cookie that fails signature verification is IGNORED rather than
+    # trusted — `fetch_cookies/2` simply omits it from `conn.cookies` — so
+    # a tampered or pre-signing value falls through to the session, or to
+    # minting a fresh id. Old unsigned cookies from before this change are
+    # in that bucket: the visitor silently gets a new cart identity rather
+    # than an error.
+    conn = fetch_cookies(conn, signed: [@cookie_name])
 
     case conn.cookies[@cookie_name] do
       nil ->

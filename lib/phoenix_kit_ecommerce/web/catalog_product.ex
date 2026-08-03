@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -684,8 +685,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             </div>
 
             <%!-- Description --%>
+            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
+                  This renders on the UNAUTHENTICATED storefront, and product
+                  descriptions are writable by anyone holding the "shop"
+                  permission and by whoever supplies a CSV import file — so
+                  `sanitize={false}` here was a path from "can edit a product"
+                  to script execution in every shopper's and the Owner's
+                  browser. See PhoenixKitEcommerce.Policy. --%>
             <%= if @localized_description do %>
-              <.markdown content={@localized_description} sanitize={false} compact />
+              <.markdown
+                content={@localized_description}
+                sanitize={not Policy.allow_raw_html_descriptions?()}
+                compact
+              />
             <% end %>
 
             <%!-- Product Details --%>

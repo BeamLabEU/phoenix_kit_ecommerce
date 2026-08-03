@@ -303,10 +303,26 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_event("select_profile", %{"profile_uuid" => profile_uuid}, socket) do
-    {:noreply,
-     socket
-     |> assign(:selected_profile_uuid, profile_uuid)
-     |> assign(:use_new_profile, false)}
+    # Only a profile that belongs to THIS user may be selected. `@billing_profiles`
+    # is already scoped by `load_billing_profiles/1` (Billing.list_user_billing_profiles
+    # for the current user), so membership in that list is the ownership check.
+    #
+    # Without it, the uuid went from the client straight onto the order, and
+    # `maybe_set_billing_snapshot` copied the referenced profile's name, address,
+    # phone and email onto the attacker's order — where the confirmation page
+    # renders them back. Any known profile uuid was a PII read.
+    #
+    # Note the sibling handler `use_new_profile` already did this correctly with
+    # `Enum.find(socket.assigns.billing_profiles, ...)`; this one just never got
+    # the same treatment.
+    if owned_profile_uuid?(socket, profile_uuid) do
+      {:noreply,
+       socket
+       |> assign(:selected_profile_uuid, profile_uuid)
+       |> assign(:use_new_profile, false)}
+    else
+      {:noreply, put_flash(socket, :error, gettext("That billing profile is not available."))}
+    end
   end
 
   @impl true
@@ -397,8 +413,35 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         [billing_profile_uuid: socket.assigns.selected_profile_uuid, user_uuid: user_uuid]
       end
 
-    result = Shop.convert_cart_to_order(cart, opts)
-    {:noreply, handle_order_result(result, socket)}
+    # Re-check ownership at the point of USE, not just at selection. The
+    # selection handler guards the normal path, but `selected_profile_uuid`
+    # is plain socket state and this is the event that writes it onto a
+    # persisted order — the one place where being wrong costs someone their
+    # address. Cheap check, last line of defence.
+    if socket.assigns.use_new_profile or
+         owned_profile_uuid?(socket, socket.assigns.selected_profile_uuid) do
+      result = Shop.convert_cart_to_order(cart, opts)
+      {:noreply, handle_order_result(result, socket)}
+    else
+      {:noreply,
+       socket
+       |> assign(:processing, false)
+       |> assign(:selected_profile_uuid, nil)
+       |> put_flash(:error, gettext("That billing profile is not available."))}
+    end
+  end
+
+  # Membership in `@billing_profiles` IS the ownership check — that list is
+  # built by `load_billing_profiles/1` from
+  # `Billing.list_user_billing_profiles(user.uuid)`, so it only ever holds
+  # the current user's profiles.
+  defp owned_profile_uuid?(_socket, nil), do: false
+
+  defp owned_profile_uuid?(socket, profile_uuid) do
+    Enum.any?(
+      socket.assigns.billing_profiles,
+      &(to_string(&1.uuid) == to_string(profile_uuid))
+    )
   end
 
   defp handle_order_result({:ok, order}, socket) do
