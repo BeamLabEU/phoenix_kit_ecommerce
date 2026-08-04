@@ -14,8 +14,11 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
 
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
-  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Web.Helpers, as: ShopHelpers
+
+  import PhoenixKitEcommerce.Web.Helpers,
+    only: [format_price: 2, profile_display_name: 1, profile_address: 1]
 
   @impl true
   def mount(%{"uuid" => uuid}, _session, socket) do
@@ -52,7 +55,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   end
 
   defp setup_order_assigns(socket, order, current_user) do
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(order.currency)
     billing_profile = get_billing_profile(order)
 
     socket
@@ -63,8 +66,14 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
     |> assign(:billing_profile, billing_profile)
   end
 
-  defp get_billing_profile(%{billing_profile_uuid: nil}), do: nil
-  defp get_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
+  # Snapshot first - see Helpers.order_billing_identity/1. This page had no
+  # snapshot fallback at all, so a deleted profile rendered nothing.
+  defp get_billing_profile(order) do
+    ShopHelpers.order_billing_identity(order) || live_billing_profile(order)
+  end
+
+  defp live_billing_profile(%{billing_profile_uuid: nil}), do: nil
+  defp live_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
 
   @impl true
   def handle_params(_params, uri, socket) do
@@ -90,34 +99,6 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
 
   defp format_date(%NaiveDateTime{} = dt) do
     Calendar.strftime(dt, "%B %d, %Y at %H:%M")
-  end
-
-  defp format_price(nil, _currency), do: "-"
-
-  defp format_price(amount, nil) do
-    "$#{Decimal.round(amount, 2)}"
-  end
-
-  defp format_price(amount, currency) do
-    Currency.format_amount(amount, currency)
-  end
-
-  defp format_price_string(nil), do: "-"
-  defp format_price_string(amount) when is_binary(amount), do: "$#{amount}"
-  defp format_price_string(amount), do: "$#{amount}"
-
-  defp profile_display_name(%{type: "company"} = profile) do
-    profile.company_name || "#{profile.first_name} #{profile.last_name}"
-  end
-
-  defp profile_display_name(profile) do
-    "#{profile.first_name} #{profile.last_name}"
-  end
-
-  defp profile_address(profile) do
-    [profile.address_line1, profile.city, profile.postal_code, profile.country]
-    |> Enum.filter(& &1)
-    |> Enum.join(", ")
   end
 
   defp items_count(nil), do: 0

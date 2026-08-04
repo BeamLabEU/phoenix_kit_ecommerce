@@ -110,7 +110,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   defp setup_order_assigns(socket, order) do
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(order.currency)
     billing_profile = get_billing_profile(order)
     {is_guest_order, order_email} = check_guest_order(order)
 
@@ -127,8 +127,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> assign(:authenticated, authenticated)
   end
 
-  defp get_billing_profile(%{billing_profile_uuid: nil}), do: nil
-  defp get_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
+  # The order's own snapshot is the record of who it was billed to; the
+  # live profile is a fallback for orders that predate snapshots (it is
+  # editable, so preferring it made history mutable).
+  defp get_billing_profile(order) do
+    PhoenixKitEcommerce.Web.Helpers.order_billing_identity(order) || live_billing_profile(order)
+  end
+
+  defp live_billing_profile(%{billing_profile_uuid: nil}), do: nil
+  defp live_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
 
   defp check_guest_order(%{user_uuid: nil} = order) do
     email = get_in(order.billing_snapshot, ["email"])
@@ -259,7 +266,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                       <% end %>
                     </div>
                     <div class="font-medium">
-                      {format_price_string(item["total"])}
+                      {format_price(item["total"], @currency)}
                     </div>
                   </div>
                 <% end %>
@@ -326,7 +333,5 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   # Helpers
 
-  defp format_price_string(nil), do: "-"
-  defp format_price_string(amount) when is_binary(amount), do: "$#{amount}"
-  defp format_price_string(amount), do: "$#{amount}"
+
 end

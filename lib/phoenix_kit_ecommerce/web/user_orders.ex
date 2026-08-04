@@ -112,14 +112,20 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
     # Apply pagination manually
     per_page = socket.assigns.per_page
-    page = socket.assigns.page
-    orders = all_orders |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
     total_pages = max(1, ceil(total_count / per_page))
+
+    # Clamp to the last real page. An out-of-range `?page=` used to render
+    # the "no orders yet" empty state to a customer who HAS orders, with no
+    # pagination control pointing back.
+    page = socket.assigns.page |> min(total_pages) |> max(1)
+
+    orders = all_orders |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
 
     socket
     |> assign(:orders, orders)
     |> assign(:total_count, total_count)
     |> assign(:total_pages, total_pages)
+    |> assign(:page, page)
     |> assign(:currency, currency)
   end
 
