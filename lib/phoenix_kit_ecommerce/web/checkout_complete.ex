@@ -67,10 +67,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   # Orders record the shop session that placed them (see the metadata built
-  # in `PhoenixKitEcommerce.build_order_attrs/*`). Orders created before
-  # that was recorded have no session to match, so under :strict they are
-  # reachable only by their owner — which is the exposure being closed, not
-  # a regression to work around.
+  # in `PhoenixKitEcommerce.build_order_attrs/*`).
+  #
+  # Orders placed BEFORE that was recorded fall back to the cart: they
+  # carry `metadata["cart_uuid"]`, and the cart row survives conversion
+  # with its `session_id`. Without this fallback, tightening order access
+  # would have locked every existing guest out of their own past
+  # confirmation pages on upgrade — a silent break for every deployed
+  # shop, not just a theoretical one.
+  #
+  # The fallback costs one narrow query, and only for orders that predate
+  # the change AND are being viewed by someone who is not the owner.
   defp placed_in_session?(_order, nil), do: false
   defp placed_in_session?(_order, ""), do: false
 
@@ -80,11 +87,21 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
         Plug.Crypto.secure_compare(stored, shop_session_id)
 
       _ ->
-        false
+        legacy_cart_session?(metadata, shop_session_id)
     end
   end
 
   defp placed_in_session?(_order, _shop_session_id), do: false
+
+  defp legacy_cart_session?(metadata, shop_session_id) do
+    case Shop.cart_session_id(Map.get(metadata, "cart_uuid")) do
+      stored when is_binary(stored) and stored != "" ->
+        Plug.Crypto.secure_compare(stored, shop_session_id)
+
+      _ ->
+        false
+    end
+  end
 
   defp setup_order_assigns(socket, order) do
     currency = Shop.get_default_currency()

@@ -1563,6 +1563,56 @@ defmodule PhoenixKitEcommerce do
   def get_cart(_), do: nil
 
   @doc """
+  Whether any cart exists for this shop session id.
+
+  Used by `PhoenixKitEcommerce.Web.Plugs.ShopSession` to decide whether an
+  unsigned, pre-migration cookie names a real session worth adopting.
+  Existence only — no cart is loaded and nothing is authorized by this.
+  """
+  @spec session_has_cart?(String.t() | any()) :: boolean()
+  def session_has_cart?(session_id) when is_binary(session_id) and session_id != "" do
+    Cart
+    |> where([c], c.session_id == ^session_id)
+    |> limit(1)
+    |> select([c], 1)
+    |> repo().one()
+    |> is_nil()
+    |> Kernel.not()
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  def session_has_cart?(_), do: false
+
+  @doc """
+  Returns just the `session_id` of a cart, without loading items.
+
+  Used to authorize order confirmation pages for orders placed BEFORE
+  `metadata["session_id"]` was recorded on the order itself. Those orders
+  still carry `metadata["cart_uuid"]`, and the cart row survives
+  conversion (`mark_cart_converted/2` flips its status, it is never
+  deleted) with its `session_id` intact — so the placing session is still
+  recoverable for them.
+
+  Deliberately a narrow `select` rather than `get_cart/1`: this runs on a
+  page load purely to compare one string, and `get_cart/1` preloads items
+  and the shipping method.
+  """
+  @spec cart_session_id(String.t() | any()) :: String.t() | nil
+  def cart_session_id(uuid) when is_binary(uuid) do
+    if UUIDUtils.valid?(uuid) do
+      Cart
+      |> where([c], c.uuid == ^uuid)
+      |> select([c], c.session_id)
+      |> repo().one()
+    end
+  end
+
+  def cart_session_id(_), do: nil
+
+  @doc """
   Gets a cart by ID or UUID, raises if not found.
   """
   def get_cart!(id) do
