@@ -1571,8 +1571,18 @@ defmodule PhoenixKitEcommerce do
   """
   @spec session_has_cart?(String.t() | any()) :: boolean()
   def session_has_cart?(session_id) when is_binary(session_id) and session_id != "" do
+    # Deliberately narrow. The adopted id is a CART identity, so it may only
+    # be adopted for a cart that is still a live GUEST cart:
+    #
+    #   * `status == "active"` — a converted or abandoned cart is finished
+    #     business, and matching one would keep the migration window open
+    #     forever (nothing deletes carts; `mark_abandoned_carts/1` only
+    #     flips a status and is wired to no cron).
+    #   * `is_nil(user_uuid)` — a cart already claimed by an account must
+    #     never be reachable by presenting an unsigned cookie.
     Cart
     |> where([c], c.session_id == ^session_id)
+    |> where([c], c.status == "active" and is_nil(c.user_uuid))
     |> limit(1)
     |> select([c], 1)
     |> repo().one()
@@ -2296,21 +2306,6 @@ defmodule PhoenixKitEcommerce do
   def convert_cart_to_order(%Cart{} = cart, opts) when is_list(opts) do
     cart = get_cart!(cart.uuid)
 
-    # Snapshot the placing session BEFORE anything can clear it.
-    #
-    # `resolve_checkout_user/2` runs ahead of `build_order_attrs/3` and, for
-    # both guest checkout and a logged-in user adopting a guest cart, ends in
-    # `assign_cart_to_user/2` — which writes `session_id: nil` onto the cart.
-    # Reading `cart.session_id` after that point yields nil, so the order was
-    # stamped with no placing session and the cart row lost it too. That meant
-    # a guest could not open the confirmation page they were redirected to
-    # one line later, and the `cart_uuid -> cart.session_id` fallback could
-    # not recover it either, because the column had already been nulled.
-    #
-    # Captured here, outside the transaction, so every downstream step sees
-    # the value the buyer actually holds in their cookie.
-    opts = Keyword.put_new(opts, :placing_session_id, cart.session_id)
-
     # Wrap entire conversion in a transaction to ensure atomicity
     # If any step fails after order creation, the order is rolled back
     repo().transaction(fn ->
@@ -2319,11 +2314,31 @@ defmodule PhoenixKitEcommerce do
       # if another request already started conversion
       with :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
+           # Snapshot the placing session from the LOCKED cart, before
+           # anything can clear it.
+           #
+           # `resolve_checkout_user/2` runs next and, for both guest checkout
+           # and a logged-in user adopting a guest cart, ends in
+           # `assign_cart_to_user/2` — which writes `session_id: nil` onto the
+           # cart. Reading `cart.session_id` after that point yields nil, so
+           # the order was stamped with no placing session and the cart row
+           # lost it too: the guest could not open the confirmation page they
+           # were redirected to one line later, and the
+           # `cart_uuid -> cart.session_id` fallback could not recover it.
+           #
+           # Deliberately a local binding rather than an option. This value
+           # authorizes the order confirmation page, and
+           # `convert_cart_to_order/2` is public (re-exported through
+           # `compat/shop.ex`) — threading it through `opts` let a caller
+           # supply their own and have it stamped into
+           # `metadata["session_id"]`, handing out access to an order they
+           # did not place. Derived internally, it cannot be influenced.
+           placing_session_id = cart.session_id,
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
            {:ok, cart} <- apply_checkout_shipping_country(cart, opts),
            {:ok, cart} <- validate_shipping_method_available(cart),
            line_items <- build_order_line_items(cart),
-           order_attrs <- build_order_attrs(cart, line_items, opts),
+           order_attrs <- build_order_attrs(cart, line_items, opts, placing_session_id),
            {:ok, order} <- do_create_order(user_uuid, order_attrs),
            {:ok, _cart} <- mark_cart_converted(cart, order.uuid) do
         {:ok, order}
@@ -2379,27 +2394,28 @@ defmodule PhoenixKitEcommerce do
       get_shipping_country(billing_profile_uuid, billing_data, cart) ||
         Policy.default_tax_country()
 
-    cond do
-      is_nil(country) or country == "" ->
-        {:ok, cart}
+    with {:ok, cart} <- maybe_write_shipping_country(cart, country) do
+      # ALWAYS recalculate before the order copies these totals, not only
+      # when the country changed.
+      #
+      # Two reasons. `set_cart_shipping_country/2` writes the column but
+      # not the totals, so a newly-applied country leaves tax_amount stale.
+      # And a cart that ALREADY had the right country skipped recalculation
+      # entirely — so any totals left stale by a concurrent cart edit (see
+      # the lock in `recalculate_cart_totals!/1`) were copied onto the order
+      # verbatim. Recomputing unconditionally, inside the conversion
+      # transaction and under that lock, makes the order's totals a fresh
+      # read rather than a trusted cache.
+      _ = recalculate_cart_totals!(cart)
+      {:ok, get_cart!(cart.uuid)}
+    end
+  end
 
-      country == cart.shipping_country ->
-        {:ok, cart}
-
-      true ->
-        case set_cart_shipping_country(cart, country) do
-          {:ok, updated} ->
-            # `set_cart_shipping_country/2` only writes the column — the
-            # stored tax_amount/total were computed while the country was
-            # still nil, so they must be recomputed before the order copies
-            # them. Reload afterwards so line items are present for
-            # `build_order_line_items/1`.
-            _ = recalculate_cart_totals!(updated)
-            {:ok, get_cart!(updated.uuid)}
-
-          {:error, _} = error ->
-            error
-        end
+  defp maybe_write_shipping_country(%Cart{} = cart, country) do
+    if is_nil(country) or country == "" or country == cart.shipping_country do
+      {:ok, cart}
+    else
+      set_cart_shipping_country(cart, country)
     end
   end
 
@@ -2491,7 +2507,7 @@ defmodule PhoenixKitEcommerce do
     product_items ++ shipping_item
   end
 
-  defp build_order_attrs(%Cart{} = cart, line_items, opts) do
+  defp build_order_attrs(%Cart{} = cart, line_items, opts, placing_session_id) do
     billing_profile_uuid = Keyword.get(opts, :billing_profile_uuid)
     billing_data = Keyword.get(opts, :billing_data)
 
@@ -2519,8 +2535,10 @@ defmodule PhoenixKitEcommerce do
         #
         # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
         # from `cart.session_id` — by this point `assign_cart_to_user/2` has
-        # already nulled the column for every guest checkout.
-        "session_id" => Keyword.get(opts, :placing_session_id) || cart.session_id,
+        # already nulled the column for every guest checkout. Passed as an
+        # argument rather than through `opts` so a caller of the public
+        # `convert_cart_to_order/2` cannot choose it.
+        "session_id" => placing_session_id,
         "shipping_country" => shipping_country,
         "shipping_method_uuid" => cart.shipping_method_uuid
       }
@@ -2954,6 +2972,30 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp recalculate_cart_totals!(%Cart{} = cart) do
+    # Serialize concurrent recalculations of the SAME cart.
+    #
+    # Callers lock only the PRODUCT row, which does not serialize two adds
+    # of DIFFERENT products: at READ COMMITTED both transactions insert
+    # their item, each then recalculated over a snapshot containing only
+    # its own, and the second cart UPDATE — which blocked on the first's
+    # row lock — overwrote the totals with a value computed from stale
+    # data. Both items persisted; the totals reflected one. Real money,
+    # not just a UI glitch, since conversion copies these totals onto the
+    # order.
+    #
+    # Taking the cart row lock HERE rather than in each of the eight
+    # callers is what makes it correct: the lock must be held before the
+    # item read, so the loser of the race re-reads after the winner
+    # commits and sees both items. Contention is per-cart, so the cost is
+    # negligible; the checkout conversion path is unaffected, it already
+    # serializes on an atomic status transition.
+    _locked =
+      Cart
+      |> where([c], c.uuid == ^cart.uuid)
+      |> lock("FOR UPDATE")
+      |> select([c], c.uuid)
+      |> repo().one()
+
     items = CartItem |> where([i], i.cart_uuid == ^cart.uuid) |> repo().all()
 
     subtotal =
