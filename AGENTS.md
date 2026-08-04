@@ -114,12 +114,53 @@ Features: automatic format detection, keyword-based filtering, category assignme
 
 ### Settings Keys
 
-All stored via PhoenixKit Settings with module `"shop"`:
+All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed** — the
+unprefixed names this section used to list (`tax_enabled`, `tax_rate`, …)
+were never what the code read.
 
-- `tax_enabled` — enable tax calculations (default: true)
-- `tax_rate` — tax rate percentage (default: 20)
-- `inventory_tracking` — track product inventory (default: true)
-- `allow_price_override` — allow per-product price overrides (default: false)
+**Behaviour**
+
+- `shop_enabled` — module master switch (default: `false`)
+- `shop_inventory_tracking` — track product inventory (default: `true`)
+- `shop_allow_price_override` — allow per-product price overrides (default: `false`)
+
+**Storefront display**
+
+- `shop_category_name_display` — `"truncate"` (default) or `"wrap"`
+- `shop_category_icon_mode` — `"none"` (default), icon rendering mode
+- `shop_sidebar_show_categories` — show the category sidebar (default: `true`)
+
+**Policy — read through `PhoenixKitEcommerce.Policy`, never directly**
+
+Every one is **secure by default**, and every reader fails *closed* on a
+settings-layer error. The module is the single source of truth so the admin
+UI and the enforcement points cannot disagree about a default.
+
+- `shop_order_lookup_policy` — `"strict"` (default) requires the session that
+  placed an order to view its confirmation page; `"link"` makes the UUID
+  sufficient. Only choose `"link"` if you deliberately mail order links and
+  accept the URL as the credential — the page renders the billing snapshot.
+- `shop_allow_raw_html_descriptions` — `false` (default) sanitizes product
+  descriptions. Turning it on trusts everyone who can edit a product *or
+  supply a CSV import feed* with script execution in every shopper's browser.
+- `shop_allow_svg_uploads` — `false` (default) rejects SVG in the image
+  importer. SVG can carry script and stored files are served inline.
+- `shop_image_import_allow_private_networks` — `false` (default) blocks
+  loopback/private/link-local/metadata addresses in the image importer.
+- `shop_default_tax_country` — optional two-letter fallback country for tax
+  when checkout supplied no address. Unset by default: charging tax against
+  a guessed jurisdiction is worse than charging none.
+- `shop_import_cleanup_scope` — `"auto_created"` (default) limits post-import
+  cleanup to categories the import created; `"all_empty"` restores the old
+  sweep that deleted *every* empty category, including deliberate placeholders.
+- `shop_legacy_cookie_until` — ISO8601 cutoff after which pre-signing
+  `shop_session_id` cookies stop being adopted. ⚠️ Unset means "still
+  migrating"; this is the one key here where leaving the default forever is
+  wrong, because nothing prunes carts so the window never self-closes.
+
+**Consumed from billing** (owned by `phoenix_kit_billing`, read here)
+
+- `billing_tax_enabled`, `billing_default_tax_rate`
 
 ### Cart Status Workflow
 
@@ -337,12 +378,19 @@ The sweep completed most of the initially-deferred items. **Completed:**
    forms** (driven by `TranslationTabs` + dynamic-option selects) and the
    **map-backed import-config form** (no changeset/`:action`) were left
    as-is — migrating them safely needs translation/validation rewiring.
-5. **Body-string gettext-backend migration** (from PR #4) —
-   `web/shop_web.ex` injects `PhoenixKitWeb.Gettext`, so ~25+ body-string
-   `gettext()` calls across `web/` resolve against the parent app's
-   catalogue rather than `PhoenixKitEcommerce.Gettext`. Migrating means
-   switching the `__using__` injection and extracting/translating
-   hundreds of msgids — a separate, larger PR.
+5. ~~**Body-string gettext-backend migration** (from PR #4)~~ — **done**
+   (commit `bce8114`). `web/shop_web.ex` now injects
+   `PhoenixKitEcommerce.Gettext` for both the LiveView and component
+   `__using__` blocks, and `priv/gettext/{en,et,ru}` each carry 547
+   msgids. Body strings in `web/` resolve against the module catalogue,
+   not the parent app's.
+
+   Practical consequence for new code: a `gettext("…")` added anywhere
+   under `web/` lands in **this module's** catalogue, so it needs
+   `mix gettext.extract && mix gettext.merge priv/gettext --no-fuzzy`
+   here — not in core. (Merge with `--no-fuzzy`: fuzzy entries are live
+   at runtime, so a plain merge after an extraction gap ships guessed
+   translations.)
 
 ## Research & Design Notes
 
