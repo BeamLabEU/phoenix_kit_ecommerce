@@ -177,15 +177,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   @impl true
   def render(assigns) do
-    assigns =
-      if assigns.authenticated do
-        assign(assigns, :sidebar_after_shop, shop_sidebar(assigns))
-      else
-        assigns
-      end
-
     ~H"""
-    <ShopLayouts.shop_layout {assigns} show_sidebar={true}>
+    <ShopLayouts.shop_layout {assigns}>
       <div>
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
@@ -230,32 +223,28 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
           </div>
         <% end %>
 
-        <%!-- Main layout: sidebar + content --%>
-        <%!-- For authenticated users: no grid (sidebar is in dashboard layout) --%>
-        <%!-- For guests: 4-column grid with sidebar --%>
-        <div class={unless @authenticated, do: "grid grid-cols-1 lg:grid-cols-4 gap-8", else: ""}>
+        <%!-- Main layout: 4-column grid, in-page sidebar for everyone --%>
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <%!-- Sidebar: filters + optional categories --%>
-          <%= if !@authenticated do %>
-            <aside class="lg:col-span-1 hidden lg:block">
-              <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-                <div class="card-body p-4">
-                  <CatalogSidebar.catalog_sidebar
-                    filters={@enabled_filters}
-                    filter_values={@filter_values}
-                    active_filters={@active_filters}
-                    categories={@categories}
-                    current_category={nil}
-                    current_language={@current_language}
-                    category_icon_mode={@category_icon_mode}
-                    category_name_wrap={@category_name_wrap}
-                    filter_qs={@filter_qs}
-                  />
-                </div>
+          <aside class="lg:col-span-1 hidden lg:block">
+            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
+              <div class="card-body p-4">
+                <CatalogSidebar.catalog_sidebar
+                  filters={@enabled_filters}
+                  filter_values={@filter_values}
+                  active_filters={@active_filters}
+                  categories={@categories}
+                  current_category={nil}
+                  current_language={@current_language}
+                  category_icon_mode={@category_icon_mode}
+                  category_name_wrap={@category_name_wrap}
+                  filter_qs={@filter_qs}
+                />
               </div>
-            </aside>
-          <% end %>
+            </div>
+          </aside>
 
-          <div class={unless @authenticated, do: "lg:col-span-3", else: ""}>
+          <div class="lg:col-span-3">
             <%!-- Category Grid (controlled by setting) --%>
             <%= if @show_categories_grid && @categories != [] do %>
               <div class="mb-8">
@@ -317,13 +306,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                 </div>
               </div>
             <% else %>
-              <div class={[
-                "grid gap-6",
-                if(@authenticated,
-                  do: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
-                  else: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
-                )
-              ]}>
+              <div class="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
                 <%= for product <- @products do %>
                   <ShopCards.product_card
                     product={product}
@@ -349,22 +332,6 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         </div>
       </div>
     </ShopLayouts.shop_layout>
-    """
-  end
-
-  defp shop_sidebar(assigns) do
-    ~H"""
-    <CatalogSidebar.catalog_sidebar
-      filters={@enabled_filters}
-      filter_values={@filter_values}
-      active_filters={@active_filters}
-      categories={@categories}
-      current_category={nil}
-      current_language={@current_language}
-      category_icon_mode={@category_icon_mode}
-      category_name_wrap={@category_name_wrap}
-      filter_qs={@filter_qs}
-    />
     """
   end
 

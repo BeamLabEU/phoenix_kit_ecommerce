@@ -244,15 +244,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
 
   @impl true
   def render(assigns) do
-    assigns =
-      if assigns.authenticated do
-        assign(assigns, :sidebar_after_shop, shop_sidebar(assigns))
-      else
-        assigns
-      end
-
     ~H"""
-    <ShopLayouts.shop_layout {assigns} show_sidebar={true}>
+    <ShopLayouts.shop_layout {assigns}>
       <div class="p-6 max-w-7xl mx-auto">
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
@@ -295,7 +288,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                   current_language={@current_language}
                   category_icon_mode={@category_icon_mode}
                   category_name_wrap={@category_name_wrap}
-                  show_categories={!@authenticated}
+                  show_categories={true}
                   filter_qs={@filter_qs}
                 />
               </div>
@@ -303,51 +296,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           </div>
         <% end %>
 
-        <%= if @authenticated do %>
-          <%!-- Authenticated layout: Categories are in dashboard sidebar --%>
-          <%!-- Category Header --%>
-          <div class="mb-8">
-            <h1 class="text-3xl font-bold">{@localized_name}</h1>
-            <%= if @localized_description do %>
-              <p class="text-base-content/70 mt-2">{@localized_description}</p>
-            <% end %>
-            <p class="text-sm text-base-content/50 mt-2">
-              {@total_products} product(s) found
-            </p>
-          </div>
-
-          <%!-- Full-width Products Grid --%>
-          <%= if @products == [] do %>
-            <.category_empty_state
-              active_filters={@active_filters}
-              current_language={@current_language}
-              filter_qs={@filter_qs}
-            />
-          <% else %>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              <%= for product <- @products do %>
-                <ShopCards.product_card
-                  product={product}
-                  currency={@currency}
-                  language={@current_language}
-                  filter_qs={@filter_qs}
-                />
-              <% end %>
-            </div>
-
-            <ShopCards.shop_pagination
-              page={@page}
-              total_pages={@total_pages}
-              total_products={@total_products}
-              per_page={@per_page}
-              base_path={Shop.category_url(@category, @current_language)}
-              active_filters={@active_filters}
-              enabled_filters={@enabled_filters}
-            />
-          <% end %>
-        <% else %>
-          <%!-- Guest layout: With sidebar for filters + category navigation --%>
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <%!-- 4-column grid, in-page sidebar for everyone --%>
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <%!-- Sidebar --%>
             <aside class="lg:col-span-1 hidden lg:block">
               <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
@@ -411,25 +361,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               <% end %>
             </div>
           </div>
-        <% end %>
       </div>
     </ShopLayouts.shop_layout>
-    """
-  end
-
-  defp shop_sidebar(assigns) do
-    ~H"""
-    <CatalogSidebar.catalog_sidebar
-      filters={@enabled_filters}
-      filter_values={@filter_values}
-      active_filters={@active_filters}
-      categories={@categories}
-      current_category={@category}
-      current_language={@current_language}
-      category_icon_mode={@category_icon_mode}
-      category_name_wrap={@category_name_wrap}
-      filter_qs={@filter_qs}
-    />
     """
   end
 
