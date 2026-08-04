@@ -164,6 +164,23 @@ defmodule PhoenixKitEcommerce do
   @impl PhoenixKit.Module
   def module_name, do: "E-Commerce"
 
+  @doc """
+  Tailwind source roots contributed to the host's CSS build.
+
+  Both `README.md` and `AGENTS.md` claimed this was implemented; it was
+  not, and the `use PhoenixKit.Module` default returns `[]`. The
+  consequence was invisible rather than loud: core's
+  `:phoenix_kit_css_sources` compiler collects this from every discovered
+  module and writes `assets/css/_phoenix_kit_sources.css`, so with shop
+  contributing nothing, Tailwind purged every class used only by this
+  module's storefront and admin templates from the host build.
+
+  It stayed hidden because the compiler only warns when the TOTAL source
+  list is empty — any other installed module masked the absence.
+  """
+  @impl PhoenixKit.Module
+  def css_sources, do: [:phoenix_kit_ecommerce]
+
   @impl PhoenixKit.Module
   def version do
     case Application.spec(:phoenix_kit_ecommerce, :vsn) do
