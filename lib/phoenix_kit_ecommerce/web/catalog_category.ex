@@ -18,7 +18,22 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
-  def mount(%{"slug" => slug} = params, _session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+    end
+  end
+
+  defp do_mount(%{"slug" => slug} = params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop/... always uses default language, not session
     current_language = Helpers.get_language_from_params_or_default(params)

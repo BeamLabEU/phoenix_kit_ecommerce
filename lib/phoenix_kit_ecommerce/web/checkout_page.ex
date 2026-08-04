@@ -28,7 +28,22 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     ]
 
   @impl true
-  def mount(_params, session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+    end
+  end
+
+  defp do_mount(_params, session, socket) do
     user = get_current_user(socket)
     session_id = session["shop_session_id"]
     user_uuid = if user, do: user.uuid
@@ -43,12 +58,27 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp handle_cart_validation(socket, cart, user) do
+    requires_shipping = Shop.cart_requires_shipping?(cart)
+
     cond do
       Enum.empty?(cart.items) ->
         {:ok, redirect_to_cart(socket, "Your cart is empty")}
 
-      is_nil(cart.shipping_method_uuid) ->
+      is_nil(cart.shipping_method_uuid) and requires_shipping ->
         {:ok, redirect_to_cart(socket, "Please select a shipping method")}
+
+      # A selection the cart has outgrown must not reach review priced at
+      # zero - it converts to a guaranteed conversion failure.
+      requires_shipping and not is_nil(cart.shipping_method_uuid) and
+          not Enum.any?(
+            Shop.get_available_shipping_methods(cart),
+            &(&1.uuid == cart.shipping_method_uuid)
+          ) ->
+        {:ok,
+         redirect_to_cart(
+           socket,
+           "The selected shipping method is no longer available for this cart - please pick another"
+         )}
 
       true ->
         {:ok, setup_checkout_assigns(socket, cart, user)}
@@ -446,11 +476,39 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket = assign(socket, :step, :review)
 
     case Shop.preview_checkout_totals(socket.assigns.cart, checkout_opts(socket)) do
-      {:ok, cart} -> assign(socket, :cart, cart)
+      {:ok, cart} ->
+        # The billing country just entered the calculation - a method that
+        # served the country-less cart may not serve THIS address, and its
+        # ineligible price is zero, so review would show an underpriced
+        # total that conversion then rejects. Catch it here, at the moment
+        # the number is first shown.
+        if shipping_selection_still_valid?(cart) do
+          assign(socket, :cart, cart)
+        else
+          socket
+          |> assign(:step, :shipping_invalid)
+          |> put_flash(
+            :error,
+            gettext(
+              "The selected shipping method is not available for your address - please pick another"
+            )
+          )
+          |> push_navigate(to: Routes.path("/cart"))
+        end
+
       # Never block review on a pricing refresh; conversion recalculates
       # under its own lock regardless, and a stale display is a smaller
       # failure than a dead checkout.
-      {:error, _} -> socket
+      {:error, _} ->
+        socket
+    end
+  end
+
+  defp shipping_selection_still_valid?(cart) do
+    cond do
+      not Shop.cart_requires_shipping?(cart) -> true
+      is_nil(cart.shipping_method_uuid) -> false
+      true -> Enum.any?(Shop.get_available_shipping_methods(cart), &(&1.uuid == cart.shipping_method_uuid))
     end
   end
 
@@ -512,11 +570,116 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:error_message, nil)
   end
 
+  # The selected method stopped serving this cart (usually the billing
+  # country ruled it out). Send the shopper back to pick another instead of
+  # a dead generic failure.
+  defp handle_order_result({:error, :shipping_method_unavailable}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(
+      :error,
+      gettext("The selected shipping method is not available for your address - please pick another")
+    )
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, {:product_not_available, _uuid}}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("An item in your cart is no longer available"))
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, :product_not_available}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("An item in your cart is no longer available"))
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  # The billing details are missing deliverable-address fields — this is
+  # the context refusing what the review step's own validation would have
+  # caught, so return the customer to an EDITABLE billing form instead of
+  # failing generically. A saved profile that fails here (billing never
+  # required profiles to carry an address) is prefilled into the form for
+  # completion.
+  defp handle_order_result({:error, {:billing_incomplete, _missing}}, socket) do
+    socket = assign(socket, :processing, false)
+
+    socket =
+      if socket.assigns.use_new_profile do
+        socket
+      else
+        prefill_from_selected_profile(socket)
+      end
+
+    socket
+    |> assign(:step, :billing)
+    |> assign(:use_new_profile, true)
+    |> put_flash(
+      :error,
+      gettext("Please complete the billing address - a physical order needs one")
+    )
+  end
+
+  defp handle_order_result({:error, :billing_profile_not_found}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> assign(:selected_profile_uuid, nil)
+    |> assign(:step, :billing)
+    |> put_flash(:error, gettext("That billing profile is not available."))
+  end
+
+  defp handle_order_result({:error, :payment_option_unavailable}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(
+      :error,
+      gettext("The selected payment method is no longer available - please pick another")
+    )
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, :shop_disabled}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("The shop is currently unavailable"))
+    |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))
+  end
+
   defp handle_order_result({:error, _reason}, socket) do
     socket
     |> assign(:processing, false)
     |> assign(:error_message, "Failed to create order. Please try again.")
     |> put_flash(:error, "Failed to create order")
+  end
+
+  # Seed the editable billing form from the profile the customer had
+  # selected, so completing an address-less saved profile is a fill-in,
+  # not a retype.
+  defp prefill_from_selected_profile(socket) do
+    case Enum.find(
+           socket.assigns.billing_profiles,
+           &(to_string(&1.uuid) == to_string(socket.assigns.selected_profile_uuid))
+         ) do
+      nil ->
+        socket
+
+      profile ->
+        assign(socket, :billing_data, %{
+          "first_name" => profile.first_name || "",
+          "last_name" => profile.last_name || "",
+          "email" => profile.email || socket.assigns.billing_data["email"] || "",
+          "phone" => profile.phone || "",
+          "company_name" => profile.company_name || "",
+          "address_line1" => profile.address_line1 || "",
+          "address_line2" => profile.address_line2 || "",
+          "city" => profile.city || "",
+          "state" => profile.state || "",
+          "postal_code" => profile.postal_code || "",
+          "country" => profile.country || ""
+        })
+    end
   end
 
   defp validate_billing_data(data) do

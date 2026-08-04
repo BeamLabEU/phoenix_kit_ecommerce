@@ -29,7 +29,22 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   @placeholder_data_uri "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23e5e7eb'/%3E%3Cg fill='%239ca3af'%3E%3Crect x='160' y='140' width='80' height='60' rx='4'/%3E%3Ccircle cx='180' cy='160' r='8'/%3E%3Cpath d='M160 190 l25-20 l15 15 l20-25 l20 30 v10 h-80 z'/%3E%3C/g%3E%3C/svg%3E"
 
   @impl true
-  def mount(%{"slug" => slug} = params, session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+    end
+  end
+
+  defp do_mount(%{"slug" => slug} = params, session, socket) do
     current_language = get_language_from_params_or_default(params)
 
     case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
@@ -398,9 +413,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     add_result =
       if has_specs do
-        Shop.add_to_cart(cart, product, quantity, selected_specs: selected_specs)
+        Shop.add_to_cart(cart, product, quantity,
+          selected_specs: selected_specs,
+          language: socket.assigns.current_language
+        )
       else
-        Shop.add_to_cart(cart, product, quantity)
+        Shop.add_to_cart(cart, product, quantity, language: socket.assigns.current_language)
       end
 
     case add_result do
@@ -432,6 +450,24 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:cart_item, updated_cart_item)
          |> put_flash(:info, message)
          |> push_event("cart_updated", %{})}
+
+      {:error, :shop_disabled} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "The shop is currently unavailable")}
+
+      {:error, :product_not_available} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "This product is no longer available")}
+
+      {:error, {:product_not_available, _uuid}} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "This product is no longer available")}
 
       {:error, reason} ->
         # Log error for admin monitoring
