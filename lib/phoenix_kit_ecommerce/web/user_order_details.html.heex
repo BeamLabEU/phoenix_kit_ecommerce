@@ -50,7 +50,7 @@
                     <% end %>
                   </div>
                   <div class="font-medium">
-                    {format_price_string(item["total"])}
+                    {format_price(item["total"], @currency)}
                   </div>
                 </div>
               <% end %>

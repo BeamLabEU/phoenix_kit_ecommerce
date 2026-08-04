@@ -18,11 +18,31 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   # Price formatting
   # ---------------------------------------------------------------------------
 
-  @doc "Format a price value with currency. Returns \"-\" for nil price."
+  @doc """
+  Format a price value with currency. Returns "-" for nil price.
+
+  Accepts the amount as a Decimal, number, or numeric string (order line
+  items persist their amounts as strings). The currency may be a
+  `Currency` struct, a bare code string (`Shop.currency_for_code/1`
+  falls back to the code when the record's currency no longer resolves —
+  showing "12.50 XYZ" is honest, borrowing today's default symbol is not),
+  or nil (no default currency configured at all — legacy `$`).
+  """
   def format_price(nil, _currency), do: "-"
+
+  def format_price(price, currency) when is_binary(price) do
+    case Decimal.parse(price) do
+      {decimal, ""} -> format_price(decimal, currency)
+      _ -> "-"
+    end
+  end
 
   def format_price(price, nil) do
     "$#{Decimal.round(price, 2)}"
+  end
+
+  def format_price(price, code) when is_binary(code) do
+    "#{Decimal.round(price, 2)} #{code}"
   end
 
   def format_price(price, currency) do
@@ -211,14 +231,58 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
     profile.company_name || "#{profile.first_name} #{profile.last_name}"
   end
 
-  def profile_display_name(profile) do
+  def profile_display_name(profile) when is_struct(profile) do
     "#{profile.first_name} #{profile.last_name}"
   end
 
-  @doc "Format address for a billing profile."
-  def profile_address(profile) do
+  # An order's `billing_snapshot` is a plain MAP, and it is the record of
+  # who the order was actually billed to. Same rendering, different shape.
+  def profile_display_name(%{} = snapshot) do
+    case snapshot["type"] do
+      "company" ->
+        snapshot["company_name"] || joined_name(snapshot)
+
+      _ ->
+        joined_name(snapshot)
+    end
+  end
+
+  defp joined_name(snapshot) do
+    [snapshot["first_name"], snapshot["last_name"]]
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.join(" ")
+  end
+
+  @doc "Format address for a billing profile struct or an order's snapshot map."
+  def profile_address(profile) when is_struct(profile) do
     [profile.address_line1, profile.city, profile.postal_code, profile.country]
     |> Enum.filter(& &1)
     |> Enum.join(", ")
   end
+
+  def profile_address(%{} = snapshot) do
+    [
+      snapshot["address_line1"],
+      snapshot["city"],
+      snapshot["postal_code"],
+      snapshot["country"]
+    ]
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.join(", ")
+  end
+
+  @doc """
+  The billing identity an order was placed with.
+
+  Prefers the order's immutable `billing_snapshot` over the live billing
+  profile: the profile is editable, so reading it made a historical order
+  claim an address it was never billed to (and deleting the profile made
+  the true one reappear). The live profile is a fallback only for orders
+  placed before snapshots existed.
+  """
+  def order_billing_identity(%{billing_snapshot: snapshot}) when is_map(snapshot) do
+    if map_size(snapshot) > 0, do: snapshot
+  end
+
+  def order_billing_identity(_order), do: nil
 end

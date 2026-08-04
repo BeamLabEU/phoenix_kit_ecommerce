@@ -45,7 +45,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   defp do_mount(%{"slug" => slug} = params, session, socket) do
-    current_language = get_language_from_params_or_default(params)
+    current_language = Helpers.get_language_from_params_or_default(params)
 
     case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
       {:error, :not_found} ->
@@ -1327,15 +1327,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Determine language from URL params - use locale param if present, otherwise default
   # This ensures non-localized routes (/shop/...) always use default language,
   # regardless of what's stored in session from previous visits
-  defp get_language_from_params_or_default(%{"locale" => locale}) when is_binary(locale) do
-    # Localized route - use the locale from URL
-    DialectMapper.resolve_dialect(locale)
-  end
-
-  defp get_language_from_params_or_default(_params) do
-    # Non-localized route - use admin default language for consistency with Routes.path
-    Routes.get_default_admin_locale()
-  end
 
   # PubSub event handlers
   #

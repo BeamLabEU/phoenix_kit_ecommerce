@@ -154,6 +154,23 @@ defmodule PhoenixKitEcommerce do
     Billing.get_default_currency()
   end
 
+  @doc """
+  Resolves the currency a PERSISTED record was denominated in.
+
+  Order and cart pages used to load today's default currency, so changing
+  the shop currency silently relabeled every historical order's amounts.
+  Given the code stored on the record, this returns its `Currency` struct;
+  an unresolvable code returns nil — callers then show the bare code rather
+  than borrowing today's default symbol for an amount it does not describe.
+  """
+  def currency_for_code(nil), do: get_default_currency()
+
+  def currency_for_code(code) when is_binary(code) do
+    Billing.get_currency_by_code(code) || code
+  rescue
+    _ -> code
+  end
+
   # ============================================
   # MODULE BEHAVIOUR CALLBACKS
   # ============================================
