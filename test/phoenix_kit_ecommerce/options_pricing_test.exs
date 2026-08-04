@@ -80,6 +80,54 @@ defmodule PhoenixKitEcommerce.OptionsPricingTest do
       assert Decimal.equal?(max, Decimal.new("10")), "max was #{max}"
       refute Decimal.gt?(min, max), "range is inverted: #{min} > #{max}"
     end
+
+    # The range function is the storefront's "From $X" and
+    # `calculate_final_price/4` is what the customer is actually charged, so
+    # every rule has to hold on both. `calculate_final_price/4` was fixed
+    # alone and the range kept its own copy of all three defects — these
+    # assert the two agree, which is the property that was broken.
+
+    test "a NEGATIVE percent lowers the bottom of the range" do
+      # Was {100, 100}: the percent branch was gated on `compare(pct, 0) ==
+      # :gt`, so the discount was dropped and the shop advertised "From
+      # $100.00" for an item it would sell for 80.00.
+      specs = spec(%{"Standard" => "0", "Sale" => "-20"}, "percent")
+      {min, max} = Options.get_price_range(specs, Decimal.new("100"), %{})
+
+      assert Decimal.equal?(min, Decimal.new("80.00")), "min was #{min}"
+      assert Decimal.equal?(max, Decimal.new("100.00")), "max was #{max}"
+
+      assert Decimal.equal?(
+               min,
+               Options.calculate_final_price(specs, %{"o" => "Sale"}, Decimal.new("100"))
+             )
+    end
+
+    test "both ends are rounded to 2dp" do
+      # Was {10.00, 10.005} — rounding lived in the percent branch only, so
+      # the advertised figure carried more precision than the price column.
+      {_min, max} =
+        Options.get_price_range(
+          spec(%{"a" => "0", "b" => "0.005"}, "fixed"),
+          Decimal.new("10.00"),
+          %{}
+        )
+
+      assert Decimal.equal?(max, Decimal.new("10.01")), "max was #{max}"
+    end
+
+    test "a modifier that inverts the price floors at zero, not a negative" do
+      # Was {-5.00, 10.00} — the storefront rendered "From $-5.00".
+      specs = spec(%{"a" => "0", "b" => "-15"}, "fixed")
+      {min, _max} = Options.get_price_range(specs, Decimal.new("10.00"), %{})
+
+      assert Decimal.equal?(min, Decimal.new("0.00")), "min was #{min}"
+
+      assert Decimal.equal?(
+               min,
+               Options.calculate_final_price(specs, %{"o" => "b"}, Decimal.new("10.00"))
+             )
+    end
   end
 
   describe "the Decimal ordering trap itself" do

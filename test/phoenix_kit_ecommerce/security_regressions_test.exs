@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.SecurityRegressionsTest do
   """
   use ExUnit.Case, async: true
 
+  alias PhoenixKitEcommerce.Import.OptionBuilder
   alias PhoenixKitEcommerce.Import.PromUaFormat
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Services.ImageDownloader
@@ -98,6 +99,14 @@ defmodule PhoenixKitEcommerce.SecurityRegressionsTest do
       # The unfolding must not blanket-block every mapped address.
       refute ImageDownloader.private_host?("::ffff:8.8.8.8")
     end
+
+    test "real IPv6 ranges are classified, in both directions" do
+      # The guard resolves BOTH families now, so genuine v6 answers reach
+      # these clauses rather than only ever arriving unfolded from v4.
+      assert ImageDownloader.private_host?("fd00::1"), "unique-local should be blocked"
+      assert ImageDownloader.private_host?("fe80::1"), "link-local should be blocked"
+      refute ImageDownloader.private_host?("2001:4860:4860::8888"), "public v6 is allowed"
+    end
   end
 
   describe "parse_money/1 (import price truncation)" do
@@ -156,6 +165,42 @@ defmodule PhoenixKitEcommerce.SecurityRegressionsTest do
 
     test "negatives survive" do
       assert Decimal.equal?(PromUaFormat.parse_money("-5,50"), Decimal.new("-5.50"))
+    end
+  end
+
+  describe "Shopify variant prices use the same parser" do
+    # The truncation fix landed on the Prom.ua side only. `OptionBuilder`
+    # still matched `{decimal, _}` on Shopify's "Variant Price", so the same
+    # feed values imported wrong through the other format — and since
+    # `base_price` is the MINIMUM variant price, one mangled row set the
+    # price for every variant of the product.
+
+    test "a decimal comma is not truncated into the base price" do
+      rows = [
+        %{"Option1 Name" => "Size", "Option1 Value" => "S", "Variant Price" => "12,50"},
+        %{"Option1 Name" => "Size", "Option1 Value" => "L", "Variant Price" => "18,00"}
+      ]
+
+      base = OptionBuilder.build_from_variants(rows).base_price
+      assert Decimal.equal?(base, Decimal.new("12.50")), "base_price was #{base}"
+    end
+
+    test "a thousands separator is not truncated into the base price" do
+      # Previously imported as 1 — a 1,234.56 product on sale for a euro.
+      rows = [%{"Option1 Name" => "Size", "Option1 Value" => "S", "Variant Price" => "1,234.56"}]
+
+      base = OptionBuilder.build_from_variants(rows).base_price
+      assert Decimal.equal?(base, Decimal.new("1234.56")), "base_price was #{base}"
+    end
+
+    test "an unreadable variant price is dropped, not treated as free" do
+      rows = [
+        %{"Option1 Name" => "Size", "Option1 Value" => "S", "Variant Price" => "abc"},
+        %{"Option1 Name" => "Size", "Option1 Value" => "L", "Variant Price" => "18.00"}
+      ]
+
+      base = OptionBuilder.build_from_variants(rows).base_price
+      assert Decimal.equal?(base, Decimal.new("18.00")), "base_price was #{base}"
     end
   end
 

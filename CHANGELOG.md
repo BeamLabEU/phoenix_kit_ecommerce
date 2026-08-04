@@ -4,6 +4,89 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.13 - 2026-08-04
+
+Checkout security and wrong-money fixes (PR #12), plus the post-merge review
+in `dev_docs/pull_requests/2026/12-checkout-security-policy-settings/`.
+0.1.12 was tagged but never published, so its changes ship here too.
+
+### Added
+- **`PhoenixKitEcommerce.Policy`** — seven admin-controllable policy keys behind
+  one module, so the settings UI and the enforcement points cannot disagree
+  about a default. Every key ships in its safe position and every reader fails
+  **closed** on a settings-layer error: `shop_order_lookup_policy`,
+  `shop_allow_raw_html_descriptions`, `shop_allow_svg_uploads`,
+  `shop_image_import_allow_private_networks`, `shop_default_tax_country`,
+  `shop_import_cleanup_scope`, `shop_legacy_cookie_until`. Genuine invariants
+  deliberately get no setting. All policy changes are activity-logged.
+- **`css_sources/0`** — documented in the README since forever, never
+  implemented, so Tailwind purged every class used only by this module's
+  templates from the host build. The absence was masked whenever any other
+  PhoenixKit module was installed.
+- **`PhoenixKitEcommerce.Import.Money`** — one supplier-money parser shared by
+  every import format.
+- First test suites for `Options` pricing, the import money parser, the
+  security regressions, guest order access, and the admin-permission contract.
+
+### Fixed
+- **Billing-profile IDOR.** `select_profile` accepted any client-supplied uuid
+  and order creation copied that profile's name, address, phone and email onto
+  the attacker's order. Now checked at selection, at `confirm_order`, and again
+  in the context — `convert_cart_to_order/2` is public and re-exported, so it
+  must not depend on one caller remembering.
+- **Order confirmation pages were world-readable.** Access was granted for any
+  order with a nil `user_uuid` and for any order whose owner was unconfirmed —
+  and guest checkout creates exactly such users. Orders now record the placing
+  shop session, with a `cart_uuid → cart.session_id` fallback so pre-existing
+  guest orders keep working.
+- **Cart takeover on a shared browser.** The logged-in fallback matched carts by
+  `session_id` without the `is_nil(user_uuid)` guard, and the cookie outlives
+  logout by 30 days. The cookie is now signed, `SameSite=Lax`, Secure-on-HTTPS,
+  with a narrow one-time migration for pre-signing cookies.
+- **Stored XSS on the storefront** via `sanitize={false}` and a bare `raw/1`.
+- **SSRF in the CSV image importer**, three ways: redirects were never
+  re-validated, IPv4-mapped IPv6 bypassed the private-range check entirely
+  (`::ffff:127.0.0.1` read as public), and no guard existed before that.
+  Post-merge: both address families are now resolved, so an IPv6-only image
+  host is no longer blocked outright and a public-A/private-AAAA host no longer
+  slips through.
+- **Draft, inactive and archived products were public and purchasable**, via two
+  separate paths.
+- **Tax was zero on every order** — the cart page leaves `shipping_country` nil
+  and checkout never set it. Fixing that surfaced two more: tax was charged on
+  the whole subtotal while `CartItem` carries a `taxable` flag, and the review
+  screen showed a pre-tax total while conversion charged tax.
+- **Percentage discounts did nothing** — the percent branch was gated on
+  `compare(sum, 0) == :gt`, so a negative percent was silently discarded.
+  **Price ranges came out inverted** (`Enum.min/max` compare `%Decimal{}` by
+  Erlang term order, not value). **Fixed-only prices were never rounded.**
+  Post-merge: all three also affected `get_price_range/3` — the storefront's
+  "From $X" — which kept its own copy of the arithmetic. Both functions now
+  share one helper.
+- **CSV prices were silently wrong** — `"12,50"` imported as 12, and the first
+  hardening multiplied `"1.2345"` by 10,000. Post-merge: the Shopify
+  `"Variant Price"` path still truncated the same way, and since `base_price` is
+  the minimum variant price, one mangled row priced every variant.
+- **An unreadable price became free stock** — the parser returned nil and the
+  call site turned it into `Decimal.new(0)`. The row now fails validation.
+- **Free shipping** via a method the cart had outgrown; **lost cart totals**
+  under concurrency; **cart edits could commit after the order was created**.
+- Confirmation email moved outside the conversion transaction, so an SMTP
+  failure can no longer roll back a paid order.
+- Import cleanup no longer deletes every empty category in the catalog.
+- Five LiveViews had no `handle_info` catch-all; malformed `phx-value-*`
+  payloads crashed sockets through `String.to_integer/1`.
+- Guest carts orphaned by a fabricated session id on the cross-language
+  product path.
+
+### Changed
+- Category admin actions re-check `Scope.has_module_access?(scope, "shop")`
+  rather than `can_access_admin_area?/1`, which is true for any permission
+  holder.
+- 25 new strings extracted and translated into ru and et.
+- Docs: the Settings Keys sections in `README.md` and `AGENTS.md` listed four
+  unprefixed keys the code never read.
+
 ## 0.1.12 - 2026-07-27
 
 ### Changed

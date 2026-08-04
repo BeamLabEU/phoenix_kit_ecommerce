@@ -362,11 +362,33 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
         # Not a literal — resolve and check every answer. Fail CLOSED on a
         # resolution error: a name we cannot resolve is not a name we can
         # vouch for.
-        case :inet.getaddrs(String.to_charlist(host), :inet) do
-          {:ok, addresses} -> Enum.any?(addresses, &private_address?/1)
-          {:error, _} -> true
-        end
+        resolved_privately?(String.to_charlist(host))
     end
+  end
+
+  # BOTH address families are resolved, and the host is blocked if any
+  # answer is private.
+  #
+  # Querying only `:inet` made this fail closed on every IPv6-only image
+  # host: `getaddrs(host, :inet)` returns `{:error, :nxdomain}` for a name
+  # with only AAAA records, which the error branch reads as "cannot vouch
+  # for it" and blocks. Legitimate imports from v6-only CDNs stopped
+  # working, and it was the guard rather than the network that stopped
+  # them. Only a name that resolves in NEITHER family is unvouchable.
+  #
+  # Checking both is also strictly safer than checking one: a host with a
+  # public A record and a private AAAA record was previously waved through
+  # on the strength of the record the resolver happened to be asked for.
+  defp resolved_privately?(host) do
+    answers =
+      Enum.flat_map([:inet, :inet6], fn family ->
+        case :inet.getaddrs(host, family) do
+          {:ok, addresses} -> addresses
+          {:error, _} -> []
+        end
+      end)
+
+    answers == [] or Enum.any?(answers, &private_address?/1)
   end
 
   # IPv4-mapped and IPv4-compatible IPv6 forms decode to the same host.

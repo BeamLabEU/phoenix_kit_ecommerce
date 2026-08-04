@@ -12,6 +12,8 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
   - Builds _option_slots structure for products using global options
   """
 
+  alias PhoenixKitEcommerce.Import.Money
+
   @max_options 10
 
   @doc """
@@ -226,17 +228,19 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     end
   end
 
-  defp parse_price(nil), do: nil
-  defp parse_price(""), do: nil
-
-  defp parse_price(str) when is_binary(str) do
-    str = String.trim(str)
-
-    case Decimal.parse(str) do
-      {decimal, _} -> decimal
-      :error -> nil
-    end
-  end
+  # Shopify's "Variant Price" goes through the shared supplier-money parser.
+  #
+  # This used to match `{decimal, _}` on `Decimal.parse/1` and throw the
+  # remainder away — the identical wrong-money defect that was fixed on the
+  # Prom.ua side and left standing here. A feed re-exported from a
+  # comma-decimal locale imported "12,50" as 12 and "1,234.56" as 1, and
+  # since `base_price` is the MINIMUM variant price, one mangled row set the
+  # product's price for every variant. Nothing errored; the product just
+  # went on sale at a fraction of its price.
+  #
+  # `nil` is preserved for an unreadable cell: callers already reject those
+  # variants rather than treating them as free.
+  defp parse_price(str), do: Money.parse(str)
 
   defp build_option_data(variants, field, base_price) do
     # Get unique values preserving order of first appearance
