@@ -1597,6 +1597,37 @@ defmodule PhoenixKitEcommerce do
   def session_has_cart?(_), do: false
 
   @doc """
+  Moves a live guest cart from one shop-session id to another.
+
+  Used by the pre-signing cookie migration. The plug mints a FRESH id and
+  re-keys the cart onto it, rather than re-signing whatever the client
+  presented — re-signing a replayed value would have turned it into a
+  fully trusted session on the very next request, which is the capability
+  the signing exists to prevent.
+
+  Scoped to active, unclaimed carts for the same reason `session_has_cart?/1`
+  is: a converted or account-owned cart must never be re-keyed by an
+  unsigned cookie. Returns `:ok` when exactly one cart moved.
+  """
+  @spec rekey_cart_session(String.t(), String.t()) :: :ok | :error
+  def rekey_cart_session(from_id, to_id)
+      when is_binary(from_id) and is_binary(to_id) and from_id != "" and to_id != "" do
+    {count, _} =
+      Cart
+      |> where([c], c.session_id == ^from_id)
+      |> where([c], c.status == "active" and is_nil(c.user_uuid))
+      |> repo().update_all(set: [session_id: to_id])
+
+    if count > 0, do: :ok, else: :error
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  def rekey_cart_session(_from, _to), do: :error
+
+  @doc """
   Returns just the `session_id` of a cart, without loading items.
 
   Used to authorize order confirmation pages for orders placed BEFORE
@@ -1879,12 +1910,12 @@ defmodule PhoenixKitEcommerce do
   def update_cart_item(%CartItem{} = item, quantity) when quantity > 0 do
     result =
       repo().transaction(fn ->
+        cart = lock_active_cart!(item.cart_uuid)
+
         updated_item =
           item
           |> CartItem.changeset(%{quantity: quantity})
           |> repo().update!()
-
-        cart = repo().get_by!(Cart, uuid: item.cart_uuid)
 
         updated_cart = recalculate_cart_totals!(cart)
         {updated_cart, updated_item}
@@ -1910,10 +1941,8 @@ defmodule PhoenixKitEcommerce do
 
     result =
       repo().transaction(fn ->
-        cart_uuid = item.cart_uuid
+        cart = lock_active_cart!(item.cart_uuid)
         repo().delete!(item)
-
-        cart = repo().get_by!(Cart, uuid: cart_uuid)
 
         recalculate_cart_totals!(cart)
       end)
@@ -1934,6 +1963,8 @@ defmodule PhoenixKitEcommerce do
   def clear_cart(%Cart{} = cart) do
     result =
       repo().transaction(fn ->
+        cart = lock_active_cart!(cart.uuid)
+
         CartItem
         |> where([i], i.cart_uuid == ^cart.uuid)
         |> repo().delete_all()
@@ -2335,6 +2366,7 @@ defmodule PhoenixKitEcommerce do
            # did not place. Derived internally, it cannot be influenced.
            placing_session_id = cart.session_id,
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
+           :ok <- validate_billing_profile_owner(opts, user_uuid),
            {:ok, cart} <- apply_checkout_shipping_country(cart, opts),
            {:ok, cart} <- validate_shipping_method_available(cart),
            line_items <- build_order_line_items(cart),
@@ -2369,6 +2401,34 @@ defmodule PhoenixKitEcommerce do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc """
+  Applies the checkout billing country to the cart and recalculates totals,
+  WITHOUT converting anything.
+
+  The review step must show the amount the customer is about to be charged.
+  The cart page deliberately leaves `shipping_country` nil ("set at
+  checkout"), and tax is zero for a nil-country cart — so before this
+  existed, a customer reviewed a pre-tax total and `convert_cart_to_order/2`
+  then applied the country, recalculated, and charged more. Cart 100.00 +
+  shipping 10.00 at 20%: review said 110.00, the order said 130.00.
+
+  That gap opened the moment tax started working at all, so it ships with
+  the same change. Runs the identical country resolution and recalculation
+  the conversion uses, so the two cannot disagree.
+
+  Takes the same `:billing_profile_uuid` / `:billing_data` options as
+  `convert_cart_to_order/2`. Returns the reloaded cart.
+  """
+  @spec preview_checkout_totals(Cart.t(), keyword()) :: {:ok, Cart.t()} | {:error, term()}
+  def preview_checkout_totals(%Cart{} = cart, opts) when is_list(opts) do
+    repo().transaction(fn ->
+      case apply_checkout_shipping_country(get_cart!(cart.uuid), opts) do
+        {:ok, updated} -> updated
+        {:error, reason} -> repo().rollback(reason)
+      end
+    end)
   end
 
   # Persist the checkout address's country onto the cart, then recompute
@@ -2416,6 +2476,32 @@ defmodule PhoenixKitEcommerce do
       {:ok, cart}
     else
       set_cart_shipping_country(cart, country)
+    end
+  end
+
+  # A billing profile may only be attached to an order by the user who owns
+  # it — enforced HERE, in the context, not only in the LiveView.
+  #
+  # `convert_cart_to_order/2` is public and re-exported through
+  # `compat/shop.ex`, and it took `billing_profile_uuid` straight from
+  # `opts` and wrote it onto the order. Billing then snapshots that
+  # profile's name, address, phone and email onto the order, which the
+  # confirmation page renders — so an unchecked uuid was a PII read. The
+  # checkout LiveView does check ownership, but a context function must not
+  # depend on one caller remembering to.
+  #
+  # This is the same defect shape as the placing-session override, and it
+  # gets the same treatment: the invariant lives with the write.
+  defp validate_billing_profile_owner(opts, user_uuid) do
+    case Keyword.get(opts, :billing_profile_uuid) do
+      nil ->
+        :ok
+
+      profile_uuid ->
+        case Billing.get_billing_profile(profile_uuid) do
+          %{user_uuid: owner_uuid} when not is_nil(owner_uuid) and owner_uuid == user_uuid -> :ok
+          _ -> {:error, :billing_profile_not_owned}
+        end
     end
   end
 
@@ -2971,6 +3057,38 @@ defmodule PhoenixKitEcommerce do
     |> repo().one()
   end
 
+  # Lock a cart row and refuse to mutate it unless it is still active.
+  #
+  # Two jobs, and the ORDER of the lock is what makes both work. Item
+  # mutations previously changed a child row and only then recalculated,
+  # so the cart lock inside `recalculate_cart_totals!/1` came too late to
+  # serialize the mutation against a concurrent conversion: a quantity
+  # edit could commit AFTER the order was created, leaving the order
+  # saying one thing and `cart_items` another. Taking the lock first
+  # closes that window.
+  #
+  # It also enforces the status invariant nothing was checking — a
+  # converted or abandoned cart is finished business and must not accept
+  # edits at all. Raises inside the caller's transaction so the whole
+  # mutation rolls back.
+  #
+  # Lock ordering note: callers that also lock a PRODUCT row take
+  # product-then-cart, and conversion locks only the cart, so there is no
+  # cart→product path and no ABBA cycle.
+  defp lock_active_cart!(cart_uuid) do
+    cart =
+      Cart
+      |> where([c], c.uuid == ^cart_uuid)
+      |> lock("FOR UPDATE")
+      |> repo().one()
+
+    case cart do
+      %Cart{status: "active"} = cart -> cart
+      %Cart{} -> repo().rollback(:cart_not_active)
+      nil -> repo().rollback(:cart_not_found)
+    end
+  end
+
   defp recalculate_cart_totals!(%Cart{} = cart) do
     # Serialize concurrent recalculations of the SAME cart.
     #
@@ -3076,10 +3194,19 @@ defmodule PhoenixKitEcommerce do
     if Decimal.equal?(taxable_subtotal, zero) or Decimal.equal?(subtotal, zero) do
       zero
     else
-      share = Decimal.div(taxable_subtotal, subtotal)
+      # Multiply BEFORE dividing. Computing `share = taxable / subtotal`
+      # first rounds to Decimal's default 28 significant digits and the
+      # error survives the multiplication: with taxable 1.05, subtotal
+      # 10.02, discount 8.35 at 20%, the divide-first form yields a base of
+      # 0.1749999999999999999999999999999999 and tax 0.03, where the exact
+      # answer is 0.175 and 0.04. A cent, but a cent on every mixed cart.
+      allocated_discount =
+        discount
+        |> Decimal.mult(taxable_subtotal)
+        |> Decimal.div(subtotal)
 
       taxable_subtotal
-      |> Decimal.sub(Decimal.mult(discount, share))
+      |> Decimal.sub(allocated_discount)
       |> Decimal.max(zero)
     end
   end

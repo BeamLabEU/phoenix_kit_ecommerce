@@ -369,6 +369,19 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     end
   end
 
+  # IPv4-mapped and IPv4-compatible IPv6 forms decode to the same host.
+  #
+  # `::ffff:127.0.0.1` parses to `{0,0,0,0,0,65535,32512,1}`, which matched
+  # none of the IPv4 clauses below — so every private address had a working
+  # bypass simply by writing it in mapped form. Verified against this
+  # module before the fix: `::ffff:127.0.0.1`, `::ffff:169.254.169.254` and
+  # `::ffff:10.0.0.5` all returned false. Unfold to the embedded IPv4 and
+  # re-check.
+  defp private_address?({0, 0, 0, 0, 0, 0xFFFF, g, h}), do: private_address?(unfold_v4(g, h))
+
+  defp private_address?({0, 0, 0, 0, 0, 0, g, h}) when g > 0 or h > 1,
+    do: private_address?(unfold_v4(g, h))
+
   # Loopback, RFC1918, link-local (incl. 169.254.169.254 metadata),
   # carrier-grade NAT, and the various reserved ranges.
   defp private_address?({127, _, _, _}), do: true
@@ -385,17 +398,65 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFE80..0xFEBF, do: true
   defp private_address?(_), do: false
 
-  defp do_http_request(url, timeout) do
+  defp unfold_v4(g, h), do: {div(g, 256), rem(g, 256), div(h, 256), rem(h, 256)}
+
+  # Follow redirects MANUALLY so every hop is re-validated.
+  #
+  # `Req`'s own `max_redirects` follows them internally, so only the
+  # original URL was ever checked: a public URL redirecting to
+  # `http://169.254.169.254/...` or `http://127.0.0.1:5432/` was fetched
+  # with no re-check, and the http->https upgrade in `validate_url/1`
+  # applied only to the first URL. The `{301, 302} -> :redirect_loop`
+  # clause below was a dead branch that only made sense if Req did not
+  # auto-follow — which is the tell that this was never intended.
+  @max_redirects 5
+
+  defp do_http_request(url, timeout), do: do_http_request(url, timeout, @max_redirects)
+
+  defp do_http_request(_url, _timeout, 0), do: {:error, :too_many_redirects}
+
+  defp do_http_request(url, timeout, hops_left) do
     opts = [
       receive_timeout: timeout,
-      max_redirects: 5,
+      redirect: false,
       headers: [
         {"user-agent", "PhoenixKit/1.0 (Image Downloader)"},
         {"accept", "image/*"}
       ]
     ]
 
-    url |> Req.get(opts) |> handle_http_response()
+    case Req.get(url, opts) do
+      {:ok, %{status: status} = response} when status in [301, 302, 303, 307, 308] ->
+        follow_redirect(response, url, timeout, hops_left)
+
+      other ->
+        handle_http_response(other)
+    end
+  end
+
+  defp follow_redirect(response, from_url, timeout, hops_left) do
+    location =
+      response.headers
+      |> Map.new(fn {k, v} -> {String.downcase(k), v} end)
+      |> Map.get("location")
+      |> List.wrap()
+      |> List.first()
+
+    case location do
+      nil ->
+        {:error, :invalid_redirect}
+
+      location ->
+        # Resolve relative Locations against the URL we just fetched, then
+        # put the target through the SAME validation as the original —
+        # scheme, host, and the private-range check.
+        target = from_url |> URI.merge(location) |> URI.to_string()
+
+        case validate_url(target) do
+          {:ok, safe_url} -> do_http_request(safe_url, timeout, hops_left - 1)
+          {:error, _} = error -> error
+        end
+    end
   end
 
   defp handle_http_response({:ok, %{status: 200} = response}), do: {:ok, response}

@@ -78,6 +78,26 @@ defmodule PhoenixKitEcommerce.SecurityRegressionsTest do
     test "a name that cannot be resolved fails CLOSED" do
       assert ImageDownloader.private_host?("no-such-host.invalid")
     end
+
+    test "IPv4-mapped IPv6 forms do not bypass the check" do
+      # `::ffff:127.0.0.1` parses to {0,0,0,0,0,65535,32512,1}, which
+      # matched none of the IPv4 clauses — so every private address had a
+      # working bypass just by writing it in mapped form.
+      for host <- [
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "::ffff:10.0.0.5",
+            "::ffff:192.168.1.1",
+            "::127.0.0.1"
+          ] do
+        assert ImageDownloader.private_host?(host), "#{host} should be blocked"
+      end
+    end
+
+    test "mapped PUBLIC addresses are still allowed" do
+      # The unfolding must not blanket-block every mapped address.
+      refute ImageDownloader.private_host?("::ffff:8.8.8.8")
+    end
   end
 
   describe "parse_money/1 (import price truncation)" do
@@ -103,6 +123,39 @@ defmodule PhoenixKitEcommerce.SecurityRegressionsTest do
       assert PromUaFormat.parse_money("abc") == nil
       assert PromUaFormat.parse_money("") == nil
       assert PromUaFormat.parse_money(nil) == nil
+    end
+
+    test "a 4+ digit tail is a fraction, never thousands grouping" do
+      # A thousands separator is ALWAYS followed by exactly three digits.
+      # The first rule ("tail of 1-2 digits means decimal") multiplied these
+      # by 10,000: "1.2345" imported as 12345.
+      assert Decimal.equal?(PromUaFormat.parse_money("1.2345"), Decimal.new("1.2345"))
+      assert Decimal.equal?(PromUaFormat.parse_money("12.3456"), Decimal.new("12.3456"))
+      assert Decimal.equal?(PromUaFormat.parse_money("1234.5678"), Decimal.new("1234.5678"))
+    end
+
+    test "a zero-padded leading group is a fraction, not grouping" do
+      # "0.001" has a 3-digit tail, but a thousands group is never
+      # zero-padded — reading it as grouping produced the integer 1.
+      assert Decimal.equal?(PromUaFormat.parse_money("0.001"), Decimal.new("0.001"))
+      assert Decimal.equal?(PromUaFormat.parse_money("0,5"), Decimal.new("0.5"))
+    end
+
+    test "clean thousands grouping still parses" do
+      assert Decimal.equal?(PromUaFormat.parse_money("1.234"), Decimal.new("1234"))
+      assert Decimal.equal?(PromUaFormat.parse_money("1,234"), Decimal.new("1234"))
+      assert Decimal.equal?(PromUaFormat.parse_money("12.345"), Decimal.new("12345"))
+    end
+
+    test "malformed grouping is refused, not guessed" do
+      # These used to produce plausible-looking wrong numbers: "1,2,3" -> 12.3
+      for junk <- ["1,2,3", "1.5.5", "1,23,45"] do
+        assert PromUaFormat.parse_money(junk) == nil, "#{junk} should be refused"
+      end
+    end
+
+    test "negatives survive" do
+      assert Decimal.equal?(PromUaFormat.parse_money("-5,50"), Decimal.new("-5.50"))
     end
   end
 
