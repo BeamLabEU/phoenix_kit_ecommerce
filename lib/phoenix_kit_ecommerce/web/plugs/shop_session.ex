@@ -21,25 +21,45 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
     if Shop.enabled?() do
       case get_shop_session_id(conn) do
         {:signed, existing_id} ->
-          put_session(conn, "shop_session_id", existing_id)
+          put_shop_session(conn, existing_id, true)
 
         {:legacy, existing_id} ->
           # Adopted from a pre-signing cookie: re-issue it signed so this
           # visitor migrates once and never takes the legacy path again.
           conn
           |> put_resp_cookie(@cookie_name, existing_id, cookie_opts(conn))
-          |> put_session("shop_session_id", existing_id)
+          |> put_shop_session(existing_id, false)
 
         nil ->
           new_id = generate_session_id()
 
           conn
           |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
-          |> put_session("shop_session_id", new_id)
+          |> put_shop_session(new_id, true)
       end
     else
       conn
     end
+  end
+
+  # Records the id AND where it came from.
+  #
+  # Provenance matters because this value does two different jobs. As a CART
+  # identity, adopting an unsigned legacy cookie is fine — the worst case is
+  # picking up a cart. As proof of ORDER ownership it is a capability, and an
+  # unsigned value is replayable: anyone who obtains a real session id
+  # out-of-band (a shared machine, a log, a Referer header) could present it
+  # unsigned and read the victim's confirmation page. That is precisely what
+  # signing was added to prevent, so `trusted` is false for the adopted case
+  # and `PhoenixKitEcommerce.Web.CheckoutComplete` requires it to be true.
+  #
+  # The cost is one request: adoption re-issues the cookie signed, so the
+  # visitor's NEXT request is trusted. Only a pre-upgrade order viewed on the
+  # very first request after upgrading is affected.
+  defp put_shop_session(conn, session_id, trusted?) do
+    conn
+    |> put_session("shop_session_id", session_id)
+    |> put_session("shop_session_trusted", trusted?)
   end
 
   # This cookie is a cart identity, and since orders are now recognised by
@@ -98,8 +118,15 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   # threat model, it is a wish. Legacy visitors with a cookie but no cart
   # lose nothing by being issued a fresh id.
   #
-  # The path also disappears on its own: every legacy visitor is upgraded
-  # on their next request, so it stops being reached once carts age out.
+  # ⚠️ This path does NOT expire on its own. Each visitor is upgraded on
+  # their next request, but the acceptance criterion — "names an existing
+  # cart" — never stops being satisfiable: nothing deletes carts.
+  # `mark_abandoned_carts/1` only flips a status and is wired to no cron,
+  # and `session_has_cart?/1` does not filter by status, so converted and
+  # abandoned carts keep qualifying indefinitely. That is tolerable only
+  # because an adopted id is marked untrusted and cannot unlock an order
+  # (see `put_shop_session/3`). If cart pruning is ever added, this whole
+  # branch can be deleted once the retention window has passed.
   defp adopt_legacy_cookie(conn) do
     conn = fetch_cookies(conn)
 

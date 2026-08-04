@@ -19,7 +19,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   @impl true
   def mount(%{"uuid" => uuid}, session, socket) do
     user = get_current_user(socket)
-    shop_session_id = session["shop_session_id"]
+
+    # Only a session id of trusted provenance may unlock an order. An id
+    # adopted from a pre-signing cookie is replayable by anyone who obtained
+    # it out-of-band, so it identifies a CART but proves nothing about who
+    # placed an order. See `ShopSession.put_shop_session/3`.
+    shop_session_id =
+      if session["shop_session_trusted"] == true, do: session["shop_session_id"]
 
     case Billing.get_order_by_uuid(uuid) do
       nil ->

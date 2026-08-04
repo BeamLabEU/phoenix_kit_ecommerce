@@ -2296,6 +2296,21 @@ defmodule PhoenixKitEcommerce do
   def convert_cart_to_order(%Cart{} = cart, opts) when is_list(opts) do
     cart = get_cart!(cart.uuid)
 
+    # Snapshot the placing session BEFORE anything can clear it.
+    #
+    # `resolve_checkout_user/2` runs ahead of `build_order_attrs/3` and, for
+    # both guest checkout and a logged-in user adopting a guest cart, ends in
+    # `assign_cart_to_user/2` — which writes `session_id: nil` onto the cart.
+    # Reading `cart.session_id` after that point yields nil, so the order was
+    # stamped with no placing session and the cart row lost it too. That meant
+    # a guest could not open the confirmation page they were redirected to
+    # one line later, and the `cart_uuid -> cart.session_id` fallback could
+    # not recover it either, because the column had already been nulled.
+    #
+    # Captured here, outside the transaction, so every downstream step sees
+    # the value the buyer actually holds in their cookie.
+    opts = Keyword.put_new(opts, :placing_session_id, cart.session_id)
+
     # Wrap entire conversion in a transaction to ensure atomicity
     # If any step fails after order creation, the order is rolled back
     repo().transaction(fn ->
@@ -2501,7 +2516,11 @@ defmodule PhoenixKitEcommerce do
         # confirmation page recognise a guest as the person who just checked
         # out, instead of treating knowledge of the order uuid as proof.
         # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
-        "session_id" => cart.session_id,
+        #
+        # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
+        # from `cart.session_id` — by this point `assign_cart_to_user/2` has
+        # already nulled the column for every guest checkout.
+        "session_id" => Keyword.get(opts, :placing_session_id) || cart.session_id,
         "shipping_country" => shipping_country,
         "shipping_method_uuid" => cart.shipping_method_uuid
       }
