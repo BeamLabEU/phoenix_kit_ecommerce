@@ -15,9 +15,23 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
 
   @impl true
   def mount(_params, _session, socket) do
-    # Auto-seed defaults on first visit
-    Shop.ensure_default_import_config()
-    Shop.ensure_prom_ua_import_config()
+    # Seed only on the WebSocket mount, not on the dead render.
+    #
+    # `mount/3` runs TWICE per page load — once for the HTTP render, once
+    # when the LiveView connects — so unconditional seeding here attempted
+    # the same two writes twice on every visit. The functions are
+    # idempotent, so this was wasted work rather than duplicate rows, but
+    # it is still two write transactions per page view for something that
+    # only needs to happen once.
+    #
+    # Gating on `connected?/1` is the narrow fix. The broader one — moving
+    # seeding out of the LiveView lifecycle entirely — is a separate
+    # concern: a page render is the wrong trigger for schema seeding, and
+    # nothing guarantees an admin visits this page before an import runs.
+    if connected?(socket) do
+      Shop.ensure_default_import_config()
+      Shop.ensure_prom_ua_import_config()
+    end
 
     configs = Shop.list_import_configs(active_only: false)
 
