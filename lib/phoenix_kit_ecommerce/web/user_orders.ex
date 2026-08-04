@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -71,7 +72,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
+    page = Helpers.parse_page(page)
     current_params = build_current_params(socket)
     params = Map.put(current_params, "page", page)
 
@@ -92,7 +93,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   end
 
   defp apply_params(socket, params) do
-    page = params |> Map.get("page", "1") |> String.to_integer() |> max(1)
+    page = Helpers.parse_page(Map.get(params, "page"))
     status = Map.get(params, "status")
 
     socket

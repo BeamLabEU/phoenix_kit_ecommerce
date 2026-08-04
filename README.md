@@ -156,8 +156,10 @@ price = Shop.calculate_product_price(product, selected_specs)
 # Merge guest cart after login
 {:ok, cart} = Shop.merge_guest_cart(session_id, user.uuid)
 
-# Convert to order (integrates with Billing module)
-{:ok, order} = Shop.convert_cart_to_order(cart)
+# Convert to order (integrates with Billing module).
+# Takes the billing identity: an owned profile uuid, or guest billing data.
+{:ok, order} = Shop.convert_cart_to_order(cart, billing_profile_uuid: profile.uuid)
+{:ok, order} = Shop.convert_cart_to_order(cart, billing_data: %{"email" => "a@b.com"})
 ```
 
 > Payments (Stripe etc.) are handled by **PhoenixKitBilling**. To configure and
@@ -189,11 +191,16 @@ methods = Shop.get_available_shipping_methods(cart)
 ### CSV Import
 
 ```elixir
-# Import products from CSV (Shopify, Prom.ua, or generic format)
-{:ok, log} = Shop.start_import(file_path, import_config)
+# Imports are driven from the admin wizard at /admin/shop/imports, which
+# uploads the file, detects the format (Shopify, Prom.ua, generic), creates
+# an ImportLog and enqueues PhoenixKitEcommerce.Workers.CSVImportWorker.
+#
+# `start_import/2` is the state transition on an existing log, not an entry
+# point that takes a path:
+{:ok, log} = Shop.start_import(import_log, total_rows)
 
-# Import runs asynchronously via Oban worker
-# Track progress in real-time at /admin/shop/imports/:uuid
+# Progress is broadcast on "shop:import:<uuid>" and rendered live at
+# /admin/shop/imports/:uuid
 ```
 
 ### Real-Time Events
@@ -202,7 +209,10 @@ Subscribe to shop events in your LiveViews:
 
 ```elixir
 def mount(_params, _session, socket) do
-  PhoenixKitEcommerce.Events.subscribe_cart(user_uuid)
+  # Pick the topic that matches how the visitor is identified:
+  PhoenixKitEcommerce.Events.subscribe_to_user_cart(user_uuid)
+  # ...or, for a guest:
+  # PhoenixKitEcommerce.Events.subscribe_to_session_cart(session_id)
   {:ok, socket}
 end
 
@@ -213,12 +223,34 @@ end
 
 ### Settings
 
+Keys are `shop_`-prefixed. (Earlier revisions of this table listed
+unprefixed names that the code never read.)
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `tax_enabled` | boolean | `true` | Enable tax calculations |
-| `tax_rate` | number | `20` | Tax rate percentage |
-| `inventory_tracking` | boolean | `true` | Track product inventory |
-| `allow_price_override` | boolean | `false` | Allow per-product price overrides |
+| `shop_enabled` | boolean | `false` | Module master switch |
+| `shop_inventory_tracking` | boolean | `true` | Track product inventory |
+| `shop_allow_price_override` | boolean | `false` | Allow per-product price overrides |
+| `shop_category_name_display` | string | `"truncate"` | `"truncate"` or `"wrap"` |
+| `shop_category_icon_mode` | string | `"none"` | Category icon rendering |
+| `shop_sidebar_show_categories` | boolean | `true` | Show the category sidebar |
+
+Tax comes from the Billing module (`billing_tax_enabled`,
+`billing_default_tax_rate`), not from shop.
+
+**Policy keys** — read through `PhoenixKitEcommerce.Policy`, never directly.
+All are secure by default and fail *closed*; each is editable on the
+E-Commerce settings page.
+
+| Key | Default | Effect of the default |
+|-----|---------|-----------------------|
+| `shop_order_lookup_policy` | `"strict"` | An order page needs the session that placed it |
+| `shop_allow_raw_html_descriptions` | `"false"` | Product descriptions are sanitized |
+| `shop_allow_svg_uploads` | `"false"` | SVG is rejected by the image importer |
+| `shop_image_import_allow_private_networks` | `"false"` | Importer refuses loopback/private addresses |
+| `shop_default_tax_country` | `""` | No guessed jurisdiction; tax needs a real address |
+| `shop_import_cleanup_scope` | `"auto_created"` | Cleanup only removes categories the import created |
+| `shop_legacy_cookie_until` | *(unset)* | ⚠️ Pre-signing cart cookies are still adopted — set a date to close the window |
 
 ### Cart Status Workflow
 

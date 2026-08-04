@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, humanize_key: 1, get_current_user: 1]
@@ -67,7 +68,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   @impl true
   def handle_event("update_quantity", %{"item_uuid" => item_uuid, "quantity" => quantity}, socket) do
-    quantity = max(1, String.to_integer(quantity))
+    quantity = max(1, Helpers.parse_int(quantity, 1))
 
     update_item_quantity(socket, item_uuid, quantity)
   end
@@ -214,6 +215,17 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
      |> assign(:cart, cart)
      |> assign(:shipping_methods, shipping_methods)}
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

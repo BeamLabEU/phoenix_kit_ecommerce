@@ -1132,12 +1132,32 @@ defmodule PhoenixKitEcommerce.Options do
       end)
 
     # Apply percent modifier: intermediate * (1 + percent_sum/100)
-    if Decimal.compare(percent_sum, Decimal.new("0")) == :gt do
-      multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
-      Decimal.mult(intermediate, multiplier) |> Decimal.round(2)
-    else
-      intermediate
-    end
+    #
+    # Applied whenever it is non-zero. This used to be `== :gt`, so a
+    # NEGATIVE percent was silently discarded and every percentage discount
+    # did nothing at all: -10% on 100.00 returned 100.00. A surcharge worked,
+    # a discount was ignored — the asymmetry is what made it survive so long.
+    percent_applied =
+      if Decimal.equal?(percent_sum, Decimal.new("0")) do
+        intermediate
+      else
+        multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
+        Decimal.mult(intermediate, multiplier)
+      end
+
+    # Round on EVERY path, not just the percent one. Rounding used to live
+    # inside the percent branch, so a fixed-only modifier returned an
+    # unrounded value (base 10.00 + "0.005" -> 10.005) which then hit a
+    # DECIMAL(12,2) column and was rounded independently at the line-total,
+    # breaking `line_total = unit_price * quantity`.
+    #
+    # Floored at zero: modifiers large enough to invert the price produce a
+    # negative number that no downstream code accepts — the order changeset
+    # rejects a negative total outright — so the failure would surface far
+    # from its cause.
+    percent_applied
+    |> Decimal.max(Decimal.new("0"))
+    |> Decimal.round(2)
   end
 
   def calculate_final_price(_, _, base_price, _), do: base_price || Decimal.new("0")
@@ -1268,8 +1288,8 @@ defmodule PhoenixKitEcommerce.Options do
         {min_acc, max_acc}
       else
         {
-          Decimal.add(min_acc, Enum.min(values)),
-          Decimal.add(max_acc, Enum.max(values))
+          Decimal.add(min_acc, decimal_min(values)),
+          Decimal.add(max_acc, decimal_max(values))
         }
       end
     end)
@@ -1301,8 +1321,8 @@ defmodule PhoenixKitEcommerce.Options do
         {min_acc, max_acc}
       else
         {
-          Decimal.add(min_acc, Enum.min(values)),
-          Decimal.add(max_acc, Enum.max(values))
+          Decimal.add(min_acc, decimal_min(values)),
+          Decimal.add(max_acc, decimal_max(values))
         }
       end
     end)
@@ -1354,4 +1374,17 @@ defmodule PhoenixKitEcommerce.Options do
   defp uuid_string?(string) when is_binary(string) do
     match?({:ok, _}, Ecto.UUID.cast(string))
   end
+
+  # Numeric min/max over Decimals.
+  #
+  # `Enum.min/1` and `Enum.max/1` fall back to Erlang TERM ordering, which
+  # compares `%Decimal{}` structs field by field — sign, then coefficient,
+  # then exponent — not by value. So `Enum.min([10, 9.99])` returns 10 and
+  # `Enum.max` returns 9.99: the price range comes out inverted, and it is
+  # customer-visible in the storefront's "From $X" display.
+  #
+  #     Enum.min([Decimal.new("10"), Decimal.new("9.99")])  #=> 10   WRONG
+  #     decimal_min([Decimal.new("10"), Decimal.new("9.99")]) #=> 9.99
+  defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
+  defp decimal_max([first | rest]), do: Enum.reduce(rest, first, &Decimal.max/2)
 end

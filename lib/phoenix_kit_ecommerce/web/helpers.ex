@@ -105,6 +105,31 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   def parse_page(page) when is_integer(page) and page > 0, do: page
   def parse_page(_), do: 1
 
+  @doc """
+  Parse an integer from a LiveView event payload, falling back to `default`.
+
+  `String.to_integer/1` raises on anything non-numeric, and a raise inside
+  `handle_event/3` takes the whole LiveView down — so any hand-crafted or
+  merely stale `phx-value-*` produced a crashed socket rather than an
+  ignored event. That is reachable unauthenticated on the storefront
+  (quantity fields) and by any admin elsewhere.
+
+  Returns `default` for nil, blank, partially-numeric ("3abc") and
+  non-binary input. Callers that need a floor should still apply one —
+  this only guarantees you get an integer back.
+  """
+  def parse_int(value, default \\ 0)
+
+  def parse_int(value, default) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {int, ""} -> int
+      _ -> default
+    end
+  end
+
+  def parse_int(value, _default) when is_integer(value), do: value
+  def parse_int(_value, default), do: default
+
   # ---------------------------------------------------------------------------
   # Image helpers (for catalog list pages - uses featured_image_uuid)
   # ---------------------------------------------------------------------------

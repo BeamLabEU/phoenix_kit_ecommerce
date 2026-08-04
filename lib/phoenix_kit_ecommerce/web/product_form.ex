@@ -1264,7 +1264,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                               price_modifiers
                               |> Map.values()
                               |> Enum.map(&parse_decimal/1)
-                              |> Enum.min(fn -> Decimal.new("0") end) %>
+                              |> decimal_min() %>
                             <table class="table table-xs">
                               <thead>
                                 <tr>
@@ -2344,4 +2344,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> String.split(" ")
     |> Enum.map_join(" ", &String.capitalize/1)
   end
+
+  # Numeric minimum over Decimals — `Enum.min/2` compares %Decimal{} structs
+  # by Erlang term order, not value, and returns 10 for [10, 9.99].
+  defp decimal_min([]), do: Decimal.new("0")
+  defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 end
