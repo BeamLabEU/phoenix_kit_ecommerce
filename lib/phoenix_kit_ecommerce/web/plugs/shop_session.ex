@@ -24,12 +24,26 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
         {:signed, existing_id} ->
           put_shop_session(conn, existing_id, true)
 
-        {:legacy, existing_id} ->
-          # Adopted from a pre-signing cookie: re-issue it signed so this
-          # visitor migrates once and never takes the legacy path again.
+        {:legacy, legacy_id} ->
+          # Migrate the CART onto a freshly minted id rather than re-signing
+          # the value the client supplied.
+          #
+          # Re-signing was the flaw: on the next request the attacker's own
+          # value came back as `{:signed, _}` and was fully trusted, so the
+          # untrusted marking only DELAYED the capability by one request
+          # instead of removing it. Minting a new id and re-keying the cart
+          # means a replayed value can never become a trusted session — the
+          # replayer gets an id that was never theirs to present, and the
+          # legitimate visitor keeps their cart.
+          # A failed re-key is not an error worth surfacing: the visitor
+          # simply starts a new cart, which is what they would have got
+          # without the migration at all.
+          new_id = generate_session_id()
+          _ = Shop.rekey_cart_session(legacy_id, new_id)
+
           conn
-          |> put_resp_cookie(@cookie_name, existing_id, cookie_opts(conn))
-          |> put_shop_session(existing_id, false)
+          |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
+          |> put_shop_session(new_id, true)
 
         nil ->
           new_id = generate_session_id()

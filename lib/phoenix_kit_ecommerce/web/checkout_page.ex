@@ -369,7 +369,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       errors = validate_billing_data(socket.assigns.billing_data)
 
       if Enum.empty?(errors) do
-        {:noreply, assign(socket, step: :review, form_errors: %{})}
+        {:noreply, socket |> enter_review() |> assign(:form_errors, %{})}
       else
         {:noreply,
          socket
@@ -380,7 +380,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       if is_nil(socket.assigns.selected_profile_uuid) do
         {:noreply, put_flash(socket, :error, "Please select a billing profile")}
       else
-        {:noreply, assign(socket, :step, :review)}
+        {:noreply, enter_review(socket)}
       end
     end
   end
@@ -428,6 +428,39 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
        |> assign(:processing, false)
        |> assign(:selected_profile_uuid, nil)
        |> put_flash(:error, gettext("That billing profile is not available."))}
+    end
+  end
+
+  # Entering review must show the amount that will actually be charged.
+  #
+  # The cart carries no shipping country until checkout supplies one, and
+  # tax is zero without it — so simply flipping to `:review` showed a
+  # pre-tax total while `convert_cart_to_order/2` went on to apply the
+  # country and charge tax. The customer approved one number and was billed
+  # another.
+  #
+  # `preview_checkout_totals/2` runs the same country resolution and
+  # recalculation the conversion does, so the review figure and the charge
+  # are produced by one code path.
+  defp enter_review(socket) do
+    socket = assign(socket, :step, :review)
+
+    case Shop.preview_checkout_totals(socket.assigns.cart, checkout_opts(socket)) do
+      {:ok, cart} -> assign(socket, :cart, cart)
+      # Never block review on a pricing refresh; conversion recalculates
+      # under its own lock regardless, and a stale display is a smaller
+      # failure than a dead checkout.
+      {:error, _} -> socket
+    end
+  end
+
+  # The billing identity for this checkout, in the shape both
+  # `preview_checkout_totals/2` and `convert_cart_to_order/2` expect.
+  defp checkout_opts(socket) do
+    if socket.assigns.use_new_profile do
+      [billing_data: socket.assigns.billing_data]
+    else
+      [billing_profile_uuid: socket.assigns.selected_profile_uuid]
     end
   end
 
