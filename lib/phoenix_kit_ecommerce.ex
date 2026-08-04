@@ -2136,6 +2136,35 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Clears the cart's shipping selection and recalculates totals.
+
+  Used when the selected method stops being eligible for the cart as it is
+  NOW (weight change, last physical line removed) — leaving it selected
+  showed a zero-cost method the cart had outgrown and let checkout proceed
+  to an inevitable conversion failure.
+  """
+  def clear_cart_shipping(%Cart{} = cart) do
+    result =
+      repo().transaction(fn ->
+        updated_cart =
+          cart
+          |> Cart.shipping_changeset(%{shipping_method_uuid: nil, shipping_amount: nil})
+          |> repo().update!()
+
+        recalculate_cart_totals!(updated_cart)
+      end)
+
+    case result do
+      {:ok, updated_cart} ->
+        Events.broadcast_shipping_selected(updated_cart)
+        {:ok, updated_cart}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
   Sets shipping method for cart.
   """
   def set_cart_shipping(%Cart{} = cart, %ShippingMethod{} = method, country) do

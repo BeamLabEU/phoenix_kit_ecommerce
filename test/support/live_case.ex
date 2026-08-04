@@ -46,6 +46,11 @@ defmodule PhoenixKitEcommerce.LiveCase do
     pid = Sandbox.start_owner!(TestRepo, shared: not tags[:async])
     on_exit(fn -> Sandbox.stop_owner(pid) end)
 
+    # Storefront mounts and purchase mutations are gated on the module being
+    # enabled; the suite runs with the shop ON (see the same block in
+    # DataCase). Tests covering the disabled behaviour flip it off themselves.
+    PhoenixKit.Settings.update_setting("shop_enabled", "true")
+
     conn =
       Phoenix.ConnTest.build_conn()
       |> Plug.Test.init_test_session(%{})
