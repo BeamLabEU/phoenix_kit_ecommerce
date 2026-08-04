@@ -267,6 +267,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     {:noreply, socket |> load_static_category_data() |> load_filtered_categories()}
   end
 
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
   # ============================================
   # PRIVATE HELPERS
   # ============================================

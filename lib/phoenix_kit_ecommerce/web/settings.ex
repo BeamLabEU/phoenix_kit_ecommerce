@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Policy
 
   @impl true
@@ -317,12 +318,37 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   defp flip(true), do: "false"
   defp flip(false), do: "true"
 
+  # Every policy change is audited.
+  #
+  # These six toggles flip SSRF protection, raw-HTML rendering, SVG
+  # uploads, order-lookup authorization, import cleanup scope and the tax
+  # fallback — precisely the settings an audit trail exists for. "Who
+  # turned off description sanitizing, and when" is the first question
+  # anyone asks after an incident, and without this the answer was
+  # nowhere. All six funnel through here, so one call covers them.
+  #
+  # The value is safe to record: these are policy names and a country
+  # code, never user data.
   defp save_policy(socket, key, value, message) do
     case Settings.update_setting(key, value) do
       {:ok, _} ->
+        Activity.log("shop.policy_updated",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"setting" => key, "value" => value}
+        )
+
         {:noreply, socket |> assign_policy() |> put_flash(:info, message)}
 
       {:error, _} ->
+        Activity.log("shop.policy_update_failed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"setting" => key, "value" => value}
+        )
+
         {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
     end
   end

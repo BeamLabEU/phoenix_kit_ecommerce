@@ -34,7 +34,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
       {:error, :not_found} ->
-        handle_cross_language_redirect(slug, current_language, params, socket)
+        handle_cross_language_redirect(slug, current_language, params, session, socket)
 
       {:ok, %{category: %{status: "hidden"}}} ->
         {:ok,
@@ -129,7 +129,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   # Handle cross-language slug redirect
   # When user visits with a slug from a different language, redirect to correct localized URL
-  defp handle_cross_language_redirect(slug, current_language, params, socket) do
+  defp handle_cross_language_redirect(slug, current_language, params, session, socket) do
     case Shop.get_product_by_any_slug(slug, preload: [:category]) do
       {:error, :not_found} ->
         # Product truly not found
@@ -138,53 +138,80 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> put_flash(:error, "Product not found")
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
-      {:ok, %{category: %{status: "hidden"}}, _matched_lang} ->
-        # Product's category is hidden
-        {:ok,
-         socket
-         |> put_flash(:error, "Product not found")
-         |> push_navigate(to: Shop.catalog_url(current_language))}
-
       {:ok, product, _matched_lang} ->
-        # Found product in different language
-        # Check if we need to redirect or can just use the product
-        redirect_lang = Helpers.best_redirect_language(product.slug || %{})
-
-        # Normalize both languages to compare (e.g., "en" <-> "en-US")
-        current_base = DialectMapper.extract_base(current_language)
-        redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
-
-        cond do
-          # No valid redirect language found
-          is_nil(redirect_lang) ->
-            {:ok,
-             socket
-             |> put_flash(:error, "Product not found")
-             |> push_navigate(to: Shop.catalog_url(current_language))}
-
-          # Same base language (e.g., "en" vs "en-US") - use product without redirect
-          current_base == redirect_base ->
-            # Re-run mount with found product to avoid redirect loop
-            mount_with_product(product, current_language, params, socket)
-
-          # Different language - redirect to correct URL
-          true ->
-            slug = SlugResolver.product_slug(product, redirect_lang)
-
-            {:ok,
-             push_navigate(socket,
-               to: Helpers.build_lang_url("/shop/product/#{slug}", redirect_lang)
-             )}
+        if publicly_visible?(product) do
+          resolve_language_redirect(product, current_language, params, session, socket)
+        else
+          not_found(socket, current_language)
         end
+    end
+  end
+
+  # One visibility rule for the storefront, shared by both slug paths.
+  #
+  # `mount/3` rejected non-active products, but this cross-language path —
+  # reached whenever the visitor's slug resolves in another language —
+  # checked only the CATEGORY's status and handed the product straight to
+  # `mount_with_product/5`. A draft product stayed publicly reachable, and
+  # purchasable, through its other-language slug. Keeping the rule in one
+  # predicate is what stops the two paths drifting apart again.
+  defp publicly_visible?(%{status: "active"} = product) do
+    case product do
+      %{category: %{status: "hidden"}} -> false
+      _ -> true
+    end
+  end
+
+  defp publicly_visible?(_product), do: false
+
+  defp not_found(socket, current_language) do
+    {:ok,
+     socket
+     |> put_flash(:error, "Product not found")
+     |> push_navigate(to: Shop.catalog_url(current_language))}
+  end
+
+  defp resolve_language_redirect(product, current_language, params, session, socket) do
+    redirect_lang = Helpers.best_redirect_language(product.slug || %{})
+
+    # Normalize both languages to compare (e.g., "en" <-> "en-US")
+    current_base = DialectMapper.extract_base(current_language)
+    redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
+
+    cond do
+      # No valid redirect language found
+      is_nil(redirect_lang) ->
+        not_found(socket, current_language)
+
+      # Same base language (e.g., "en" vs "en-US") - use product without redirect
+      current_base == redirect_base ->
+        # Re-run mount with found product to avoid redirect loop
+        mount_with_product(product, current_language, params, session, socket)
+
+      # Different language - redirect to correct URL
+      true ->
+        slug = SlugResolver.product_slug(product, redirect_lang)
+
+        {:ok,
+         push_navigate(socket,
+           to: Helpers.build_lang_url("/shop/product/#{slug}", redirect_lang)
+         )}
     end
   end
 
   # Mount product page using already-found product (avoids redirect loop)
   # Used when cross-language lookup finds a product with same base language
-  defp mount_with_product(product, current_language, params, socket) do
-    # Note: We don't have session here, so we'll generate new session_id if needed
-    # This is acceptable since this path is only hit on first mount, not during LiveView lifecycle
-    session_id = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+  defp mount_with_product(product, current_language, params, session, socket) do
+    # Use the visitor's REAL shop session, same as the direct path.
+    #
+    # This used to mint a random id, with a comment claiming the session
+    # was unavailable here — it was not; `mount/3` receives it and simply
+    # did not thread it through `handle_cross_language_redirect/5`. The
+    # consequence was silent and expensive: a guest arriving via a
+    # same-base-language slug got a cart keyed to an id their browser has
+    # never held, so their existing cart was invisible and anything they
+    # added went into an orphan cart they could never reach again.
+    session_id = session["shop_session_id"] || generate_session_id()
     user = Helpers.get_current_user(socket)
     user_uuid = if user, do: user.uuid, else: nil
 
@@ -1309,4 +1336,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       {:noreply, socket}
     end
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 end
