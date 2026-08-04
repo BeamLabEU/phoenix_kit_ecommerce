@@ -40,6 +40,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Import.{CSVValidator, FormatDetector}
   alias PhoenixKitEcommerce.ImportConfig
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Workers.ImageMigrationWorker
 
@@ -59,6 +60,9 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
 
     Logger.info("CSVImportWorker: Starting import #{import_log_uuid} from #{path}")
 
+    # Marks which categories this run is allowed to clean up afterwards.
+    started_at = DateTime.utc_now()
+
     with {:ok, import_log} <- get_import_log(import_log_uuid),
          {:ok, config} <- load_config(config_uuid, import_log),
          {:ok, format_mod} <- detect_format(path),
@@ -76,7 +80,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
              download_images
            ),
          {:ok, _import_log} <- complete_import(import_log, stats) do
-      if skip_empty_categories, do: cleanup_empty_categories(stats)
+      if skip_empty_categories, do: cleanup_empty_categories(started_at)
       cleanup_file(path)
       broadcast_complete(import_log_uuid, stats)
       Logger.info("CSVImportWorker: Completed import #{import_log_uuid} - #{inspect(stats)}")
@@ -367,8 +371,27 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     end
   end
 
-  defp cleanup_empty_categories(_stats) do
-    empty_categories = Shop.list_empty_categories()
+  # Remove categories this import created and left empty.
+  #
+  # The option is presented to the admin as cleaning up after the import,
+  # but the old implementation discarded its argument and deleted EVERY
+  # empty category in the catalog — so a deliberately-empty "Coming Soon"
+  # placeholder was destroyed by any successful import with the default
+  # option on, and there is no undo.
+  #
+  # `inserted_at >= started_at` is the proxy for "this run created it";
+  # nothing in the import pipeline records created category uuids, and
+  # threading that through every row handler to delete a few rows is not
+  # worth the coupling. An admin who genuinely wants the old sweep can
+  # choose it via `shop_import_cleanup_scope`.
+  defp cleanup_empty_categories(started_at) do
+    all_empty = Shop.list_empty_categories()
+
+    empty_categories =
+      case Policy.import_cleanup_scope() do
+        :all_empty -> all_empty
+        :auto_created -> Enum.filter(all_empty, &created_since?(&1, started_at))
+      end
 
     Enum.each(empty_categories, fn cat ->
       case Shop.delete_category(cat) do
@@ -387,6 +410,18 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     e ->
       Logger.warning("CSVImportWorker: Category cleanup failed - #{inspect(e)}")
   end
+
+  defp created_since?(%{inserted_at: nil}, _started_at), do: false
+
+  defp created_since?(%{inserted_at: inserted_at}, started_at) do
+    DateTime.compare(to_utc(inserted_at), started_at) != :lt
+  end
+
+  defp created_since?(_category, _started_at), do: false
+
+  # Schemas store naive timestamps; normalise before comparing.
+  defp to_utc(%DateTime{} = dt), do: dt
+  defp to_utc(%NaiveDateTime{} = ndt), do: DateTime.from_naive!(ndt, "Etc/UTC")
 
   defp cleanup_file(path) do
     File.rm(path)

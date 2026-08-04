@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -90,7 +91,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
+    page = Helpers.parse_page(page)
 
     socket =
       socket
@@ -102,7 +103,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("delete", %{"uuid" => uuid}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
       category = Shop.get_category!(uuid)
 
       case Shop.delete_category(category) do
@@ -162,7 +163,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_change_status", %{"status" => status}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
       uuids = socket.assigns.bulk_uuids
       count = Shop.bulk_update_category_status(uuids, status)
 
@@ -190,7 +191,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
       uuids = socket.assigns.bulk_uuids
       parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
       count = Shop.bulk_update_category_parent(uuids, parent_uuid)
@@ -209,7 +210,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("bulk_delete", _params, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
       uuids = socket.assigns.bulk_uuids
       count = Shop.bulk_delete_categories(uuids)
 
@@ -265,6 +266,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   def handle_info({:categories_bulk_deleted, _uuids}, socket) do
     {:noreply, socket |> load_static_category_data() |> load_filtered_categories()}
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   # ============================================
   # PRIVATE HELPERS

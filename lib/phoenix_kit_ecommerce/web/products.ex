@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -64,7 +65,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    page = (params["page"] || "1") |> String.to_integer()
+    page = Helpers.parse_page(params["page"])
     search = params["search"] || ""
     status = if params["status"] in ["", nil], do: nil, else: params["status"]
     type = if params["type"] in ["", nil], do: nil, else: params["type"]
@@ -147,7 +148,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
+    page = Helpers.parse_page(page)
 
     socket =
       socket
@@ -413,6 +414,17 @@ defmodule PhoenixKitEcommerce.Web.Products do
   def handle_info({:inventory_updated, _product_uuid, _change}, socket) do
     {:noreply, load_products(socket)}
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

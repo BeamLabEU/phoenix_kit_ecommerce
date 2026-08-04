@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   alias PhoenixKitEcommerce.OptionTypes
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import TranslationTabs
 
@@ -320,9 +321,14 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   @impl true
   def handle_event("remove_opt_option", %{"index" => idx}, socket) do
     form_data = socket.assigns.opt_form_data
-    index = String.to_integer(idx)
-    updated = %{form_data | options: List.delete_at(form_data.options, index)}
-    {:noreply, assign(socket, :opt_form_data, updated)}
+    index = Helpers.parse_int(idx, -1)
+
+    if index < 0 do
+      {:noreply, socket}
+    else
+      updated = %{form_data | options: List.delete_at(form_data.options, index)}
+      {:noreply, assign(socket, :opt_form_data, updated)}
+    end
   end
 
   defp apply_option_change(current, nil, opt) do
@@ -979,7 +985,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
 
   defp parse_options(options) when is_map(options) do
     options
-    |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+    |> Enum.sort_by(fn {k, _v} -> Helpers.parse_int(k, 0) end)
     |> Enum.map(fn {_k, v} -> v end)
     |> Enum.reject(&(&1 == ""))
   end

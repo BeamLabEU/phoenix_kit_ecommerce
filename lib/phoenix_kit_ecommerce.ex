@@ -50,6 +50,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.ImportConfig
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Options.MetadataValidator
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
@@ -162,6 +163,23 @@ defmodule PhoenixKitEcommerce do
 
   @impl PhoenixKit.Module
   def module_name, do: "E-Commerce"
+
+  @doc """
+  Tailwind source roots contributed to the host's CSS build.
+
+  Both `README.md` and `AGENTS.md` claimed this was implemented; it was
+  not, and the `use PhoenixKit.Module` default returns `[]`. The
+  consequence was invisible rather than loud: core's
+  `:phoenix_kit_css_sources` compiler collects this from every discovered
+  module and writes `assets/css/_phoenix_kit_sources.css`, so with shop
+  contributing nothing, Tailwind purged every class used only by this
+  module's storefront and admin templates from the host build.
+
+  It stayed hidden because the compiler only warns when the TOTAL source
+  list is empty — any other installed module masked the absence.
+  """
+  @impl PhoenixKit.Module
+  def css_sources, do: [:phoenix_kit_ecommerce]
 
   @impl PhoenixKit.Module
   def version do
@@ -1500,8 +1518,18 @@ defmodule PhoenixKitEcommerce do
         # First try to find by user_uuid
         case base_query |> where([c], c.user_uuid == ^user_uuid) |> repo().one() do
           nil when not is_nil(session_id) ->
-            # Fallback: try session_id (cart created before login)
-            base_query |> where([c], c.session_id == ^session_id) |> repo().one()
+            # Fallback: a cart this session started before logging in.
+            #
+            # `is_nil(c.user_uuid)` is load-bearing and was missing. A
+            # logged-in user's cart carries BOTH user_uuid and session_id,
+            # and the shop_session_id cookie outlives logout by 30 days —
+            # so on a shared browser, the next user to log in without a cart
+            # of their own matched the PREVIOUS user's cart here and could
+            # edit it and check out against it. Only claim carts that are
+            # still unowned.
+            base_query
+            |> where([c], c.session_id == ^session_id and is_nil(c.user_uuid))
+            |> repo().one()
 
           result ->
             result
@@ -1550,6 +1578,97 @@ defmodule PhoenixKitEcommerce do
   end
 
   def get_cart(_), do: nil
+
+  @doc """
+  Whether any cart exists for this shop session id.
+
+  Used by `PhoenixKitEcommerce.Web.Plugs.ShopSession` to decide whether an
+  unsigned, pre-migration cookie names a real session worth adopting.
+  Existence only — no cart is loaded and nothing is authorized by this.
+  """
+  @spec session_has_cart?(String.t() | any()) :: boolean()
+  def session_has_cart?(session_id) when is_binary(session_id) and session_id != "" do
+    # Deliberately narrow. The adopted id is a CART identity, so it may only
+    # be adopted for a cart that is still a live GUEST cart:
+    #
+    #   * `status == "active"` — a converted or abandoned cart is finished
+    #     business, and matching one would keep the migration window open
+    #     forever (nothing deletes carts; `mark_abandoned_carts/1` only
+    #     flips a status and is wired to no cron).
+    #   * `is_nil(user_uuid)` — a cart already claimed by an account must
+    #     never be reachable by presenting an unsigned cookie.
+    Cart
+    |> where([c], c.session_id == ^session_id)
+    |> where([c], c.status == "active" and is_nil(c.user_uuid))
+    |> limit(1)
+    |> select([c], 1)
+    |> repo().one()
+    |> is_nil()
+    |> Kernel.not()
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  def session_has_cart?(_), do: false
+
+  @doc """
+  Moves a live guest cart from one shop-session id to another.
+
+  Used by the pre-signing cookie migration. The plug mints a FRESH id and
+  re-keys the cart onto it, rather than re-signing whatever the client
+  presented — re-signing a replayed value would have turned it into a
+  fully trusted session on the very next request, which is the capability
+  the signing exists to prevent.
+
+  Scoped to active, unclaimed carts for the same reason `session_has_cart?/1`
+  is: a converted or account-owned cart must never be re-keyed by an
+  unsigned cookie. Returns `:ok` when exactly one cart moved.
+  """
+  @spec rekey_cart_session(String.t(), String.t()) :: :ok | :error
+  def rekey_cart_session(from_id, to_id)
+      when is_binary(from_id) and is_binary(to_id) and from_id != "" and to_id != "" do
+    {count, _} =
+      Cart
+      |> where([c], c.session_id == ^from_id)
+      |> where([c], c.status == "active" and is_nil(c.user_uuid))
+      |> repo().update_all(set: [session_id: to_id])
+
+    if count > 0, do: :ok, else: :error
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  def rekey_cart_session(_from, _to), do: :error
+
+  @doc """
+  Returns just the `session_id` of a cart, without loading items.
+
+  Used to authorize order confirmation pages for orders placed BEFORE
+  `metadata["session_id"]` was recorded on the order itself. Those orders
+  still carry `metadata["cart_uuid"]`, and the cart row survives
+  conversion (`mark_cart_converted/2` flips its status, it is never
+  deleted) with its `session_id` intact — so the placing session is still
+  recoverable for them.
+
+  Deliberately a narrow `select` rather than `get_cart/1`: this runs on a
+  page load purely to compare one string, and `get_cart/1` preloads items
+  and the shipping method.
+  """
+  @spec cart_session_id(String.t() | any()) :: String.t() | nil
+  def cart_session_id(uuid) when is_binary(uuid) do
+    if UUIDUtils.valid?(uuid) do
+      Cart
+      |> where([c], c.uuid == ^uuid)
+      |> select([c], c.session_id)
+      |> repo().one()
+    end
+  end
+
+  def cart_session_id(_), do: nil
 
   @doc """
   Gets a cart by ID or UUID, raises if not found.
@@ -1808,12 +1927,12 @@ defmodule PhoenixKitEcommerce do
   def update_cart_item(%CartItem{} = item, quantity) when quantity > 0 do
     result =
       repo().transaction(fn ->
+        cart = lock_active_cart!(item.cart_uuid)
+
         updated_item =
           item
           |> CartItem.changeset(%{quantity: quantity})
           |> repo().update!()
-
-        cart = repo().get_by!(Cart, uuid: item.cart_uuid)
 
         updated_cart = recalculate_cart_totals!(cart)
         {updated_cart, updated_item}
@@ -1839,10 +1958,8 @@ defmodule PhoenixKitEcommerce do
 
     result =
       repo().transaction(fn ->
-        cart_uuid = item.cart_uuid
+        cart = lock_active_cart!(item.cart_uuid)
         repo().delete!(item)
-
-        cart = repo().get_by!(Cart, uuid: cart_uuid)
 
         recalculate_cart_totals!(cart)
       end)
@@ -1863,6 +1980,8 @@ defmodule PhoenixKitEcommerce do
   def clear_cart(%Cart{} = cart) do
     result =
       repo().transaction(fn ->
+        cart = lock_active_cart!(cart.uuid)
+
         CartItem
         |> where([i], i.cart_uuid == ^cart.uuid)
         |> repo().delete_all()
@@ -2243,12 +2362,34 @@ defmodule PhoenixKitEcommerce do
       # if another request already started conversion
       with :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
+           # Snapshot the placing session from the LOCKED cart, before
+           # anything can clear it.
+           #
+           # `resolve_checkout_user/2` runs next and, for both guest checkout
+           # and a logged-in user adopting a guest cart, ends in
+           # `assign_cart_to_user/2` — which writes `session_id: nil` onto the
+           # cart. Reading `cart.session_id` after that point yields nil, so
+           # the order was stamped with no placing session and the cart row
+           # lost it too: the guest could not open the confirmation page they
+           # were redirected to one line later, and the
+           # `cart_uuid -> cart.session_id` fallback could not recover it.
+           #
+           # Deliberately a local binding rather than an option. This value
+           # authorizes the order confirmation page, and
+           # `convert_cart_to_order/2` is public (re-exported through
+           # `compat/shop.ex`) — threading it through `opts` let a caller
+           # supply their own and have it stamped into
+           # `metadata["session_id"]`, handing out access to an order they
+           # did not place. Derived internally, it cannot be influenced.
+           placing_session_id = cart.session_id,
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
+           :ok <- validate_billing_profile_owner(opts, user_uuid),
+           {:ok, cart} <- apply_checkout_shipping_country(cart, opts),
+           {:ok, cart} <- validate_shipping_method_available(cart),
            line_items <- build_order_line_items(cart),
-           order_attrs <- build_order_attrs(cart, line_items, opts),
+           order_attrs <- build_order_attrs(cart, line_items, opts, placing_session_id),
            {:ok, order} <- do_create_order(user_uuid, order_attrs),
-           {:ok, _cart} <- mark_cart_converted(cart, order.uuid),
-           :ok <- maybe_send_guest_confirmation(user_uuid) do
+           {:ok, _cart} <- mark_cart_converted(cart, order.uuid) do
         {:ok, order}
       else
         {:error, reason} ->
@@ -2262,8 +2403,122 @@ defmodule PhoenixKitEcommerce do
     end)
     # unwrap the transaction result
     |> case do
-      {:ok, {:ok, order}} -> {:ok, order}
-      {:error, reason} -> {:error, reason}
+      {:ok, {:ok, order}} ->
+        # Deliberately AFTER the transaction commits, not inside it.
+        #
+        # This used to be the last step of the `with` above, which meant an
+        # SMTP failure rolled back an order the customer had already paid
+        # for, and a slow mail server held the cart row lock open for the
+        # length of the network round-trip. A confirmation email is a
+        # notification about a committed fact — it must not be able to undo
+        # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
+        _ = maybe_send_guest_confirmation(order.user_uuid)
+        {:ok, order}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Applies the checkout billing country to the cart and recalculates totals,
+  WITHOUT converting anything.
+
+  The review step must show the amount the customer is about to be charged.
+  The cart page deliberately leaves `shipping_country` nil ("set at
+  checkout"), and tax is zero for a nil-country cart — so before this
+  existed, a customer reviewed a pre-tax total and `convert_cart_to_order/2`
+  then applied the country, recalculated, and charged more. Cart 100.00 +
+  shipping 10.00 at 20%: review said 110.00, the order said 130.00.
+
+  That gap opened the moment tax started working at all, so it ships with
+  the same change. Runs the identical country resolution and recalculation
+  the conversion uses, so the two cannot disagree.
+
+  Takes the same `:billing_profile_uuid` / `:billing_data` options as
+  `convert_cart_to_order/2`. Returns the reloaded cart.
+  """
+  @spec preview_checkout_totals(Cart.t(), keyword()) :: {:ok, Cart.t()} | {:error, term()}
+  def preview_checkout_totals(%Cart{} = cart, opts) when is_list(opts) do
+    repo().transaction(fn ->
+      case apply_checkout_shipping_country(get_cart!(cart.uuid), opts) do
+        {:ok, updated} -> updated
+        {:error, reason} -> repo().rollback(reason)
+      end
+    end)
+  end
+
+  # Persist the checkout address's country onto the cart, then recompute
+  # totals, BEFORE the order is built from those totals.
+  #
+  # `set_cart_shipping_country/2` existed but had no caller: the cart page
+  # deliberately leaves `shipping_country` nil ("set at checkout based on
+  # billing info") and checkout never set it. Since `get_tax_rate/1`
+  # returns 0 for a nil-country cart, every order was created tax-free
+  # however billing tax was configured.
+  #
+  # Resolution order is: the address actually being used for this checkout,
+  # then whatever the cart already had, then the admin's configured
+  # fallback (`Policy.default_tax_country/0`, unset by default). When none
+  # of those yields a country the behaviour is unchanged — no country, no
+  # tax — because charging tax against a guessed jurisdiction would be
+  # worse than charging none.
+  defp apply_checkout_shipping_country(%Cart{} = cart, opts) do
+    billing_profile_uuid = Keyword.get(opts, :billing_profile_uuid)
+    billing_data = Keyword.get(opts, :billing_data)
+
+    country =
+      get_shipping_country(billing_profile_uuid, billing_data, cart) ||
+        Policy.default_tax_country()
+
+    with {:ok, cart} <- maybe_write_shipping_country(cart, country) do
+      # ALWAYS recalculate before the order copies these totals, not only
+      # when the country changed.
+      #
+      # Two reasons. `set_cart_shipping_country/2` writes the column but
+      # not the totals, so a newly-applied country leaves tax_amount stale.
+      # And a cart that ALREADY had the right country skipped recalculation
+      # entirely — so any totals left stale by a concurrent cart edit (see
+      # the lock in `recalculate_cart_totals!/1`) were copied onto the order
+      # verbatim. Recomputing unconditionally, inside the conversion
+      # transaction and under that lock, makes the order's totals a fresh
+      # read rather than a trusted cache.
+      _ = recalculate_cart_totals!(cart)
+      {:ok, get_cart!(cart.uuid)}
+    end
+  end
+
+  defp maybe_write_shipping_country(%Cart{} = cart, country) do
+    if is_nil(country) or country == "" or country == cart.shipping_country do
+      {:ok, cart}
+    else
+      set_cart_shipping_country(cart, country)
+    end
+  end
+
+  # A billing profile may only be attached to an order by the user who owns
+  # it — enforced HERE, in the context, not only in the LiveView.
+  #
+  # `convert_cart_to_order/2` is public and re-exported through
+  # `compat/shop.ex`, and it took `billing_profile_uuid` straight from
+  # `opts` and wrote it onto the order. Billing then snapshots that
+  # profile's name, address, phone and email onto the order, which the
+  # confirmation page renders — so an unchecked uuid was a PII read. The
+  # checkout LiveView does check ownership, but a context function must not
+  # depend on one caller remembering to.
+  #
+  # This is the same defect shape as the placing-session override, and it
+  # gets the same treatment: the invariant lives with the write.
+  defp validate_billing_profile_owner(opts, user_uuid) do
+    case Keyword.get(opts, :billing_profile_uuid) do
+      nil ->
+        :ok
+
+      profile_uuid ->
+        case Billing.get_billing_profile(profile_uuid) do
+          %{user_uuid: owner_uuid} when not is_nil(owner_uuid) and owner_uuid == user_uuid -> :ok
+          _ -> {:error, :billing_profile_not_owned}
+        end
     end
   end
 
@@ -2280,6 +2535,44 @@ defmodule PhoenixKitEcommerce do
 
       true ->
         :ok
+    end
+  end
+
+  # Re-validate the shipping method AFTER the checkout country has been
+  # applied, not before: a method may be eligible for a country-less cart
+  # and ineligible once the billing address supplies a country it does not
+  # serve, and running this too early would also wrongly reject that case
+  # in reverse.
+  defp validate_shipping_method_available(%Cart{} = cart) do
+    if selected_shipping_method_available?(cart) do
+      {:ok, cart}
+    else
+      {:error, :shipping_method_unavailable}
+    end
+  end
+
+  # A selected shipping method must still be eligible for the cart AS IT IS
+  # NOW, not as it was when the customer picked it.
+  #
+  # Checking only that `shipping_method_uuid` is set was exploitable:
+  # `calculate_method_shipping/4` zeroes the cost of a method the cart has
+  # outgrown while LEAVING it selected, so a customer could choose a cheap
+  # light-parcel method, then load the cart past that method's weight or
+  # subtotal cap, and check out with the shipping charge silently at zero.
+  # Nothing downstream re-checked. Repeatable, and straight off the margin.
+  defp selected_shipping_method_available?(%Cart{shipping_method_uuid: nil}), do: true
+
+  defp selected_shipping_method_available?(%Cart{} = cart) do
+    case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
+      nil ->
+        false
+
+      method ->
+        ShippingMethod.available_for?(method, %{
+          weight_grams: cart.total_weight_grams || 0,
+          subtotal: cart.subtotal || Decimal.new("0"),
+          country: cart.shipping_country
+        })
     end
   end
 
@@ -2317,7 +2610,7 @@ defmodule PhoenixKitEcommerce do
     product_items ++ shipping_item
   end
 
-  defp build_order_attrs(%Cart{} = cart, line_items, opts) do
+  defp build_order_attrs(%Cart{} = cart, line_items, opts, placing_session_id) do
     billing_profile_uuid = Keyword.get(opts, :billing_profile_uuid)
     billing_data = Keyword.get(opts, :billing_data)
 
@@ -2338,6 +2631,17 @@ defmodule PhoenixKitEcommerce do
       "metadata" => %{
         "source" => "shop_checkout",
         "cart_uuid" => cart.uuid,
+        # The shop session that placed this order. This is what lets the
+        # confirmation page recognise a guest as the person who just checked
+        # out, instead of treating knowledge of the order uuid as proof.
+        # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+        #
+        # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
+        # from `cart.session_id` — by this point `assign_cart_to_user/2` has
+        # already nulled the column for every guest checkout. Passed as an
+        # argument rather than through `opts` so a caller of the public
+        # `convert_cart_to_order/2` cannot choose it.
+        "session_id" => placing_session_id,
         "shipping_country" => shipping_country,
         "shipping_method_uuid" => cart.shipping_method_uuid
       }
@@ -2770,7 +3074,63 @@ defmodule PhoenixKitEcommerce do
     |> repo().one()
   end
 
+  # Lock a cart row and refuse to mutate it unless it is still active.
+  #
+  # Two jobs, and the ORDER of the lock is what makes both work. Item
+  # mutations previously changed a child row and only then recalculated,
+  # so the cart lock inside `recalculate_cart_totals!/1` came too late to
+  # serialize the mutation against a concurrent conversion: a quantity
+  # edit could commit AFTER the order was created, leaving the order
+  # saying one thing and `cart_items` another. Taking the lock first
+  # closes that window.
+  #
+  # It also enforces the status invariant nothing was checking — a
+  # converted or abandoned cart is finished business and must not accept
+  # edits at all. Raises inside the caller's transaction so the whole
+  # mutation rolls back.
+  #
+  # Lock ordering note: callers that also lock a PRODUCT row take
+  # product-then-cart, and conversion locks only the cart, so there is no
+  # cart→product path and no ABBA cycle.
+  defp lock_active_cart!(cart_uuid) do
+    cart =
+      Cart
+      |> where([c], c.uuid == ^cart_uuid)
+      |> lock("FOR UPDATE")
+      |> repo().one()
+
+    case cart do
+      %Cart{status: "active"} = cart -> cart
+      %Cart{} -> repo().rollback(:cart_not_active)
+      nil -> repo().rollback(:cart_not_found)
+    end
+  end
+
   defp recalculate_cart_totals!(%Cart{} = cart) do
+    # Serialize concurrent recalculations of the SAME cart.
+    #
+    # Callers lock only the PRODUCT row, which does not serialize two adds
+    # of DIFFERENT products: at READ COMMITTED both transactions insert
+    # their item, each then recalculated over a snapshot containing only
+    # its own, and the second cart UPDATE — which blocked on the first's
+    # row lock — overwrote the totals with a value computed from stale
+    # data. Both items persisted; the totals reflected one. Real money,
+    # not just a UI glitch, since conversion copies these totals onto the
+    # order.
+    #
+    # Taking the cart row lock HERE rather than in each of the eight
+    # callers is what makes it correct: the lock must be held before the
+    # item read, so the loser of the race re-reads after the winner
+    # commits and sees both items. Contention is per-cart, so the cost is
+    # negligible; the checkout conversion path is unaffected, it already
+    # serializes on an atomic status transition.
+    _locked =
+      Cart
+      |> where([c], c.uuid == ^cart.uuid)
+      |> lock("FOR UPDATE")
+      |> select([c], c.uuid)
+      |> repo().one()
+
     items = CartItem |> where([i], i.cart_uuid == ^cart.uuid) |> repo().all()
 
     subtotal =
@@ -2790,10 +3150,26 @@ defmodule PhoenixKitEcommerce do
 
     shipping_amount = calculate_shipping(cart, subtotal, total_weight)
 
-    # Calculate tax
+    # Calculate tax over the TAXABLE portion of the cart only.
+    #
+    # `CartItem` snapshots the product's `taxable` flag at add-to-cart
+    # time, and every product form exposes it — but tax was charged on the
+    # whole subtotal regardless, so a mixed cart over-collected on its
+    # zero-rated lines. This was invisible until now only because tax was
+    # always zero (the cart's shipping_country was never set), so fixing
+    # that fix makes this one load-bearing.
+    #
+    # The discount is apportioned to the taxable share rather than
+    # subtracted whole: taking it all off the taxable base would let a
+    # discount on a zero-rated item wipe out tax owed on a standard-rated
+    # one.
     tax_rate = get_tax_rate(cart)
-    taxable_amount = Decimal.sub(subtotal, cart.discount_amount || Decimal.new("0"))
-    tax_amount = Decimal.mult(taxable_amount, tax_rate) |> Decimal.round(2)
+
+    tax_amount =
+      items
+      |> taxable_base(subtotal, cart.discount_amount || Decimal.new("0"))
+      |> Decimal.mult(tax_rate)
+      |> Decimal.round(2)
 
     # Calculate total
     total =
@@ -2813,6 +3189,43 @@ defmodule PhoenixKitEcommerce do
     })
     |> repo().update!()
     |> repo().preload([:items, :shipping_method], force: true)
+  end
+
+  # The portion of the cart tax actually applies to.
+  #
+  # `CartItem` snapshots the product's `taxable` flag, but tax used to be
+  # charged on the whole subtotal, so a mixed cart over-collected on its
+  # zero-rated lines.
+  #
+  # The discount is apportioned to the taxable share rather than subtracted
+  # whole: taking it all off the taxable base would let a discount on a
+  # zero-rated item wipe out tax owed on a standard-rated one.
+  defp taxable_base(items, subtotal, discount) do
+    taxable_subtotal =
+      Enum.reduce(items, Decimal.new("0"), fn i, acc ->
+        if i.taxable == false, do: acc, else: Decimal.add(acc, i.line_total || Decimal.new("0"))
+      end)
+
+    zero = Decimal.new("0")
+
+    if Decimal.equal?(taxable_subtotal, zero) or Decimal.equal?(subtotal, zero) do
+      zero
+    else
+      # Multiply BEFORE dividing. Computing `share = taxable / subtotal`
+      # first rounds to Decimal's default 28 significant digits and the
+      # error survives the multiplication: with taxable 1.05, subtotal
+      # 10.02, discount 8.35 at 20%, the divide-first form yields a base of
+      # 0.1749999999999999999999999999999999 and tax 0.03, where the exact
+      # answer is 0.175 and 0.04. A cent, but a cent on every mixed cart.
+      allocated_discount =
+        discount
+        |> Decimal.mult(taxable_subtotal)
+        |> Decimal.div(subtotal)
+
+      taxable_subtotal
+      |> Decimal.sub(allocated_discount)
+      |> Decimal.max(zero)
+    end
   end
 
   defp calculate_shipping(cart, subtotal, total_weight) do
