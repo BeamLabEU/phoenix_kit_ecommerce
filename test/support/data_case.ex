@@ -43,6 +43,13 @@ defmodule PhoenixKitEcommerce.DataCase do
 
     on_exit(fn -> Sandbox.stop_owner(pid) end)
 
+    # Purchase mutations are gated on the module being enabled (an admin
+    # flipping the switch must stop a connected LiveView's add-to-cart,
+    # not only new mounts), so the suite runs with the shop ON — the same
+    # state every exercised code path assumes in production. Tests that
+    # cover the disabled behaviour flip it off themselves.
+    PhoenixKit.Settings.update_setting("shop_enabled", "true")
+
     :ok
   end
 

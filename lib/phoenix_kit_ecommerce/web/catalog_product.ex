@@ -727,6 +727,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               />
             <% end %>
 
+            <%!-- Full body (imports put the complete supplier description in
+                  body_html and only a short extract in description). Same
+                  sanitization policy as the description above. --%>
+            <%= if @localized_body && @localized_body != "" do %>
+              <div class="mt-4">
+                <.markdown
+                  content={@localized_body}
+                  sanitize={not Policy.allow_raw_html_descriptions?()}
+                />
+              </div>
+            <% end %>
+
             <%!-- Product Details --%>
             <div class="divider"></div>
 
@@ -1290,11 +1302,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   # PubSub event handlers
+  #
+  # Both handlers RELOAD the canonical product with its preloads and
+  # recompute every derived assign rather than trusting the broadcast
+  # payload. The previous versions swapped in the payload (or a bare
+  # `get_product!/1` without `preload: :category`) — the template branches
+  # on `@product.category`, and an `%Ecto.Association.NotLoaded{}` is
+  # truthy, so the next render crashed; the localized text, option specs
+  # and calculated price also went stale because only `:product` changed.
   @impl true
-  def handle_info({:product_updated, updated_product}, socket) do
-    # Only update if it's the same product
-    if updated_product.uuid == socket.assigns.product.uuid do
-      {:noreply, assign(socket, :product, updated_product)}
+  def handle_info({:product_updated, %{uuid: uuid}}, socket) do
+    if uuid == socket.assigns.product.uuid do
+      {:noreply, refresh_product(socket)}
     else
       {:noreply, socket}
     end
@@ -1303,9 +1322,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   @impl true
   def handle_info({:inventory_updated, product_uuid, _change}, socket) do
     if product_uuid == socket.assigns.product.uuid do
-      # Reload product to get updated stock
-      product = Shop.get_product!(product_uuid)
-      {:noreply, assign(socket, :product, product)}
+      {:noreply, refresh_product(socket)}
     else
       {:noreply, socket}
     end
@@ -1321,4 +1338,47 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # crashing live sessions with no change here at all.
   @impl true
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # Reload the canonical product (with preloads) and recompute every assign
+  # derived from it. The visitor's in-progress option selection is kept where
+  # the refreshed option set still allows it. A product that vanished or left
+  # "active" sends the shopper back to the catalog instead of a crash or a
+  # stale purchasable page.
+  defp refresh_product(socket) do
+    case Shop.get_product(socket.assigns.product.uuid, preload: [:category]) do
+      %{status: "active"} = product ->
+        current_language = socket.assigns.current_language
+        selectable_specs = Shop.get_selectable_specs(product)
+
+        selected_specs =
+          socket.assigns.selected_specs
+          |> Map.take(Enum.map(selectable_specs, & &1["key"]))
+          |> then(fn kept ->
+            Map.merge(build_default_specs(selectable_specs, product.metadata || %{}), kept)
+          end)
+
+        socket
+        |> assign(:product, product)
+        |> assign(:localized_title, Translations.get(product, :title, current_language))
+        |> assign(
+          :localized_description,
+          Translations.get(product, :description, current_language)
+        )
+        |> assign(:localized_body, Translations.get(product, :body_html, current_language))
+        |> assign(:specifications, build_specifications(product))
+        |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
+        |> assign(:selectable_specs, selectable_specs)
+        |> assign(:selected_specs, selected_specs)
+        |> assign(:calculated_price, Shop.calculate_product_price(product, selected_specs))
+        |> assign(
+          :missing_required_specs,
+          get_missing_required_specs(selected_specs, selectable_specs)
+        )
+
+      _gone_or_inactive ->
+        socket
+        |> put_flash(:info, "This product is no longer available")
+        |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
+    end
+  end
 end
