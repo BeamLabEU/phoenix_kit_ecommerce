@@ -114,6 +114,63 @@ defmodule PhoenixKitEcommerce.Policy do
   end
 
   @doc """
+  Whether pre-signing shop-session cookies may still be adopted.
+
+  When the cookie became signed, every existing unsigned one stopped
+  verifying — so without a migration each guest silently lost their cart
+  on upgrade. `PhoenixKitEcommerce.Web.Plugs.ShopSession` therefore adopts
+  a legacy cookie once and re-issues it signed.
+
+  That path is a standing weakness: an unsigned value is replayable by
+  anyone who obtained it out-of-band, so it must not outlive the upgrade
+  it exists for. Set `shop_legacy_cookie_until` to an ISO8601 date (or
+  datetime) to close the window; after it passes, unsigned cookies are
+  refused outright and those visitors simply get a fresh cart.
+
+  Default: `nil`, meaning "still migrating". That is the compatible
+  default rather than the strict one — a shop that upgrades without
+  reading release notes must not lose customer carts — but it is the one
+  setting here where leaving the default forever is the wrong choice.
+  Adopted ids never authorize an order regardless of this setting.
+  """
+  @spec legacy_cookie_window_open?(Date.t() | DateTime.t()) :: boolean()
+  def legacy_cookie_window_open?(now \\ DateTime.utc_now()) do
+    case read("shop_legacy_cookie_until", "") do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> true
+          cutoff -> parse_cutoff(cutoff, now)
+        end
+
+      _ ->
+        true
+    end
+  end
+
+  defp parse_cutoff(cutoff, now) do
+    parsed =
+      case DateTime.from_iso8601(cutoff) do
+        {:ok, dt, _} -> {:ok, dt}
+        _ -> date_cutoff(cutoff)
+      end
+
+    case parsed do
+      {:ok, dt} -> DateTime.compare(now, dt) == :lt
+      # An unparseable cutoff is a configuration error. Fail OPEN here: the
+      # alternative silently drops every guest's cart on a typo, and the
+      # adopted id cannot authorize an order in any case.
+      :error -> true
+    end
+  end
+
+  defp date_cutoff(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> DateTime.new(date, ~T[00:00:00], "Etc/UTC")
+      _ -> :error
+    end
+  end
+
+  @doc """
   Which categories the post-import cleanup step may delete.
 
   * `:auto_created` (default) — only categories that the import itself

@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   import Plug.Conn
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Policy
 
   @cookie_name "shop_session_id"
   # 30 days
@@ -108,29 +109,29 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   # moment the shop upgraded — a real break for every deployed store, not a
   # theoretical one.
   #
-  # The adoption is deliberately narrow: an unsigned value is accepted only
-  # when it actually names a cart that exists. That keeps the migration
-  # self-limiting and makes forgery pointless — this cookie now also proves
-  # guest ORDER ownership, so blindly trusting any unsigned string would
-  # hand an attacker exactly the capability the signing was added to
-  # protect. A guessed value matches no cart and is refused; a real
-  # session_id is 32 bytes of crypto-random, so guessing one is not a
-  # threat model, it is a wish. Legacy visitors with a cookie but no cart
-  # lose nothing by being issued a fresh id.
+  # Three things keep this narrow, because an unsigned value is replayable
+  # by anyone who obtains one out-of-band, and this cookie now also proves
+  # guest ORDER ownership — blindly trusting any unsigned string would hand
+  # over exactly the capability signing was added to protect:
   #
-  # ⚠️ This path does NOT expire on its own. Each visitor is upgraded on
-  # their next request, but the acceptance criterion — "names an existing
-  # cart" — never stops being satisfiable: nothing deletes carts.
-  # `mark_abandoned_carts/1` only flips a status and is wired to no cron,
-  # and `session_has_cart?/1` does not filter by status, so converted and
-  # abandoned carts keep qualifying indefinitely. That is tolerable only
-  # because an adopted id is marked untrusted and cannot unlock an order
-  # (see `put_shop_session/3`). If cart pruning is ever added, this whole
-  # branch can be deleted once the retention window has passed.
+  #   1. It must name a LIVE GUEST cart — active, unclaimed by any account
+  #      (`Shop.session_has_cart?/1`). A guessed value matches nothing; a
+  #      real session id is 32 crypto-random bytes.
+  #   2. It never authorizes an order. Adopted ids are marked untrusted,
+  #      and `CheckoutComplete` requires a trusted one.
+  #   3. It expires. `Policy.legacy_cookie_window_open?/0` closes the door
+  #      on a configured date. This is load-bearing: nothing deletes carts
+  #      (`mark_abandoned_carts/1` only flips a status and is wired to no
+  #      cron), so without a cutoff the criterion in (1) would stay
+  #      satisfiable indefinitely and the window would never self-close.
+  #
+  # Legacy visitors with a cookie but no live cart lose nothing by being
+  # issued a fresh id.
   defp adopt_legacy_cookie(conn) do
     conn = fetch_cookies(conn)
 
-    with raw when is_binary(raw) <- conn.cookies[@cookie_name],
+    with true <- Policy.legacy_cookie_window_open?(),
+         raw when is_binary(raw) <- conn.cookies[@cookie_name],
          true <- plausible_session_id?(raw),
          true <- Shop.session_has_cart?(raw) do
       {:legacy, raw}
