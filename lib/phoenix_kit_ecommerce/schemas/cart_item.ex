@@ -125,8 +125,10 @@ defmodule PhoenixKitEcommerce.CartItem do
       iex> from_product(product, 1, "ru")
       %{product_title: "Виджет", product_slug: "vidzhet", ...}
   """
-  def from_product(%Product{} = product, quantity \\ 1, language \\ nil) do
-    lang = language || default_language()
+  def from_product(product, quantity \\ 1, language_or_opts \\ nil)
+
+  def from_product(%Product{} = product, quantity, opts) when is_list(opts) do
+    lang = Keyword.get(opts, :language) || default_language()
 
     %{
       product_uuid: product.uuid,
@@ -135,11 +137,23 @@ defmodule PhoenixKitEcommerce.CartItem do
       product_image: get_product_image_url(product),
       unit_price: product.price,
       compare_at_price: product.compare_at_price,
-      currency: product.currency,
+      # Line amounts are summed in the CART's currency frame, so the line
+      # snapshots that frame when the caller supplies it; the product's own
+      # currency field is usually the schema's untouched default.
+      currency: Keyword.get(opts, :currency) || product.currency,
       quantity: quantity,
       weight_grams: product.weight_grams || 0,
-      taxable: product.taxable
+      taxable: product.taxable,
+      # Snapshotted so cart/checkout logic survives product edits and
+      # deletion (product_uuid is ON DELETE SET NULL). Absent on rows
+      # created before this shipped - readers fall back to the live
+      # product, and only a MISSING product defaults to "requires".
+      metadata: %{"requires_shipping" => product.requires_shipping}
     }
+  end
+
+  def from_product(%Product{} = product, quantity, language) do
+    from_product(product, quantity, language: language)
   end
 
   # Get product image URL, preferring new Storage system over legacy

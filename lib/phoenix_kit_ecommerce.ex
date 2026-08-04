@@ -1394,17 +1394,90 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether any line in the cart needs physical shipping.
+
+  Reads the `"requires_shipping"` flag snapshotted onto each cart item at
+  add time. Rows created before the snapshot existed fall back to the live
+  product's flag (batched, one query); a line whose product is GONE counts
+  as requiring shipping — the conservative default, since charging shipping
+  on a digital line is a smaller failure than shipping-free physical goods.
+
+  Digital-only carts skip the shipping-method requirement, the shipping
+  charge, and the shipping line on the resulting order.
+  """
+  def cart_requires_shipping?(%Cart{} = cart) do
+    cart |> cart_items_loaded() |> items_require_shipping?()
+  end
+
+  defp cart_items_loaded(%Cart{items: items}) when is_list(items), do: items
+
+  defp cart_items_loaded(%Cart{uuid: uuid}) do
+    CartItem |> where([i], i.cart_uuid == ^uuid) |> repo().all()
+  end
+
+  defp items_require_shipping?(items) do
+    {known, unknown} =
+      Enum.split_with(items, fn item ->
+        is_boolean((item.metadata || %{})["requires_shipping"])
+      end)
+
+    Enum.any?(known, & &1.metadata["requires_shipping"]) or
+      legacy_items_require_shipping?(unknown)
+  end
+
+  defp legacy_items_require_shipping?([]), do: false
+
+  defp legacy_items_require_shipping?(items) do
+    product_uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+
+    flags =
+      Product
+      |> where([p], p.uuid in ^product_uuids)
+      |> select([p], {p.uuid, p.requires_shipping})
+      |> repo().all()
+      |> Map.new()
+
+    Enum.any?(items, fn item ->
+      # A line without a snapshot AND without a live product requires
+      # shipping by default.
+      Map.get(flags, item.product_uuid, true)
+    end)
+  end
+
+  # Weight that participates in shipping eligibility and pricing - lines
+  # that don't ship contribute none, so a heavy digital bundle can't push
+  # a mixed cart over a method's weight cap.
+  defp shippable_weight_grams(items) do
+    {known, unknown} =
+      Enum.split_with(items, fn item ->
+        is_boolean((item.metadata || %{})["requires_shipping"])
+      end)
+
+    known_weight =
+      known
+      |> Enum.filter(& &1.metadata["requires_shipping"])
+      |> Enum.reduce(0, fn i, acc -> acc + (i.weight_grams || 0) * i.quantity end)
+
+    # Legacy rows (no snapshot) keep their weight in the shippable total -
+    # matching the conservative "requires shipping" default above.
+    known_weight +
+      Enum.reduce(unknown, 0, fn i, acc -> acc + (i.weight_grams || 0) * i.quantity end)
+  end
+
+  @doc """
   Gets available shipping methods for a cart.
   Filters by weight, subtotal, and country.
   """
   def get_available_shipping_methods(%Cart{} = cart) do
+    shippable_weight = cart |> cart_items_loaded() |> shippable_weight_grams()
+
     ShippingMethod
     |> where([s], s.active == true)
     |> order_by([s], [s.position, s.name])
     |> repo().all()
     |> Enum.filter(fn method ->
       ShippingMethod.available_for?(method, %{
-        weight_grams: cart.total_weight_grams || 0,
+        weight_grams: shippable_weight,
         subtotal: cart.subtotal || Decimal.new("0"),
         country: cart.shipping_country
       })
@@ -1699,23 +1772,67 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, opts) when is_list(opts) do
     selected_specs = Keyword.get(opts, :selected_specs, %{})
     skip_validation = Keyword.get(opts, :skip_spec_validation, false)
+    language = Keyword.get(opts, :language)
 
-    # Validate selected_specs against product's option schema
-    with :ok <- maybe_validate_specs(product, selected_specs, skip_validation) do
+    # The disabled check lives in the CONTEXT, not only the LiveView mounts:
+    # a LiveView connected before an admin flipped the switch can still send
+    # events, and the mount gate cannot reach it.
+    with :ok <- validate_shop_enabled(),
+         :ok <- validate_cart_currency(cart, product),
+         :ok <- maybe_validate_specs(product, selected_specs, skip_validation) do
       if map_size(selected_specs) > 0 do
-        add_product_with_specs_to_cart(cart, product, quantity, selected_specs)
+        add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language)
       else
-        add_simple_product_to_cart(cart, product, quantity)
+        add_simple_product_to_cart(cart, product, quantity, language)
       end
     end
   end
 
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, _opts)
       when is_integer(quantity) do
-    add_simple_product_to_cart(cart, product, quantity)
+    with :ok <- validate_shop_enabled(),
+         :ok <- validate_cart_currency(cart, product) do
+      add_simple_product_to_cart(cart, product, quantity, nil)
+    end
   end
 
-  defp add_simple_product_to_cart(cart, product, quantity) do
+  defp validate_shop_enabled do
+    if enabled?(), do: :ok, else: {:error, :shop_disabled}
+  end
+
+  # Cart totals sum line decimals in the CART's currency frame, so every
+  # line must be snapshotted in that frame. A product whose own currency
+  # differs (usually the schema's "USD" default on a non-USD shop — the
+  # importers never set the field) is logged, not rejected: prices are
+  # entered thinking in the shop currency, and rejecting would brick every
+  # existing catalog that carries the stale default.
+  defp validate_cart_currency(%Cart{currency: cart_currency}, %Product{} = product) do
+    if is_binary(product.currency) and is_binary(cart_currency) and
+         product.currency != cart_currency do
+      require Logger
+
+      Logger.warning(
+        "[Shop] product #{product.uuid} carries currency #{product.currency} " <>
+          "but the cart is #{cart_currency}; the amount is charged in #{cart_currency}"
+      )
+    end
+
+    :ok
+  end
+
+  # A product must still be purchasable AT THE LOCKED READ - the page the
+  # shopper is holding may predate an archive/bulk-archive (those broadcast
+  # on a topic the product page does not subscribe to), and mount-time
+  # checks cannot see that.
+  defp validate_locked_product_purchasable!(repo, %Product{status: status} = product) do
+    if status != "active" do
+      repo.rollback({:product_not_available, product.uuid})
+    end
+
+    :ok
+  end
+
+  defp add_simple_product_to_cart(cart, product, quantity, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
@@ -1725,6 +1842,8 @@ defmodule PhoenixKitEcommerce do
           |> where([p], p.uuid == ^product.uuid)
           |> lock("FOR UPDATE")
           |> repo().one!()
+
+        validate_locked_product_purchasable!(repo(), locked_product)
 
         # Use unified price calculation path (same as add_product_with_specs_to_cart)
         # With empty specs this returns base_price, but allows future extensibility
@@ -1738,7 +1857,10 @@ defmodule PhoenixKitEcommerce do
             nil ->
               # Create new item with calculated price
               attrs =
-                CartItem.from_product(locked_product, quantity)
+                CartItem.from_product(locked_product, quantity,
+                  language: language,
+                  currency: cart.currency
+                )
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, calculated_price)
 
@@ -1765,7 +1887,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs) do
+  defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price/metadata changes during cart update
@@ -1774,6 +1896,8 @@ defmodule PhoenixKitEcommerce do
           |> where([p], p.uuid == ^product.uuid)
           |> lock("FOR UPDATE")
           |> repo().one!()
+
+        validate_locked_product_purchasable!(repo(), locked_product)
 
         # Calculate price with spec modifiers using locked product state
         calculated_price = calculate_product_price(locked_product, selected_specs)
@@ -1786,7 +1910,10 @@ defmodule PhoenixKitEcommerce do
             nil ->
               # Create new item with specs and calculated price
               attrs =
-                CartItem.from_product(locked_product, quantity)
+                CartItem.from_product(locked_product, quantity,
+                  language: language,
+                  currency: cart.currency
+                )
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, calculated_price)
                 |> Map.put(:selected_specs, selected_specs)
@@ -2130,6 +2257,10 @@ defmodule PhoenixKitEcommerce do
       cart.items == [] or is_nil(cart.items) ->
         {:ok, cart}
 
+      # Digital-only carts don't get a method auto-selected
+      not cart_requires_shipping?(cart) ->
+        {:ok, cart}
+
       # No shipping methods available
       shipping_methods == [] ->
         {:ok, cart}
@@ -2360,8 +2491,15 @@ defmodule PhoenixKitEcommerce do
       # Use atomic status transition to prevent double-conversion on double-click
       # This atomically changes status from "active" to "converting" and fails
       # if another request already started conversion
-      with :ok <- validate_cart_convertible(cart),
+      with :ok <- validate_shop_enabled(),
+           :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
+           # AFTER the cart lock, on locked product rows: an archive racing
+           # the pre-transaction validation window cannot slip a
+           # no-longer-active product into the order.
+           :ok <- validate_line_products_active(cart),
+           :ok <- validate_payment_option(cart),
+           :ok <- validate_billing_completeness(cart, opts),
            # Snapshot the placing session from the LOCKED cart, before
            # anything can clear it.
            #
@@ -2530,13 +2668,126 @@ defmodule PhoenixKitEcommerce do
       Enum.empty?(cart.items) ->
         {:error, :cart_empty}
 
-      is_nil(cart.shipping_method_uuid) ->
+      # Only carts with a shippable line need a shipping method; a
+      # digital-only cart converts without one (and without a charge).
+      is_nil(cart.shipping_method_uuid) and items_require_shipping?(cart.items) ->
         {:error, :no_shipping_method}
 
       true ->
         :ok
     end
   end
+
+  # Every line's product must still be ACTIVE at conversion, checked on
+  # LOCKED rows inside the conversion transaction — a pre-transaction check
+  # races a concurrent archive between validation and order creation. A line
+  # whose product row is gone (or was detached by ON DELETE SET NULL) is not
+  # sellable either.
+  defp validate_line_products_active(%Cart{items: items}) do
+    uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+
+    if length(uuids) < length(items) do
+      {:error, :product_not_available}
+    else
+      active =
+        Product
+        |> where([p], p.uuid in ^uuids and p.status == "active")
+        |> lock("FOR UPDATE")
+        |> select([p], p.uuid)
+        |> repo().all()
+
+      if length(active) == length(Enum.uniq(uuids)) do
+        :ok
+      else
+        {:error, :product_not_available}
+      end
+    end
+  end
+
+  # The selected payment option must still exist, be active, and have its
+  # billing-profile requirement satisfied. Until now the selection was
+  # simply DISCARDED at conversion — never revalidated, never recorded on
+  # the order (`build_order_attrs/4` re-reads it into order metadata).
+  # A cart without a selection converts as before.
+  defp validate_payment_option(%Cart{payment_option_uuid: nil}), do: :ok
+
+  defp validate_payment_option(%Cart{payment_option_uuid: uuid}) do
+    case PhoenixKitBilling.get_payment_option(uuid) do
+      %{active: true} -> :ok
+      _ -> {:error, :payment_option_unavailable}
+    end
+  rescue
+    _ -> {:error, :payment_option_unavailable}
+  end
+
+  # A cart with a shippable line needs a deliverable address — enforced in
+  # the CONTEXT, because the LiveView's completeness check lives on the
+  # review step and a crafted confirm_order event skips it, and because
+  # saved billing profiles were never required to carry an address at all.
+  defp validate_billing_completeness(%Cart{} = cart, opts) do
+    if items_require_shipping?(cart.items) do
+      cond do
+        uuid = Keyword.get(opts, :billing_profile_uuid) ->
+          validate_profile_completeness(uuid)
+
+        is_map(Keyword.get(opts, :billing_data)) ->
+          validate_billing_data_completeness(Keyword.get(opts, :billing_data))
+
+        true ->
+          {:error, {:billing_incomplete, ["billing details"]}}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp validate_profile_completeness(uuid) do
+    case PhoenixKitBilling.get_billing_profile(uuid) do
+      nil ->
+        {:error, :billing_profile_not_found}
+
+      profile ->
+        name_missing =
+          case profile.type do
+            "company" -> blank_field?(profile.company_name)
+            _ -> blank_field?(profile.first_name) and blank_field?(profile.name)
+          end
+
+        missing =
+          [
+            {name_missing, "name"},
+            {blank_field?(profile.address_line1), "address_line1"},
+            {blank_field?(profile.city), "city"},
+            {blank_field?(profile.postal_code), "postal_code"},
+            {blank_field?(profile.country), "country"}
+          ]
+          |> Enum.filter(&elem(&1, 0))
+          |> Enum.map(&elem(&1, 1))
+
+        if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
+    end
+  end
+
+  defp validate_billing_data_completeness(data) do
+    name_missing = blank_field?(data["first_name"]) and blank_field?(data["company_name"])
+
+    missing =
+      [
+        {name_missing, "name"},
+        {blank_field?(data["address_line1"]), "address_line1"},
+        {blank_field?(data["city"]), "city"},
+        {blank_field?(data["postal_code"]), "postal_code"},
+        {blank_field?(data["country"]), "country"}
+      ]
+      |> Enum.filter(&elem(&1, 0))
+      |> Enum.map(&elem(&1, 1))
+
+    if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
+  end
+
+  defp blank_field?(nil), do: true
+  defp blank_field?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank_field?(_), do: false
 
   # Re-validate the shipping method AFTER the checkout country has been
   # applied, not before: a method may be eligible for a country-less cart
@@ -2591,8 +2842,11 @@ defmodule PhoenixKitEcommerce do
         }
       end)
 
+    # A digital-only cart gets NO shipping line even when a method is still
+    # selected (a mixed cart that lost its last physical line keeps the
+    # association loaded); its charge is already zeroed by the totals.
     shipping_item =
-      if cart.shipping_method do
+      if cart.shipping_method && items_require_shipping?(cart.items) do
         [
           %{
             "name" => "Shipping: #{cart.shipping_method.name}",
@@ -2643,8 +2897,13 @@ defmodule PhoenixKitEcommerce do
         # `convert_cart_to_order/2` cannot choose it.
         "session_id" => placing_session_id,
         "shipping_country" => shipping_country,
-        "shipping_method_uuid" => cart.shipping_method_uuid
+        # nil for a digital-only order even when a stale selection remains
+        # on the cart - the order must not reference a method it never
+        # charged for.
+        "shipping_method_uuid" =>
+          if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
       }
+      |> Map.merge(payment_option_metadata(cart))
     }
 
     cond do
@@ -2681,6 +2940,21 @@ defmodule PhoenixKitEcommerce do
   end
 
   # Remove _unused_ prefixed keys that Phoenix LiveView adds
+  # The customer's validated payment choice, durably recorded on the order.
+  # First-class linkage on the billing Order (a column + processing
+  # consumption) is a billing-side change; until then the metadata carries
+  # uuid + code so nothing about the choice is lost.
+  defp payment_option_metadata(%Cart{payment_option_uuid: nil}), do: %{}
+
+  defp payment_option_metadata(%Cart{payment_option_uuid: uuid}) do
+    case PhoenixKitBilling.get_payment_option(uuid) do
+      %{code: code} -> %{"payment_option_uuid" => uuid, "payment_option_code" => code}
+      _ -> %{"payment_option_uuid" => uuid}
+    end
+  rescue
+    _ -> %{"payment_option_uuid" => uuid}
+  end
+
   defp clean_billing_data(data) when is_map(data) do
     data
     |> Enum.reject(fn {key, _value} ->
@@ -3148,7 +3422,16 @@ defmodule PhoenixKitEcommerce do
         acc + i.quantity
       end)
 
-    shipping_amount = calculate_shipping(cart, subtotal, total_weight)
+    # No shippable line, no shipping charge - the selected method (if any)
+    # prices at zero and the order will omit the shipping line entirely.
+    # Method pricing sees only the SHIPPABLE weight, so digital lines can't
+    # move a mixed cart across a method's weight brackets.
+    shipping_amount =
+      if items_require_shipping?(items) do
+        calculate_shipping(cart, subtotal, shippable_weight_grams(items))
+      else
+        Decimal.new("0")
+      end
 
     # Calculate tax over the TAXABLE portion of the cart only.
     #

@@ -64,7 +64,12 @@ defmodule PhoenixKitEcommerce.Regression.GuestOrderAccessTest do
       Shop.convert_cart_to_order(cart,
         billing_data: %{
           "email" => "guest-#{System.unique_integer([:positive])}@example.com",
-          "country" => "US"
+          "country" => "US",
+          "first_name" => "Test",
+          "last_name" => "Buyer",
+          "address_line1" => "1 Test Street",
+          "city" => "Testville",
+          "postal_code" => "10001"
         }
       )
 
@@ -128,7 +133,15 @@ defmodule PhoenixKitEcommerce.Regression.GuestOrderAccessTest do
     {:ok, order} =
       Shop.convert_cart_to_order(cart,
         user_uuid: user.uuid,
-        billing_data: %{"email" => user.email, "country" => "US"}
+        billing_data: %{
+          "email" => user.email,
+          "country" => "US",
+          "first_name" => "Test",
+          "last_name" => "Buyer",
+          "address_line1" => "1 Test Street",
+          "city" => "Testville",
+          "postal_code" => "10001"
+        }
       )
 
     order = Billing.get_order_by_uuid(order.uuid)

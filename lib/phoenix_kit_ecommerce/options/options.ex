@@ -796,9 +796,43 @@ defmodule PhoenixKitEcommerce.Options do
 
     if option_values != %{} do
       image_mappings = Map.get(metadata, "_image_mappings", %{})
-      Enum.filter(specs, &spec_has_product_values?(&1, option_values, image_mappings))
+
+      specs
+      |> Enum.filter(&spec_has_product_values?(&1, option_values, image_mappings))
+      |> Enum.map(&narrow_spec_options(&1, option_values))
     else
       specs
+    end
+  end
+
+  # Rewrite the spec's "options" to the product's restricted value list.
+  #
+  # Dropping whole KEYS without narrowing the surviving specs' value lists
+  # left three consumers wrong at once: default selection took the schema's
+  # first value even when the product excluded it, request validation
+  # accepted any schema value the UI never offered, and the price range
+  # walked modifier entries for excluded values (a product restricted to
+  # ["Red"] still advertised "From" pricing off an excluded "Gold" +100).
+  defp narrow_spec_options(spec, option_values) do
+    case Map.get(option_values, spec["key"]) do
+      values when is_list(values) and values != [] ->
+        case spec["options"] do
+          schema_options when is_list(schema_options) and schema_options != [] ->
+            # Intersect preserving the schema's order; a product value that
+            # is not in the schema list is kept too (products may carry
+            # bespoke values discovered from metadata).
+            narrowed =
+              Enum.filter(schema_options, &(&1 in values)) ++
+                Enum.reject(values, &(&1 in schema_options))
+
+            Map.put(spec, "options", narrowed)
+
+          _ ->
+            Map.put(spec, "options", values)
+        end
+
+      _ ->
+        spec
     end
   end
 
@@ -1273,6 +1307,17 @@ defmodule PhoenixKitEcommerce.Options do
       # Get modifiers: check for overrides first, then fall back to defaults
       modifiers =
         resolve_modifiers(allow_override, metadata, option_key, default_modifiers)
+
+      # Only values the product actually offers participate in the range.
+      # The spec's "options" list is already narrowed to the product's
+      # `_option_values` upstream; without this Map.take an excluded value's
+      # modifier (a "Gold" +100 on a product restricted to ["Red"]) still
+      # widened the advertised range.
+      modifiers =
+        case opt["options"] do
+          allowed when is_list(allowed) and allowed != [] -> Map.take(modifiers, allowed)
+          _ -> modifiers
+        end
 
       values = Map.values(modifiers) |> Enum.map(&parse_decimal/1)
 
