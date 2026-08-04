@@ -26,6 +26,14 @@ defmodule PhoenixKitEcommerce.Test.Hooks do
   def on_mount(:assign_scope, _params, session, socket) do
     case Map.get(session, "phoenix_kit_test_scope") do
       nil ->
+        # Production's `phoenix_kit_mount_current_scope` ALWAYS assigns a
+        # scope — an anonymous one for logged-out visitors — so mirror that
+        # rather than leaving the key absent (layouts read it on every page).
+        socket =
+          socket
+          |> assign(:phoenix_kit_current_scope, PhoenixKit.Users.Auth.Scope.for_user(nil))
+          |> assign(:phoenix_kit_current_user, nil)
+
         {:cont, socket}
 
       %{user: user} = scope ->

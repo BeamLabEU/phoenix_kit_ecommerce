@@ -560,15 +560,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   @impl true
   def render(assigns) do
-    assigns =
-      if assigns.authenticated do
-        assign(assigns, :sidebar_after_shop, shop_sidebar(assigns))
-      else
-        assigns
-      end
-
     ~H"""
-    <ShopLayouts.shop_layout {assigns} show_sidebar={true}>
+    <ShopLayouts.shop_layout {assigns}>
       <div class="container flex-col mx-auto px-4 py-6 max-w-7xl">
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
@@ -586,29 +579,23 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </ul>
         </div>
 
-        <div class={
-          if @authenticated,
-            do: "grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12",
-            else: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8"
-        }>
-          <%!-- Guest: category navigation only (no filters on product page) --%>
-          <%= if !@authenticated do %>
-            <aside class="hidden lg:block">
-              <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-                <div class="card-body p-4">
-                  <CatalogSidebar.category_nav
-                    categories={@categories}
-                    current_category={@product.category}
-                    current_language={@current_language}
-                    category_icon_mode={@category_icon_mode}
-                    category_name_wrap={@category_name_wrap}
-                    open={true}
-                    filter_qs={@filter_qs}
-                  />
-                </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8">
+          <%!-- Category navigation (no filters on product page) --%>
+          <aside class="hidden lg:block">
+            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
+              <div class="card-body p-4">
+                <CatalogSidebar.category_nav
+                  categories={@categories}
+                  current_category={@product.category}
+                  current_language={@current_language}
+                  category_icon_mode={@category_icon_mode}
+                  category_name_wrap={@category_name_wrap}
+                  open={true}
+                  filter_qs={@filter_qs}
+                />
               </div>
-            </aside>
-          <% end %>
+            </div>
+          </aside>
           <%!-- Product Images --%>
           <div class="space-y-4">
             <%!-- Main Image --%>
@@ -1015,19 +1002,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     >
       {@option_value}
     </button>
-    """
-  end
-
-  defp shop_sidebar(assigns) do
-    ~H"""
-    <CatalogSidebar.category_nav
-      categories={@categories}
-      current_category={@product.category}
-      current_language={@current_language}
-      category_icon_mode={@category_icon_mode}
-      category_name_wrap={@category_name_wrap}
-      filter_qs={@filter_qs}
-    />
     """
   end
 
