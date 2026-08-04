@@ -133,7 +133,11 @@ defmodule PhoenixKitEcommerce.Policy do
   setting here where leaving the default forever is the wrong choice.
   Adopted ids never authorize an order regardless of this setting.
   """
-  @spec legacy_cookie_window_open?(Date.t() | DateTime.t()) :: boolean()
+  # `now` is a DateTime, not a Date: `parse_cutoff/2` compares with
+  # `DateTime.compare/2`, which raises on a `Date`. The spec said
+  # `Date.t() | DateTime.t()` and advertised an argument that would crash
+  # the plug that calls this.
+  @spec legacy_cookie_window_open?(DateTime.t()) :: boolean()
   def legacy_cookie_window_open?(now \\ DateTime.utc_now()) do
     case read("shop_legacy_cookie_until", "") do
       value when is_binary(value) ->

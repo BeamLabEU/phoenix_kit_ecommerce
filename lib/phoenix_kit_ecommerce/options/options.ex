@@ -1131,33 +1131,7 @@ defmodule PhoenixKitEcommerce.Options do
         Decimal.add(acc, value)
       end)
 
-    # Apply percent modifier: intermediate * (1 + percent_sum/100)
-    #
-    # Applied whenever it is non-zero. This used to be `== :gt`, so a
-    # NEGATIVE percent was silently discarded and every percentage discount
-    # did nothing at all: -10% on 100.00 returned 100.00. A surcharge worked,
-    # a discount was ignored — the asymmetry is what made it survive so long.
-    percent_applied =
-      if Decimal.equal?(percent_sum, Decimal.new("0")) do
-        intermediate
-      else
-        multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
-        Decimal.mult(intermediate, multiplier)
-      end
-
-    # Round on EVERY path, not just the percent one. Rounding used to live
-    # inside the percent branch, so a fixed-only modifier returned an
-    # unrounded value (base 10.00 + "0.005" -> 10.005) which then hit a
-    # DECIMAL(12,2) column and was rounded independently at the line-total,
-    # breaking `line_total = unit_price * quantity`.
-    #
-    # Floored at zero: modifiers large enough to invert the price produce a
-    # negative number that no downstream code accepts — the order changeset
-    # rejects a negative total outright — so the failure would surface far
-    # from its cause.
-    percent_applied
-    |> Decimal.max(Decimal.new("0"))
-    |> Decimal.round(2)
+    apply_percent(intermediate, percent_sum)
   end
 
   def calculate_final_price(_, _, base_price, _), do: base_price || Decimal.new("0")
@@ -1239,33 +1213,18 @@ defmodule PhoenixKitEcommerce.Options do
       # Calculate min/max for percent modifiers (considering overrides)
       {percent_min, percent_max} = get_effective_modifier_range(percent_specs, metadata)
 
-      # Calculate min price: (base + fixed_min) * (1 + percent_min/100)
-      min_intermediate = Decimal.add(base, fixed_min)
+      # Both ends go through `apply_percent/2`, the SAME helper
+      # `calculate_final_price/4` uses. They must not diverge: this range is
+      # the storefront's "From $X" and the other function is what the
+      # customer is actually charged, so any rule applied to one and not the
+      # other is a price the shop advertises but does not honour.
+      min_price = apply_percent(Decimal.add(base, fixed_min), percent_min)
+      max_price = apply_percent(Decimal.add(base, fixed_max), percent_max)
 
-      min_price =
-        if Decimal.compare(percent_min, Decimal.new("0")) == :gt do
-          multiplier =
-            Decimal.add(Decimal.new("1"), Decimal.div(percent_min, Decimal.new("100")))
-
-          Decimal.mult(min_intermediate, multiplier) |> Decimal.round(2)
-        else
-          min_intermediate
-        end
-
-      # Calculate max price: (base + fixed_max) * (1 + percent_max/100)
-      max_intermediate = Decimal.add(base, fixed_max)
-
-      max_price =
-        if Decimal.compare(percent_max, Decimal.new("0")) == :gt do
-          multiplier =
-            Decimal.add(Decimal.new("1"), Decimal.div(percent_max, Decimal.new("100")))
-
-          Decimal.mult(max_intermediate, multiplier) |> Decimal.round(2)
-        else
-          max_intermediate
-        end
-
-      {min_price, max_price}
+      # A negative percent multiplier (below -100%) inverts the ordering of
+      # the two ends, so order them numerically rather than trusting that
+      # min_intermediate <= max_intermediate carried through the multiply.
+      {Decimal.min(min_price, max_price), Decimal.max(min_price, max_price)}
     end
   end
 
@@ -1373,6 +1332,41 @@ defmodule PhoenixKitEcommerce.Options do
 
   defp uuid_string?(string) when is_binary(string) do
     match?({:ok, _}, Ecto.UUID.cast(string))
+  end
+
+  # Apply a summed percent modifier to an already-fixed-adjusted amount,
+  # then round and floor. The single place these three rules live, because
+  # `calculate_final_price/4` (what the customer is charged) and
+  # `get_price_range/3` (the "From $X" the storefront advertises) each had
+  # their own copy and each copy was wrong in the same three ways:
+  #
+  #   * The percent was gated on `compare(sum, 0) == :gt`, so a NEGATIVE
+  #     percent was silently discarded and every percentage discount did
+  #     nothing: -20% on 100.00 returned 100.00. A surcharge worked, a
+  #     discount did not — the asymmetry is what let it survive.
+  #   * Rounding lived INSIDE the percent branch, so a fixed-only modifier
+  #     returned an unrounded value (base 10.00 + "0.005" -> 10.005) which
+  #     then hit a DECIMAL(12,2) column and was rounded independently at the
+  #     line total, breaking `line_total = unit_price * quantity`.
+  #   * Nothing floored at zero, so a modifier large enough to invert the
+  #     price produced a negative number — a storefront reading "From
+  #     $-5.00", and an order changeset rejecting a negative total far from
+  #     its cause.
+  #
+  # `calculate_final_price/4` was fixed on its own; the range function kept
+  # all three. Sharing the helper is what stops them drifting again.
+  defp apply_percent(amount, percent_sum) do
+    percent_applied =
+      if Decimal.equal?(percent_sum, Decimal.new("0")) do
+        amount
+      else
+        multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
+        Decimal.mult(amount, multiplier)
+      end
+
+    percent_applied
+    |> Decimal.max(Decimal.new("0"))
+    |> Decimal.round(2)
   end
 
   # Numeric min/max over Decimals.
