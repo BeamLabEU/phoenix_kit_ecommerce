@@ -59,7 +59,7 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     base_price =
       variants
       |> Enum.map(& &1.price)
-      |> Enum.min(fn -> Decimal.new("0") end)
+      |> decimal_min()
 
     # Build option1 data (typically Size - affects price)
     {option1_values, option1_modifiers} = build_option_data(variants, :option1_value, base_price)
@@ -136,7 +136,7 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
       variants
       |> Enum.map(& &1.price)
       |> Enum.filter(& &1)
-      |> Enum.min(fn -> Decimal.new("0") end)
+      |> decimal_min()
 
     # Build option data for each option position
     options =
@@ -277,4 +277,11 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
+
+  # Numeric minimum over Decimals; `Enum.min/2` uses Erlang term ordering,
+  # which compares %Decimal{} structs structurally rather than by value and
+  # picks the wrong element (10 over 9.99). Empty list keeps the previous
+  # zero default.
+  defp decimal_min([]), do: Decimal.new("0")
+  defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 end
