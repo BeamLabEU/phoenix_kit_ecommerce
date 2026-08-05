@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
 
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
@@ -181,82 +182,86 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   @impl true
   def handle_event("execute_delete", _params, socket) do
-    product = socket.assigns.delete_target
+    Authz.authorize(socket, :manage_catalog, fn ->
+      product = socket.assigns.delete_target
 
-    file_uuids =
-      if socket.assigns.delete_media_checked,
-        do: Shop.collect_product_file_uuids(product),
-        else: []
+      file_uuids =
+        if socket.assigns.delete_media_checked,
+          do: Shop.collect_product_file_uuids(product),
+          else: []
 
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
-
-        {products, total} =
-          Shop.list_products_with_count(
-            page: socket.assigns.page,
-            per_page: @per_page,
-            search: socket.assigns.search,
-            status: socket.assigns.status_filter,
-            product_type: socket.assigns.type_filter,
-            category_uuid: socket.assigns.category_filter,
-            preload: [:category]
+      case Shop.delete_product(product) do
+        {:ok, _} ->
+          Activity.log("shop.product_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "product",
+            resource_uuid: product.uuid,
+            metadata: %{"status" => product.status}
           )
 
-        {:noreply,
-         socket
-         |> assign(:products, products)
-         |> assign(:total, total)
-         |> assign(:delete_target, nil)
-         |> assign(:delete_media_checked, false)
-         |> put_flash(:info, gettext("Product deleted"))}
+          if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
 
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> assign(:delete_target, nil)
-         |> put_flash(:error, gettext("Failed to delete product"))}
-    end
+          {products, total} =
+            Shop.list_products_with_count(
+              page: socket.assigns.page,
+              per_page: @per_page,
+              search: socket.assigns.search,
+              status: socket.assigns.status_filter,
+              product_type: socket.assigns.type_filter,
+              category_uuid: socket.assigns.category_filter,
+              preload: [:category]
+            )
+
+          {:noreply,
+           socket
+           |> assign(:products, products)
+           |> assign(:total, total)
+           |> assign(:delete_target, nil)
+           |> assign(:delete_media_checked, false)
+           |> put_flash(:info, gettext("Product deleted"))}
+
+        {:error, _} ->
+          {:noreply,
+           socket
+           |> assign(:delete_target, nil)
+           |> put_flash(:error, gettext("Failed to delete product"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("delete_product", %{"uuid" => uuid}, socket) do
-    product = Shop.get_product!(uuid)
+    Authz.authorize(socket, :manage_catalog, fn ->
+      product = Shop.get_product!(uuid)
 
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        {products, total} =
-          Shop.list_products_with_count(
-            page: socket.assigns.page,
-            per_page: @per_page,
-            preload: [:category]
+      case Shop.delete_product(product) do
+        {:ok, _} ->
+          Activity.log("shop.product_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "product",
+            resource_uuid: product.uuid,
+            metadata: %{"status" => product.status}
           )
 
-        {:noreply,
-         socket
-         |> assign(:products, products)
-         |> assign(:total, total)
-         |> put_flash(:info, gettext("Product deleted"))}
+          {products, total} =
+            Shop.list_products_with_count(
+              page: socket.assigns.page,
+              per_page: @per_page,
+              preload: [:category]
+            )
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
-    end
+          {:noreply,
+           socket
+           |> assign(:products, products)
+           |> assign(:total, total)
+           |> put_flash(:info, gettext("Product deleted"))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
+      end
+    end)
   end
 
   # Bulk action modals — capture-then-act. Selection lives client-side in the
@@ -301,41 +306,45 @@ defmodule PhoenixKitEcommerce.Web.Products do
   # Bulk actions
   @impl true
   def handle_event("bulk_change_status", %{"status" => status}, socket) do
-    uuids = socket.assigns.bulk_uuids
-    count = Shop.bulk_update_product_status(uuids, status)
+    Authz.authorize(socket, :manage_catalog, fn ->
+      uuids = socket.assigns.bulk_uuids
+      count = Shop.bulk_update_product_status(uuids, status)
 
-    Activity.log("shop.products_status_changed",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "product",
-      metadata: %{"status" => status, "count" => count}
-    )
+      Activity.log("shop.products_status_changed",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "product",
+        metadata: %{"status" => status, "count" => count}
+      )
 
-    socket = load_products(socket)
+      socket = load_products(socket)
 
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> put_flash(
-       :info,
-       gettext("%{count} products updated to %{status}", count: count, status: status)
-     )}
+      {:noreply,
+       socket
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(
+         :info,
+         gettext("%{count} products updated to %{status}", count: count, status: status)
+       )}
+    end)
   end
 
   @impl true
   def handle_event("bulk_change_category", %{"category_uuid" => category_uuid}, socket) do
-    uuids = socket.assigns.bulk_uuids
-    category_uuid = if category_uuid == "", do: nil, else: category_uuid
-    count = Shop.bulk_update_product_category(uuids, category_uuid)
+    Authz.authorize(socket, :manage_catalog, fn ->
+      uuids = socket.assigns.bulk_uuids
+      category_uuid = if category_uuid == "", do: nil, else: category_uuid
+      count = Shop.bulk_update_product_category(uuids, category_uuid)
 
-    socket = load_products(socket)
+      socket = load_products(socket)
 
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> put_flash(:info, gettext("%{count} products moved", count: count))}
+      {:noreply,
+       socket
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(:info, gettext("%{count} products moved", count: count))}
+    end)
   end
 
   @impl true
@@ -345,31 +354,33 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   @impl true
   def handle_event("bulk_delete", _params, socket) do
-    uuids = socket.assigns.bulk_uuids
+    Authz.authorize(socket, :manage_catalog, fn ->
+      uuids = socket.assigns.bulk_uuids
 
-    file_uuids =
-      if socket.assigns.bulk_delete_media,
-        do: Shop.collect_products_file_uuids(uuids),
-        else: []
+      file_uuids =
+        if socket.assigns.bulk_delete_media,
+          do: Shop.collect_products_file_uuids(uuids),
+          else: []
 
-    count = Shop.bulk_delete_products(uuids)
-    if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
+      count = Shop.bulk_delete_products(uuids)
+      if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
 
-    Activity.log("shop.products_bulk_deleted",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "product",
-      metadata: %{"count" => count}
-    )
+      Activity.log("shop.products_bulk_deleted",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "product",
+        metadata: %{"count" => count}
+      )
 
-    socket = load_products(socket)
+      socket = load_products(socket)
 
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> assign(:bulk_delete_media, false)
-     |> put_flash(:info, gettext("%{count} products deleted", count: count))}
+      {:noreply,
+       socket
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> assign(:bulk_delete_media, false)
+       |> put_flash(:info, gettext("%{count} products deleted", count: count))}
+    end)
   end
 
   defp load_products(socket) do

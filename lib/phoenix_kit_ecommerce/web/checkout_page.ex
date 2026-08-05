@@ -506,9 +506,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   defp shipping_selection_still_valid?(cart) do
     cond do
-      not Shop.cart_requires_shipping?(cart) -> true
-      is_nil(cart.shipping_method_uuid) -> false
-      true -> Enum.any?(Shop.get_available_shipping_methods(cart), &(&1.uuid == cart.shipping_method_uuid))
+      not Shop.cart_requires_shipping?(cart) ->
+        true
+
+      is_nil(cart.shipping_method_uuid) ->
+        false
+
+      true ->
+        Enum.any?(
+          Shop.get_available_shipping_methods(cart),
+          &(&1.uuid == cart.shipping_method_uuid)
+        )
     end
   end
 
@@ -578,7 +586,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:processing, false)
     |> put_flash(
       :error,
-      gettext("The selected shipping method is not available for your address - please pick another")
+      gettext(
+        "The selected shipping method is not available for your address - please pick another"
+      )
     )
     |> push_navigate(to: Routes.path("/cart"))
   end

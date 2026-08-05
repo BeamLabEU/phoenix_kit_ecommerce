@@ -5,6 +5,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
@@ -26,49 +27,53 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
 
   @impl true
   def handle_event("toggle_active", %{"uuid" => uuid}, socket) do
-    method = Shop.get_shipping_method!(uuid)
-    {:ok, updated} = Shop.update_shipping_method(method, %{active: !method.active})
+    Authz.authorize(socket, :manage_settings, fn ->
+      method = Shop.get_shipping_method!(uuid)
+      {:ok, updated} = Shop.update_shipping_method(method, %{active: !method.active})
 
-    Activity.log("shop.shipping_method_updated",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "shipping_method",
-      resource_uuid: updated.uuid,
-      metadata: %{"active" => updated.active, "slug" => updated.slug}
-    )
+      Activity.log("shop.shipping_method_updated",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "shipping_method",
+        resource_uuid: updated.uuid,
+        metadata: %{"active" => updated.active, "slug" => updated.slug}
+      )
 
-    methods =
-      Enum.map(socket.assigns.methods, fn m ->
-        if m.uuid == updated.uuid, do: updated, else: m
-      end)
+      methods =
+        Enum.map(socket.assigns.methods, fn m ->
+          if m.uuid == updated.uuid, do: updated, else: m
+        end)
 
-    {:noreply, assign(socket, :methods, methods)}
+      {:noreply, assign(socket, :methods, methods)}
+    end)
   end
 
   @impl true
   def handle_event("delete", %{"uuid" => uuid}, socket) do
-    method = Shop.get_shipping_method!(uuid)
+    Authz.authorize(socket, :manage_settings, fn ->
+      method = Shop.get_shipping_method!(uuid)
 
-    case Shop.delete_shipping_method(method) do
-      {:ok, _} ->
-        Activity.log("shop.shipping_method_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "shipping_method",
-          resource_uuid: method.uuid,
-          metadata: %{"slug" => method.slug}
-        )
+      case Shop.delete_shipping_method(method) do
+        {:ok, _} ->
+          Activity.log("shop.shipping_method_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "shipping_method",
+            resource_uuid: method.uuid,
+            metadata: %{"slug" => method.slug}
+          )
 
-        methods = Enum.reject(socket.assigns.methods, &(&1.uuid == method.uuid))
+          methods = Enum.reject(socket.assigns.methods, &(&1.uuid == method.uuid))
 
-        {:noreply,
-         socket
-         |> assign(:methods, methods)
-         |> put_flash(:info, gettext("Shipping method deleted"))}
+          {:noreply,
+           socket
+           |> assign(:methods, methods)
+           |> put_flash(:info, gettext("Shipping method deleted"))}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to delete shipping method"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete shipping method"))}
+      end
+    end)
   end
 
   @impl true

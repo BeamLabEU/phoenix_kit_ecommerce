@@ -7,6 +7,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
@@ -68,251 +69,286 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   @impl true
   def handle_event("toggle_order_lookup_policy", _params, socket) do
-    # Checkbox ON means the SAFE value, so the stored value is inverted
-    # relative to the toggle: checked -> "strict".
-    next = if socket.assigns.order_lookup_strict, do: "link", else: "strict"
+    Authz.authorize(socket, :manage_settings, fn ->
+      # Checkbox ON means the SAFE value, so the stored value is inverted
+      # relative to the toggle: checked -> "strict".
+      next = if socket.assigns.order_lookup_strict, do: "link", else: "strict"
 
-    save_policy(socket, "shop_order_lookup_policy", next, gettext("Order access policy updated"))
+      save_policy(
+        socket,
+        "shop_order_lookup_policy",
+        next,
+        gettext("Order access policy updated")
+      )
+    end)
   end
 
   @impl true
   def handle_event("toggle_allow_raw_html", _params, socket) do
-    save_policy(
-      socket,
-      "shop_allow_raw_html_descriptions",
-      flip(socket.assigns.allow_raw_html),
-      gettext("Product description rendering updated")
-    )
+    Authz.authorize(socket, :manage_settings, fn ->
+      save_policy(
+        socket,
+        "shop_allow_raw_html_descriptions",
+        flip(socket.assigns.allow_raw_html),
+        gettext("Product description rendering updated")
+      )
+    end)
   end
 
   @impl true
   def handle_event("toggle_allow_svg", _params, socket) do
-    save_policy(
-      socket,
-      "shop_allow_svg_uploads",
-      flip(socket.assigns.allow_svg),
-      gettext("SVG import policy updated")
-    )
+    Authz.authorize(socket, :manage_settings, fn ->
+      save_policy(
+        socket,
+        "shop_allow_svg_uploads",
+        flip(socket.assigns.allow_svg),
+        gettext("SVG import policy updated")
+      )
+    end)
   end
 
   @impl true
   def handle_event("toggle_allow_private_networks", _params, socket) do
-    save_policy(
-      socket,
-      "shop_image_import_allow_private_networks",
-      flip(socket.assigns.allow_private_networks),
-      gettext("Image import network policy updated")
-    )
+    Authz.authorize(socket, :manage_settings, fn ->
+      save_policy(
+        socket,
+        "shop_image_import_allow_private_networks",
+        flip(socket.assigns.allow_private_networks),
+        gettext("Image import network policy updated")
+      )
+    end)
   end
 
   @impl true
   def handle_event("toggle_import_cleanup_scope", _params, socket) do
-    next = if socket.assigns.cleanup_auto_created_only, do: "all_empty", else: "auto_created"
+    Authz.authorize(socket, :manage_settings, fn ->
+      next = if socket.assigns.cleanup_auto_created_only, do: "all_empty", else: "auto_created"
 
-    save_policy(
-      socket,
-      "shop_import_cleanup_scope",
-      next,
-      gettext("Import cleanup scope updated")
-    )
+      save_policy(
+        socket,
+        "shop_import_cleanup_scope",
+        next,
+        gettext("Import cleanup scope updated")
+      )
+    end)
   end
 
   @impl true
   def handle_event("save_default_tax_country", %{"country" => country}, socket) do
-    normalized = country |> to_string() |> String.trim() |> String.upcase()
+    Authz.authorize(socket, :manage_settings, fn ->
+      normalized = country |> to_string() |> String.trim() |> String.upcase()
 
-    # Only a blank value or a two-letter code; anything else is a typo, and a
-    # bad country code silently means "no tax" rather than a visible error.
-    if normalized == "" or normalized =~ ~r/^[A-Z]{2}$/ do
-      save_policy(
-        socket,
-        "shop_default_tax_country",
-        normalized,
-        gettext("Tax fallback country updated")
-      )
-    else
-      {:noreply,
-       put_flash(socket, :error, gettext("Enter a two-letter country code, or leave it blank."))}
-    end
+      # Only a blank value or a two-letter code; anything else is a typo, and a
+      # bad country code silently means "no tax" rather than a visible error.
+      if normalized == "" or normalized =~ ~r/^[A-Z]{2}$/ do
+        save_policy(
+          socket,
+          "shop_default_tax_country",
+          normalized,
+          gettext("Tax fallback country updated")
+        )
+      else
+        {:noreply,
+         put_flash(socket, :error, gettext("Enter a two-letter country code, or leave it blank."))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("toggle_inventory_tracking", _params, socket) do
-    new_value = !socket.assigns.inventory_tracking
-    value_str = if(new_value, do: "true", else: "false")
+    Authz.authorize(socket, :manage_settings, fn ->
+      new_value = !socket.assigns.inventory_tracking
+      value_str = if(new_value, do: "true", else: "false")
 
-    case Settings.update_setting("shop_inventory_tracking", value_str) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:inventory_tracking, new_value)
-         |> put_flash(
-           :info,
-           if(new_value,
-             do: gettext("Inventory tracking enabled"),
-             else: gettext("Inventory tracking disabled")
-           )
-         )}
+      case Settings.update_setting("shop_inventory_tracking", value_str) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:inventory_tracking, new_value)
+           |> put_flash(
+             :info,
+             if(new_value,
+               do: gettext("Inventory tracking enabled"),
+               else: gettext("Inventory tracking disabled")
+             )
+           )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("update_category_display", %{"display" => display}, socket) do
-    case Settings.update_setting("shop_category_name_display", display) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:category_name_display, display)
-         |> put_flash(:info, gettext("Category display setting updated"))}
+    Authz.authorize(socket, :manage_settings, fn ->
+      case Settings.update_setting("shop_category_name_display", display) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:category_name_display, display)
+           |> put_flash(:info, gettext("Category display setting updated"))}
 
-      {:error, _} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Failed to update category display setting"))}
-    end
+        {:error, _} ->
+          {:noreply,
+           put_flash(socket, :error, gettext("Failed to update category display setting"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("toggle_sidebar_categories", _params, socket) do
-    new_value = !socket.assigns.sidebar_show_categories
-    value_str = if(new_value, do: "true", else: "false")
+    Authz.authorize(socket, :manage_settings, fn ->
+      new_value = !socket.assigns.sidebar_show_categories
+      value_str = if(new_value, do: "true", else: "false")
 
-    case Settings.update_setting("shop_sidebar_show_categories", value_str) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:sidebar_show_categories, new_value)
-         |> put_flash(
-           :info,
-           if(new_value,
-             do: gettext("Categories in shop enabled"),
-             else: gettext("Categories in shop disabled")
-           )
-         )}
+      case Settings.update_setting("shop_sidebar_show_categories", value_str) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:sidebar_show_categories, new_value)
+           |> put_flash(
+             :info,
+             if(new_value,
+               do: gettext("Categories in shop enabled"),
+               else: gettext("Categories in shop disabled")
+             )
+           )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("update_category_icon", %{"mode" => mode}, socket) do
-    case Settings.update_setting("shop_category_icon_mode", mode) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:category_icon_mode, mode)
-         |> put_flash(:info, gettext("Category icon setting updated"))}
+    Authz.authorize(socket, :manage_settings, fn ->
+      case Settings.update_setting("shop_category_icon_mode", mode) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:category_icon_mode, mode)
+           |> put_flash(:info, gettext("Category icon setting updated"))}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update category icon setting"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update category icon setting"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("toggle_storefront_filter", %{"key" => key}, socket) do
-    filters =
-      Enum.map(socket.assigns.storefront_filters, fn f ->
-        if f["key"] == key, do: Map.put(f, "enabled", !f["enabled"]), else: f
-      end)
-
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Storefront filter updated"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update filter"))}
-    end
-  end
-
-  @impl true
-  def handle_event("update_filter_label", %{"key" => key, "label" => label}, socket) do
-    filters =
-      Enum.map(socket.assigns.storefront_filters, fn f ->
-        if f["key"] == key, do: Map.put(f, "label", label), else: f
-      end)
-
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply, assign(socket, :storefront_filters, filters)}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update filter label"))}
-    end
-  end
-
-  @impl true
-  def handle_event("add_metadata_filter", %{"key" => option_key}, socket) do
-    existing_keys = Enum.map(socket.assigns.storefront_filters, & &1["key"])
-
-    if option_key in existing_keys do
-      {:noreply,
-       put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: option_key))}
-    else
-      max_pos =
-        socket.assigns.storefront_filters
-        |> Enum.map(& &1["position"])
-        |> Enum.max(fn -> 0 end)
-
-      new_filter = %{
-        "key" => option_key,
-        "type" => "metadata_option",
-        "option_key" => option_key,
-        "label" => String.capitalize(option_key),
-        "enabled" => true,
-        "position" => max_pos + 1
-      }
-
-      filters = socket.assigns.storefront_filters ++ [new_filter]
+    Authz.authorize(socket, :manage_settings, fn ->
+      filters =
+        Enum.map(socket.assigns.storefront_filters, fn f ->
+          if f["key"] == key, do: Map.put(f, "enabled", !f["enabled"]), else: f
+        end)
 
       case Shop.update_storefront_filters(filters) do
         {:ok, _} ->
           {:noreply,
            socket
            |> assign(:storefront_filters, filters)
-           |> put_flash(:info, gettext("Filter '%{key}' added", key: option_key))}
+           |> put_flash(:info, gettext("Storefront filter updated"))}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, gettext("Failed to add filter"))}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update filter"))}
       end
-    end
+    end)
+  end
+
+  @impl true
+  def handle_event("update_filter_label", %{"key" => key, "label" => label}, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      filters =
+        Enum.map(socket.assigns.storefront_filters, fn f ->
+          if f["key"] == key, do: Map.put(f, "label", label), else: f
+        end)
+
+      case Shop.update_storefront_filters(filters) do
+        {:ok, _} ->
+          {:noreply, assign(socket, :storefront_filters, filters)}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update filter label"))}
+      end
+    end)
+  end
+
+  @impl true
+  def handle_event("add_metadata_filter", %{"key" => option_key}, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      existing_keys = Enum.map(socket.assigns.storefront_filters, & &1["key"])
+
+      if option_key in existing_keys do
+        {:noreply,
+         put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: option_key))}
+      else
+        max_pos =
+          socket.assigns.storefront_filters
+          |> Enum.map(& &1["position"])
+          |> Enum.max(fn -> 0 end)
+
+        new_filter = %{
+          "key" => option_key,
+          "type" => "metadata_option",
+          "option_key" => option_key,
+          "label" => String.capitalize(option_key),
+          "enabled" => true,
+          "position" => max_pos + 1
+        }
+
+        filters = socket.assigns.storefront_filters ++ [new_filter]
+
+        case Shop.update_storefront_filters(filters) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> assign(:storefront_filters, filters)
+             |> put_flash(:info, gettext("Filter '%{key}' added", key: option_key))}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, gettext("Failed to add filter"))}
+        end
+      end
+    end)
   end
 
   @impl true
   def handle_event("remove_filter", %{"key" => key}, socket) do
-    filters = Enum.reject(socket.assigns.storefront_filters, &(&1["key"] == key))
+    Authz.authorize(socket, :manage_settings, fn ->
+      filters = Enum.reject(socket.assigns.storefront_filters, &(&1["key"] == key))
 
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Filter removed"))}
+      case Shop.update_storefront_filters(filters) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:storefront_filters, filters)
+           |> put_flash(:info, gettext("Filter removed"))}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to remove filter"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to remove filter"))}
+      end
+    end)
   end
 
   @impl true
   def handle_event("reset_default_filters", _params, socket) do
-    filters = Shop.default_storefront_filters()
+    Authz.authorize(socket, :manage_settings, fn ->
+      filters = Shop.default_storefront_filters()
 
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Filters reset to defaults"))}
+      case Shop.update_storefront_filters(filters) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:storefront_filters, filters)
+           |> put_flash(:info, gettext("Filters reset to defaults"))}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
+      end
+    end)
   end
 
   defp flip(true), do: "false"
