@@ -93,6 +93,28 @@ Neither shape appears in a Shopify or Prom.ua export, which is why this is
 recorded rather than fixed. A three-decimal currency is the same story: a
 lone three-digit tail (`1.234`) is deliberately read as thousands grouping.
 
+### 10. Regional dialects of one language still do not cross-match
+
+`language_keys/1` expands a code to itself, its dialect and its base — so
+`"en"` and `"en-US"` find each other, but a product keyed `"en-GB"` is not
+found by an `"en-US"` request. Closing it properly means matching on the
+key's base rather than an enumerated candidate list (a `jsonb_each_text`
+predicate), which is a scan; today's lookups are a scan anyway (no shipped
+index answers `slug->>? = ?`), so this is affordable — it just wants
+measuring on a real catalogue first.
+
+### 11. A handle-less feed cannot be matched on re-import
+
+A Shopify row with no Handle now imports as its own product with a slug
+derived from its title, but nothing carries that identity back into the
+next import: `upsert_product/1` matches on the incoming slug map, which a
+handle-less group does not have. A second import of the same file inserts
+again (the primary-slug unique index turns that into a reported row error
+rather than a duplicate). The validator already warns about blank handles;
+worth deciding whether the transformer should derive the slug up front so
+the match works, accepting that it then collides with a real handle of the
+same name.
+
 ## Cross-repo
 
 ### billing: `maybe_update_billing_snapshot` re-snapshot policy
