@@ -63,8 +63,18 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   # The filtered list is loaded here rather than in mount/3: UrlState calls
   # this after mount and on every change to the query string, so one code path
   # serves the first render, a shared link, and the Back button alike.
+  #
+  # `parent_filter` is re-parsed because the query string reaches it without
+  # passing through `filter_parent`: `?parent=` is free text until it is
+  # checked. A plain `assign` on a declared param is supported — the next
+  # patch reads its merge base back from the assigns, so the URL drops the
+  # rejected value rather than resurrecting it.
   @impl true
-  def handle_url_state(_state, socket), do: load_filtered_categories(socket)
+  def handle_url_state(_state, socket) do
+    socket
+    |> assign(:parent_filter, parse_parent_filter(socket.assigns.parent_filter))
+    |> load_filtered_categories()
+  end
 
   @impl true
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
@@ -87,7 +97,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("filter_parent", %{"parent" => parent}, socket) do
-    {:noreply, push_url_state(socket, parent_filter: if(parent == "", do: nil, else: parent))}
+    {:noreply, push_url_state(socket, parent_filter: parse_parent_filter(parent))}
   end
 
   @impl true
@@ -207,6 +217,22 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     |> assign(:all_categories, all_categories)
     |> assign(:product_counts, product_counts)
   end
+
+  # "root" is the sentinel for "top-level only"; anything else must be a real
+  # UUID, because it goes straight into `where c.parent_uuid == ^uuid` and Ecto
+  # raises `Ecto.Query.CastError` on anything that is not one — so a
+  # hand-edited `?parent=whatever` took the whole LiveView down rather than
+  # showing an unfiltered list. Unparseable means "no filter".
+  defp parse_parent_filter("root"), do: "root"
+
+  defp parse_parent_filter(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_parent_filter(_), do: nil
 
   defp load_filtered_categories(socket) do
     parent_uuid_opt =

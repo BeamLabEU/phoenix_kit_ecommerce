@@ -77,8 +77,18 @@ defmodule PhoenixKitEcommerce.Web.Products do
   # The list is loaded here rather than in mount/3: UrlState calls this after
   # mount and on every change to the query string, so one code path serves the
   # first render, a shared link, and the Back button alike.
+  #
+  # `category_filter` is re-parsed because the query string reaches it without
+  # passing through `filter_category`: `?category=` is free text until it is
+  # checked. A plain `assign` on a declared param is supported — the next
+  # patch reads its merge base back from the assigns, so the URL drops the
+  # rejected value rather than resurrecting it.
   @impl true
-  def handle_url_state(_state, socket), do: load_products(socket)
+  def handle_url_state(_state, socket) do
+    socket
+    |> assign(:category_filter, parse_category_uuid(socket.assigns.category_filter))
+    |> load_products()
+  end
 
   @impl true
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
@@ -728,9 +738,18 @@ defmodule PhoenixKitEcommerce.Web.Products do
     """
   end
 
-  defp parse_category_uuid(nil), do: nil
-  defp parse_category_uuid(""), do: nil
-  defp parse_category_uuid(id) when is_binary(id), do: id
+  # The value goes straight into `where p.category_uuid == ^uuid`, and Ecto
+  # raises `Ecto.Query.CastError` on anything that is not a UUID — so a
+  # hand-edited `?category=whatever` took the whole LiveView down rather than
+  # showing an unfiltered list. Unparseable means "no filter".
+  defp parse_category_uuid(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_category_uuid(_), do: nil
 
   defp status_badge_class("active"), do: "badge badge-success"
   defp status_badge_class("draft"), do: "badge badge-warning"

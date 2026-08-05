@@ -4,6 +4,103 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.14 - 2026-08-05
+
+The storefront layout, price-unit and permission wave (PR #13) and URL-backed
+admin list state (PR #14), plus the post-merge reviews in
+`dev_docs/pull_requests/2026/13-storefront-layout-price-units-permissions/`
+and `dev_docs/pull_requests/2026/14-url-state-search/`.
+
+⚠️ **Breaking on upgrade — authorization.** The `"shop"` permission is now
+admin-area READ access, with four sub-permissions carrying the capabilities
+(`shop.manage_catalog`, `shop.manage_carts`, `shop.manage_settings`,
+`shop.run_imports`). Core auto-grants newly discovered sub-permissions to the
+**Admin system role only**, so a CUSTOM role holding base `"shop"` keeps its
+reads but loses every mutation until an operator re-grants. Secure by default
+and deliberate, but it needs an operator action.
+
+### Added
+- **The storefront renders in the HOST's layout.** Every public page — catalog,
+  category, product, cart, checkout, confirmation — now goes through core's
+  `LayoutWrapper.app_layout` for guests and logged-in visitors alike. It used
+  to dispatch three ways, including a module-owned layout that bypassed the
+  host entirely (the reported bug) and the ADMIN dashboard layout for any
+  authenticated shopper. The category/filter sidebar the dashboard layout
+  carried now renders in the page templates for everyone, and a compact
+  in-content Shop/Cart bar covers hosts whose own header has no cart link
+  (`shop_show_cart_bar`, default on).
+- **`PhoenixKitEcommerce.PriceDisplay`** — an optional per-language price unit
+  ("per hour", "/m²", "в час") and "From" prefix, stored under one reserved
+  `Product.metadata["_price_display"]` namespace, no migration. `render/4`
+  takes an explicit context: `:catalog` may show "From", while `:selected`,
+  `:cart` and `:order` are exact and render the SNAPSHOTTED unit, so editing or
+  deleting a product cannot relabel a line a customer already agreed to. The
+  unit rides into the order's line items and reaches billing's invoices.
+- **Four shop sub-permissions** with `PhoenixKitEcommerce.Web.Authz`: admin
+  tabs carry their key so the sidebar hides what a holder cannot use, and 48
+  mutating event handlers re-check, failing closed on a missing scope.
+- **Notifications** for order placement (admins), order confirmation (the
+  customer, separately muteable) and import completion/failure. Recipients
+  union permission holders with Owner-role holders and `"*"` superadmins,
+  neither of which has permission rows.
+- **URL-backed list state** on the Products and Categories admin lists (PR
+  #14): search, filters and page live in the query string, so a filtered list
+  is a shareable, reload-proof URL and Back returns to the previous query. The
+  list load also moved out of `mount/3`, which runs twice.
+
+### Fixed
+- **Money on the checkout review screen.** Two paths reached `:review` without
+  pricing the cart, and a cart broadcast from another tab was assigned into an
+  open review, dropping the country and its tax — so the total shown could
+  differ from the total charged.
+- **The cheapest shipping method was not always the cheapest.** `Enum.min_by`
+  over `%Decimal{}` compares by Erlang term order, so `9.99` sorted above `10`
+  and cart mount could auto-select the dearer method.
+- **Shipping eligibility was judged on total weight** while listing and pricing
+  used shippable weight, so a mixed cart was quoted a method and then refused
+  at checkout. `requires_shipping` is no longer decorative: digital-only carts
+  are neither forced through shipping selection nor charged for it.
+- **The advertised price range under-quoted.** Map-shaped override modifiers
+  were skipped though the charged path parses them ("From $20" for an item that
+  charges $30), and an offered option value with no modifier entry was skipped
+  instead of contributing a zero delta, so a product whose cheapest option is
+  free advertised its most expensive combination.
+- **Order history could be rewritten** — order pages preferred the LIVE billing
+  profile over the order's snapshot. Cart, checkout and order pages also
+  rendered today's default currency instead of the amount's own.
+- **The price unit was rendered against the line TOTAL** on the order
+  confirmation and order-details pages, so a line of 2 hours at €40.00 per hour
+  read "€80.00 per hour". Both pages now render the total plain with the unit
+  price beside it, matching the cart page.
+- **A disabled shop stayed fully browsable and purchasable.**
+- **Products could be bought after being deactivated** — the conversion check
+  now runs on locked rows inside the transaction. `body_html` (where imports
+  put the full supplier description) is now rendered on the public product
+  page, under the same sanitization policy as `description`.
+- **Blank-address orders**, now validated in the CONTEXT for both billing
+  paths, and the selected payment option is no longer discarded at conversion.
+- **Imports: a re-import deleted what the feed said nothing about.** An omitted
+  column arrives as a blank, and that blank overwrote the stored value —
+  erasing descriptions in every language, images, vendor, and the admin's own
+  price modifiers, image mappings and custom metadata. Also: slug lookup
+  normalized `"en"` to `"en-US"` while every writer stores the shop's code
+  verbatim (404s and failed re-matches on a base-code shop); a Cyrillic title
+  slugified to an empty string, so a Ukrainian catalogue re-imported itself
+  every run; a variant set with no readable price published a FREE product
+  instead of failing; and rows with a blank handle all grouped together, so
+  unrelated products merged into one.
+- **A malformed `?category=` or `?parent=` crashed the admin list LiveViews.**
+  Both reach Ecto as UUID query parameters, where a non-UUID raises
+  `Ecto.Query.CastError`; they now fall back to an unfiltered list.
+- **Import-failure notifications went missing on non-ASCII catalogues.** The
+  reason string was truncated on bytes, splitting UTF-8 mid-character into a
+  value Postgres rejects — and the best-effort wrapper then swallowed it.
+
+### Changed
+- Stale `mix.lock` entries left by the preceding dependency upgrade (igniter,
+  sourceror, spitfire, rewrite, owl, ex_ast, glob_ex, text_diff) pruned, which
+  unblocks `mix precommit`.
+
 ## 0.1.13 - 2026-08-04
 
 Checkout security and wrong-money fixes (PR #12), plus the post-merge review
