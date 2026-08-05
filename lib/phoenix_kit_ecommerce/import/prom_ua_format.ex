@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
 
   @behaviour PhoenixKitEcommerce.Import.ImportFormat
 
+  alias PhoenixKit.Utils.Slug
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Import.Money
   alias PhoenixKitEcommerce.Translations
@@ -169,11 +170,14 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
       # Last resort: generate from product name
       name = row["Назва_позиції"] || "product"
 
+      # Prom.ua is a Ukrainian marketplace, so the ASCII-only strip this used
+      # to do returned "" for a typical listing - and an empty slug map is
+      # treated as "product not found", so every re-import inserted the whole
+      # catalogue again.
       name
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9\s-]/, "")
-      |> String.replace(~r/\s+/, "-")
+      |> Slug.slugify(transliterate: true)
       |> String.slice(0, 60)
+      |> String.trim("-")
     end
   end
 

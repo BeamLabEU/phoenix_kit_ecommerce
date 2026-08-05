@@ -284,8 +284,12 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
 
   # Numeric minimum over Decimals; `Enum.min/2` uses Erlang term ordering,
   # which compares %Decimal{} structs structurally rather than by value and
-  # picks the wrong element (10 over 9.99). Empty list keeps the previous
-  # zero default.
-  defp decimal_min([]), do: Decimal.new("0")
+  # picks the wrong element (10 over 9.99).
+  #
+  # No readable price at all yields nil, not zero. Zero imported cleanly and
+  # published a FREE product: a feed whose price column is empty, "N/A" or
+  # otherwise unparseable is a broken feed, and `price` is required, so the
+  # row now fails and is reported instead of silently listing at 0.
+  defp decimal_min([]), do: nil
   defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 end
