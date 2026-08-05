@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
 
   @behaviour PhoenixKitEcommerce.Import.ImportFormat
 
+  alias PhoenixKit.Utils.Slug
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Import.Money
   alias PhoenixKitEcommerce.Translations
@@ -169,12 +170,31 @@ defmodule PhoenixKitEcommerce.Import.PromUaFormat do
       # Last resort: generate from product name
       name = row["Назва_позиції"] || "product"
 
-      name
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9\s-]/, "")
-      |> String.replace(~r/\s+/, "-")
-      |> String.slice(0, 60)
+      # Prom.ua is a Ukrainian marketplace, so the ASCII-only strip this used
+      # to do returned "" for a typical listing - and an empty slug map is
+      # treated as "product not found", so every re-import inserted the whole
+      # catalogue again.
+      #
+      # Transliteration is lossy (Ганок and Ґанок both give "ganok"), and the
+      # upsert matches on this slug, so a bare transliteration would let one
+      # listing OVERWRITE another. The suffix is derived from the untouched
+      # name, so distinct listings stay distinct while a re-import of the same
+      # listing still resolves to the same product.
+      base =
+        name
+        |> Slug.slugify(transliterate: true)
+        |> String.slice(0, 52)
+        |> String.trim("-")
+
+      "#{base}-#{name_discriminator(name)}" |> String.trim_leading("-")
     end
+  end
+
+  defp name_discriminator(name) do
+    :sha256
+    |> :crypto.hash(name)
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 6)
   end
 
   defp bilingual_map(value) do

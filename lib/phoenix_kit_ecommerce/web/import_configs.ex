@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
@@ -87,125 +88,23 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
   end
 
   @impl true
-  def handle_event("save_config", %{"config" => params}, socket) do
-    form_data = params_to_form_data(params, socket.assigns.form_data.category_rules)
-    attrs = build_attrs(form_data)
-    editing = socket.assigns.editing_config
-
-    result =
-      if editing do
-        Shop.update_import_config(editing, attrs)
-      else
-        Shop.create_import_config(attrs)
-      end
-
-    case result do
-      {:ok, config} ->
-        Activity.log(
-          if(editing, do: "shop.import_config_updated", else: "shop.import_config_created"),
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "import_config",
-          resource_uuid: config.uuid,
-          metadata: %{"active" => config.active, "is_default" => config.is_default}
-        )
-
-        {:noreply,
-         socket
-         |> assign(:configs, Shop.list_import_configs(active_only: false))
-         |> assign(:show_modal, false)
-         |> assign(:editing_config, nil)
-         |> assign(:form_data, initial_form_data())
-         |> put_flash(:info, if(editing, do: "Config updated", else: "Config created"))}
-
-      {:error, changeset} ->
-        message = format_changeset_errors(changeset)
-        {:noreply, put_flash(socket, :error, "Error: #{message}")}
-    end
+  def handle_event("save_config", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("save_config", params, socket) end)
   end
 
   @impl true
-  def handle_event("delete_config", %{"uuid" => uuid}, socket) do
-    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
-
-    if config do
-      case Shop.delete_import_config(config) do
-        {:ok, _} ->
-          Activity.log("shop.import_config_deleted",
-            actor_uuid: Activity.actor_uuid(socket),
-            actor_role: Activity.actor_role(socket),
-            resource_type: "import_config",
-            resource_uuid: config.uuid,
-            metadata: %{"is_default" => config.is_default}
-          )
-
-          {:noreply,
-           socket
-           |> assign(:configs, Shop.list_import_configs(active_only: false))
-           |> put_flash(:info, "Config deleted")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to delete config")}
-      end
-    else
-      {:noreply, socket}
-    end
+  def handle_event("delete_config", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("delete_config", params, socket) end)
   end
 
   @impl true
-  def handle_event("toggle_active", %{"uuid" => uuid}, socket) do
-    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
-
-    if config do
-      case Shop.update_import_config(config, %{active: !config.active}) do
-        {:ok, updated} ->
-          Activity.log("shop.import_config_updated",
-            actor_uuid: Activity.actor_uuid(socket),
-            actor_role: Activity.actor_role(socket),
-            resource_type: "import_config",
-            resource_uuid: updated.uuid,
-            metadata: %{"active" => updated.active}
-          )
-
-          {:noreply,
-           socket
-           |> assign(:configs, Shop.list_import_configs(active_only: false))
-           |> put_flash(:info, "Config #{if config.active, do: "deactivated", else: "activated"}")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to update config")}
-      end
-    else
-      {:noreply, socket}
-    end
+  def handle_event("toggle_active", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("toggle_active", params, socket) end)
   end
 
   @impl true
-  def handle_event("set_default", %{"uuid" => uuid}, socket) do
-    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
-
-    if config do
-      case Shop.update_import_config(config, %{is_default: true}) do
-        {:ok, updated} ->
-          Activity.log("shop.import_config_set_default",
-            actor_uuid: Activity.actor_uuid(socket),
-            actor_role: Activity.actor_role(socket),
-            resource_type: "import_config",
-            resource_uuid: updated.uuid,
-            metadata: %{"is_default" => updated.is_default}
-          )
-
-          {:noreply,
-           socket
-           |> assign(:configs, Shop.list_import_configs(active_only: false))
-           |> put_flash(:info, "\"#{config.name}\" set as default")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to set default")}
-      end
-    else
-      {:noreply, socket}
-    end
+  def handle_event("set_default", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("set_default", params, socket) end)
   end
 
   # Category rule management
@@ -836,5 +735,126 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
     |> Enum.map_join(", ", fn {field, errors} ->
       "#{field}: #{Enum.join(errors, ", ")}"
     end)
+  end
+
+  defp gated_event("save_config", %{"config" => params}, socket) do
+    form_data = params_to_form_data(params, socket.assigns.form_data.category_rules)
+    attrs = build_attrs(form_data)
+    editing = socket.assigns.editing_config
+
+    result =
+      if editing do
+        Shop.update_import_config(editing, attrs)
+      else
+        Shop.create_import_config(attrs)
+      end
+
+    case result do
+      {:ok, config} ->
+        Activity.log(
+          if(editing, do: "shop.import_config_updated", else: "shop.import_config_created"),
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "import_config",
+          resource_uuid: config.uuid,
+          metadata: %{"active" => config.active, "is_default" => config.is_default}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:configs, Shop.list_import_configs(active_only: false))
+         |> assign(:show_modal, false)
+         |> assign(:editing_config, nil)
+         |> assign(:form_data, initial_form_data())
+         |> put_flash(:info, if(editing, do: "Config updated", else: "Config created"))}
+
+      {:error, changeset} ->
+        message = format_changeset_errors(changeset)
+        {:noreply, put_flash(socket, :error, "Error: #{message}")}
+    end
+  end
+
+  defp gated_event("delete_config", %{"uuid" => uuid}, socket) do
+    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
+
+    if config do
+      case Shop.delete_import_config(config) do
+        {:ok, _} ->
+          Activity.log("shop.import_config_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "import_config",
+            resource_uuid: config.uuid,
+            metadata: %{"is_default" => config.is_default}
+          )
+
+          {:noreply,
+           socket
+           |> assign(:configs, Shop.list_import_configs(active_only: false))
+           |> put_flash(:info, "Config deleted")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to delete config")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp gated_event("toggle_active", %{"uuid" => uuid}, socket) do
+    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
+
+    if config do
+      case Shop.update_import_config(config, %{active: !config.active}) do
+        {:ok, updated} ->
+          Activity.log("shop.import_config_updated",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "import_config",
+            resource_uuid: updated.uuid,
+            metadata: %{"active" => updated.active}
+          )
+
+          {:noreply,
+           socket
+           |> assign(:configs, Shop.list_import_configs(active_only: false))
+           |> put_flash(
+             :info,
+             "Config #{if config.active, do: "deactivated", else: "activated"}"
+           )}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to update config")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp gated_event("set_default", %{"uuid" => uuid}, socket) do
+    config = Enum.find(socket.assigns.configs, &(to_string(&1.uuid) == uuid))
+
+    if config do
+      case Shop.update_import_config(config, %{is_default: true}) do
+        {:ok, updated} ->
+          Activity.log("shop.import_config_set_default",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "import_config",
+            resource_uuid: updated.uuid,
+            metadata: %{"is_default" => updated.is_default}
+          )
+
+          {:noreply,
+           socket
+           |> assign(:configs, Shop.list_import_configs(active_only: false))
+           |> put_flash(:info, "\"#{config.name}\" set as default")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to set default")}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 end

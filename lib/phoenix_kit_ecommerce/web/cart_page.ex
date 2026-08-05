@@ -9,9 +9,12 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKit.Utils.Routes
+
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
@@ -21,7 +24,24 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     only: [format_price: 2, humanize_key: 1, get_current_user: 1]
 
   @impl true
-  def mount(_params, session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
+    end
+  end
+
+  defp do_mount(_params, session, socket) do
     # Get session_id from session (for guest users)
     session_id = session["shop_session_id"] || generate_session_id()
 
@@ -48,7 +68,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     {:ok, cart} = Shop.auto_select_shipping_method(cart, shipping_methods)
 
     # Get default currency from Billing
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(cart.currency)
 
     # Check if user is authenticated
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
@@ -56,12 +76,11 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     socket =
       socket
       |> assign(:page_title, "Shopping Cart")
-      |> assign(:cart, cart)
       |> assign(:session_id, session_id)
-      |> assign(:shipping_methods, shipping_methods)
       |> assign(:currency, currency)
       |> assign(:authenticated, authenticated)
       |> assign(:current_language, current_language)
+      |> assign_cart_state(cart)
 
     {:ok, socket}
   end
@@ -80,12 +99,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     if item do
       case Shop.remove_from_cart(item) do
         {:ok, updated_cart} ->
-          shipping_methods = Shop.get_available_shipping_methods(updated_cart)
-
           {:noreply,
            socket
-           |> assign(:cart, updated_cart)
-           |> assign(:shipping_methods, shipping_methods)
+           |> assign_cart_state(updated_cart)
            |> put_flash(:info, "Item removed from cart")}
 
         {:error, _} ->
@@ -123,12 +139,56 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       cart.items == [] ->
         {:noreply, put_flash(socket, :error, "Your cart is empty")}
 
-      is_nil(cart.shipping_method_uuid) ->
+      is_nil(cart.shipping_method_uuid) and socket.assigns.requires_shipping ->
         {:noreply, put_flash(socket, :error, "Please select a shipping method")}
 
       true ->
         {:noreply, push_navigate(socket, to: Shop.checkout_url(socket.assigns.current_language))}
     end
+  end
+
+  # One choke point for "the cart changed": refresh available methods,
+  # drop a selection the cart has outgrown (or stopped needing), and keep
+  # the requires-shipping flag the template gates on. Without the clearing,
+  # a method that fell out of eligibility stayed selected at zero cost and
+  # checkout ran into an inevitable conversion failure.
+  defp assign_cart_state(socket, cart) do
+    shipping_methods = Shop.get_available_shipping_methods(cart)
+    requires_shipping = Shop.cart_requires_shipping?(cart)
+
+    {cart, socket} =
+      cond do
+        is_nil(cart.shipping_method_uuid) ->
+          {cart, socket}
+
+        not requires_shipping ->
+          case Shop.clear_cart_shipping(cart) do
+            {:ok, cleared} -> {cleared, socket}
+            _ -> {cart, socket}
+          end
+
+        Enum.any?(shipping_methods, &(&1.uuid == cart.shipping_method_uuid)) ->
+          {cart, socket}
+
+        true ->
+          case Shop.clear_cart_shipping(cart) do
+            {:ok, cleared} ->
+              {cleared,
+               put_flash(
+                 socket,
+                 :error,
+                 "The selected shipping method is no longer available for this cart - please pick another"
+               )}
+
+            _ ->
+              {cart, socket}
+          end
+      end
+
+    socket
+    |> assign(:cart, cart)
+    |> assign(:shipping_methods, shipping_methods)
+    |> assign(:requires_shipping, requires_shipping)
   end
 
   defp update_item_quantity(socket, item_uuid, quantity) do
@@ -137,12 +197,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     if item do
       case Shop.update_cart_item(item, quantity) do
         {:ok, updated_cart} ->
-          shipping_methods = Shop.get_available_shipping_methods(updated_cart)
-
-          {:noreply,
-           socket
-           |> assign(:cart, updated_cart)
-           |> assign(:shipping_methods, shipping_methods)}
+          {:noreply, assign_cart_state(socket, updated_cart)}
 
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Failed to update quantity")}
@@ -158,42 +213,22 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   @impl true
   def handle_info({:cart_updated, cart}, socket) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
-
-    {:noreply,
-     socket
-     |> assign(:cart, cart)
-     |> assign(:shipping_methods, shipping_methods)}
+    {:noreply, assign_cart_state(socket, cart)}
   end
 
   @impl true
   def handle_info({:item_added, cart, _item}, socket) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
-
-    {:noreply,
-     socket
-     |> assign(:cart, cart)
-     |> assign(:shipping_methods, shipping_methods)}
+    {:noreply, assign_cart_state(socket, cart)}
   end
 
   @impl true
   def handle_info({:item_removed, cart, _item_id}, socket) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
-
-    {:noreply,
-     socket
-     |> assign(:cart, cart)
-     |> assign(:shipping_methods, shipping_methods)}
+    {:noreply, assign_cart_state(socket, cart)}
   end
 
   @impl true
   def handle_info({:quantity_updated, cart, _item}, socket) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
-
-    {:noreply,
-     socket
-     |> assign(:cart, cart)
-     |> assign(:shipping_methods, shipping_methods)}
+    {:noreply, assign_cart_state(socket, cart)}
   end
 
   @impl true
@@ -208,12 +243,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   @impl true
   def handle_info({:cart_cleared, cart}, socket) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
-
-    {:noreply,
-     socket
-     |> assign(:cart, cart)
-     |> assign(:shipping_methods, shipping_methods)}
+    {:noreply, assign_cart_state(socket, cart)}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
@@ -371,7 +401,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                 {format_price(item.line_total, @currency)}
                               </div>
                               <div class="text-xs text-base-content/50">
-                                {format_price(item.unit_price, @currency)} each
+                                {PriceDisplay.render(nil, @currency, :cart,
+                                  amount: item.unit_price,
+                                  unit: (item.metadata || %{})["price_unit"]
+                                )} each
                               </div>
                             </td>
                             <td>
@@ -392,8 +425,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
               </div>
             <% end %>
 
-            <%!-- Shipping Section --%>
-            <%= if @cart.items != [] do %>
+            <%!-- Shipping Section (digital-only carts don't ship) --%>
+            <%= if @cart.items != [] && @requires_shipping do %>
               <div class="card bg-base-100 shadow-xl mt-6">
                 <div class="card-body">
                   <h2 class="card-title mb-4">Shipping Method</h2>
@@ -465,6 +498,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
                   <div class="flex justify-between">
                     <span class="text-base-content/70">Shipping</span>
+                    <%= if !@requires_shipping do %>
+                      <span class="text-base-content/50">Not needed</span>
+                    <% else %>
                     <%= if is_nil(@cart.shipping_method_uuid) do %>
                       <span class="text-base-content/50">Select method</span>
                     <% else %>
@@ -473,6 +509,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                       <% else %>
                         <span>{format_price(@cart.shipping_amount, @currency)}</span>
                       <% end %>
+                    <% end %>
                     <% end %>
                   </div>
 
@@ -501,7 +538,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                 <button
                   phx-click="proceed_to_checkout"
                   class="btn btn-primary btn-block mt-6"
-                  disabled={@cart.items == [] || is_nil(@cart.shipping_method_uuid)}
+                  disabled={@cart.items == [] || (is_nil(@cart.shipping_method_uuid) && @requires_shipping)}
                 >
                   <.icon name="hero-credit-card" class="w-5 h-5 mr-2" /> Proceed to Checkout
                 </button>

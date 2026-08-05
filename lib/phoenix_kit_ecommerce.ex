@@ -34,6 +34,7 @@ defmodule PhoenixKitEcommerce do
   require Logger
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKit.Migrations.Postgres, as: PostgresMigrations
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Settings
@@ -154,6 +155,23 @@ defmodule PhoenixKitEcommerce do
     Billing.get_default_currency()
   end
 
+  @doc """
+  Resolves the currency a PERSISTED record was denominated in.
+
+  Order and cart pages used to load today's default currency, so changing
+  the shop currency silently relabeled every historical order's amounts.
+  Given the code stored on the record, this returns its `Currency` struct;
+  an unresolvable code returns nil — callers then show the bare code rather
+  than borrowing today's default symbol for an amount it does not describe.
+  """
+  def currency_for_code(nil), do: get_default_currency()
+
+  def currency_for_code(code) when is_binary(code) do
+    Billing.get_currency_by_code(code) || code
+  rescue
+    _ -> code
+  end
+
   # ============================================
   # MODULE BEHAVIOUR CALLBACKS
   # ============================================
@@ -195,8 +213,88 @@ defmodule PhoenixKitEcommerce do
       key: "shop",
       label: "E-Commerce",
       icon: "hero-shopping-cart",
-      description: "Product catalog, orders, and e-commerce management"
+      description: "Product catalog, orders, and e-commerce management",
+      # Base "shop" is admin-area READ access. Each sub-permission is a
+      # capability this module checks itself (core enforces sub-implies-base).
+      #
+      # ⚠️ Upgrade note: core auto-grants newly discovered sub-permissions to
+      # the Admin system role only, so a CUSTOM role that holds base "shop"
+      # keeps its read access but loses every mutation until an operator
+      # re-grants the subs. That is deliberate - secure by default, and the
+      # operator decides who gets what rather than inheriting a blanket
+      # grant - but it IS a breaking authorization change on upgrade and is
+      # called out in the PR body and AGENTS.md.
+      sub_permissions: [
+        %{
+          key: "manage_catalog",
+          label: "Manage catalog",
+          description: "Create, edit and delete products and categories"
+        },
+        %{
+          key: "manage_carts",
+          label: "Manage carts",
+          description: "View and act on customer carts (includes their contact details)"
+        },
+        %{
+          key: "manage_settings",
+          label: "Manage shop settings",
+          description: "Shop settings, security policy, product options and shipping methods"
+        },
+        %{
+          key: "run_imports",
+          label: "Run imports",
+          description: "Start CSV imports and manage import configurations"
+        }
+      ]
     }
+  end
+
+  @doc """
+  Notification types this module contributes (duck-typed, discovered by
+  core's `Notifications.Types`).
+
+  Two audiences, deliberately separate sub-types so a shop operator can
+  mute the order firehose without silencing their own receipts — and so a
+  customer's confirmation is never governed by an admin-facing preference.
+
+  ⚠️ The actions registered here are the NOTIFY actions. The audit trail
+  uses different action strings on purpose: `Activity.log/1` auto-derives
+  notifications from registered actions, so an audit row written with a
+  notify action would deliver a second, duplicate notification.
+  """
+  def notification_types do
+    [
+      %{
+        key: "shop",
+        label: "Shop",
+        description: "Orders and catalog imports",
+        actions: [],
+        default: true,
+        sub_types: [
+          %{
+            key: "orders",
+            label: "New orders",
+            description: "An order was placed in the shop",
+            actions: ["shop.order_placed"],
+            default: true
+          },
+          %{
+            key: "order_confirmations",
+            label: "Your order confirmations",
+            description: "Confirmation that an order you placed went through",
+            actions: ["shop.order_confirmed"],
+            default: true
+          },
+          %{
+            key: "imports",
+            label: "Catalog imports",
+            description: "A CSV import finished or failed",
+            actions: ["shop.import_completed", "shop.import_failed"],
+            default: true
+          }
+        ]
+      }
+    ]
   end
 
   @impl PhoenixKit.Module
@@ -235,7 +333,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/products",
         priority: 532,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_catalog",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -246,7 +344,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/categories",
         priority: 533,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_catalog",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -257,7 +355,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/shipping",
         priority: 534,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_settings",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -268,7 +366,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/carts",
         priority: 535,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_carts",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -279,7 +377,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/imports",
         priority: 536,
         level: :admin,
-        permission: "shop",
+        permission: "shop.run_imports",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
@@ -297,7 +395,7 @@ defmodule PhoenixKitEcommerce do
         priority: 927,
         level: :admin,
         parent: :admin_settings,
-        permission: "shop",
+        permission: "shop.manage_settings",
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]
@@ -1394,17 +1492,90 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether any line in the cart needs physical shipping.
+
+  Reads the `"requires_shipping"` flag snapshotted onto each cart item at
+  add time. Rows created before the snapshot existed fall back to the live
+  product's flag (batched, one query); a line whose product is GONE counts
+  as requiring shipping — the conservative default, since charging shipping
+  on a digital line is a smaller failure than shipping-free physical goods.
+
+  Digital-only carts skip the shipping-method requirement, the shipping
+  charge, and the shipping line on the resulting order.
+  """
+  def cart_requires_shipping?(%Cart{} = cart) do
+    cart |> cart_items_loaded() |> items_require_shipping?()
+  end
+
+  defp cart_items_loaded(%Cart{items: items}) when is_list(items), do: items
+
+  defp cart_items_loaded(%Cart{uuid: uuid}) do
+    CartItem |> where([i], i.cart_uuid == ^uuid) |> repo().all()
+  end
+
+  defp items_require_shipping?(items) do
+    {known, unknown} =
+      Enum.split_with(items, fn item ->
+        is_boolean((item.metadata || %{})["requires_shipping"])
+      end)
+
+    Enum.any?(known, & &1.metadata["requires_shipping"]) or
+      legacy_items_require_shipping?(unknown)
+  end
+
+  defp legacy_items_require_shipping?([]), do: false
+
+  defp legacy_items_require_shipping?(items) do
+    product_uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+
+    flags =
+      Product
+      |> where([p], p.uuid in ^product_uuids)
+      |> select([p], {p.uuid, p.requires_shipping})
+      |> repo().all()
+      |> Map.new()
+
+    Enum.any?(items, fn item ->
+      # A line without a snapshot AND without a live product requires
+      # shipping by default.
+      Map.get(flags, item.product_uuid, true)
+    end)
+  end
+
+  # Weight that participates in shipping eligibility and pricing - lines
+  # that don't ship contribute none, so a heavy digital bundle can't push
+  # a mixed cart over a method's weight cap.
+  defp shippable_weight_grams(items) do
+    {known, unknown} =
+      Enum.split_with(items, fn item ->
+        is_boolean((item.metadata || %{})["requires_shipping"])
+      end)
+
+    known_weight =
+      known
+      |> Enum.filter(& &1.metadata["requires_shipping"])
+      |> Enum.reduce(0, fn i, acc -> acc + (i.weight_grams || 0) * i.quantity end)
+
+    # Legacy rows (no snapshot) keep their weight in the shippable total -
+    # matching the conservative "requires shipping" default above.
+    known_weight +
+      Enum.reduce(unknown, 0, fn i, acc -> acc + (i.weight_grams || 0) * i.quantity end)
+  end
+
+  @doc """
   Gets available shipping methods for a cart.
   Filters by weight, subtotal, and country.
   """
   def get_available_shipping_methods(%Cart{} = cart) do
+    shippable_weight = cart |> cart_items_loaded() |> shippable_weight_grams()
+
     ShippingMethod
     |> where([s], s.active == true)
     |> order_by([s], [s.position, s.name])
     |> repo().all()
     |> Enum.filter(fn method ->
       ShippingMethod.available_for?(method, %{
-        weight_grams: cart.total_weight_grams || 0,
+        weight_grams: shippable_weight,
         subtotal: cart.subtotal || Decimal.new("0"),
         country: cart.shipping_country
       })
@@ -1699,23 +1870,67 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, opts) when is_list(opts) do
     selected_specs = Keyword.get(opts, :selected_specs, %{})
     skip_validation = Keyword.get(opts, :skip_spec_validation, false)
+    language = Keyword.get(opts, :language)
 
-    # Validate selected_specs against product's option schema
-    with :ok <- maybe_validate_specs(product, selected_specs, skip_validation) do
+    # The disabled check lives in the CONTEXT, not only the LiveView mounts:
+    # a LiveView connected before an admin flipped the switch can still send
+    # events, and the mount gate cannot reach it.
+    with :ok <- validate_shop_enabled(),
+         :ok <- validate_cart_currency(cart, product),
+         :ok <- maybe_validate_specs(product, selected_specs, skip_validation) do
       if map_size(selected_specs) > 0 do
-        add_product_with_specs_to_cart(cart, product, quantity, selected_specs)
+        add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language)
       else
-        add_simple_product_to_cart(cart, product, quantity)
+        add_simple_product_to_cart(cart, product, quantity, language)
       end
     end
   end
 
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, _opts)
       when is_integer(quantity) do
-    add_simple_product_to_cart(cart, product, quantity)
+    with :ok <- validate_shop_enabled(),
+         :ok <- validate_cart_currency(cart, product) do
+      add_simple_product_to_cart(cart, product, quantity, nil)
+    end
   end
 
-  defp add_simple_product_to_cart(cart, product, quantity) do
+  defp validate_shop_enabled do
+    if enabled?(), do: :ok, else: {:error, :shop_disabled}
+  end
+
+  # Cart totals sum line decimals in the CART's currency frame, so every
+  # line must be snapshotted in that frame. A product whose own currency
+  # differs (usually the schema's "USD" default on a non-USD shop — the
+  # importers never set the field) is logged, not rejected: prices are
+  # entered thinking in the shop currency, and rejecting would brick every
+  # existing catalog that carries the stale default.
+  defp validate_cart_currency(%Cart{currency: cart_currency}, %Product{} = product) do
+    if is_binary(product.currency) and is_binary(cart_currency) and
+         product.currency != cart_currency do
+      require Logger
+
+      Logger.warning(
+        "[Shop] product #{product.uuid} carries currency #{product.currency} " <>
+          "but the cart is #{cart_currency}; the amount is charged in #{cart_currency}"
+      )
+    end
+
+    :ok
+  end
+
+  # A product must still be purchasable AT THE LOCKED READ - the page the
+  # shopper is holding may predate an archive/bulk-archive (those broadcast
+  # on a topic the product page does not subscribe to), and mount-time
+  # checks cannot see that.
+  defp validate_locked_product_purchasable!(repo, %Product{status: status} = product) do
+    if status != "active" do
+      repo.rollback({:product_not_available, product.uuid})
+    end
+
+    :ok
+  end
+
+  defp add_simple_product_to_cart(cart, product, quantity, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
@@ -1725,6 +1940,8 @@ defmodule PhoenixKitEcommerce do
           |> where([p], p.uuid == ^product.uuid)
           |> lock("FOR UPDATE")
           |> repo().one!()
+
+        validate_locked_product_purchasable!(repo(), locked_product)
 
         # Use unified price calculation path (same as add_product_with_specs_to_cart)
         # With empty specs this returns base_price, but allows future extensibility
@@ -1738,7 +1955,10 @@ defmodule PhoenixKitEcommerce do
             nil ->
               # Create new item with calculated price
               attrs =
-                CartItem.from_product(locked_product, quantity)
+                CartItem.from_product(locked_product, quantity,
+                  language: language,
+                  currency: cart.currency
+                )
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, calculated_price)
 
@@ -1765,7 +1985,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs) do
+  defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price/metadata changes during cart update
@@ -1774,6 +1994,8 @@ defmodule PhoenixKitEcommerce do
           |> where([p], p.uuid == ^product.uuid)
           |> lock("FOR UPDATE")
           |> repo().one!()
+
+        validate_locked_product_purchasable!(repo(), locked_product)
 
         # Calculate price with spec modifiers using locked product state
         calculated_price = calculate_product_price(locked_product, selected_specs)
@@ -1786,7 +2008,10 @@ defmodule PhoenixKitEcommerce do
             nil ->
               # Create new item with specs and calculated price
               attrs =
-                CartItem.from_product(locked_product, quantity)
+                CartItem.from_product(locked_product, quantity,
+                  language: language,
+                  currency: cart.currency
+                )
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, calculated_price)
                 |> Map.put(:selected_specs, selected_specs)
@@ -2009,6 +2234,35 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Clears the cart's shipping selection and recalculates totals.
+
+  Used when the selected method stops being eligible for the cart as it is
+  NOW (weight change, last physical line removed) — leaving it selected
+  showed a zero-cost method the cart had outgrown and let checkout proceed
+  to an inevitable conversion failure.
+  """
+  def clear_cart_shipping(%Cart{} = cart) do
+    result =
+      repo().transaction(fn ->
+        updated_cart =
+          cart
+          |> Cart.shipping_changeset(%{shipping_method_uuid: nil, shipping_amount: nil})
+          |> repo().update!()
+
+        recalculate_cart_totals!(updated_cart)
+      end)
+
+    case result do
+      {:ok, updated_cart} ->
+        Events.broadcast_shipping_selected(updated_cart)
+        {:ok, updated_cart}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
   Sets shipping method for cart.
   """
   def set_cart_shipping(%Cart{} = cart, %ShippingMethod{} = method, country) do
@@ -2130,6 +2384,10 @@ defmodule PhoenixKitEcommerce do
       cart.items == [] or is_nil(cart.items) ->
         {:ok, cart}
 
+      # Digital-only carts don't get a method auto-selected
+      not cart_requires_shipping?(cart) ->
+        {:ok, cart}
+
       # No shipping methods available
       shipping_methods == [] ->
         {:ok, cart}
@@ -2144,14 +2402,22 @@ defmodule PhoenixKitEcommerce do
   defp find_cheapest_shipping_method(methods, subtotal) do
     subtotal = subtotal || Decimal.new("0")
 
+    # Enum.min_by on %Decimal{} structs compares by ERLANG TERM ORDER, not
+    # value: `9.99` (coef 999, exp -2) sorts above `10` (coef 10, exp 0),
+    # so the auto-selection could pick the more expensive method and charge
+    # the customer for it. Same class as the price-range bug fixed in
+    # Options - compare with Decimal.compare/2.
     methods
-    |> Enum.min_by(fn method ->
-      if ShippingMethod.free_for?(method, subtotal) do
-        Decimal.new("0")
-      else
-        method.price || Decimal.new("999999")
-      end
-    end)
+    |> Enum.min_by(
+      fn method ->
+        if ShippingMethod.free_for?(method, subtotal) do
+          Decimal.new("0")
+        else
+          method.price || Decimal.new("999999")
+        end
+      end,
+      &(Decimal.compare(&1, &2) != :gt)
+    )
   end
 
   @doc """
@@ -2360,8 +2626,23 @@ defmodule PhoenixKitEcommerce do
       # Use atomic status transition to prevent double-conversion on double-click
       # This atomically changes status from "active" to "converting" and fails
       # if another request already started conversion
-      with :ok <- validate_cart_convertible(cart),
+      with :ok <- validate_shop_enabled(),
+           :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
+           # AGAIN on the locked, reloaded cart - contents only. Another tab
+           # can add a physical line (or empty the cart) between the pre-lock
+           # read and the lock; without this a cart that gained a shippable
+           # line converts with shipping_method_uuid still nil, i.e. physical
+           # goods shipped for free. The STATUS check is deliberately not
+           # repeated: the lock has already flipped it to "converting", and
+           # winning that flip is what proves it was active.
+           :ok <- validate_cart_contents(cart),
+           # AFTER the cart lock, on locked product rows: an archive racing
+           # the pre-transaction validation window cannot slip a
+           # no-longer-active product into the order.
+           :ok <- validate_line_products_active(cart),
+           :ok <- validate_payment_option(cart),
+           :ok <- validate_billing_completeness(cart, opts),
            # Snapshot the placing session from the LOCKED cart, before
            # anything can clear it.
            #
@@ -2413,9 +2694,22 @@ defmodule PhoenixKitEcommerce do
         # notification about a committed fact — it must not be able to undo
         # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
         _ = maybe_send_guest_confirmation(order.user_uuid)
+        _ = log_order_converted(order)
+        _ = PhoenixKitEcommerce.Notifications.order_placed(order)
         {:ok, order}
 
       {:error, reason} ->
+        # A failed checkout is exactly what an operator wants to see later
+        # ("customers keep bouncing off shipping"), so the attempt is
+        # recorded too - PII-safe, no billing details.
+        _ =
+          PhoenixKitEcommerce.Activity.log_failed("shop.order_converted", reason,
+            actor_uuid: cart.user_uuid,
+            resource_type: "cart",
+            resource_uuid: cart.uuid,
+            mode: "checkout"
+          )
+
         {:error, reason}
     end
   end
@@ -2523,20 +2817,138 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp validate_cart_convertible(%Cart{} = cart) do
-    cond do
-      cart.status != "active" ->
-        {:error, :cart_not_active}
+    if cart.status != "active" do
+      {:error, :cart_not_active}
+    else
+      validate_cart_contents(cart)
+    end
+  end
 
+  defp validate_cart_contents(%Cart{} = cart) do
+    cond do
       Enum.empty?(cart.items) ->
         {:error, :cart_empty}
 
-      is_nil(cart.shipping_method_uuid) ->
+      # Only carts with a shippable line need a shipping method; a
+      # digital-only cart converts without one (and without a charge).
+      is_nil(cart.shipping_method_uuid) and items_require_shipping?(cart.items) ->
         {:error, :no_shipping_method}
 
       true ->
         :ok
     end
   end
+
+  # Every line's product must still be ACTIVE at conversion, checked on
+  # LOCKED rows inside the conversion transaction — a pre-transaction check
+  # races a concurrent archive between validation and order creation. A line
+  # whose product row is gone (or was detached by ON DELETE SET NULL) is not
+  # sellable either.
+  defp validate_line_products_active(%Cart{items: items}) do
+    uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+
+    if length(uuids) < length(items) do
+      {:error, :product_not_available}
+    else
+      active =
+        Product
+        |> where([p], p.uuid in ^uuids and p.status == "active")
+        |> lock("FOR UPDATE")
+        |> select([p], p.uuid)
+        |> repo().all()
+
+      if length(active) == length(Enum.uniq(uuids)) do
+        :ok
+      else
+        {:error, :product_not_available}
+      end
+    end
+  end
+
+  # The selected payment option must still exist, be active, and have its
+  # billing-profile requirement satisfied. Until now the selection was
+  # simply DISCARDED at conversion — never revalidated, never recorded on
+  # the order (`build_order_attrs/4` re-reads it into order metadata).
+  # A cart without a selection converts as before.
+  defp validate_payment_option(%Cart{payment_option_uuid: nil}), do: :ok
+
+  defp validate_payment_option(%Cart{payment_option_uuid: uuid}) do
+    case PhoenixKitBilling.get_payment_option(uuid) do
+      %{active: true} -> :ok
+      _ -> {:error, :payment_option_unavailable}
+    end
+  rescue
+    _ -> {:error, :payment_option_unavailable}
+  end
+
+  # A cart with a shippable line needs a deliverable address — enforced in
+  # the CONTEXT, because the LiveView's completeness check lives on the
+  # review step and a crafted confirm_order event skips it, and because
+  # saved billing profiles were never required to carry an address at all.
+  defp validate_billing_completeness(%Cart{} = cart, opts) do
+    if items_require_shipping?(cart.items) do
+      cond do
+        uuid = Keyword.get(opts, :billing_profile_uuid) ->
+          validate_profile_completeness(uuid)
+
+        is_map(Keyword.get(opts, :billing_data)) ->
+          validate_billing_data_completeness(Keyword.get(opts, :billing_data))
+
+        true ->
+          {:error, {:billing_incomplete, ["billing details"]}}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp validate_profile_completeness(uuid) do
+    case PhoenixKitBilling.get_billing_profile(uuid) do
+      nil ->
+        {:error, :billing_profile_not_found}
+
+      profile ->
+        name_missing =
+          case profile.type do
+            "company" -> blank_field?(profile.company_name)
+            _ -> blank_field?(profile.first_name) and blank_field?(profile.name)
+          end
+
+        missing =
+          [
+            {name_missing, "name"},
+            {blank_field?(profile.address_line1), "address_line1"},
+            {blank_field?(profile.city), "city"},
+            {blank_field?(profile.postal_code), "postal_code"},
+            {blank_field?(profile.country), "country"}
+          ]
+          |> Enum.filter(&elem(&1, 0))
+          |> Enum.map(&elem(&1, 1))
+
+        if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
+    end
+  end
+
+  defp validate_billing_data_completeness(data) do
+    name_missing = blank_field?(data["first_name"]) and blank_field?(data["company_name"])
+
+    missing =
+      [
+        {name_missing, "name"},
+        {blank_field?(data["address_line1"]), "address_line1"},
+        {blank_field?(data["city"]), "city"},
+        {blank_field?(data["postal_code"]), "postal_code"},
+        {blank_field?(data["country"]), "country"}
+      ]
+      |> Enum.filter(&elem(&1, 0))
+      |> Enum.map(&elem(&1, 1))
+
+    if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
+  end
+
+  defp blank_field?(nil), do: true
+  defp blank_field?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank_field?(_), do: false
 
   # Re-validate the shipping method AFTER the checkout country has been
   # applied, not before: a method may be eligible for a country-less cart
@@ -2563,16 +2975,29 @@ defmodule PhoenixKitEcommerce do
   defp selected_shipping_method_available?(%Cart{shipping_method_uuid: nil}), do: true
 
   defp selected_shipping_method_available?(%Cart{} = cart) do
-    case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
-      nil ->
-        false
+    items = cart_items_loaded(cart)
 
-      method ->
-        ShippingMethod.available_for?(method, %{
-          weight_grams: cart.total_weight_grams || 0,
-          subtotal: cart.subtotal || Decimal.new("0"),
-          country: cart.shipping_country
-        })
+    # Nothing ships: a method left selected from when the cart still had a
+    # physical line is irrelevant - it is not being charged for, and it must
+    # not be able to block the order.
+    if items_require_shipping?(items) do
+      case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
+        nil ->
+          false
+
+        method ->
+          # SHIPPABLE weight, matching what listing and pricing use. On
+          # total weight a mixed cart could be quoted a method (priced on
+          # its 100g of physical goods) and then refused at conversion
+          # because a 50kg digital line pushed it over the cap.
+          ShippingMethod.available_for?(method, %{
+            weight_grams: shippable_weight_grams(items),
+            subtotal: cart.subtotal || Decimal.new("0"),
+            country: cart.shipping_country
+          })
+      end
+    else
+      true
     end
   end
 
@@ -2587,12 +3012,19 @@ defmodule PhoenixKitEcommerce do
           "unit_price" => Decimal.to_string(item.unit_price),
           "total" => Decimal.to_string(item.line_total),
           "sku" => item.product_sku,
-          "type" => "product"
+          "type" => "product",
+          # Carried so invoices and the confirmation page can render the
+          # unit the customer saw. Rides billing's existing line-item JSONB;
+          # first-class linkage is a billing-side change.
+          "price_unit" => (item.metadata || %{})["price_unit"]
         }
       end)
 
+    # A digital-only cart gets NO shipping line even when a method is still
+    # selected (a mixed cart that lost its last physical line keeps the
+    # association loaded); its charge is already zeroed by the totals.
     shipping_item =
-      if cart.shipping_method do
+      if cart.shipping_method && items_require_shipping?(cart.items) do
         [
           %{
             "name" => "Shipping: #{cart.shipping_method.name}",
@@ -2618,34 +3050,42 @@ defmodule PhoenixKitEcommerce do
     shipping_country = get_shipping_country(billing_profile_uuid, billing_data, cart)
 
     # Use string keys to match Billing.maybe_set_order_number behavior
-    base_attrs = %{
-      "currency" => cart.currency,
-      "line_items" => line_items,
-      "subtotal" => cart.subtotal,
-      "tax_amount" => cart.tax_amount || Decimal.new(0),
-      "tax_rate" => get_tax_rate(cart),
-      "discount_amount" => cart.discount_amount || Decimal.new(0),
-      "discount_code" => cart.discount_code,
-      "total" => cart.total,
-      "status" => "pending",
-      "metadata" => %{
-        "source" => "shop_checkout",
-        "cart_uuid" => cart.uuid,
-        # The shop session that placed this order. This is what lets the
-        # confirmation page recognise a guest as the person who just checked
-        # out, instead of treating knowledge of the order uuid as proof.
-        # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
-        #
-        # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
-        # from `cart.session_id` — by this point `assign_cart_to_user/2` has
-        # already nulled the column for every guest checkout. Passed as an
-        # argument rather than through `opts` so a caller of the public
-        # `convert_cart_to_order/2` cannot choose it.
-        "session_id" => placing_session_id,
-        "shipping_country" => shipping_country,
-        "shipping_method_uuid" => cart.shipping_method_uuid
+    base_attrs =
+      %{
+        "currency" => cart.currency,
+        "line_items" => line_items,
+        "subtotal" => cart.subtotal,
+        "tax_amount" => cart.tax_amount || Decimal.new(0),
+        "tax_rate" => get_tax_rate(cart),
+        "discount_amount" => cart.discount_amount || Decimal.new(0),
+        "discount_code" => cart.discount_code,
+        "total" => cart.total,
+        "status" => "pending",
+        "metadata" =>
+          %{
+            "source" => "shop_checkout",
+            "cart_uuid" => cart.uuid,
+            # The shop session that placed this order. This is what lets the
+            # confirmation page recognise a guest as the person who just checked
+            # out, instead of treating knowledge of the order uuid as proof.
+            # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+            #
+            # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
+            # from `cart.session_id` — by this point `assign_cart_to_user/2` has
+            # already nulled the column for every guest checkout. Passed as an
+            # argument rather than through `opts` so a caller of the public
+            # `convert_cart_to_order/2` cannot choose it.
+            "session_id" => placing_session_id,
+            "shipping_country" => shipping_country,
+            # nil for a digital-only order even when a stale selection remains
+            # on the cart - the order must not reference a method it never
+            # charged for.
+            "shipping_method_uuid" =>
+              if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
+          }
+          |> Map.merge(payment_option_metadata(cart))
       }
-    }
+      |> maybe_put_payment_option(cart)
 
     cond do
       # Logged-in user with billing profile
@@ -2681,6 +3121,100 @@ defmodule PhoenixKitEcommerce do
   end
 
   # Remove _unused_ prefixed keys that Phoenix LiveView adds
+  # The money path's audit row. Written after commit, PII-safe (uuids,
+  # counts, total - never the customer's name, address or email).
+  #
+  # ⚠️ The action is DELIBERATELY not the notify action ("shop.order_placed"):
+  # `Activity.log/1` auto-derives notifications from registered actions, so
+  # reusing it here would deliver a duplicate on top of the explicit
+  # fan-out. `target_uuid` stays nil for the same reason - a targeted audit
+  # row with a registered action becomes a notification.
+  defp log_order_converted(order) do
+    PhoenixKitEcommerce.Activity.log("shop.order_converted",
+      actor_uuid: order.user_uuid,
+      resource_type: "order",
+      resource_uuid: order.uuid,
+      mode: "checkout",
+      metadata: %{
+        "order_number" => order.order_number,
+        "currency" => order.currency,
+        "total" => to_string(order.total),
+        "item_count" => length(order.line_items || [])
+      }
+    )
+  end
+
+  # First-class linkage (billing Order.payment_option_uuid, core V162) so an
+  # operator can see WHICH configured option a customer chose - several
+  # options share one payment_method.
+  #
+  # ⚠️ The guard checks the host's MIGRATED VERSION, not the schema. The
+  # schema always carries the field once billing is updated; what varies is
+  # whether the host has actually run `mix phoenix_kit.update`. Checking
+  # `__schema__(:fields)` therefore guarded nothing and every order insert
+  # died with `column "payment_option_uuid" does not exist` - caught by
+  # driving a real checkout in the browser, not by any test or review.
+  defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: nil}), do: attrs
+
+  defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: uuid}) do
+    if payment_option_column_available?() do
+      Map.put(attrs, "payment_option_uuid", uuid)
+    else
+      attrs
+    end
+  end
+
+  # V162 added the column. Cached in :persistent_term because this runs on
+  # every checkout and the answer only changes when an operator migrates -
+  # at which point a restart (or a cache clear) picks it up.
+  #
+  # This constant is the ONLY thing standing between a host below that
+  # version and a crash on a missing column, so it has to track the core
+  # migration's real number: it was 161 until core merged a different V161
+  # (citext username) ahead of this one.
+  @payment_option_version 162
+  @payment_option_cache_key {__MODULE__, :payment_option_column?}
+
+  defp payment_option_column_available? do
+    case :persistent_term.get(@payment_option_cache_key, :unknown) do
+      :unknown ->
+        # `Migration.migrated_version/0` only works INSIDE a migration
+        # runner - at runtime it raises "could not find migration runner
+        # process", which the rescue below turned into a permanent false.
+        # `migrated_version_runtime/1` is core's runtime accessor (the same
+        # one `phoenix_kit.status` and the module coordinator use).
+        available? =
+          PostgresMigrations.migrated_version_runtime([]) >=
+            @payment_option_version
+
+        :persistent_term.put(@payment_option_cache_key, available?)
+        available?
+
+      cached ->
+        cached
+    end
+  rescue
+    # Cannot tell -> do not write the column. An order that records the
+    # payment option only in metadata is a smaller failure than an order
+    # that cannot be placed at all.
+    _ -> false
+  end
+
+  # The customer's validated payment choice, also recorded in metadata: the
+  # column carries the LINK (nulled if the option is later deleted), the
+  # metadata carries the code, so a deleted option still degrades to "it
+  # was a bank transfer" rather than to nothing.
+  defp payment_option_metadata(%Cart{payment_option_uuid: nil}), do: %{}
+
+  defp payment_option_metadata(%Cart{payment_option_uuid: uuid}) do
+    case PhoenixKitBilling.get_payment_option(uuid) do
+      %{code: code} -> %{"payment_option_uuid" => uuid, "payment_option_code" => code}
+      _ -> %{"payment_option_uuid" => uuid}
+    end
+  rescue
+    _ -> %{"payment_option_uuid" => uuid}
+  end
+
   defp clean_billing_data(data) when is_map(data) do
     data
     |> Enum.reject(fn {key, _value} ->
@@ -3148,7 +3682,16 @@ defmodule PhoenixKitEcommerce do
         acc + i.quantity
       end)
 
-    shipping_amount = calculate_shipping(cart, subtotal, total_weight)
+    # No shippable line, no shipping charge - the selected method (if any)
+    # prices at zero and the order will omit the shipping line entirely.
+    # Method pricing sees only the SHIPPABLE weight, so digital lines can't
+    # move a mixed cart across a method's weight brackets.
+    shipping_amount =
+      if items_require_shipping?(items) do
+        calculate_shipping(cart, subtotal, shippable_weight_grams(items))
+      else
+        Decimal.new("0")
+      end
 
     # Calculate tax over the TAXABLE portion of the cart only.
     #
@@ -3667,45 +4210,121 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
-  Merges localized fields from new attributes into existing product.
+  Merges import attributes into an existing product.
 
-  Preserves existing translations while adding new ones from attrs.
-  Non-localized fields are replaced entirely.
+  A feed states what it knows; it cannot state what it does not know. The
+  importers always emit the full attribute set, so a column the file omits
+  arrives as a blank — and treating that blank as an instruction meant a
+  routine second import DELETED data the file never mentioned:
+
+    * a blank Body (HTML) cell erased that product's description in *every*
+      language, not merely the imported one;
+    * a feed with no image columns cleared the product's images and vendor;
+    * `metadata` was rebuilt from the feed, dropping the admin's option
+      price modifiers, image mappings, price-display unit and custom keys.
+
+  So a blank incoming value leaves the stored one alone, localized maps
+  merge per language, and `metadata` merges per key. Anything the feed does
+  carry still wins — including a value that clears a single translation.
 
   ## Examples
 
       iex> merge_localized_attrs(%Product{title: %{"en-US" => "Old"}}, %{title: %{"es-ES" => "Nuevo"}})
       %{title: %{"en-US" => "Old", "es-ES" => "Nuevo"}}
   """
+  @localized_import_fields [:title, :slug, :description, :body_html, :seo_title, :seo_description]
+
   def merge_localized_attrs(existing, new_attrs) do
-    localized_fields = [:title, :slug, :description, :body_html, :seo_title, :seo_description]
+    language = import_language(new_attrs)
 
-    # Start with all new attrs
-    Enum.reduce(localized_fields, new_attrs, fn field, acc ->
-      existing_map = Map.get(existing, field) || %{}
-      new_map = get_attr(acc, field) || %{}
+    @localized_import_fields
+    |> Enum.reduce(new_attrs, fn field, acc ->
+      merge_localized_field(acc, existing, field, language)
+    end)
+    |> merge_import_metadata(existing)
+  end
 
-      # Only merge if there's something to merge
-      if map_size(new_map) > 0 do
-        # Merge: new values take precedence for same language
-        merged = Map.merge(existing_map, new_map)
-        put_attr(acc, field, merged)
-      else
-        acc
+  defp merge_localized_field(attrs, existing, field, language) do
+    existing_map = Map.get(existing, field) || %{}
+    new_map = get_attr(attrs, field) || %{}
+
+    cond do
+      map_size(new_map) > 0 ->
+        put_attr(attrs, field, Map.merge(existing_map, new_map))
+
+      # The column IS in the file and its cell is empty: clear that one
+      # language. Writing `%{}` here erased every OTHER language too, which
+      # no feed ever asked for.
+      has_attr?(attrs, field) and is_binary(language) ->
+        put_attr(attrs, field, Map.delete(existing_map, language))
+
+      true ->
+        drop_attr(attrs, field)
+    end
+  end
+
+  # The language a set of import attrs is written in — read off whichever
+  # localized map carries one. `title` is required, so this is nil only for a
+  # row that will fail validation anyway.
+  defp import_language(attrs) do
+    Enum.find_value(@localized_import_fields, fn field ->
+      case get_attr(attrs, field) do
+        map when is_map(map) and map_size(map) > 0 -> map |> Map.keys() |> List.first()
+        _ -> nil
       end
     end)
   end
+
+  # `metadata` is DERIVED (option values, price modifiers, image mappings),
+  # not a column, so an import that describes no options is not asking to
+  # delete the admin's — or another importer's — namespaces.
+  #
+  # The merge is DEEP because these namespaces are keyed by option: a feed
+  # that ships `_price_modifiers => %{"size" => …}` says nothing about the
+  # admin-created `engraving` option living beside it, and a top-level merge
+  # deleted it. A leaf the feed does carry still wins.
+  defp merge_import_metadata(attrs, existing) do
+    case get_attr(attrs, :metadata) do
+      nil ->
+        attrs
+
+      incoming ->
+        put_attr(attrs, :metadata, deep_merge(Map.get(existing, :metadata) || %{}, incoming))
+    end
+  end
+
+  defp deep_merge(stored, incoming) when is_map(stored) and is_map(incoming) do
+    Map.merge(stored, incoming, fn _key, old, new -> deep_merge(old, new) end)
+  end
+
+  defp deep_merge(_stored, incoming), do: incoming
 
   # Helper to get attribute from either atom or string keyed map
   defp get_attr(attrs, key) when is_atom(key) do
     Map.get(attrs, key) || Map.get(attrs, to_string(key))
   end
 
-  # Helper to put attribute preserving the map's key type
+  defp has_attr?(attrs, key) when is_atom(key) do
+    Map.has_key?(attrs, key) or Map.has_key?(attrs, to_string(key))
+  end
+
+  # Remove an attribute under either key spelling, so the changeset never
+  # sees it and the stored value survives.
+  defp drop_attr(attrs, key) when is_atom(key) do
+    attrs |> Map.delete(key) |> Map.delete(to_string(key))
+  end
+
+  # Helper to put attribute preserving the map's key type.
+  #
+  # When the key is absent entirely, follow the spelling the REST of the map
+  # uses: Ecto refuses a params map with mixed atom and string keys, so
+  # adding `:metadata` to an otherwise string-keyed import row raised a
+  # CastError instead of saving.
   defp put_attr(attrs, key, value) when is_atom(key) do
     cond do
       Map.has_key?(attrs, key) -> Map.put(attrs, key, value)
       Map.has_key?(attrs, to_string(key)) -> Map.put(attrs, to_string(key), value)
+      Enum.any?(Map.keys(attrs), &is_binary/1) -> Map.put(attrs, to_string(key), value)
       true -> Map.put(attrs, key, value)
     end
   end

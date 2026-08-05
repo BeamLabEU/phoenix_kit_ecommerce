@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -102,34 +103,8 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   end
 
   @impl true
-  def handle_event("delete", _params, socket) do
-    product = socket.assigns.product
-
-    file_uuids =
-      if socket.assigns.delete_media_checked,
-        do: Shop.collect_product_file_uuids(product),
-        else: []
-
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
-
-        {:noreply,
-         socket
-         |> put_flash(:info, gettext("Product deleted"))
-         |> push_navigate(to: Routes.path("/admin/shop/products"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
-    end
+  def handle_event("delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("delete", params, socket) end)
   end
 
   @impl true
@@ -175,6 +150,36 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
       |> assign(:product_seo_description, product_seo_description)
 
     {:noreply, socket}
+  end
+
+  defp gated_event("delete", _params, socket) do
+    product = socket.assigns.product
+
+    file_uuids =
+      if socket.assigns.delete_media_checked,
+        do: Shop.collect_product_file_uuids(product),
+        else: []
+
+    case Shop.delete_product(product) do
+      {:ok, _} ->
+        Activity.log("shop.product_deleted",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "product",
+          resource_uuid: product.uuid,
+          metadata: %{"status" => product.status}
+        )
+
+        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, gettext("Product deleted"))
+         |> push_navigate(to: Routes.path("/admin/shop/products"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
+    end
   end
 
   @impl true
