@@ -5,11 +5,11 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
 
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Web.Authz
 
   @impl true
   def mount(_params, _session, socket) do
@@ -26,54 +26,15 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
   end
 
   @impl true
-  def handle_event("toggle_active", %{"uuid" => uuid}, socket) do
+  def handle_event("toggle_active", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      method = Shop.get_shipping_method!(uuid)
-      {:ok, updated} = Shop.update_shipping_method(method, %{active: !method.active})
-
-      Activity.log("shop.shipping_method_updated",
-        actor_uuid: Activity.actor_uuid(socket),
-        actor_role: Activity.actor_role(socket),
-        resource_type: "shipping_method",
-        resource_uuid: updated.uuid,
-        metadata: %{"active" => updated.active, "slug" => updated.slug}
-      )
-
-      methods =
-        Enum.map(socket.assigns.methods, fn m ->
-          if m.uuid == updated.uuid, do: updated, else: m
-        end)
-
-      {:noreply, assign(socket, :methods, methods)}
+      gated_event("toggle_active", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("delete", %{"uuid" => uuid}, socket) do
-    Authz.authorize(socket, :manage_settings, fn ->
-      method = Shop.get_shipping_method!(uuid)
-
-      case Shop.delete_shipping_method(method) do
-        {:ok, _} ->
-          Activity.log("shop.shipping_method_deleted",
-            actor_uuid: Activity.actor_uuid(socket),
-            actor_role: Activity.actor_role(socket),
-            resource_type: "shipping_method",
-            resource_uuid: method.uuid,
-            metadata: %{"slug" => method.slug}
-          )
-
-          methods = Enum.reject(socket.assigns.methods, &(&1.uuid == method.uuid))
-
-          {:noreply,
-           socket
-           |> assign(:methods, methods)
-           |> put_flash(:info, gettext("Shipping method deleted"))}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, gettext("Failed to delete shipping method"))}
-      end
-    end)
+  def handle_event("delete", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn -> gated_event("delete", params, socket) end)
   end
 
   @impl true
@@ -252,4 +213,49 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
 
   defp format_weight(grams) when grams >= 1000, do: "#{Float.round(grams / 1000, 1)} kg"
   defp format_weight(grams), do: "#{grams} g"
+
+  defp gated_event("toggle_active", %{"uuid" => uuid}, socket) do
+    method = Shop.get_shipping_method!(uuid)
+    {:ok, updated} = Shop.update_shipping_method(method, %{active: !method.active})
+
+    Activity.log("shop.shipping_method_updated",
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "shipping_method",
+      resource_uuid: updated.uuid,
+      metadata: %{"active" => updated.active, "slug" => updated.slug}
+    )
+
+    methods =
+      Enum.map(socket.assigns.methods, fn m ->
+        if m.uuid == updated.uuid, do: updated, else: m
+      end)
+
+    {:noreply, assign(socket, :methods, methods)}
+  end
+
+  defp gated_event("delete", %{"uuid" => uuid}, socket) do
+    method = Shop.get_shipping_method!(uuid)
+
+    case Shop.delete_shipping_method(method) do
+      {:ok, _} ->
+        Activity.log("shop.shipping_method_deleted",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "shipping_method",
+          resource_uuid: method.uuid,
+          metadata: %{"slug" => method.slug}
+        )
+
+        methods = Enum.reject(socket.assigns.methods, &(&1.uuid == method.uuid))
+
+        {:noreply,
+         socket
+         |> assign(:methods, methods)
+         |> put_flash(:info, gettext("Shipping method deleted"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to delete shipping method"))}
+    end
+  end
 end

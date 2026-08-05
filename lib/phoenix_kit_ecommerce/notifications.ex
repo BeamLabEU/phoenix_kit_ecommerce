@@ -31,6 +31,7 @@ defmodule PhoenixKitEcommerce.Notifications do
   require Logger
 
   alias PhoenixKit.Notifications
+  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
   alias PhoenixKit.Utils.Routes
@@ -75,7 +76,7 @@ defmodule PhoenixKitEcommerce.Notifications do
   defp notify_customer_of_order(%{user_uuid: nil}), do: :ok
 
   defp notify_customer_of_order(order) do
-    case PhoenixKit.Users.Auth.get_user(order.user_uuid) do
+    case Auth.get_user(order.user_uuid) do
       %{confirmed_at: confirmed} = _user when not is_nil(confirmed) ->
         Notifications.create(%{
           recipient_uuid: order.user_uuid,

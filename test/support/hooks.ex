@@ -17,6 +17,8 @@ defmodule PhoenixKitEcommerce.Test.Hooks do
 
   import Phoenix.Component, only: [assign: 3]
 
+  alias PhoenixKit.Users.Auth.Scope
+
   @doc """
   `on_mount` callback. Reads `"phoenix_kit_test_scope"` from session and
   assigns `:phoenix_kit_current_scope` / `:phoenix_kit_current_user`
@@ -31,7 +33,7 @@ defmodule PhoenixKitEcommerce.Test.Hooks do
         # rather than leaving the key absent (layouts read it on every page).
         socket =
           socket
-          |> assign(:phoenix_kit_current_scope, PhoenixKit.Users.Auth.Scope.for_user(nil))
+          |> assign(:phoenix_kit_current_scope, Scope.for_user(nil))
           |> assign(:phoenix_kit_current_user, nil)
 
         {:cont, socket}

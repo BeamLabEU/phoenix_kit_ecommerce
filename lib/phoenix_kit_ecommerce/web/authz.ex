@@ -28,6 +28,7 @@ defmodule PhoenixKitEcommerce.Web.Authz do
   """
 
   alias PhoenixKit.Users.Auth.Scope
+  alias PhoenixKit.Utils.Routes
 
   @doc """
   True when the socket's scope holds the given shop capability.
@@ -69,7 +70,7 @@ defmodule PhoenixKitEcommerce.Web.Authz do
       {:ok,
        socket
        |> Phoenix.LiveView.put_flash(:error, denial_message())
-       |> Phoenix.LiveView.push_navigate(to: PhoenixKit.Utils.Routes.path("/admin/shop"))}
+       |> Phoenix.LiveView.push_navigate(to: Routes.path("/admin/shop"))}
     end
   end
 

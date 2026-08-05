@@ -41,7 +41,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+       |> push_navigate(to: Routes.path("/"))}
     end
   end
 
@@ -390,6 +390,21 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
+  # Options selected or not, the cart line is created the same way; the
+  # opts differ only by the specs map.
+  defp add_to_cart(cart, product, quantity, selected_specs, socket) do
+    opts = [language: socket.assigns.current_language]
+
+    opts =
+      if selected_specs != %{} and map_size(selected_specs) > 0 do
+        Keyword.put(opts, :selected_specs, selected_specs)
+      else
+        opts
+      end
+
+    Shop.add_to_cart(cart, product, quantity, opts)
+  end
+
   defp do_add_to_cart_impl(socket) do
     socket = assign(socket, :adding_to_cart, true)
 
@@ -409,18 +424,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       calculated_price: calculated_price
     } = socket.assigns
 
-    # Add to cart with specs if any options were selected
-    has_specs = selected_specs != %{} and map_size(selected_specs) > 0
-
-    add_result =
-      if has_specs do
-        Shop.add_to_cart(cart, product, quantity,
-          selected_specs: selected_specs,
-          language: socket.assigns.current_language
-        )
-      else
-        Shop.add_to_cart(cart, product, quantity, language: socket.assigns.current_language)
-      end
+    add_result = add_to_cart(cart, product, quantity, selected_specs, socket)
 
     case add_result do
       {:ok, updated_cart} ->

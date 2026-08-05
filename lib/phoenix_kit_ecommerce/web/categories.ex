@@ -12,7 +12,6 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
 
-  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
@@ -20,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
@@ -103,34 +103,8 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   end
 
   @impl true
-  def handle_event("delete", %{"uuid" => uuid}, socket) do
-    Authz.authorize(socket, :manage_catalog, fn ->
-      if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
-        category = Shop.get_category!(uuid)
-
-        case Shop.delete_category(category) do
-          {:ok, _} ->
-            Activity.log("shop.category_deleted",
-              actor_uuid: Activity.actor_uuid(socket),
-              actor_role: Activity.actor_role(socket),
-              resource_type: "category",
-              resource_uuid: category.uuid,
-              metadata: %{"status" => category.status}
-            )
-
-            {:noreply,
-             socket
-             |> load_static_category_data()
-             |> load_filtered_categories()
-             |> put_flash(:info, gettext("Category deleted"))}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, gettext("Failed to delete category"))}
-        end
-      else
-        {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-      end
-    end)
+  def handle_event("delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("delete", params, socket) end)
   end
 
   # Bulk action modals
@@ -165,81 +139,22 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   # Bulk actions (require admin role)
 
   @impl true
-  def handle_event("bulk_change_status", %{"status" => status}, socket) do
+  def handle_event("bulk_change_status", params, socket) do
     Authz.authorize(socket, :manage_catalog, fn ->
-      if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
-        uuids = socket.assigns.bulk_uuids
-        count = Shop.bulk_update_category_status(uuids, status)
-
-        Activity.log("shop.categories_status_changed",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "category",
-          metadata: %{"status" => status, "count" => count}
-        )
-
-        {:noreply,
-         socket
-         |> load_static_category_data()
-         |> load_filtered_categories()
-         |> assign(:bulk_uuids, [])
-         |> assign(:show_bulk_modal, nil)
-         |> put_flash(
-           :info,
-           gettext("%{count} categories updated to %{status}", count: count, status: status)
-         )}
-      else
-        {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-      end
+      gated_event("bulk_change_status", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
+  def handle_event("bulk_change_parent", params, socket) do
     Authz.authorize(socket, :manage_catalog, fn ->
-      if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
-        uuids = socket.assigns.bulk_uuids
-        parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
-        count = Shop.bulk_update_category_parent(uuids, parent_uuid)
-
-        {:noreply,
-         socket
-         |> load_static_category_data()
-         |> load_filtered_categories()
-         |> assign(:bulk_uuids, [])
-         |> assign(:show_bulk_modal, nil)
-         |> put_flash(:info, gettext("%{count} categories updated", count: count))}
-      else
-        {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-      end
+      gated_event("bulk_change_parent", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("bulk_delete", _params, socket) do
-    Authz.authorize(socket, :manage_catalog, fn ->
-      if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
-        uuids = socket.assigns.bulk_uuids
-        count = Shop.bulk_delete_categories(uuids)
-
-        Activity.log("shop.categories_bulk_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "category",
-          metadata: %{"count" => count}
-        )
-
-        {:noreply,
-         socket
-         |> load_static_category_data()
-         |> load_filtered_categories()
-         |> assign(:bulk_uuids, [])
-         |> assign(:show_bulk_modal, nil)
-         |> put_flash(:info, gettext("%{count} categories deleted", count: count))}
-      else
-        {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-      end
-    end)
+  def handle_event("bulk_delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("bulk_delete", params, socket) end)
   end
 
   # ============================================
@@ -694,5 +609,102 @@ defmodule PhoenixKitEcommerce.Web.Categories do
         </div>
       <% end %>
     """
+  end
+
+  defp gated_event("delete", %{"uuid" => uuid}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      category = Shop.get_category!(uuid)
+
+      case Shop.delete_category(category) do
+        {:ok, _} ->
+          Activity.log("shop.category_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "category",
+            resource_uuid: category.uuid,
+            metadata: %{"status" => category.status}
+          )
+
+          {:noreply,
+           socket
+           |> load_static_category_data()
+           |> load_filtered_categories()
+           |> put_flash(:info, gettext("Category deleted"))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete category"))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_change_status", %{"status" => status}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      count = Shop.bulk_update_category_status(uuids, status)
+
+      Activity.log("shop.categories_status_changed",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "category",
+        metadata: %{"status" => status, "count" => count}
+      )
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(
+         :info,
+         gettext("%{count} categories updated to %{status}", count: count, status: status)
+       )}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
+      count = Shop.bulk_update_category_parent(uuids, parent_uuid)
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(:info, gettext("%{count} categories updated", count: count))}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_delete", _params, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      count = Shop.bulk_delete_categories(uuids)
+
+      Activity.log("shop.categories_bulk_deleted",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "category",
+        metadata: %{"count" => count}
+      )
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(:info, gettext("%{count} categories deleted", count: count))}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
   end
 end

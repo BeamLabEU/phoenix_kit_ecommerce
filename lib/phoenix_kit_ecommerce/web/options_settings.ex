@@ -8,10 +8,10 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
 
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.OptionTypes
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
@@ -138,101 +138,28 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   end
 
   @impl true
-  def handle_event("save_option", %{"option" => params}, socket) do
+  def handle_event("save_option", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn -> gated_event("save_option", params, socket) end)
+  end
+
+  @impl true
+  def handle_event("delete_option", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      form_data = parse_form_params(params)
-      opt = build_option(form_data)
-
-      current = socket.assigns.options
-      editing = socket.assigns.editing_option
-
-      result = save_option_change(editing, current, opt)
-
-      case result do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> assign(:options, Options.get_global_options())
-           |> assign(:show_modal, false)
-           |> assign(:editing_option, nil)
-           |> assign(:form_data, initial_form_data())
-           |> put_flash(:info, if(editing, do: "Option updated", else: "Option created"))}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Error: #{reason}")}
-      end
+      gated_event("delete_option", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("delete_option", %{"key" => key}, socket) do
+  def handle_event("toggle_enabled", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      case Options.remove_global_option(key) do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> assign(:options, Options.get_global_options())
-           |> put_flash(:info, "Option deleted")}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Error: #{reason}")}
-      end
+      gated_event("toggle_enabled", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("toggle_enabled", %{"key" => key}, socket) do
+  def handle_event("reorder_options", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      current = socket.assigns.options
-
-      updated =
-        Enum.map(current, fn opt ->
-          if opt["key"] == key do
-            current_enabled = Map.get(opt, "enabled", true)
-            Map.put(opt, "enabled", !current_enabled)
-          else
-            opt
-          end
-        end)
-
-      case Options.update_global_options(updated) do
-        {:ok, _} ->
-          toggled = Enum.find(updated, &(&1["key"] == key))
-          label = if Map.get(toggled, "enabled", true), do: "enabled", else: "disabled"
-
-          {:noreply,
-           socket
-           |> assign(:options, Options.get_global_options())
-           |> put_flash(:info, "Option #{key} #{label}")}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Error: #{reason}")}
-      end
-    end)
-  end
-
-  @impl true
-  def handle_event("reorder_options", %{"ordered_ids" => ordered_keys}, socket) do
-    Authz.authorize(socket, :manage_settings, fn ->
-      current = socket.assigns.options
-
-      # Reorder options based on new order
-      reordered =
-        ordered_keys
-        |> Enum.with_index()
-        |> Enum.map(fn {key, idx} ->
-          opt = Enum.find(current, &(&1["key"] == key))
-          if opt, do: Map.put(opt, "position", idx), else: nil
-        end)
-        |> Enum.reject(&is_nil/1)
-
-      case Options.update_global_options(reordered) do
-        {:ok, _} ->
-          {:noreply, assign(socket, :options, Options.get_global_options())}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Reorder failed: #{reason}")}
-      end
+      gated_event("reorder_options", params, socket)
     end)
   end
 
@@ -892,4 +819,91 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   end
 
   defp format_options_with_modifiers(_), do: ""
+
+  defp gated_event("save_option", %{"option" => params}, socket) do
+    form_data = parse_form_params(params)
+    opt = build_option(form_data)
+
+    current = socket.assigns.options
+    editing = socket.assigns.editing_option
+
+    result = save_option_change(editing, current, opt)
+
+    case result do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:options, Options.get_global_options())
+         |> assign(:show_modal, false)
+         |> assign(:editing_option, nil)
+         |> assign(:form_data, initial_form_data())
+         |> put_flash(:info, if(editing, do: "Option updated", else: "Option created"))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+    end
+  end
+
+  defp gated_event("delete_option", %{"key" => key}, socket) do
+    case Options.remove_global_option(key) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:options, Options.get_global_options())
+         |> put_flash(:info, "Option deleted")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+    end
+  end
+
+  defp gated_event("toggle_enabled", %{"key" => key}, socket) do
+    current = socket.assigns.options
+
+    updated =
+      Enum.map(current, fn opt ->
+        if opt["key"] == key do
+          current_enabled = Map.get(opt, "enabled", true)
+          Map.put(opt, "enabled", !current_enabled)
+        else
+          opt
+        end
+      end)
+
+    case Options.update_global_options(updated) do
+      {:ok, _} ->
+        toggled = Enum.find(updated, &(&1["key"] == key))
+        label = if Map.get(toggled, "enabled", true), do: "enabled", else: "disabled"
+
+        {:noreply,
+         socket
+         |> assign(:options, Options.get_global_options())
+         |> put_flash(:info, "Option #{key} #{label}")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+    end
+  end
+
+  defp gated_event("reorder_options", %{"ordered_ids" => ordered_keys}, socket) do
+    current = socket.assigns.options
+
+    # Reorder options based on new order
+    reordered =
+      ordered_keys
+      |> Enum.with_index()
+      |> Enum.map(fn {key, idx} ->
+        opt = Enum.find(current, &(&1["key"] == key))
+        if opt, do: Map.put(opt, "position", idx), else: nil
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    case Options.update_global_options(reordered) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :options, Options.get_global_options())}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Reorder failed: #{reason}")}
+    end
+  end
 end

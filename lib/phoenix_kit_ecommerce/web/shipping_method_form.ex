@@ -5,12 +5,12 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.ShippingMethod
+  alias PhoenixKitEcommerce.Web.Authz
 
   @impl true
   def mount(_params, _session, socket) do
@@ -64,10 +64,8 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   end
 
   @impl true
-  def handle_event("save", %{"shipping_method" => params}, socket) do
-    Authz.authorize(socket, :manage_settings, fn ->
-      save_method(socket, socket.assigns.live_action, params)
-    end)
+  def handle_event("save", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn -> gated_event("save", params, socket) end)
   end
 
   defp save_method(socket, :new, params) do
@@ -356,5 +354,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     socket
     |> assign(:changeset, changeset)
     |> assign(:form, to_form(changeset))
+  end
+
+  defp gated_event("save", %{"shipping_method" => params}, socket) do
+    save_method(socket, socket.assigns.live_action, params)
   end
 end

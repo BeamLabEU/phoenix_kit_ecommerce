@@ -1313,19 +1313,7 @@ defmodule PhoenixKitEcommerce.Options do
       # `_option_values` upstream; without this Map.take an excluded value's
       # modifier (a "Gold" +100 on a product restricted to ["Red"]) still
       # widened the advertised range.
-      modifiers =
-        case opt["options"] do
-          allowed when is_list(allowed) and allowed != [] ->
-            # Every offered value participates: one WITHOUT a modifier entry
-            # costs the base price (0 delta), which is usually the cheap end
-            # of the range. Dropping it made a product whose default option
-            # is free advertise its most expensive combination as its only
-            # price.
-            Map.new(allowed, fn value -> {value, Map.get(modifiers, value, "0")} end)
-
-          _ ->
-            modifiers
-        end
+      modifiers = restrict_to_offered_values(modifiers, opt["options"])
 
       values = Map.values(modifiers) |> Enum.map(&parse_decimal/1)
 
@@ -1345,6 +1333,16 @@ defmodule PhoenixKitEcommerce.Options do
   end
 
   def get_effective_modifier_range(_, _), do: {Decimal.new("0"), Decimal.new("0")}
+
+  # Every offered value participates: one WITHOUT a modifier entry costs the
+  # base price (0 delta), which is usually the cheap end of the range.
+  # Dropping it made a product whose default option is free advertise its
+  # most expensive combination as its only price.
+  defp restrict_to_offered_values(modifiers, allowed) when is_list(allowed) and allowed != [] do
+    Map.new(allowed, fn value -> {value, Map.get(modifiers, value, "0")} end)
+  end
+
+  defp restrict_to_offered_values(modifiers, _allowed), do: modifiers
 
   defp resolve_modifiers(true, %{"_price_modifiers" => %{} = pm}, option_key, default_modifiers) do
     case Map.get(pm, option_key) do

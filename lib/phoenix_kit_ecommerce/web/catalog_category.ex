@@ -29,7 +29,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+       |> push_navigate(to: Routes.path("/"))}
     end
   end
 

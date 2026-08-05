@@ -6,6 +6,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -26,7 +27,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+       |> push_navigate(to: Routes.path("/"))}
     end
   end
 
