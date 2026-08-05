@@ -50,7 +50,10 @@
                     <% end %>
                   </div>
                   <div class="font-medium">
-                    {format_price(item["total"], @currency)}
+                    {PriceDisplay.render(nil, @currency, :order,
+                      amount: item["total"],
+                      unit: item["price_unit"]
+                    )}
                   </div>
                 </div>
               <% end %>

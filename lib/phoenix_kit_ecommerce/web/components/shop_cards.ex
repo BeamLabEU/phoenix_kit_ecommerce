@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Helpers
 
   @doc """
@@ -61,7 +62,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
         <div class="flex items-center gap-2">
           <span class="text-lg font-bold text-primary">
-            {Helpers.format_price(@product.price, @currency)}
+            {PriceDisplay.render(@product, @currency, :catalog, language: @language)}
           </span>
           <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
             <span class="text-sm text-base-content/40 line-through">

@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
@@ -130,12 +131,16 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     translatable_fields = Translations.product_fields()
     translations_map = TranslationTabs.build_translations_map(product, translatable_fields)
 
+    %{unit: price_unit, from: price_from} = PriceDisplay.settings(product)
+
     socket
     |> assign(:enabled_languages, enabled_languages)
     |> assign(:default_language, default_language)
     |> assign(:current_translation_language, default_language)
     |> assign(:show_translation_tabs, show_translations)
     |> assign(:product_translations, translations_map)
+    |> assign(:price_unit, price_unit)
+    |> assign(:price_from, price_from)
   end
 
   @impl true
@@ -194,6 +199,13 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:add_option_key, add_option_key)
     |> assign(:add_option_value, add_option_value)
     |> assign(:product_translations, product_translations)
+    # Keep the price-display inputs live across validate rounds and
+    # language-tab switches; without this a typed unit vanishes on the next
+    # keystroke elsewhere in the form.
+    |> assign(:price_unit, PriceDisplay.settings(%{
+      PriceDisplay.metadata_key() => PriceDisplay.build(product_params["price_unit"] || %{}, false)
+    }).unit)
+    |> assign(:price_from, product_params["price_from"] in ["true", true, "on"])
     |> then(&{:noreply, &1})
   end
 
@@ -249,7 +261,22 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
       end)
       |> Map.new()
 
-    product_params = Map.put(product_params, "metadata", cleaned_metadata)
+    # Price display (unit + "From") comes from real form inputs, folded in
+    # here because this build REPLACES metadata wholesale - a save that did
+    # not carry the fields would drop them.
+    cleaned_metadata =
+      case PriceDisplay.build(
+             product_params["price_unit"] || %{},
+             product_params["price_from"] in ["true", true, "on"]
+           ) do
+        empty when empty == %{} -> Map.delete(cleaned_metadata, PriceDisplay.metadata_key())
+        display -> Map.put(cleaned_metadata, PriceDisplay.metadata_key(), display)
+      end
+
+    product_params =
+      product_params
+      |> Map.drop(["price_unit", "price_from"])
+      |> Map.put("metadata", cleaned_metadata)
 
     # Extract featured and gallery from unified image list
     all_images = socket.assigns.all_image_uuids
@@ -869,6 +896,46 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                     name="product[taxable]"
                     checked={Ecto.Changeset.get_field(@changeset, :taxable)}
                     label={gettext("Charge tax on this product")}
+                    wrapper_class="h-12 px-4 bg-base-200 rounded-lg"
+                  />
+                </div>
+
+                <%!-- Row 3: How the price is written on the storefront --%>
+                <div class="form-control w-full">
+                  <label class="label" for="product_price_unit">
+                    <span class="label-text font-medium">{gettext("Price unit")}</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="product_price_unit"
+                    name={"product[price_unit][#{@current_translation_language}]"}
+                    value={@price_unit[@current_translation_language] || ""}
+                    maxlength="32"
+                    class="input input-bordered w-full"
+                    placeholder={gettext("e.g. per hour, per m², per litre")}
+                  />
+                  <label class="label">
+                    <span class="label-text-alt text-base-content/60">
+                      {gettext("Shown after the price (%{lang}). Leave empty for none.",
+                        lang: @current_translation_language
+                      )}
+                    </span>
+                  </label>
+                  <%!-- Units for the other languages must survive a save made
+                        while a different tab is active. --%>
+                  <%= for {lang, text} <- @price_unit, lang != @current_translation_language do %>
+                    <input type="hidden" name={"product[price_unit][#{lang}]"} value={text} />
+                  <% end %>
+                </div>
+
+                <div class="form-control w-full">
+                  <label class="label">
+                    <span class="label-text font-medium">{gettext("Price display")}</span>
+                  </label>
+                  <.checkbox
+                    name="product[price_from]"
+                    checked={@price_from}
+                    label={gettext("Show \"From\" before the price")}
                     wrapper_class="h-12 px-4 bg-base-200 rounded-lg"
                   />
                 </div>

@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -724,7 +725,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <%= if @price_affecting_specs != [] do %>
                 <%!-- Has price-affecting specs - show calculated price --%>
                 <span class="text-3xl font-bold text-primary">
-                  {format_price(@calculated_price, @currency)}
+                  {PriceDisplay.render(@product, @currency, :selected,
+                    amount: @calculated_price,
+                    language: @current_language
+                  )}
                 </span>
                 <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">
@@ -734,7 +738,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <% else %>
                 <%!-- Simple product - show base price --%>
                 <span class="text-3xl font-bold text-primary">
-                  {format_price(@product.price, @currency)}
+                  {PriceDisplay.render(@product, @currency, :catalog, language: @current_language)}
                 </span>
                 <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">

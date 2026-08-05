@@ -1315,8 +1315,16 @@ defmodule PhoenixKitEcommerce.Options do
       # widened the advertised range.
       modifiers =
         case opt["options"] do
-          allowed when is_list(allowed) and allowed != [] -> Map.take(modifiers, allowed)
-          _ -> modifiers
+          allowed when is_list(allowed) and allowed != [] ->
+            # Every offered value participates: one WITHOUT a modifier entry
+            # costs the base price (0 delta), which is usually the cheap end
+            # of the range. Dropping it made a product whose default option
+            # is free advertise its most expensive combination as its only
+            # price.
+            Map.new(allowed, fn value -> {value, Map.get(modifiers, value, "0")} end)
+
+          _ ->
+            modifiers
         end
 
       values = Map.values(modifiers) |> Enum.map(&parse_decimal/1)

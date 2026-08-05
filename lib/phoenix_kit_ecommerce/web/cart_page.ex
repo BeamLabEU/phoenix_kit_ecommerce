@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
@@ -397,7 +398,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                 {format_price(item.line_total, @currency)}
                               </div>
                               <div class="text-xs text-base-content/50">
-                                {format_price(item.unit_price, @currency)} each
+                                {PriceDisplay.render(nil, @currency, :cart,
+                                  amount: item.unit_price,
+                                  unit: (item.metadata || %{})["price_unit"]
+                                )} each
                               </div>
                             </td>
                             <td>
