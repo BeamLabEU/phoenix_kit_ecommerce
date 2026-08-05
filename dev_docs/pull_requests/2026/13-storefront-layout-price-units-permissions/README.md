@@ -80,6 +80,22 @@ already links to the cart.
   unpreloaded association crashed the view) and kept a selected option
   value whose key survived but whose value the product no longer offers
 
+**Imports** (an adversarial sweep of the subsystem, after the above)
+- a re-import DELETED what the feed said nothing about: an omitted column
+  arrives as a blank, and that blank overwrote the stored value — erasing
+  the description in every language, the images, the vendor, and the
+  admin's option price modifiers, image mappings and custom metadata
+- slug lookup normalized the language to a dialect (`"en"` → `"en-US"`)
+  while every writer stores the shop's code verbatim, so on a shop whose
+  language is the base code, product and category pages 404'd and a
+  re-import could not match the product it had just created
+- a Cyrillic title slugified to an empty string, which the upsert reads as
+  "not found" — a Ukrainian catalogue re-imported itself on every run
+- a variant set with no readable price defaulted to zero and published a
+  FREE product; the row now fails and is reported
+- rows with a blank handle all grouped together, so unrelated products
+  merged into one and the extras became variants of the first
+
 ## Price units
 
 `PhoenixKitEcommerce.PriceDisplay` renders `From €40.00 per hour`. Storage
@@ -112,18 +128,22 @@ shared string delivers a duplicate. A test pins the contract.
 
 - `mix precommit` exit 0 (compile --warnings-as-errors, format, credo
   --strict, dialyzer)
-- 321 tests, 0 failures — **both** against the Hex pin and
+- 336 tests, 0 failures — **both** against the Hex pin and
   `PHOENIX_KIT_PATH=../phoenix_kit`; 5 consecutive runs stable
 - browser-verified through `phoenix_kit_parent`: storefront as guest AND
   logged-in against pre-change screenshots, admin pages structurally
   unchanged, the price unit rendering live, and a host-built storefront at
   the parent's own `/colors` URL proving the context API supports a host
   writing its own catalogue UI while sharing the module's cart
+- ⚠️ **needs core's `Utils.Slug` transliteration** (companion PR) for the
+  Cyrillic slug fix. Ecommerce degrades gracefully without it — the option
+  is ignored by an older core — and the tests that assert it are gated on
+  the capability, so this suite is green either way.
 
 ## Test plan
 
-- [x] 321 tests, 0 failures (Hex pin)
-- [x] 321 tests, 0 failures (local core)
+- [x] 336 tests, 0 failures (Hex pin)
+- [x] 336 tests, 0 failures (local core)
 - [x] 5/5 consecutive stable runs
 - [x] `mix format --check-formatted`, `credo --strict`, `dialyzer`
 - [x] Browser tour: guest + authenticated storefront, admin surface, price
