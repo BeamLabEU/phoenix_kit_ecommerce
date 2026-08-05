@@ -1365,6 +1365,15 @@ defmodule PhoenixKitEcommerce.Options do
     end
   end
 
+  # The legacy/override map shape (`%{"type" => "percent", "value" => "50"}`)
+  # is what `get_effective_modifier_info/3` reads on the CHARGED path, so
+  # the range must read it too. Falling through to 0 here made the catalog
+  # advertise a price the cart then disagreed with: "From $20" for an item
+  # whose Premium option charges $30.
+  defp parse_decimal(%{"value" => value}) when is_binary(value) and value != "" do
+    parse_decimal(value)
+  end
+
   defp parse_decimal(value) do
     require Logger
 

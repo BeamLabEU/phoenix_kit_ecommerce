@@ -2402,14 +2402,22 @@ defmodule PhoenixKitEcommerce do
   defp find_cheapest_shipping_method(methods, subtotal) do
     subtotal = subtotal || Decimal.new("0")
 
+    # Enum.min_by on %Decimal{} structs compares by ERLANG TERM ORDER, not
+    # value: `9.99` (coef 999, exp -2) sorts above `10` (coef 10, exp 0),
+    # so the auto-selection could pick the more expensive method and charge
+    # the customer for it. Same class as the price-range bug fixed in
+    # Options - compare with Decimal.compare/2.
     methods
-    |> Enum.min_by(fn method ->
-      if ShippingMethod.free_for?(method, subtotal) do
-        Decimal.new("0")
-      else
-        method.price || Decimal.new("999999")
-      end
-    end)
+    |> Enum.min_by(
+      fn method ->
+        if ShippingMethod.free_for?(method, subtotal) do
+          Decimal.new("0")
+        else
+          method.price || Decimal.new("999999")
+        end
+      end,
+      &(Decimal.compare(&1, &2) != :gt)
+    )
   end
 
   @doc """
@@ -2621,6 +2629,14 @@ defmodule PhoenixKitEcommerce do
       with :ok <- validate_shop_enabled(),
            :ok <- validate_cart_convertible(cart),
            {:ok, cart} <- try_lock_cart_for_conversion(cart),
+           # AGAIN on the locked, reloaded cart - contents only. Another tab
+           # can add a physical line (or empty the cart) between the pre-lock
+           # read and the lock; without this a cart that gained a shippable
+           # line converts with shipping_method_uuid still nil, i.e. physical
+           # goods shipped for free. The STATUS check is deliberately not
+           # repeated: the lock has already flipped it to "converting", and
+           # winning that flip is what proves it was active.
+           :ok <- validate_cart_contents(cart),
            # AFTER the cart lock, on locked product rows: an archive racing
            # the pre-transaction validation window cannot slip a
            # no-longer-active product into the order.
@@ -2801,10 +2817,15 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp validate_cart_convertible(%Cart{} = cart) do
-    cond do
-      cart.status != "active" ->
-        {:error, :cart_not_active}
+    if cart.status != "active" do
+      {:error, :cart_not_active}
+    else
+      validate_cart_contents(cart)
+    end
+  end
 
+  defp validate_cart_contents(%Cart{} = cart) do
+    cond do
       Enum.empty?(cart.items) ->
         {:error, :cart_empty}
 
@@ -2954,16 +2975,31 @@ defmodule PhoenixKitEcommerce do
   defp selected_shipping_method_available?(%Cart{shipping_method_uuid: nil}), do: true
 
   defp selected_shipping_method_available?(%Cart{} = cart) do
-    case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
-      nil ->
-        false
+    items = cart_items_loaded(cart)
 
-      method ->
-        ShippingMethod.available_for?(method, %{
-          weight_grams: cart.total_weight_grams || 0,
-          subtotal: cart.subtotal || Decimal.new("0"),
-          country: cart.shipping_country
-        })
+    cond do
+      # Nothing ships: a method left selected from when the cart still had
+      # a physical line is irrelevant - it is not being charged for, and it
+      # must not be able to block the order.
+      not items_require_shipping?(items) ->
+        true
+
+      true ->
+        case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
+          nil ->
+            false
+
+          method ->
+            # SHIPPABLE weight, matching what listing and pricing use. On
+            # total weight a mixed cart could be quoted a method (priced on
+            # its 100g of physical goods) and then refused at conversion
+            # because a 50kg digital line pushed it over the cap.
+            ShippingMethod.available_for?(method, %{
+              weight_grams: shippable_weight_grams(items),
+              subtotal: cart.subtotal || Decimal.new("0"),
+              country: cart.shipping_country
+            })
+        end
     end
   end
 

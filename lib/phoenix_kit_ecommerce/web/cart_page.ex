@@ -66,7 +66,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     {:ok, cart} = Shop.auto_select_shipping_method(cart, shipping_methods)
 
     # Get default currency from Billing
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(cart.currency)
 
     # Check if user is authenticated
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
