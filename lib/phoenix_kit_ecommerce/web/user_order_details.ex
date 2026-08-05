@@ -19,7 +19,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   alias PhoenixKitEcommerce.Web.Helpers, as: ShopHelpers
 
   import PhoenixKitEcommerce.Web.Helpers,
-    only: [format_price: 2, profile_display_name: 1, profile_address: 1]
+    only: [format_price: 2, profile_display_name: 1, profile_address: 1, profile_email: 1]
 
   @impl true
   def mount(%{"uuid" => uuid}, _session, socket) do

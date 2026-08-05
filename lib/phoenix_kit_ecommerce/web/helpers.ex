@@ -272,6 +272,17 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
+  Contact email from a billing profile STRUCT or an order's snapshot MAP.
+
+  The snapshot is a plain map, so `profile.email` raises on it — the crash
+  a rendered confirmation page hit after order pages started preferring
+  the snapshot. Same shape problem as `profile_display_name/1`.
+  """
+  def profile_email(profile) when is_struct(profile), do: profile.email
+  def profile_email(%{} = snapshot), do: snapshot["email"]
+  def profile_email(_), do: nil
+
+  @doc """
   The billing identity an order was placed with.
 
   Prefers the order's immutable `billing_snapshot` over the live billing
