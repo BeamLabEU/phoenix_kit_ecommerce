@@ -8,6 +8,8 @@ defmodule PhoenixKitEcommerce.Import.CSVParser do
   - Each variant row has Option1/Option2 values and prices
   """
 
+  alias PhoenixKit.Utils.Slug
+
   NimbleCSV.define(ShopifyCSV, separator: ",", escape: "\"")
 
   @doc """
@@ -49,7 +51,22 @@ defmodule PhoenixKitEcommerce.Import.CSVParser do
     # Group by Handle and reverse to maintain order
     rows
     |> Enum.reverse()
-    |> Enum.group_by(& &1["Handle"])
+    |> Enum.group_by(&group_key/1)
+  end
+
+  # The handle is what makes a row a VARIANT of the row above it. Rows with a
+  # blank handle share no such relationship, yet they all grouped under the
+  # same blank key: unrelated products merged into one, the first row's title
+  # won, and every other product silently became a variant of it.
+  #
+  # A blank handle falls back to the row's own title, which is what the
+  # merchant meant by it and — unlike a row number — stays the same when the
+  # file is re-exported in a different order, so a re-import still matches.
+  defp group_key(row) do
+    case row["Handle"] do
+      handle when is_binary(handle) and handle != "" -> handle
+      _ -> Slug.slugify(row["Title"] || "", transliterate: true)
+    end
   end
 
   @doc """

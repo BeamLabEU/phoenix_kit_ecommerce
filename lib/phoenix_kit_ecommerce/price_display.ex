@@ -97,25 +97,6 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   end
 
   @doc """
-  Merges a product's existing display namespace into incoming attrs when
-  those attrs do not carry one.
-
-  The CSV upsert path replaces `metadata` wholesale, so without this a
-  routine re-import silently deletes an admin's price unit.
-  """
-  def preserve(existing_metadata, new_metadata)
-
-  def preserve(existing, new) when is_map(existing) and is_map(new) do
-    case {Map.get(existing, @key), Map.has_key?(new, @key)} do
-      {nil, _} -> new
-      {_, true} -> new
-      {kept, false} -> Map.put(new, @key, kept)
-    end
-  end
-
-  def preserve(_existing, new), do: new
-
-  @doc """
   The unit text for a language, with default-language fallback.
 
   Returns nil when the product has no unit — callers render the plain price.

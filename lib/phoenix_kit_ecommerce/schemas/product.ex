@@ -36,6 +36,8 @@ defmodule PhoenixKitEcommerce.Product do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKit.Utils.Slug
+
   @type t :: %__MODULE__{}
 
   @statuses ["draft", "active", "archived"]
@@ -275,13 +277,11 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
+  # Core's shared slugifier, with transliteration on: the local ASCII-only
+  # version stripped every character of a Cyrillic title and stored an empty
+  # slug, which leaves the product with no URL at all.
   defp slugify(text) when is_binary(text) do
-    text
-    |> String.downcase()
-    |> String.replace(~r/[^\w\s-]/, "")
-    |> String.replace(~r/\s+/, "-")
-    |> String.replace(~r/-+/, "-")
-    |> String.trim("-")
+    Slug.slugify(text, transliterate: true)
   end
 
   defp slugify(_), do: ""

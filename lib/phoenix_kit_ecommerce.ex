@@ -52,7 +52,6 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
-  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
@@ -4206,60 +4205,93 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
-  Merges localized fields from new attributes into existing product.
+  Merges import attributes into an existing product.
 
-  Preserves existing translations while adding new ones from attrs.
-  Non-localized fields are replaced entirely.
+  A feed states what it knows; it cannot state what it does not know. The
+  importers always emit the full attribute set, so a column the file omits
+  arrives as a blank — and treating that blank as an instruction meant a
+  routine second import DELETED data the file never mentioned:
+
+    * a blank Body (HTML) cell erased that product's description in *every*
+      language, not merely the imported one;
+    * a feed with no image columns cleared the product's images and vendor;
+    * `metadata` was rebuilt from the feed, dropping the admin's option
+      price modifiers, image mappings, price-display unit and custom keys.
+
+  So a blank incoming value leaves the stored one alone, localized maps
+  merge per language, and `metadata` merges per key. Anything the feed does
+  carry still wins — including a value that clears a single translation.
 
   ## Examples
 
       iex> merge_localized_attrs(%Product{title: %{"en-US" => "Old"}}, %{title: %{"es-ES" => "Nuevo"}})
       %{title: %{"en-US" => "Old", "es-ES" => "Nuevo"}}
   """
-  def merge_localized_attrs(existing, new_attrs) do
-    localized_fields = [:title, :slug, :description, :body_html, :seo_title, :seo_description]
+  @localized_import_fields [:title, :slug, :description, :body_html, :seo_title, :seo_description]
 
-    # Start with all new attrs
-    Enum.reduce(localized_fields, new_attrs, fn field, acc ->
+  # Fields the importers always emit and where blank means "not in the feed".
+  # `price` and `status` are deliberately absent: the feed owns those, and
+  # both always carry a real value.
+  @blank_preserving_import_fields [:vendor, :tags, :images, :featured_image, :category_uuid]
+
+  def merge_localized_attrs(existing, new_attrs) do
+    @localized_import_fields
+    |> Enum.reduce(new_attrs, fn field, acc ->
       existing_map = Map.get(existing, field) || %{}
       new_map = get_attr(acc, field) || %{}
 
-      # Only merge if there's something to merge
       if map_size(new_map) > 0 do
-        # Merge: new values take precedence for same language
-        merged = Map.merge(existing_map, new_map)
-        put_attr(acc, field, merged)
+        put_attr(acc, field, Map.merge(existing_map, new_map))
       else
-        acc
+        # Leave the stored translations alone rather than writing %{} over them.
+        drop_attr(acc, field)
       end
     end)
-    |> preserve_price_display(existing)
+    |> merge_import_metadata(existing)
+    |> preserve_blank_import_fields(existing)
   end
 
-  # Non-localized fields are replaced wholesale, `metadata` included - so a
-  # routine CSV re-import (which rebuilds metadata from the feed and knows
-  # nothing about display settings) silently deleted an admin's price unit
-  # and "From" flag. Carry the namespace over when the incoming attrs do
-  # not supply one.
-  defp preserve_price_display(attrs, existing) do
-    incoming = get_attr(attrs, :metadata)
+  defp merge_import_metadata(attrs, existing) do
+    incoming = get_attr(attrs, :metadata) || %{}
+    stored = Map.get(existing, :metadata) || %{}
 
-    case PriceDisplay.preserve(existing.metadata || %{}, incoming || %{}) do
-      ^incoming -> attrs
-      preserved -> put_attr(attrs, :metadata, preserved)
-    end
+    put_attr(attrs, :metadata, Map.merge(stored, incoming))
   end
+
+  defp preserve_blank_import_fields(attrs, _existing) do
+    Enum.reduce(@blank_preserving_import_fields, attrs, fn field, acc ->
+      if blank_import_value?(get_attr(acc, field)), do: drop_attr(acc, field), else: acc
+    end)
+  end
+
+  defp blank_import_value?(nil), do: true
+  defp blank_import_value?(""), do: true
+  defp blank_import_value?([]), do: true
+  defp blank_import_value?(map) when is_map(map), do: map_size(map) == 0
+  defp blank_import_value?(_), do: false
 
   # Helper to get attribute from either atom or string keyed map
   defp get_attr(attrs, key) when is_atom(key) do
     Map.get(attrs, key) || Map.get(attrs, to_string(key))
   end
 
-  # Helper to put attribute preserving the map's key type
+  # Remove an attribute under either key spelling, so the changeset never
+  # sees it and the stored value survives.
+  defp drop_attr(attrs, key) when is_atom(key) do
+    attrs |> Map.delete(key) |> Map.delete(to_string(key))
+  end
+
+  # Helper to put attribute preserving the map's key type.
+  #
+  # When the key is absent entirely, follow the spelling the REST of the map
+  # uses: Ecto refuses a params map with mixed atom and string keys, so
+  # adding `:metadata` to an otherwise string-keyed import row raised a
+  # CastError instead of saving.
   defp put_attr(attrs, key, value) when is_atom(key) do
     cond do
       Map.has_key?(attrs, key) -> Map.put(attrs, key, value)
       Map.has_key?(attrs, to_string(key)) -> Map.put(attrs, to_string(key), value)
+      Enum.any?(Map.keys(attrs), &is_binary/1) -> Map.put(attrs, to_string(key), value)
       true -> Map.put(attrs, key, value)
     end
   end

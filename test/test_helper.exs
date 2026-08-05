@@ -160,4 +160,21 @@ i18n_exclude =
 
 integration_exclude = if repo_available, do: [], else: [:integration]
 
-ExUnit.start(exclude: i18n_exclude ++ integration_exclude)
+# Cyrillic slug generation needs `PhoenixKit.Utils.Slug`'s `:transliterate`
+# option. An older published phoenix_kit ignores the option and returns the
+# ASCII-only result, which is exactly the behavior these tests assert is gone
+# - so they run once the dep resolves to a release that ships it.
+transliteration_exclude =
+  if PhoenixKit.Utils.Slug.slugify("Кашпо", transliterate: true) == "" do
+    Logger.info(
+      "[test_helper] PhoenixKit.Utils.Slug transliteration not available - " <>
+        "Cyrillic slug tests excluded. They will run automatically once " <>
+        "`phoenix_kit` is upgraded to a release that ships it."
+    )
+
+    [:requires_core_transliteration]
+  else
+    []
+  end
+
+ExUnit.start(exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude)
