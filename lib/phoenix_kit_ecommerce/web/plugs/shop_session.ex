@@ -20,40 +20,53 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
 
   def call(conn, _opts) do
     if Shop.enabled?() do
-      case get_shop_session_id(conn) do
-        {:signed, existing_id} ->
-          put_shop_session(conn, existing_id, true)
-
-        {:legacy, legacy_id} ->
-          # Migrate the CART onto a freshly minted id rather than re-signing
-          # the value the client supplied.
-          #
-          # Re-signing was the flaw: on the next request the attacker's own
-          # value came back as `{:signed, _}` and was fully trusted, so the
-          # untrusted marking only DELAYED the capability by one request
-          # instead of removing it. Minting a new id and re-keying the cart
-          # means a replayed value can never become a trusted session — the
-          # replayer gets an id that was never theirs to present, and the
-          # legitimate visitor keeps their cart.
-          # A failed re-key is not an error worth surfacing: the visitor
-          # simply starts a new cart, which is what they would have got
-          # without the migration at all.
-          new_id = generate_session_id()
-          _ = Shop.rekey_cart_session(legacy_id, new_id)
-
-          conn
-          |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
-          |> put_shop_session(new_id, true)
-
-        nil ->
-          new_id = generate_session_id()
-
-          conn
-          |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
-          |> put_shop_session(new_id, true)
-      end
+      establish_session(conn)
     else
-      conn
+      # A disabled shop must not MINT new cart identities - but it must
+      # still recognise an existing signed one. The order-confirmation page
+      # is deliberately reachable while disabled (it is a receipt), and it
+      # authorizes on this session's provenance; going fully inert here
+      # locked returning guests out of their own receipts once the Phoenix
+      # session expired but their 30-day signed cookie had not.
+      case get_shop_session_id(conn) do
+        {:signed, existing_id} -> put_shop_session(conn, existing_id, true)
+        _ -> conn
+      end
+    end
+  end
+
+  defp establish_session(conn) do
+    case get_shop_session_id(conn) do
+      {:signed, existing_id} ->
+        put_shop_session(conn, existing_id, true)
+
+      {:legacy, legacy_id} ->
+        # Migrate the CART onto a freshly minted id rather than re-signing
+        # the value the client supplied.
+        #
+        # Re-signing was the flaw: on the next request the attacker's own
+        # value came back as `{:signed, _}` and was fully trusted, so the
+        # untrusted marking only DELAYED the capability by one request
+        # instead of removing it. Minting a new id and re-keying the cart
+        # means a replayed value can never become a trusted session — the
+        # replayer gets an id that was never theirs to present, and the
+        # legitimate visitor keeps their cart.
+        # A failed re-key is not an error worth surfacing: the visitor
+        # simply starts a new cart, which is what they would have got
+        # without the migration at all.
+        new_id = generate_session_id()
+        _ = Shop.rekey_cart_session(legacy_id, new_id)
+
+        conn
+        |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
+        |> put_shop_session(new_id, true)
+
+      nil ->
+        new_id = generate_session_id()
+
+        conn
+        |> put_resp_cookie(@cookie_name, new_id, cookie_opts(conn))
+        |> put_shop_session(new_id, true)
     end
   end
 

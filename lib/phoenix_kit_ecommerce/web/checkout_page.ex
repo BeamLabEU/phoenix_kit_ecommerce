@@ -39,7 +39,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: Routes.path("/"))}
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
     end
   end
 
@@ -160,6 +162,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp build_checkout_socket(socket, assigns) do
+    socket = do_build_checkout_socket(socket, assigns)
+
+    # Mount can land directly on :review (an authenticated shopper with a
+    # saved profile and a payment option that needs no billing details).
+    # That path must price the cart too.
+    if socket.assigns.step == :review, do: enter_review(socket), else: socket
+  end
+
+  defp do_build_checkout_socket(socket, assigns) do
     socket
     |> assign(:page_title, "Checkout")
     |> assign(:cart, assigns.cart)
@@ -322,7 +333,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     if socket.assigns.needs_billing do
       {:noreply, assign(socket, :step, :billing)}
     else
-      {:noreply, assign(socket, :step, :review)}
+      # enter_review/1, not a bare step assign: it is the only path that
+      # prices the cart with the billing country, and a review that skips
+      # it shows a tax-free total the conversion then charges tax on.
+      {:noreply, enter_review(socket)}
     end
   end
 
@@ -504,6 +518,23 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     end
   end
 
+  # A cart change broadcast from another tab lands here. Blindly assigning
+  # it into an open REVIEW showed a total that had lost the billing country
+  # (the cart page's select_shipping deliberately clears it), so the
+  # customer approved a tax-free figure that conversion then taxed. On the
+  # review step, re-price through the same path that produced the figure in
+  # the first place.
+  defp assign_cart_repriced(socket, cart) do
+    if socket.assigns[:step] == :review do
+      case Shop.preview_checkout_totals(cart, checkout_opts(socket)) do
+        {:ok, priced} -> assign(socket, :cart, priced)
+        {:error, _} -> assign(socket, :cart, cart)
+      end
+    else
+      assign(socket, :cart, cart)
+    end
+  end
+
   defp shipping_selection_still_valid?(cart) do
     cond do
       not Shop.cart_requires_shipping?(cart) ->
@@ -654,7 +685,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:processing, false)
     |> put_flash(:error, gettext("The shop is currently unavailable"))
-    |> push_navigate(to: Routes.path("/"))
+    |> push_navigate(to: "/")
   end
 
   defp handle_order_result({:error, _reason}, socket) do
@@ -740,12 +771,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_info({:cart_updated, cart}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
   def handle_info({:item_added, cart, _item}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
@@ -754,18 +785,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     if Enum.empty?(cart.items) do
       {:noreply, redirect_to_cart(socket, "Your cart is empty")}
     else
-      {:noreply, assign(socket, :cart, cart)}
+      {:noreply, assign_cart_repriced(socket, cart)}
     end
   end
 
   @impl true
   def handle_info({:quantity_updated, cart, _item}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
   def handle_info({:shipping_selected, cart}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true

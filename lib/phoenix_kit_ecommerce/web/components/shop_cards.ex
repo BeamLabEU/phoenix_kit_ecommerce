@@ -7,6 +7,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   """
 
   use Phoenix.Component
+  use Gettext, backend: PhoenixKitEcommerce.Gettext
 
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
 
@@ -140,5 +141,46 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
       </div>
     <% end %>
     """
+  end
+
+  @doc """
+  Compact "browse / cart" bar for storefront pages.
+
+  The storefront used to ship its own top-level layout carrying a cart
+  link, a language switcher and a home link. Rendering inside the HOST's
+  layout is the right call — the shop should look like the site — but a
+  host whose header has no cart link would leave a shopper with no way
+  back to their cart. This is the replacement: in-content (so it composes
+  with any host chrome rather than competing with it), server-rendered,
+  and switchable off via `shop_show_cart_bar` by hosts that carry their
+  own.
+  """
+  attr :language, :string, required: true
+  attr :cart_count, :integer, default: 0
+  attr :class, :string, default: ""
+
+  def storefront_bar(assigns) do
+    ~H"""
+    <div :if={show_cart_bar?()} class={["flex items-center justify-between gap-4 mb-6", @class]}>
+      <.link navigate={Shop.catalog_url(@language)} class="btn btn-ghost btn-sm gap-2">
+        <.icon name="hero-building-storefront" class="w-4 h-4" />
+        {gettext("Shop")}
+      </.link>
+
+      <.link navigate={Shop.cart_url(@language)} class="btn btn-outline btn-sm gap-2">
+        <.icon name="hero-shopping-cart" class="w-4 h-4" />
+        {gettext("Cart")}
+        <span :if={@cart_count > 0} class="badge badge-primary badge-sm">{@cart_count}</span>
+      </.link>
+    </div>
+    """
+  end
+
+  defp show_cart_bar? do
+    PhoenixKit.Settings.get_setting_cached("shop_show_cart_bar", "true") == "true"
+  rescue
+    # Fail toward SHOWING it: a shopper with no way to their cart is worse
+    # than a duplicate link.
+    _ -> true
   end
 end

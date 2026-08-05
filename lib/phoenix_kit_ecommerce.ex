@@ -2977,29 +2977,27 @@ defmodule PhoenixKitEcommerce do
   defp selected_shipping_method_available?(%Cart{} = cart) do
     items = cart_items_loaded(cart)
 
-    cond do
-      # Nothing ships: a method left selected from when the cart still had
-      # a physical line is irrelevant - it is not being charged for, and it
-      # must not be able to block the order.
-      not items_require_shipping?(items) ->
-        true
+    # Nothing ships: a method left selected from when the cart still had a
+    # physical line is irrelevant - it is not being charged for, and it must
+    # not be able to block the order.
+    if items_require_shipping?(items) do
+      case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
+        nil ->
+          false
 
-      true ->
-        case repo().get_by(ShippingMethod, uuid: cart.shipping_method_uuid) do
-          nil ->
-            false
-
-          method ->
-            # SHIPPABLE weight, matching what listing and pricing use. On
-            # total weight a mixed cart could be quoted a method (priced on
-            # its 100g of physical goods) and then refused at conversion
-            # because a 50kg digital line pushed it over the cap.
-            ShippingMethod.available_for?(method, %{
-              weight_grams: shippable_weight_grams(items),
-              subtotal: cart.subtotal || Decimal.new("0"),
-              country: cart.shipping_country
-            })
-        end
+        method ->
+          # SHIPPABLE weight, matching what listing and pricing use. On
+          # total weight a mixed cart could be quoted a method (priced on
+          # its 100g of physical goods) and then refused at conversion
+          # because a 50kg digital line pushed it over the cap.
+          ShippingMethod.available_for?(method, %{
+            weight_grams: shippable_weight_grams(items),
+            subtotal: cart.subtotal || Decimal.new("0"),
+            country: cart.shipping_country
+          })
+      end
+    else
+      true
     end
   end
 
@@ -3052,40 +3050,42 @@ defmodule PhoenixKitEcommerce do
     shipping_country = get_shipping_country(billing_profile_uuid, billing_data, cart)
 
     # Use string keys to match Billing.maybe_set_order_number behavior
-    base_attrs = %{
-      "currency" => cart.currency,
-      "line_items" => line_items,
-      "subtotal" => cart.subtotal,
-      "tax_amount" => cart.tax_amount || Decimal.new(0),
-      "tax_rate" => get_tax_rate(cart),
-      "discount_amount" => cart.discount_amount || Decimal.new(0),
-      "discount_code" => cart.discount_code,
-      "total" => cart.total,
-      "status" => "pending",
-      "metadata" =>
-        %{
-          "source" => "shop_checkout",
-          "cart_uuid" => cart.uuid,
-          # The shop session that placed this order. This is what lets the
-          # confirmation page recognise a guest as the person who just checked
-          # out, instead of treating knowledge of the order uuid as proof.
-          # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
-          #
-          # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
-          # from `cart.session_id` — by this point `assign_cart_to_user/2` has
-          # already nulled the column for every guest checkout. Passed as an
-          # argument rather than through `opts` so a caller of the public
-          # `convert_cart_to_order/2` cannot choose it.
-          "session_id" => placing_session_id,
-          "shipping_country" => shipping_country,
-          # nil for a digital-only order even when a stale selection remains
-          # on the cart - the order must not reference a method it never
-          # charged for.
-          "shipping_method_uuid" =>
-            if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
-        }
-        |> Map.merge(payment_option_metadata(cart))
-    }
+    base_attrs =
+      %{
+        "currency" => cart.currency,
+        "line_items" => line_items,
+        "subtotal" => cart.subtotal,
+        "tax_amount" => cart.tax_amount || Decimal.new(0),
+        "tax_rate" => get_tax_rate(cart),
+        "discount_amount" => cart.discount_amount || Decimal.new(0),
+        "discount_code" => cart.discount_code,
+        "total" => cart.total,
+        "status" => "pending",
+        "metadata" =>
+          %{
+            "source" => "shop_checkout",
+            "cart_uuid" => cart.uuid,
+            # The shop session that placed this order. This is what lets the
+            # confirmation page recognise a guest as the person who just checked
+            # out, instead of treating knowledge of the order uuid as proof.
+            # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+            #
+            # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
+            # from `cart.session_id` — by this point `assign_cart_to_user/2` has
+            # already nulled the column for every guest checkout. Passed as an
+            # argument rather than through `opts` so a caller of the public
+            # `convert_cart_to_order/2` cannot choose it.
+            "session_id" => placing_session_id,
+            "shipping_country" => shipping_country,
+            # nil for a digital-only order even when a stale selection remains
+            # on the cart - the order must not reference a method it never
+            # charged for.
+            "shipping_method_uuid" =>
+              if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
+          }
+          |> Map.merge(payment_option_metadata(cart))
+      }
+      |> maybe_put_payment_option(cart)
 
     cond do
       # Logged-in user with billing profile
@@ -3144,10 +3144,26 @@ defmodule PhoenixKitEcommerce do
     )
   end
 
-  # The customer's validated payment choice, durably recorded on the order.
-  # First-class linkage on the billing Order (a column + processing
-  # consumption) is a billing-side change; until then the metadata carries
-  # uuid + code so nothing about the choice is lost.
+  # First-class linkage (billing Order.payment_option_uuid, core V161) when
+  # the resolved billing supports it, so an operator can see WHICH
+  # configured option a customer chose - several options share one
+  # payment_method. Guarded because a host may still be on an older core.
+  defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: nil}), do: attrs
+
+  defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: uuid}) do
+    if :payment_option_uuid in PhoenixKitBilling.Order.__schema__(:fields) do
+      Map.put(attrs, "payment_option_uuid", uuid)
+    else
+      attrs
+    end
+  rescue
+    _ -> attrs
+  end
+
+  # The customer's validated payment choice, also recorded in metadata: the
+  # column carries the LINK (nulled if the option is later deleted), the
+  # metadata carries the code, so a deleted option still degrades to "it
+  # was a bank transfer" rather than to nothing.
   defp payment_option_metadata(%Cart{payment_option_uuid: nil}), do: %{}
 
   defp payment_option_metadata(%Cart{payment_option_uuid: uuid}) do

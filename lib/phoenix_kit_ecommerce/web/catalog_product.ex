@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
+  alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
@@ -41,7 +42,9 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: Routes.path("/"))}
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
     end
   end
 
@@ -98,6 +101,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     socket =
       socket
       |> assign(:page_title, localized_title)
+      |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
       |> assign(:localized_title, localized_title)
@@ -604,6 +608,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <div class="container flex-col mx-auto px-4 py-6 max-w-7xl">
+        
+        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
@@ -1380,40 +1386,89 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # "active" sends the shopper back to the catalog instead of a crash or a
   # stale purchasable page.
   defp refresh_product(socket) do
-    case Shop.get_product(socket.assigns.product.uuid, preload: [:category]) do
-      %{status: "active"} = product ->
-        current_language = socket.assigns.current_language
-        selectable_specs = Shop.get_selectable_specs(product)
+    product = Shop.get_product(socket.assigns.product.uuid, preload: [:category])
 
-        selected_specs =
-          socket.assigns.selected_specs
-          |> Map.take(Enum.map(selectable_specs, & &1["key"]))
-          |> then(fn kept ->
-            Map.merge(build_default_specs(selectable_specs, product.metadata || %{}), kept)
-          end)
-
-        socket
-        |> assign(:product, product)
-        |> assign(:localized_title, Translations.get(product, :title, current_language))
-        |> assign(
-          :localized_description,
-          Translations.get(product, :description, current_language)
-        )
-        |> assign(:localized_body, Translations.get(product, :body_html, current_language))
-        |> assign(:specifications, build_specifications(product))
-        |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
-        |> assign(:selectable_specs, selectable_specs)
-        |> assign(:selected_specs, selected_specs)
-        |> assign(:calculated_price, Shop.calculate_product_price(product, selected_specs))
-        |> assign(
-          :missing_required_specs,
-          get_missing_required_specs(selected_specs, selectable_specs)
-        )
-
-      _gone_or_inactive ->
-        socket
-        |> put_flash(:info, "This product is no longer available")
-        |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
+    # The SAME rule mount applies - `publicly_visible?/1` also rejects a
+    # product whose category is hidden. Checking only the product's own
+    # status let an admin move an open product into a hidden category and
+    # leave it purchasable.
+    if product && publicly_visible?(product) do
+      do_refresh_product(socket, product)
+    else
+      socket
+      |> put_flash(:info, "This product is no longer available")
+      |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
     end
+  end
+
+  defp do_refresh_product(socket, product) do
+    current_language = socket.assigns.current_language
+    selectable_specs = Shop.get_selectable_specs(product)
+    localized_title = Translations.get(product, :title, current_language)
+
+    selected_specs = retained_specs(socket.assigns.selected_specs, selectable_specs, product)
+
+    socket
+    |> assign(:product, product)
+    |> assign(:page_title, localized_title)
+    |> assign(:selected_image, refreshed_image(socket, product))
+    |> assign(:localized_title, localized_title)
+    |> assign(:localized_description, Translations.get(product, :description, current_language))
+    |> assign(:localized_body, Translations.get(product, :body_html, current_language))
+    |> assign(:specifications, build_specifications(product))
+    |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
+    |> assign(:selectable_specs, selectable_specs)
+    |> assign(:selected_specs, selected_specs)
+    |> assign(:calculated_price, Shop.calculate_product_price(product, selected_specs))
+    |> assign(
+      :missing_required_specs,
+      get_missing_required_specs(selected_specs, selectable_specs)
+    )
+  end
+
+  # Keep the shopper's choices only where they are STILL OFFERED. Keeping a
+  # value merely because its key survived left an invisible selection: no
+  # button appeared chosen, the price was computed from the removed value,
+  # and add-to-cart then rejected it as invalid.
+  defp retained_specs(selected, selectable_specs, product) do
+    allowed =
+      Map.new(selectable_specs, fn spec -> {spec["key"], spec["options"] || []} end)
+
+    kept =
+      selected
+      |> Enum.filter(fn {key, value} ->
+        case Map.get(allowed, key) do
+          values when is_list(values) and values != [] -> value in values
+          # An option with no enumerated values (free text, number) keeps
+          # whatever the shopper entered.
+          [] -> true
+          nil -> false
+        end
+      end)
+      |> Map.new()
+
+    Map.merge(build_default_specs(selectable_specs, product.metadata || %{}), kept)
+  end
+
+  # A removed image must not stay on screen as a broken thumbnail.
+  defp refreshed_image(socket, product) do
+    current = socket.assigns[:selected_image]
+
+    still_present? =
+      is_binary(current) and
+        Enum.any?(get_display_images(product), fn uuid ->
+          current == image_url(uuid) or current == uuid
+        end)
+
+    if still_present?, do: current, else: first_image(product)
+  end
+
+  defp storefront_cart_count(session_id, user_uuid) do
+    case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
+      %{items_count: n} when is_integer(n) -> n
+      _ -> 0
+    end
+  rescue
+    _ -> 0
   end
 end
