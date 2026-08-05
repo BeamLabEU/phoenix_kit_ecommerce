@@ -211,4 +211,38 @@ defmodule PhoenixKitEcommerce.PriceDisplayTest do
       assert line["price_unit"] == "per hour"
     end
   end
+
+  describe "order pages render the snapshot shape" do
+    test "the billing helpers all accept a snapshot MAP, not just a profile struct" do
+      # Order pages now prefer order.billing_snapshot, which is a plain map.
+      # Every helper the confirmation template calls on it must handle that
+      # shape: profile_email/1 did not, and the page 500'd AFTER the order
+      # had been created - the customer's money was taken and their receipt
+      # was an error page. Caught by driving a real checkout in the browser;
+      # no unit test rendered the template.
+      alias PhoenixKitEcommerce.Web.Helpers
+
+      snapshot = %{
+        "type" => "individual",
+        "first_name" => "Max",
+        "last_name" => "Don",
+        "email" => "max@example.com",
+        "address_line1" => "1 Test Street",
+        "city" => "Tallinn",
+        "postal_code" => "10111",
+        "country" => "EE"
+      }
+
+      assert Helpers.profile_display_name(snapshot) == "Max Don"
+      assert Helpers.profile_email(snapshot) == "max@example.com"
+      assert Helpers.profile_address(snapshot) =~ "Tallinn"
+
+      # A company snapshot resolves its name, and a sparse one does not raise.
+      assert Helpers.profile_display_name(%{"type" => "company", "company_name" => "ACME"}) ==
+               "ACME"
+
+      assert Helpers.profile_email(%{}) == nil
+      assert Helpers.profile_address(%{}) == ""
+    end
+  end
 end

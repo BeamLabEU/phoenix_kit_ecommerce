@@ -13,7 +13,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
-    only: [format_price: 2, profile_display_name: 1, profile_address: 1, get_current_user: 1]
+    only: [
+      format_price: 2,
+      profile_display_name: 1,
+      profile_address: 1,
+      profile_email: 1,
+      get_current_user: 1
+    ]
 
   alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Routes
@@ -223,8 +229,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <div class="text-sm">
                   <div class="font-medium">{profile_display_name(@billing_profile)}</div>
                   <div class="text-base-content/60">{profile_address(@billing_profile)}</div>
-                  <%= if @billing_profile.email do %>
-                    <div class="text-base-content/60">{@billing_profile.email}</div>
+                  <%= if profile_email(@billing_profile) do %>
+                    <div class="text-base-content/60">{profile_email(@billing_profile)}</div>
                   <% end %>
                 </div>
               </div>

@@ -34,6 +34,7 @@ defmodule PhoenixKitEcommerce do
   require Logger
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKit.Migrations.Postgres, as: PostgresMigrations
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Settings
@@ -3144,20 +3145,55 @@ defmodule PhoenixKitEcommerce do
     )
   end
 
-  # First-class linkage (billing Order.payment_option_uuid, core V161) when
-  # the resolved billing supports it, so an operator can see WHICH
-  # configured option a customer chose - several options share one
-  # payment_method. Guarded because a host may still be on an older core.
+  # First-class linkage (billing Order.payment_option_uuid, core V161) so an
+  # operator can see WHICH configured option a customer chose - several
+  # options share one payment_method.
+  #
+  # ⚠️ The guard checks the host's MIGRATED VERSION, not the schema. The
+  # schema always carries the field once billing is updated; what varies is
+  # whether the host has actually run `mix phoenix_kit.update`. Checking
+  # `__schema__(:fields)` therefore guarded nothing and every order insert
+  # died with `column "payment_option_uuid" does not exist` - caught by
+  # driving a real checkout in the browser, not by any test or review.
   defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: nil}), do: attrs
 
   defp maybe_put_payment_option(attrs, %Cart{payment_option_uuid: uuid}) do
-    if :payment_option_uuid in PhoenixKitBilling.Order.__schema__(:fields) do
+    if payment_option_column_available?() do
       Map.put(attrs, "payment_option_uuid", uuid)
     else
       attrs
     end
+  end
+
+  # V161 added the column. Cached in :persistent_term because this runs on
+  # every checkout and the answer only changes when an operator migrates -
+  # at which point a restart (or a cache clear) picks it up.
+  @payment_option_version 161
+  @payment_option_cache_key {__MODULE__, :payment_option_column?}
+
+  defp payment_option_column_available? do
+    case :persistent_term.get(@payment_option_cache_key, :unknown) do
+      :unknown ->
+        # `Migration.migrated_version/0` only works INSIDE a migration
+        # runner - at runtime it raises "could not find migration runner
+        # process", which the rescue below turned into a permanent false.
+        # `migrated_version_runtime/1` is core's runtime accessor (the same
+        # one `phoenix_kit.status` and the module coordinator use).
+        available? =
+          PostgresMigrations.migrated_version_runtime([]) >=
+            @payment_option_version
+
+        :persistent_term.put(@payment_option_cache_key, available?)
+        available?
+
+      cached ->
+        cached
+    end
   rescue
-    _ -> attrs
+    # Cannot tell -> do not write the column. An order that records the
+    # payment option only in metadata is a smaller failure than an order
+    # that cannot be placed at all.
+    _ -> false
   end
 
   # The customer's validated payment choice, also recorded in metadata: the

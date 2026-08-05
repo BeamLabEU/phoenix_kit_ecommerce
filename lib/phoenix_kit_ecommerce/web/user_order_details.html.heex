@@ -99,8 +99,8 @@
               <div class="text-sm mt-4">
                 <div class="font-medium">{profile_display_name(@billing_profile)}</div>
                 <div class="text-base-content/60 mt-1">{profile_address(@billing_profile)}</div>
-                <%= if @billing_profile.email do %>
-                  <div class="text-base-content/60 mt-1">{@billing_profile.email}</div>
+                <%= if profile_email(@billing_profile) do %>
+                  <div class="text-base-content/60 mt-1">{profile_email(@billing_profile)}</div>
                 <% end %>
               </div>
             <% else %>
