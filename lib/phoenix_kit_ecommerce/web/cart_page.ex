@@ -35,7 +35,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: Routes.path("/"))}
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
     end
   end
 

@@ -36,6 +36,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:category_name_display, get_category_name_display())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
+      |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
       |> assign_policy()
@@ -61,6 +62,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp get_category_icon_mode do
     Settings.get_setting_cached("shop_category_icon_mode", "none")
+  end
+
+  defp get_show_cart_bar do
+    Settings.get_setting_cached("shop_show_cart_bar", "true") == "true"
   end
 
   defp get_sidebar_show_categories do
@@ -127,6 +132,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_sidebar_categories", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_sidebar_categories", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_cart_bar", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_cart_bar", params, socket)
     end)
   end
 
@@ -595,6 +607,28 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
             <div class="divider"></div>
 
+            <%!-- Storefront cart bar --%>
+            <div class="form-control mb-6">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">{gettext("Show the storefront cart bar")}</span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "A compact Shop / Cart bar on catalog pages. Turn it off if your own site header already links to the cart."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                  checked={@show_cart_bar}
+                  phx-click="toggle_cart_bar"
+                />
+              </label>
+            </div>
+
+            <div class="divider"></div>
+
             <%!-- Category Name Display --%>
             <div class="form-control mb-6">
               <label class="label">
@@ -813,6 +847,28 @@ defmodule PhoenixKitEcommerce.Web.Settings do
            if(new_value,
              do: gettext("Categories in shop enabled"),
              else: gettext("Categories in shop disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("toggle_cart_bar", _params, socket) do
+    new_value = !socket.assigns.show_cart_bar
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_show_cart_bar", value_str) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:show_cart_bar, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Storefront cart bar enabled"),
+             else: gettext("Storefront cart bar disabled")
            )
          )}
 

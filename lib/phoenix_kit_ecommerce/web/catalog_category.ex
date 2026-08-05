@@ -29,7 +29,9 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: Routes.path("/"))}
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
     end
   end
 
@@ -93,6 +95,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         socket =
           socket
           |> assign(:page_title, localized_name)
+          |> assign(:cart_count, storefront_cart_count(socket))
           |> assign(:category, category)
           |> assign(:current_language, current_language)
           |> assign(:localized_name, localized_name)
@@ -262,6 +265,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <div class="p-6 max-w-7xl mx-auto">
+        
+        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
@@ -428,5 +433,21 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       </div>
     </div>
     """
+  end
+
+  # Cart badge for the storefront bar. Guests and users alike; a missing
+  # cart is simply zero.
+  defp storefront_cart_count(socket) do
+    user = socket.assigns[:phoenix_kit_current_user]
+
+    case Shop.find_active_cart(
+           user_uuid: user && user.uuid,
+           session_id: socket.assigns[:session_id]
+         ) do
+      %{items_count: n} when is_integer(n) -> n
+      _ -> 0
+    end
+  rescue
+    _ -> 0
   end
 end

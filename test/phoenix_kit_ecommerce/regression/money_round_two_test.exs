@@ -150,4 +150,17 @@ defmodule PhoenixKitEcommerce.Regression.MoneyRoundTwoTest do
     # The range's top end must be what the customer is actually charged.
     assert Decimal.equal?(max_price, charged)
   end
+
+  test "the payment option the customer chose is recorded on the order" do
+    # It used to be discarded entirely at conversion: nothing on the order
+    # said which configured option was picked, so an operator processing a
+    # bank transfer could not tell which instructions the customer saw.
+    c = cart()
+    {:ok, c} = Shop.add_to_cart(c, product(%{"requires_shipping" => false}), 1)
+
+    {:ok, order} = Shop.convert_cart_to_order(c, billing_data: billing())
+
+    # No option selected: nothing recorded, and nothing breaks.
+    refute order.metadata["payment_option_uuid"]
+  end
 end

@@ -6,7 +6,6 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -27,7 +26,9 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: Routes.path("/"))}
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
     end
   end
 
@@ -70,6 +71,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     socket =
       socket
       |> assign(:page_title, "Shop")
+      |> assign(:cart_count, storefront_cart_count(socket))
       |> assign(:categories, categories)
       |> assign(:products, products)
       |> assign(:total_products, total)
@@ -196,6 +198,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <div>
+        
+        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
           <div class="text-center">
@@ -361,5 +365,21 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     page = Keyword.get(opts, :page)
 
     FilterHelpers.build_filter_url(base_path, active_filters, assigns.enabled_filters, page: page)
+  end
+
+  # Cart badge for the storefront bar. Guests and users alike; a missing
+  # cart is simply zero.
+  defp storefront_cart_count(socket) do
+    user = socket.assigns[:phoenix_kit_current_user]
+
+    case Shop.find_active_cart(
+           user_uuid: user && user.uuid,
+           session_id: socket.assigns[:session_id]
+         ) do
+      %{items_count: n} when is_integer(n) -> n
+      _ -> 0
+    end
+  rescue
+    _ -> 0
   end
 end
