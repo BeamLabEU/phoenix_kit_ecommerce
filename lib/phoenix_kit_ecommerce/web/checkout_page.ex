@@ -163,7 +163,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:page_title, "Checkout")
     |> assign(:cart, assigns.cart)
-    |> assign(:currency, Shop.get_default_currency())
+    |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
     |> assign(:is_guest, assigns.is_guest)
     |> assign(:authenticated, assigns.authenticated)
     |> assign(:payment_options, assigns.payment_options)
