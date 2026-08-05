@@ -117,6 +117,26 @@ defmodule PhoenixKitEcommerce.Web.AuthzTest do
     end
   end
 
+  describe "every import-starting event is gated" do
+    test "no import-starting handler reaches the worker without run_imports" do
+      # skip_mapping was a verbatim un-gated duplicate of confirm_import:
+      # both call run_import_with_mappings/2, but only one was wrapped, so
+      # the "Skip Mapping" button started a full import for a holder of
+      # base "shop" alone. Pin the whole family, not just the one that got
+      # missed.
+      source = File.read!("lib/phoenix_kit_ecommerce/web/imports.ex")
+
+      starters = ~w(start_import confirm_import skip_mapping run_import retry_import
+                    start_image_migration cancel_image_migration delete_import)
+
+      for event <- starters do
+        assert source =~
+                 ~s|def handle_event("#{event}", params, socket) do\n    Authz.authorize(socket, :run_imports|,
+               "#{event} does not go through the run_imports gate"
+      end
+    end
+  end
+
   describe "privileged pages guard their content" do
     @tag :integration
     test "the carts page is not readable without manage_carts", %{conn: conn} do

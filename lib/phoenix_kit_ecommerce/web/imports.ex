@@ -118,9 +118,8 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   end
 
   @impl true
-  def handle_event("skip_mapping", _params, socket) do
-    # Skip mapping step and run import directly
-    run_import_with_mappings(socket, [])
+  def handle_event("skip_mapping", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("skip_mapping", params, socket) end)
   end
 
   @impl true
@@ -1626,6 +1625,12 @@ defmodule PhoenixKitEcommerce.Web.Imports do
       [] ->
         {:noreply, put_flash(socket, :error, gettext("Please select a CSV file first"))}
     end
+  end
+
+  # Skip mapping and run the import directly - the same mutation as
+  # confirm_import, and gated the same way.
+  defp gated_event("skip_mapping", _params, socket) do
+    run_import_with_mappings(socket, [])
   end
 
   defp gated_event("confirm_import", _params, socket) do
