@@ -9,16 +9,12 @@ it, but the admin LiveViews still log only on `{:ok, _}`. The quality-sweep
 playbook wants both branches everywhere (a run of failed deletes is what an
 operator most wants to see). ~24 call sites; mechanical but wide.
 
-### 2. `Translations.default_language/0` can disagree with the slug resolver
+### 2. ~~`Translations.default_language/0` can disagree with the slug resolver~~ FIXED
 
-`SlugResolver` normalizes a base code to its dialect (`"en"` → `"en-US"`)
-before looking a slug up, while `Translations.default_language/0` may
-return the bare base code. When a shop's default IS a bare base code, a
-localized map keyed by `default_language/0` cannot be found by the
-resolver — `upsert_product/1` then fails to match its own slug and tries to
-INSERT, hitting the unique index. Surfaced by a test that had to key its
-fixtures through `normalize_language_public/1` to exercise the production
-path. Worth collapsing the two onto one resolution rule.
+Every lookup now matches any spelling of the same language rather than
+insisting on the normalized one, so a shop whose language is the base code
+resolves its own slugs. The two resolution rules still exist; collapsing
+them onto one remains worthwhile, but nothing is broken by the difference.
 
 ### 3. The disabled-shop gate does not reach already-connected sessions
 
@@ -56,6 +52,46 @@ extracted and translated (ru/et); the pre-existing ones are not.
 `authenticated` and `current_path` are still computed in the five shopping
 LiveViews although no template consumes them since the layout unification.
 Harmless, deletable.
+
+### 8. The imported option model cannot express a variant matrix
+
+An adversarial sweep of the import subsystem confirmed four related limits
+in how Shopify variants become options. They share one cause — options are
+stored as INDEPENDENT lists with per-value price modifiers, while a Shopify
+feed describes a matrix of specific combinations — so they want a design
+decision, not a patch:
+
+  * **Modifiers are summed, so real combinations are mispriced.** `S/Red
+    10.00` + `L/Blue 18.00` yields `L => +8` and `Blue => +8`; picking the
+    real `L/Blue` charges 26. The pair `S/Blue`, which the feed never
+    offered, is also selectable and add-to-cart accepts it (each option is
+    validated independently).
+  * **The no-mapping path drops Option3–Option10** and gives Option2 no
+    price impact at all, so a mapped-away material disappears and a
+    pricier colour charges the base price.
+  * **`_option_slots` is written but the storefront reads the non-slot
+    schema**, so a product can show both the discovered per-product option
+    and the global one it was mapped to — including values this product
+    never offered.
+  * **A global `multiselect` prices as a single value.** `multiselect` is
+    declared price-capable and validation accepts a list, but pricing reads
+    only a binary selected value, so a list gets a zero modifier.
+
+Storing the CSV's combinations (a variant table with its own price) is the
+real fix; per-value modifiers can then be derived for display.
+
+### 9. `Money.parse/1` reshapes two plausible inputs
+
+Confirmed by the same sweep, both narrow:
+
+  * `($1,234.56)` — accounting notation for a negative — parses as a
+    POSITIVE 1234.56 rather than being rejected or negated.
+  * `1.2e3` parses as `1.23`, because the strip removes `e` before the
+    separator logic runs.
+
+Neither shape appears in a Shopify or Prom.ua export, which is why this is
+recorded rather than fixed. A three-decimal currency is the same story: a
+lone three-digit tail (`1.234`) is deliberately read as thousands grouping.
 
 ## Cross-repo
 
