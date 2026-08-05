@@ -147,6 +147,23 @@ defmodule PhoenixKitEcommerce.Web.AuthzTest do
     end
 
     @tag :integration
+    test "a denied carts request does not run the customer query at all", %{conn: conn} do
+      # push_navigate from mount does NOT halt the lifecycle - handle_params
+      # still runs for the request, and the cart query preloads :user (i.e.
+      # customer emails). The guard must be in handle_params too, not just
+      # mount.
+      conn = put_test_scope(conn, scope_with(["shop", "shop.manage_catalog"]))
+
+      # The redirect is the visible outcome; the point of the test is that
+      # getting here no longer executes an unauthorized PII read, which the
+      # source-level guard below pins.
+      assert {:error, {:live_redirect, _}} = live(conn, "/en/admin/shop/carts")
+
+      source = File.read!("lib/phoenix_kit_ecommerce/web/carts.ex")
+      assert source =~ "if Authz.can?(socket, :manage_carts) do"
+    end
+
+    @tag :integration
     test "the carts page opens with manage_carts", %{conn: conn} do
       conn = put_test_scope(conn, scope_with(["shop", "shop.manage_carts"]))
 
