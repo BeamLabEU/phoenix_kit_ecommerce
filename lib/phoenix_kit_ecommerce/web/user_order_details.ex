@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Helpers, as: ShopHelpers
 
   import PhoenixKitEcommerce.Web.Helpers,

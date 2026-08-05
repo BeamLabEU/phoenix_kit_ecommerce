@@ -49,6 +49,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ImportConfig
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Product
@@ -2884,7 +2885,11 @@ defmodule PhoenixKitEcommerce do
           "unit_price" => Decimal.to_string(item.unit_price),
           "total" => Decimal.to_string(item.line_total),
           "sku" => item.product_sku,
-          "type" => "product"
+          "type" => "product",
+          # Carried so invoices and the confirmation page can render the
+          # unit the customer saw. Rides billing's existing line-item JSONB;
+          # first-class linkage is a billing-side change.
+          "price_unit" => (item.metadata || %{})["price_unit"]
         }
       end)
 
@@ -4023,6 +4028,21 @@ defmodule PhoenixKitEcommerce do
         acc
       end
     end)
+    |> preserve_price_display(existing)
+  end
+
+  # Non-localized fields are replaced wholesale, `metadata` included - so a
+  # routine CSV re-import (which rebuilds metadata from the feed and knows
+  # nothing about display settings) silently deleted an admin's price unit
+  # and "From" flag. Carry the namespace over when the incoming attrs do
+  # not supply one.
+  defp preserve_price_display(attrs, existing) do
+    incoming = get_attr(attrs, :metadata)
+
+    case PriceDisplay.preserve(existing.metadata || %{}, incoming || %{}) do
+      ^incoming -> attrs
+      preserved -> put_attr(attrs, :metadata, preserved)
+    end
   end
 
   # Helper to get attribute from either atom or string keyed map

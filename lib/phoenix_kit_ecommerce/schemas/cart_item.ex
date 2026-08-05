@@ -148,12 +148,25 @@ defmodule PhoenixKitEcommerce.CartItem do
       # deletion (product_uuid is ON DELETE SET NULL). Absent on rows
       # created before this shipped - readers fall back to the live
       # product, and only a MISSING product defaults to "requires".
-      metadata: %{"requires_shipping" => product.requires_shipping}
+      metadata:
+        %{"requires_shipping" => product.requires_shipping}
+        |> put_price_unit(product, lang)
     }
   end
 
   def from_product(%Product{} = product, quantity, language) do
     from_product(product, quantity, language: language)
+  end
+
+  # The unit is snapshotted with the line, not read live at render time:
+  # cart lines survive product edits and deletion (product_uuid is
+  # ON DELETE SET NULL), and a line the customer agreed to must not be
+  # relabelled afterwards.
+  defp put_price_unit(metadata, product, lang) do
+    case PhoenixKitEcommerce.PriceDisplay.unit_for(product, lang) do
+      nil -> metadata
+      unit -> Map.put(metadata, "price_unit", unit)
+    end
   end
 
   # Get product image URL, preferring new Storage system over legacy

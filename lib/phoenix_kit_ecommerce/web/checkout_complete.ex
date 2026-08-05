@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
 
   import PhoenixKitEcommerce.Web.Helpers,
@@ -266,7 +267,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                       <% end %>
                     </div>
                     <div class="font-medium">
-                      {format_price(item["total"], @currency)}
+                      {PriceDisplay.render(nil, @currency, :order,
+                        amount: item["total"],
+                        unit: item["price_unit"]
+                      )}
                     </div>
                   </div>
                 <% end %>
