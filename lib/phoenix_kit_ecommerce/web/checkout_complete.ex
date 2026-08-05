@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, profile_display_name: 1, profile_address: 1, get_current_user: 1]
@@ -132,7 +133,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   # live profile is a fallback for orders that predate snapshots (it is
   # editable, so preferring it made history mutable).
   defp get_billing_profile(order) do
-    PhoenixKitEcommerce.Web.Helpers.order_billing_identity(order) || live_billing_profile(order)
+    Helpers.order_billing_identity(order) || live_billing_profile(order)
   end
 
   defp live_billing_profile(%{billing_profile_uuid: nil}), do: nil

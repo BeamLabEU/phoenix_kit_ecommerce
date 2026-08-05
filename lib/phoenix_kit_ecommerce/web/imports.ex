@@ -17,7 +17,6 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.PubSub.Manager
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
@@ -28,6 +27,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Services.ImageMigration
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Workers.CSVImportWorker
 
@@ -108,33 +108,13 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   end
 
   @impl true
-  def handle_event("start_import", _params, socket) do
-    Authz.authorize(socket, :run_imports, fn ->
-      # Multi-step: consume upload, detect format, then route to appropriate step
-      case consume_uploaded_entries(socket, :csv_file, fn %{path: path}, entry ->
-             dest_dir = Path.join(System.tmp_dir!(), "shop_imports")
-             File.mkdir_p!(dest_dir)
-
-             dest_path =
-               Path.join(dest_dir, "#{System.system_time(:millisecond)}_#{entry.client_name}")
-
-             File.cp!(path, dest_path)
-             {:ok, {dest_path, entry.client_name}}
-           end) do
-        [{dest_path, filename}] ->
-          handle_detected_format(socket, dest_path, filename)
-
-        [] ->
-          {:noreply, put_flash(socket, :error, gettext("Please select a CSV file first"))}
-      end
-    end)
+  def handle_event("start_import", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("start_import", params, socket) end)
   end
 
   @impl true
-  def handle_event("confirm_import", _params, socket) do
-    Authz.authorize(socket, :run_imports, fn ->
-      run_import_with_mappings(socket, [])
-    end)
+  def handle_event("confirm_import", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("confirm_import", params, socket) end)
   end
 
   @impl true
@@ -144,12 +124,8 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   end
 
   @impl true
-  def handle_event("run_import", _params, socket) do
-    Authz.authorize(socket, :run_imports, fn ->
-      # Run import with current mappings
-      mappings = socket.assigns.option_mappings
-      run_import_with_mappings(socket, mappings)
-    end)
+  def handle_event("run_import", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("run_import", params, socket) end)
   end
 
   @impl true
@@ -216,29 +192,13 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   end
 
   @impl true
-  def handle_event("retry_import", %{"id" => id}, socket) do
-    Authz.authorize(socket, :run_imports, fn ->
-      case parse_uuid(id) do
-        {:ok, import_uuid} ->
-          do_retry_import(import_uuid, socket)
-
-        :error ->
-          {:noreply, put_flash(socket, :error, gettext("Invalid import ID"))}
-      end
-    end)
+  def handle_event("retry_import", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("retry_import", params, socket) end)
   end
 
   @impl true
-  def handle_event("delete_import", %{"id" => id}, socket) do
-    Authz.authorize(socket, :run_imports, fn ->
-      case parse_uuid(id) do
-        {:ok, import_uuid} ->
-          do_delete_import(import_uuid, socket)
-
-        :error ->
-          {:noreply, put_flash(socket, :error, gettext("Invalid import ID"))}
-      end
-    end)
+  def handle_event("delete_import", params, socket) do
+    Authz.authorize(socket, :run_imports, fn -> gated_event("delete_import", params, socket) end)
   end
 
   @impl true
@@ -281,37 +241,16 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   end
 
   @impl true
-  def handle_event("start_image_migration", _params, socket) do
+  def handle_event("start_image_migration", params, socket) do
     Authz.authorize(socket, :run_imports, fn ->
-      user = socket.assigns.phoenix_kit_current_scope.user
-      {:ok, count} = ImageMigration.queue_all_migrations(user.uuid)
-
-      socket =
-        socket
-        |> assign(:migration_in_progress, true)
-        |> assign(:migration_stats, ImageMigration.migration_stats())
-        |> put_flash(:info, gettext("Started migration for %{count} products", count: count))
-
-      {:noreply, socket}
+      gated_event("start_image_migration", params, socket)
     end)
   end
 
   @impl true
-  def handle_event("cancel_image_migration", _params, socket) do
+  def handle_event("cancel_image_migration", params, socket) do
     Authz.authorize(socket, :run_imports, fn ->
-      case ImageMigration.cancel_pending_migrations() do
-        {:ok, count} ->
-          socket =
-            socket
-            |> assign(:migration_in_progress, false)
-            |> assign(:migration_stats, ImageMigration.migration_stats())
-            |> put_flash(
-              :info,
-              gettext("Cancelled %{count} pending migration jobs", count: count)
-            )
-
-          {:noreply, socket}
-      end
+      gated_event("cancel_image_migration", params, socket)
     end)
   end
 
@@ -1668,4 +1607,83 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   defp error_to_string(:not_accepted), do: gettext("Only CSV files are accepted")
   defp error_to_string(:too_many_files), do: gettext("Only one file at a time")
   defp error_to_string(err), do: inspect(err)
+
+  defp gated_event("start_import", _params, socket) do
+    # Multi-step: consume upload, detect format, then route to appropriate step
+    case consume_uploaded_entries(socket, :csv_file, fn %{path: path}, entry ->
+           dest_dir = Path.join(System.tmp_dir!(), "shop_imports")
+           File.mkdir_p!(dest_dir)
+
+           dest_path =
+             Path.join(dest_dir, "#{System.system_time(:millisecond)}_#{entry.client_name}")
+
+           File.cp!(path, dest_path)
+           {:ok, {dest_path, entry.client_name}}
+         end) do
+      [{dest_path, filename}] ->
+        handle_detected_format(socket, dest_path, filename)
+
+      [] ->
+        {:noreply, put_flash(socket, :error, gettext("Please select a CSV file first"))}
+    end
+  end
+
+  defp gated_event("confirm_import", _params, socket) do
+    run_import_with_mappings(socket, [])
+  end
+
+  defp gated_event("run_import", _params, socket) do
+    # Run import with current mappings
+    mappings = socket.assigns.option_mappings
+    run_import_with_mappings(socket, mappings)
+  end
+
+  defp gated_event("retry_import", %{"id" => id}, socket) do
+    case parse_uuid(id) do
+      {:ok, import_uuid} ->
+        do_retry_import(import_uuid, socket)
+
+      :error ->
+        {:noreply, put_flash(socket, :error, gettext("Invalid import ID"))}
+    end
+  end
+
+  defp gated_event("delete_import", %{"id" => id}, socket) do
+    case parse_uuid(id) do
+      {:ok, import_uuid} ->
+        do_delete_import(import_uuid, socket)
+
+      :error ->
+        {:noreply, put_flash(socket, :error, gettext("Invalid import ID"))}
+    end
+  end
+
+  defp gated_event("start_image_migration", _params, socket) do
+    user = socket.assigns.phoenix_kit_current_scope.user
+    {:ok, count} = ImageMigration.queue_all_migrations(user.uuid)
+
+    socket =
+      socket
+      |> assign(:migration_in_progress, true)
+      |> assign(:migration_stats, ImageMigration.migration_stats())
+      |> put_flash(:info, gettext("Started migration for %{count} products", count: count))
+
+    {:noreply, socket}
+  end
+
+  defp gated_event("cancel_image_migration", _params, socket) do
+    case ImageMigration.cancel_pending_migrations() do
+      {:ok, count} ->
+        socket =
+          socket
+          |> assign(:migration_in_progress, false)
+          |> assign(:migration_stats, ImageMigration.migration_stats())
+          |> put_flash(
+            :info,
+            gettext("Cancelled %{count} pending migration jobs", count: count)
+          )
+
+        {:noreply, socket}
+    end
+  end
 end

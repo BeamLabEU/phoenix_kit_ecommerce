@@ -11,9 +11,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
-  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Helpers
 
   @doc """

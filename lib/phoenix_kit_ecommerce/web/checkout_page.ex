@@ -39,7 +39,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+       |> push_navigate(to: Routes.path("/"))}
     end
   end
 
@@ -654,7 +654,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:processing, false)
     |> put_flash(:error, gettext("The shop is currently unavailable"))
-    |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))
+    |> push_navigate(to: Routes.path("/"))
   end
 
   defp handle_order_result({:error, _reason}, socket) do
@@ -676,20 +676,23 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         socket
 
       profile ->
-        assign(socket, :billing_data, %{
-          "first_name" => profile.first_name || "",
-          "last_name" => profile.last_name || "",
-          "email" => profile.email || socket.assigns.billing_data["email"] || "",
-          "phone" => profile.phone || "",
-          "company_name" => profile.company_name || "",
-          "address_line1" => profile.address_line1 || "",
-          "address_line2" => profile.address_line2 || "",
-          "city" => profile.city || "",
-          "state" => profile.state || "",
-          "postal_code" => profile.postal_code || "",
-          "country" => profile.country || ""
-        })
+        assign(socket, :billing_data, profile_form_data(profile, socket.assigns.billing_data))
     end
+  end
+
+  # Field-for-field copy of a saved profile into the editable form's shape.
+  @profile_form_fields ~w(first_name last_name phone company_name address_line1
+                          address_line2 city state postal_code country)a
+
+  defp profile_form_data(profile, current) do
+    base =
+      Map.new(@profile_form_fields, fn field ->
+        {to_string(field), Map.get(profile, field) || ""}
+      end)
+
+    # The email is the one field the customer may have typed before picking
+    # a profile, so a blank profile email must not wipe it.
+    Map.put(base, "email", profile.email || current["email"] || "")
   end
 
   defp validate_billing_data(data) do

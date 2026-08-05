@@ -49,9 +49,9 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ImportConfig
   alias PhoenixKitEcommerce.Options
-  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig

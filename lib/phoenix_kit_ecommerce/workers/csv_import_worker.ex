@@ -94,21 +94,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
         Logger.error("CSVImportWorker: Failed import #{import_log_uuid} - #{inspect(reason)}")
         handle_failure(import_log_uuid, reason)
 
-        # Oban retries: notifying on every attempt turns one transient
-        # failure into three alerts followed by a success. Only the
-        # terminal attempt is news.
-        if final_attempt?(job) do
-          case get_import_log(import_log_uuid) do
-            {:ok, import_log} ->
-              notify_once(import_log, :failed, reason)
-
-              log_import_finished(import_log, "shop.import_run_failed", %{reason: inspect(reason)})
-
-            _ ->
-              :ok
-          end
-        end
-
+        report_terminal_failure(job, import_log_uuid, reason)
         error
     end
   end
@@ -127,6 +113,18 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
       end)
 
     perform(%Oban.Job{job | args: new_args})
+  end
+
+  # Oban retries: notifying on every attempt turns one transient failure
+  # into three alerts followed by a success. Only the terminal one is news.
+  defp report_terminal_failure(job, import_log_uuid, reason) do
+    with true <- final_attempt?(job),
+         {:ok, import_log} <- get_import_log(import_log_uuid) do
+      notify_once(import_log, :failed, reason)
+      log_import_finished(import_log, "shop.import_run_failed", %{reason: inspect(reason)})
+    else
+      _ -> :ok
+    end
   end
 
   defp final_attempt?(%Oban.Job{attempt: attempt, max_attempts: max}) when is_integer(attempt),
@@ -170,13 +168,11 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     )
   end
 
+  # Stringify keys AND values: an import's stats map carries counts and an
+  # error term, and the audit trail must not take an arbitrary shape.
   defp safe_import_metadata(map) when is_map(map) do
-    map
-    |> Enum.map(fn {k, v} -> {to_string(k), to_string(v)} end)
-    |> Map.new()
+    Map.new(map, fn {k, v} -> {to_string(k), to_string(v)} end)
   end
-
-  defp safe_import_metadata(other), do: %{"detail" => inspect(other)}
 
   # ============================================
   # PRIVATE HELPERS

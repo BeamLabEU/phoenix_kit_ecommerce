@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKit.Utils.Routes
+
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
@@ -33,7 +35,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       {:ok,
        socket
        |> put_flash(:error, "The shop is currently unavailable")
-       |> push_navigate(to: PhoenixKit.Utils.Routes.path("/"))}
+       |> push_navigate(to: Routes.path("/"))}
     end
   end
 

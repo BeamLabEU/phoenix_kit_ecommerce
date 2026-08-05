@@ -89,9 +89,10 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   def build(unit_map, from?) do
     unit = normalize_unit(unit_map)
 
-    cond do
-      unit == %{} and from? != true -> %{}
-      true -> %{"unit" => unit, "from" => from? == true}
+    if unit == %{} and from? != true do
+      %{}
+    else
+      %{"unit" => unit, "from" => from? == true}
     end
   end
 
