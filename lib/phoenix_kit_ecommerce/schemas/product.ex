@@ -158,6 +158,12 @@ defmodule PhoenixKitEcommerce.Product do
     |> validate_number(:download_expiry_days, greater_than: 0)
     |> validate_length(:currency, is: 3)
     |> maybe_generate_slug()
+    # Products carry the same functional unique index as categories
+    # (`extract_primary_slug(slug)`) but never declared it, so two titles that
+    # slugify the same — easy once titles are transliterated, "Ель" and "Эль"
+    # both give "el" — raised a raw ConstraintError out of the form and out of
+    # the import worker instead of a field error the operator can act on.
+    |> unique_constraint(:slug, name: "idx_shop_products_slug_primary")
   end
 
   @doc """
