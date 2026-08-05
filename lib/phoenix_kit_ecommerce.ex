@@ -249,6 +249,54 @@ defmodule PhoenixKitEcommerce do
     }
   end
 
+  @doc """
+  Notification types this module contributes (duck-typed, discovered by
+  core's `Notifications.Types`).
+
+  Two audiences, deliberately separate sub-types so a shop operator can
+  mute the order firehose without silencing their own receipts — and so a
+  customer's confirmation is never governed by an admin-facing preference.
+
+  ⚠️ The actions registered here are the NOTIFY actions. The audit trail
+  uses different action strings on purpose: `Activity.log/1` auto-derives
+  notifications from registered actions, so an audit row written with a
+  notify action would deliver a second, duplicate notification.
+  """
+  def notification_types do
+    [
+      %{
+        key: "shop",
+        label: "Shop",
+        description: "Orders and catalog imports",
+        actions: [],
+        default: true,
+        sub_types: [
+          %{
+            key: "orders",
+            label: "New orders",
+            description: "An order was placed in the shop",
+            actions: ["shop.order_placed"],
+            default: true
+          },
+          %{
+            key: "order_confirmations",
+            label: "Your order confirmations",
+            description: "Confirmation that an order you placed went through",
+            actions: ["shop.order_confirmed"],
+            default: true
+          },
+          %{
+            key: "imports",
+            label: "Catalog imports",
+            description: "A CSV import finished or failed",
+            actions: ["shop.import_completed", "shop.import_failed"],
+            default: true
+          }
+        ]
+      }
+    ]
+  end
+
   @impl PhoenixKit.Module
   def admin_tabs do
     [
@@ -2630,9 +2678,22 @@ defmodule PhoenixKitEcommerce do
         # notification about a committed fact — it must not be able to undo
         # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
         _ = maybe_send_guest_confirmation(order.user_uuid)
+        _ = log_order_converted(order)
+        _ = PhoenixKitEcommerce.Notifications.order_placed(order)
         {:ok, order}
 
       {:error, reason} ->
+        # A failed checkout is exactly what an operator wants to see later
+        # ("customers keep bouncing off shipping"), so the attempt is
+        # recorded too - PII-safe, no billing details.
+        _ =
+          PhoenixKitEcommerce.Activity.log_failed("shop.order_converted", reason,
+            actor_uuid: cart.user_uuid,
+            resource_type: "cart",
+            resource_uuid: cart.uuid,
+            mode: "checkout"
+          )
+
         {:error, reason}
     end
   end
@@ -3024,6 +3085,29 @@ defmodule PhoenixKitEcommerce do
   end
 
   # Remove _unused_ prefixed keys that Phoenix LiveView adds
+  # The money path's audit row. Written after commit, PII-safe (uuids,
+  # counts, total - never the customer's name, address or email).
+  #
+  # ⚠️ The action is DELIBERATELY not the notify action ("shop.order_placed"):
+  # `Activity.log/1` auto-derives notifications from registered actions, so
+  # reusing it here would deliver a duplicate on top of the explicit
+  # fan-out. `target_uuid` stays nil for the same reason - a targeted audit
+  # row with a registered action becomes a notification.
+  defp log_order_converted(order) do
+    PhoenixKitEcommerce.Activity.log("shop.order_converted",
+      actor_uuid: order.user_uuid,
+      resource_type: "order",
+      resource_uuid: order.uuid,
+      mode: "checkout",
+      metadata: %{
+        "order_number" => order.order_number,
+        "currency" => order.currency,
+        "total" => to_string(order.total),
+        "item_count" => length(order.line_items || [])
+      }
+    )
+  end
+
   # The customer's validated payment choice, durably recorded on the order.
   # First-class linkage on the billing Order (a column + processing
   # consumption) is a billing-side change; until then the metadata carries
