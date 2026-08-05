@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
@@ -202,102 +203,108 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     # Keep the price-display inputs live across validate rounds and
     # language-tab switches; without this a typed unit vanishes on the next
     # keystroke elsewhere in the form.
-    |> assign(:price_unit, PriceDisplay.settings(%{
-      PriceDisplay.metadata_key() => PriceDisplay.build(product_params["price_unit"] || %{}, false)
-    }).unit)
+    |> assign(
+      :price_unit,
+      PriceDisplay.settings(%{
+        PriceDisplay.metadata_key() =>
+          PriceDisplay.build(product_params["price_unit"] || %{}, false)
+      }).unit
+    )
     |> assign(:price_from, product_params["price_from"] in ["true", true, "on"])
     |> then(&{:noreply, &1})
   end
 
   @impl true
   def handle_event("save", %{"product" => product_params}, socket) do
-    # Remove helper fields from params (they're just UI helpers)
-    product_params =
-      product_params
-      |> Enum.reject(fn {k, _v} ->
-        String.starts_with?(k, "_new_option_value_") or
-          String.starts_with?(k, "_add_option_")
-      end)
-      |> Map.new()
+    Authz.authorize(socket, :manage_catalog, fn ->
+      # Remove helper fields from params (they're just UI helpers)
+      product_params =
+        product_params
+        |> Enum.reject(fn {k, _v} ->
+          String.starts_with?(k, "_new_option_value_") or
+            String.starts_with?(k, "_add_option_")
+        end)
+        |> Map.new()
 
-    # Merge metadata into product params
-    metadata = product_params["metadata"] || %{}
-    base_price = parse_decimal(product_params["price"])
+      # Merge metadata into product params
+      metadata = product_params["metadata"] || %{}
+      base_price = parse_decimal(product_params["price"])
 
-    # Convert final_price inputs to modifier values
-    metadata = convert_final_prices_to_modifiers(metadata, base_price)
+      # Convert final_price inputs to modifier values
+      metadata = convert_final_prices_to_modifiers(metadata, base_price)
 
-    # Remove _option_values from form metadata (may have garbage from Phoenix)
-    metadata = Map.delete(metadata, "_option_values")
+      # Remove _option_values from form metadata (may have garbage from Phoenix)
+      metadata = Map.delete(metadata, "_option_values")
 
-    # Add _option_values from socket assigns (managed via phx-click)
-    selected_option_values = socket.assigns.selected_option_values
+      # Add _option_values from socket assigns (managed via phx-click)
+      selected_option_values = socket.assigns.selected_option_values
 
-    metadata =
-      if selected_option_values == %{} do
+      metadata =
+        if selected_option_values == %{} do
+          metadata
+        else
+          Map.put(metadata, "_option_values", selected_option_values)
+        end
+
+      # Clean up _option_values - remove entries where all values are selected
+      metadata =
+        clean_option_values(
+          metadata,
+          socket.assigns.option_schema,
+          socket.assigns[:original_option_values] || %{}
+        )
+
+      # Clean up _image_mappings - remove empty values and invalid image IDs
+      valid_image_uuids = build_valid_image_uuids(socket.assigns)
+      metadata = clean_image_mappings(metadata, valid_image_uuids)
+
+      # Clean up metadata - convert multiselect arrays if needed
+      cleaned_metadata =
         metadata
-      else
-        Map.put(metadata, "_option_values", selected_option_values)
-      end
+        |> Enum.map(fn
+          {k, v} when is_list(v) -> {k, Enum.reject(v, &(&1 == ""))}
+          {k, v} -> {k, v}
+        end)
+        |> Map.new()
 
-    # Clean up _option_values - remove entries where all values are selected
-    metadata =
-      clean_option_values(
-        metadata,
-        socket.assigns.option_schema,
-        socket.assigns[:original_option_values] || %{}
-      )
+      # Price display (unit + "From") comes from real form inputs, folded in
+      # here because this build REPLACES metadata wholesale - a save that did
+      # not carry the fields would drop them.
+      cleaned_metadata =
+        case PriceDisplay.build(
+               product_params["price_unit"] || %{},
+               product_params["price_from"] in ["true", true, "on"]
+             ) do
+          empty when empty == %{} -> Map.delete(cleaned_metadata, PriceDisplay.metadata_key())
+          display -> Map.put(cleaned_metadata, PriceDisplay.metadata_key(), display)
+        end
 
-    # Clean up _image_mappings - remove empty values and invalid image IDs
-    valid_image_uuids = build_valid_image_uuids(socket.assigns)
-    metadata = clean_image_mappings(metadata, valid_image_uuids)
+      product_params =
+        product_params
+        |> Map.drop(["price_unit", "price_from"])
+        |> Map.put("metadata", cleaned_metadata)
 
-    # Clean up metadata - convert multiselect arrays if needed
-    cleaned_metadata =
-      metadata
-      |> Enum.map(fn
-        {k, v} when is_list(v) -> {k, Enum.reject(v, &(&1 == ""))}
-        {k, v} -> {k, v}
-      end)
-      |> Map.new()
+      # Extract featured and gallery from unified image list
+      all_images = socket.assigns.all_image_uuids
+      featured_uuid = List.first(all_images)
+      gallery_uuids = Enum.drop(all_images, 1)
 
-    # Price display (unit + "From") comes from real form inputs, folded in
-    # here because this build REPLACES metadata wholesale - a save that did
-    # not carry the fields would drop them.
-    cleaned_metadata =
-      case PriceDisplay.build(
-             product_params["price_unit"] || %{},
-             product_params["price_from"] in ["true", true, "on"]
-           ) do
-        empty when empty == %{} -> Map.delete(cleaned_metadata, PriceDisplay.metadata_key())
-        display -> Map.put(cleaned_metadata, PriceDisplay.metadata_key(), display)
-      end
+      product_params =
+        product_params
+        |> Map.put("featured_image_uuid", featured_uuid)
+        |> Map.put("image_uuids", gallery_uuids)
 
-    product_params =
-      product_params
-      |> Map.drop(["price_unit", "price_from"])
-      |> Map.put("metadata", cleaned_metadata)
+      # Build localized field attrs from main form values and translations
+      product_params =
+        build_localized_params(
+          socket.assigns.product,
+          product_params,
+          socket.assigns[:product_translations] || %{},
+          socket.assigns.default_language
+        )
 
-    # Extract featured and gallery from unified image list
-    all_images = socket.assigns.all_image_uuids
-    featured_uuid = List.first(all_images)
-    gallery_uuids = Enum.drop(all_images, 1)
-
-    product_params =
-      product_params
-      |> Map.put("featured_image_uuid", featured_uuid)
-      |> Map.put("image_uuids", gallery_uuids)
-
-    # Build localized field attrs from main form values and translations
-    product_params =
-      build_localized_params(
-        socket.assigns.product,
-        product_params,
-        socket.assigns[:product_translations] || %{},
-        socket.assigns.default_language
-      )
-
-    save_product(socket, socket.assigns.live_action, product_params)
+      save_product(socket, socket.assigns.live_action, product_params)
+    end)
   end
 
   # ===========================================

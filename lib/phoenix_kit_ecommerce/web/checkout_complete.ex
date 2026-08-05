@@ -336,6 +336,4 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   # Helpers
-
-
 end

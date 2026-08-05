@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.Carts do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
@@ -20,7 +21,13 @@ defmodule PhoenixKitEcommerce.Web.Carts do
   @default_currency_symbol "$"
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, session, socket) do
+    # This page's CONTENT is privileged, not just its mutations: cart rows
+    # carry customer contact details, so reading them needs the capability.
+    Authz.authorize_mount(socket, :manage_carts, fn -> do_mount(params, session, socket) end)
+  end
+
+  defp do_mount(_params, _session, socket) do
     {carts, total} = Shop.list_carts_with_count(per_page: @per_page)
     currency = Shop.get_default_currency()
 

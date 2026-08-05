@@ -111,6 +111,16 @@ Application.put_env(:phoenix_kit_ecommerce, :test_repo_available, repo_available
 # Minimal PhoenixKit services needed by the context layer.
 {:ok, _pid} = PhoenixKit.PubSub.Manager.start_link([])
 
+# The permission layer resolves a sub-permission through the module
+# registry: `Scope.can?/2` requires `feature_enabled?/1`, which asks the
+# registry which module owns a key. Without the registry running, EVERY
+# `can?/2` answers false and the authorization tests would pass for the
+# wrong reason (denied because the registry is missing, not because the
+# capability is). Starting it here mirrors production, where the host app
+# boots it.
+{:ok, _pid} = PhoenixKit.ModuleRegistry.start_link([])
+:ok = PhoenixKit.ModuleRegistry.register(PhoenixKitEcommerce)
+
 # Flows that register users go through the Hammer-backed rate limiter.
 # Without this its ETS table is absent and registration crashes. Mirrors
 # core's `phoenix_kit/test/test_helper.exs`.

@@ -213,7 +213,39 @@ defmodule PhoenixKitEcommerce do
       key: "shop",
       label: "E-Commerce",
       icon: "hero-shopping-cart",
-      description: "Product catalog, orders, and e-commerce management"
+      description: "Product catalog, orders, and e-commerce management",
+      # Base "shop" is admin-area READ access. Each sub-permission is a
+      # capability this module checks itself (core enforces sub-implies-base).
+      #
+      # ⚠️ Upgrade note: core auto-grants newly discovered sub-permissions to
+      # the Admin system role only, so a CUSTOM role that holds base "shop"
+      # keeps its read access but loses every mutation until an operator
+      # re-grants the subs. That is deliberate - secure by default, and the
+      # operator decides who gets what rather than inheriting a blanket
+      # grant - but it IS a breaking authorization change on upgrade and is
+      # called out in the PR body and AGENTS.md.
+      sub_permissions: [
+        %{
+          key: "manage_catalog",
+          label: "Manage catalog",
+          description: "Create, edit and delete products and categories"
+        },
+        %{
+          key: "manage_carts",
+          label: "Manage carts",
+          description: "View and act on customer carts (includes their contact details)"
+        },
+        %{
+          key: "manage_settings",
+          label: "Manage shop settings",
+          description: "Shop settings, security policy, product options and shipping methods"
+        },
+        %{
+          key: "run_imports",
+          label: "Run imports",
+          description: "Start CSV imports and manage import configurations"
+        }
+      ]
     }
   end
 
@@ -253,7 +285,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/products",
         priority: 532,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_catalog",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -264,7 +296,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/categories",
         priority: 533,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_catalog",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -275,7 +307,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/shipping",
         priority: 534,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_settings",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -286,7 +318,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/carts",
         priority: 535,
         level: :admin,
-        permission: "shop",
+        permission: "shop.manage_carts",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       ),
@@ -297,7 +329,7 @@ defmodule PhoenixKitEcommerce do
         path: "shop/imports",
         priority: 536,
         level: :admin,
-        permission: "shop",
+        permission: "shop.run_imports",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
@@ -315,7 +347,7 @@ defmodule PhoenixKitEcommerce do
         priority: 927,
         level: :admin,
         parent: :admin_settings,
-        permission: "shop",
+        permission: "shop.manage_settings",
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]
@@ -2933,28 +2965,29 @@ defmodule PhoenixKitEcommerce do
       "discount_code" => cart.discount_code,
       "total" => cart.total,
       "status" => "pending",
-      "metadata" => %{
-        "source" => "shop_checkout",
-        "cart_uuid" => cart.uuid,
-        # The shop session that placed this order. This is what lets the
-        # confirmation page recognise a guest as the person who just checked
-        # out, instead of treating knowledge of the order uuid as proof.
-        # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
-        #
-        # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
-        # from `cart.session_id` — by this point `assign_cart_to_user/2` has
-        # already nulled the column for every guest checkout. Passed as an
-        # argument rather than through `opts` so a caller of the public
-        # `convert_cart_to_order/2` cannot choose it.
-        "session_id" => placing_session_id,
-        "shipping_country" => shipping_country,
-        # nil for a digital-only order even when a stale selection remains
-        # on the cart - the order must not reference a method it never
-        # charged for.
-        "shipping_method_uuid" =>
-          if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
-      }
-      |> Map.merge(payment_option_metadata(cart))
+      "metadata" =>
+        %{
+          "source" => "shop_checkout",
+          "cart_uuid" => cart.uuid,
+          # The shop session that placed this order. This is what lets the
+          # confirmation page recognise a guest as the person who just checked
+          # out, instead of treating knowledge of the order uuid as proof.
+          # See `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+          #
+          # Taken from the snapshot captured in `convert_cart_to_order/2`, NOT
+          # from `cart.session_id` — by this point `assign_cart_to_user/2` has
+          # already nulled the column for every guest checkout. Passed as an
+          # argument rather than through `opts` so a caller of the public
+          # `convert_cart_to_order/2` cannot choose it.
+          "session_id" => placing_session_id,
+          "shipping_country" => shipping_country,
+          # nil for a digital-only order even when a stale selection remains
+          # on the cart - the order must not reference a method it never
+          # charged for.
+          "shipping_method_uuid" =>
+            if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
+        }
+        |> Map.merge(payment_option_metadata(cart))
     }
 
     cond do

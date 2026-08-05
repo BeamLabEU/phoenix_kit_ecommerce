@@ -143,7 +143,6 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     end
   end
 
-
   # One choke point for "the cart changed": refresh available methods,
   # drop a selection the cart has outgrown (or stopped needing), and keep
   # the requires-shipping flag the template gates on. Without the clearing,
