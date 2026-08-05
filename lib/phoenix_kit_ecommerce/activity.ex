@@ -86,6 +86,36 @@ defmodule PhoenixKitEcommerce.Activity do
   end
 
   @doc """
+  Logs a mutation that was ATTEMPTED but failed.
+
+  The audit trail should record what a person tried to do, not only what
+  succeeded — a run of failed deletes is exactly the kind of thing an
+  operator wants to see afterwards. The row carries `db_pending: true` so
+  a reader can tell an attempt from a completed change, and the reason is
+  stringified defensively (a changeset's errors can contain anything).
+  """
+  @spec log_failed(String.t(), term(), keyword()) :: log_result()
+  def log_failed(action, reason, opts \\ []) do
+    metadata =
+      opts
+      |> Keyword.get(:metadata, %{})
+      |> Map.merge(%{"db_pending" => true, "failure_reason" => failure_reason(reason)})
+
+    log(action, Keyword.put(opts, :metadata, metadata))
+  end
+
+  # Never let an error's SHAPE leak PII into the audit trail: changeset
+  # errors quote the offending value, which on a checkout is a customer's
+  # address. Only the field names and atom reasons survive.
+  defp failure_reason(%Ecto.Changeset{errors: errors}) do
+    errors |> Enum.map_join(", ", fn {field, _} -> to_string(field) end)
+  end
+
+  defp failure_reason(reason) when is_atom(reason), do: to_string(reason)
+  defp failure_reason({reason, _details}) when is_atom(reason), do: to_string(reason)
+  defp failure_reason(_other), do: "error"
+
+  @doc """
   Extracts the acting user's uuid from the LiveView socket assigns.
 
   Reads `socket.assigns[:phoenix_kit_current_scope]` (the shop

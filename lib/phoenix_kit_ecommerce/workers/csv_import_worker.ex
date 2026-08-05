@@ -49,7 +49,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
   @progress_interval 50
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"import_log_uuid" => _} = args}) do
+  def perform(%Oban.Job{args: %{"import_log_uuid" => _} = args} = job) do
     import_log_uuid = Map.fetch!(args, "import_log_uuid")
     path = Map.fetch!(args, "path")
     config_uuid = Map.get(args, "config_uuid")
@@ -83,12 +83,32 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
       if skip_empty_categories, do: cleanup_empty_categories(started_at)
       cleanup_file(path)
       broadcast_complete(import_log_uuid, stats)
+      # AFTER cleanup: "completed" must mean the whole job succeeded, not
+      # just that the rows were written.
+      notify_once(import_log, :completed, stats)
+      log_import_finished(import_log, "shop.import_run_completed", stats)
       Logger.info("CSVImportWorker: Completed import #{import_log_uuid} - #{inspect(stats)}")
       :ok
     else
       {:error, reason} = error ->
         Logger.error("CSVImportWorker: Failed import #{import_log_uuid} - #{inspect(reason)}")
         handle_failure(import_log_uuid, reason)
+
+        # Oban retries: notifying on every attempt turns one transient
+        # failure into three alerts followed by a success. Only the
+        # terminal attempt is news.
+        if final_attempt?(job) do
+          case get_import_log(import_log_uuid) do
+            {:ok, import_log} ->
+              notify_once(import_log, :failed, reason)
+
+              log_import_finished(import_log, "shop.import_run_failed", %{reason: inspect(reason)})
+
+            _ ->
+              :ok
+          end
+        end
+
         error
     end
   end
@@ -108,6 +128,55 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
 
     perform(%Oban.Job{job | args: new_args})
   end
+
+  defp final_attempt?(%Oban.Job{attempt: attempt, max_attempts: max}) when is_integer(attempt),
+    do: attempt >= max
+
+  defp final_attempt?(_job), do: true
+
+  # Idempotence guard: standalone notifications carry no source key, so a
+  # re-run (a manual retry, a re-enqueued job) would notify again. The
+  # marker lives on the import log's own options map - no migration.
+  defp notify_once(import_log, kind, payload) do
+    marker = "notified_#{kind}"
+    options = import_log.options || %{}
+
+    if Map.get(options, marker) do
+      :ok
+    else
+      case kind do
+        :completed -> PhoenixKitEcommerce.Notifications.import_completed(import_log, payload)
+        :failed -> PhoenixKitEcommerce.Notifications.import_failed(import_log, payload)
+      end
+
+      Shop.update_import_log(import_log, %{options: Map.put(options, marker, true)})
+      :ok
+    end
+  rescue
+    error ->
+      Logger.warning("CSVImportWorker: notification bookkeeping failed - #{inspect(error)}")
+      :ok
+  end
+
+  # The worker owns the lifecycle rows the LiveView cannot write: it is the
+  # only place that knows an import actually finished.
+  defp log_import_finished(import_log, action, metadata) do
+    PhoenixKitEcommerce.Activity.log(action,
+      actor_uuid: import_log.user_uuid,
+      resource_type: "import_log",
+      resource_uuid: import_log.uuid,
+      mode: "worker",
+      metadata: safe_import_metadata(metadata)
+    )
+  end
+
+  defp safe_import_metadata(map) when is_map(map) do
+    map
+    |> Enum.map(fn {k, v} -> {to_string(k), to_string(v)} end)
+    |> Map.new()
+  end
+
+  defp safe_import_metadata(other), do: %{"detail" => inspect(other)}
 
   # ============================================
   # PRIVATE HELPERS
