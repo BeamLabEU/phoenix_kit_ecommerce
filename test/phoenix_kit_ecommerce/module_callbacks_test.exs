@@ -18,15 +18,45 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
   end
 
   test "module_key/0 matches what the permission and tabs declare" do
-    # `permission: "shop"` on every tab, and `has_module_access?(scope, "shop")`
-    # in the admin LiveViews, are all the same string as this. If it drifts,
-    # every permission check silently starts asking about a module that does
-    # not exist.
+    # Every tab guards either the base key or one of THIS module's declared
+    # sub-permissions. If a tab's key drifts outside that set, the sidebar
+    # and the actual gate disagree: the page hides but stays reachable, or
+    # shows and then denies.
     assert PhoenixKitEcommerce.module_key() == "shop"
 
+    valid = valid_permission_keys()
+
     for tab <- PhoenixKitEcommerce.admin_tabs() do
-      assert tab.permission == "shop", "tab #{inspect(tab.id)} guards the wrong key"
+      assert tab.permission in valid,
+             "tab #{inspect(tab.id)} guards #{inspect(tab.permission)}, " <>
+               "which is neither the base key nor a declared sub-permission"
     end
+  end
+
+  test "every declared sub-permission is actually used by a tab or the Authz layer" do
+    # A declared-but-unenforced capability is worse than none: it shows up
+    # in the admin permission matrix, an operator grants or withholds it,
+    # and nothing changes.
+    %{sub_permissions: subs} = PhoenixKitEcommerce.permission_metadata()
+
+    tab_keys = PhoenixKitEcommerce.admin_tabs() |> Enum.map(& &1.permission) |> MapSet.new()
+
+    authz_sources =
+      Path.wildcard("lib/phoenix_kit_ecommerce/web/*.ex")
+      |> Enum.map_join("\n", &File.read!/1)
+
+    for %{key: key} <- subs do
+      full = "shop.#{key}"
+
+      assert MapSet.member?(tab_keys, full) or authz_sources =~ ":#{key}",
+             "sub-permission #{inspect(full)} is declared but never enforced"
+    end
+  end
+
+  defp valid_permission_keys do
+    meta = PhoenixKitEcommerce.permission_metadata()
+
+    MapSet.new([meta.key | Enum.map(meta.sub_permissions, &"#{meta.key}.#{&1.key}")])
   end
 
   test "required_modules/0 names billing, which this module hard-depends on" do

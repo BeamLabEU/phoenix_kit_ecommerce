@@ -36,6 +36,8 @@ defmodule PhoenixKitEcommerce.Product do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKit.Utils.Slug
+
   @type t :: %__MODULE__{}
 
   @statuses ["draft", "active", "archived"]
@@ -156,6 +158,12 @@ defmodule PhoenixKitEcommerce.Product do
     |> validate_number(:download_expiry_days, greater_than: 0)
     |> validate_length(:currency, is: 3)
     |> maybe_generate_slug()
+    # Products carry the same functional unique index as categories
+    # (`extract_primary_slug(slug)`) but never declared it, so two titles that
+    # slugify the same — easy once titles are transliterated, "Ель" and "Эль"
+    # both give "el" — raised a raw ConstraintError out of the form and out of
+    # the import worker instead of a field error the operator can act on.
+    |> unique_constraint(:slug, name: "idx_shop_products_slug_primary")
   end
 
   @doc """
@@ -275,13 +283,11 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
+  # Core's shared slugifier, with transliteration on: the local ASCII-only
+  # version stripped every character of a Cyrillic title and stored an empty
+  # slug, which leaves the product with no URL at all.
   defp slugify(text) when is_binary(text) do
-    text
-    |> String.downcase()
-    |> String.replace(~r/[^\w\s-]/, "")
-    |> String.replace(~r/\s+/, "-")
-    |> String.replace(~r/-+/, "-")
-    |> String.trim("-")
+    Slug.slugify(text, transliterate: true)
   end
 
   defp slugify(_), do: ""

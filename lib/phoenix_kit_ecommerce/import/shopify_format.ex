@@ -35,7 +35,8 @@ defmodule PhoenixKitEcommerce.Import.ShopifyFormat do
 
     CSVParser.parse_and_group(path)
     |> Enum.filter(fn {_handle, rows} -> Filter.should_include?(rows, config) end)
-    |> Enum.map(fn {handle, rows} ->
+    |> Enum.map(fn {group_key, rows} ->
+      handle = CSVParser.handle_value(group_key)
       transform_opts = [language: language, option_mappings: option_mappings]
 
       if option_mappings != [] do

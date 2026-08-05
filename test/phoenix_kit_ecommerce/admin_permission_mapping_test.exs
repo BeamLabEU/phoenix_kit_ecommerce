@@ -89,8 +89,20 @@ defmodule PhoenixKitEcommerce.AdminPermissionMappingTest do
     # If a tab's `permission:` and `module_key/0` drift apart, the sidebar
     # and the actual gate disagree: the page hides but stays reachable, or
     # shows and then denies.
+    base = PhoenixKitEcommerce.module_key()
+
+    subs =
+      PhoenixKitEcommerce.permission_metadata()
+      |> Map.get(:sub_permissions, [])
+      |> Enum.map(&"#{base}.#{&1.key}")
+
+    valid = MapSet.new([base | subs])
+
     for tab <- PhoenixKitEcommerce.admin_tabs() do
-      assert tab.permission == PhoenixKitEcommerce.module_key(),
+      # A sub-permission implies its base (core enforces the cascade), so a
+      # tab may guard either - but nothing outside this module's declared
+      # key set, or the sidebar and the gate disagree.
+      assert MapSet.member?(valid, tab.permission),
              "tab #{inspect(tab.id)} guards #{inspect(tab.permission)}"
     end
   end

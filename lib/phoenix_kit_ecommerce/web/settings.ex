@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.Web.Authz
 
   @impl true
   def mount(_params, _session, socket) do
@@ -35,6 +36,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:category_name_display, get_category_name_display())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
+      |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
       |> assign_policy()
@@ -62,257 +64,124 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     Settings.get_setting_cached("shop_category_icon_mode", "none")
   end
 
+  defp get_show_cart_bar do
+    Settings.get_setting_cached("shop_show_cart_bar", "true") == "true"
+  end
+
   defp get_sidebar_show_categories do
     Settings.get_setting_cached("shop_sidebar_show_categories", "true") == "true"
   end
 
   @impl true
-  def handle_event("toggle_order_lookup_policy", _params, socket) do
-    # Checkbox ON means the SAFE value, so the stored value is inverted
-    # relative to the toggle: checked -> "strict".
-    next = if socket.assigns.order_lookup_strict, do: "link", else: "strict"
-
-    save_policy(socket, "shop_order_lookup_policy", next, gettext("Order access policy updated"))
+  def handle_event("toggle_order_lookup_policy", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_order_lookup_policy", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_allow_raw_html", _params, socket) do
-    save_policy(
-      socket,
-      "shop_allow_raw_html_descriptions",
-      flip(socket.assigns.allow_raw_html),
-      gettext("Product description rendering updated")
-    )
+  def handle_event("toggle_allow_raw_html", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_allow_raw_html", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_allow_svg", _params, socket) do
-    save_policy(
-      socket,
-      "shop_allow_svg_uploads",
-      flip(socket.assigns.allow_svg),
-      gettext("SVG import policy updated")
-    )
+  def handle_event("toggle_allow_svg", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_allow_svg", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_allow_private_networks", _params, socket) do
-    save_policy(
-      socket,
-      "shop_image_import_allow_private_networks",
-      flip(socket.assigns.allow_private_networks),
-      gettext("Image import network policy updated")
-    )
+  def handle_event("toggle_allow_private_networks", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_allow_private_networks", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_import_cleanup_scope", _params, socket) do
-    next = if socket.assigns.cleanup_auto_created_only, do: "all_empty", else: "auto_created"
-
-    save_policy(
-      socket,
-      "shop_import_cleanup_scope",
-      next,
-      gettext("Import cleanup scope updated")
-    )
+  def handle_event("toggle_import_cleanup_scope", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_import_cleanup_scope", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("save_default_tax_country", %{"country" => country}, socket) do
-    normalized = country |> to_string() |> String.trim() |> String.upcase()
-
-    # Only a blank value or a two-letter code; anything else is a typo, and a
-    # bad country code silently means "no tax" rather than a visible error.
-    if normalized == "" or normalized =~ ~r/^[A-Z]{2}$/ do
-      save_policy(
-        socket,
-        "shop_default_tax_country",
-        normalized,
-        gettext("Tax fallback country updated")
-      )
-    else
-      {:noreply,
-       put_flash(socket, :error, gettext("Enter a two-letter country code, or leave it blank."))}
-    end
+  def handle_event("save_default_tax_country", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_default_tax_country", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_inventory_tracking", _params, socket) do
-    new_value = !socket.assigns.inventory_tracking
-    value_str = if(new_value, do: "true", else: "false")
-
-    case Settings.update_setting("shop_inventory_tracking", value_str) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:inventory_tracking, new_value)
-         |> put_flash(
-           :info,
-           if(new_value,
-             do: gettext("Inventory tracking enabled"),
-             else: gettext("Inventory tracking disabled")
-           )
-         )}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
-    end
+  def handle_event("toggle_inventory_tracking", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_inventory_tracking", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("update_category_display", %{"display" => display}, socket) do
-    case Settings.update_setting("shop_category_name_display", display) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:category_name_display, display)
-         |> put_flash(:info, gettext("Category display setting updated"))}
-
-      {:error, _} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Failed to update category display setting"))}
-    end
+  def handle_event("update_category_display", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_category_display", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_sidebar_categories", _params, socket) do
-    new_value = !socket.assigns.sidebar_show_categories
-    value_str = if(new_value, do: "true", else: "false")
-
-    case Settings.update_setting("shop_sidebar_show_categories", value_str) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:sidebar_show_categories, new_value)
-         |> put_flash(
-           :info,
-           if(new_value,
-             do: gettext("Categories in shop enabled"),
-             else: gettext("Categories in shop disabled")
-           )
-         )}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
-    end
+  def handle_event("toggle_sidebar_categories", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_sidebar_categories", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("update_category_icon", %{"mode" => mode}, socket) do
-    case Settings.update_setting("shop_category_icon_mode", mode) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:category_icon_mode, mode)
-         |> put_flash(:info, gettext("Category icon setting updated"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update category icon setting"))}
-    end
+  def handle_event("toggle_cart_bar", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_cart_bar", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("toggle_storefront_filter", %{"key" => key}, socket) do
-    filters =
-      Enum.map(socket.assigns.storefront_filters, fn f ->
-        if f["key"] == key, do: Map.put(f, "enabled", !f["enabled"]), else: f
-      end)
-
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Storefront filter updated"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update filter"))}
-    end
+  def handle_event("update_category_icon", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_category_icon", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("update_filter_label", %{"key" => key, "label" => label}, socket) do
-    filters =
-      Enum.map(socket.assigns.storefront_filters, fn f ->
-        if f["key"] == key, do: Map.put(f, "label", label), else: f
-      end)
-
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply, assign(socket, :storefront_filters, filters)}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to update filter label"))}
-    end
+  def handle_event("toggle_storefront_filter", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_storefront_filter", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("add_metadata_filter", %{"key" => option_key}, socket) do
-    existing_keys = Enum.map(socket.assigns.storefront_filters, & &1["key"])
-
-    if option_key in existing_keys do
-      {:noreply,
-       put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: option_key))}
-    else
-      max_pos =
-        socket.assigns.storefront_filters
-        |> Enum.map(& &1["position"])
-        |> Enum.max(fn -> 0 end)
-
-      new_filter = %{
-        "key" => option_key,
-        "type" => "metadata_option",
-        "option_key" => option_key,
-        "label" => String.capitalize(option_key),
-        "enabled" => true,
-        "position" => max_pos + 1
-      }
-
-      filters = socket.assigns.storefront_filters ++ [new_filter]
-
-      case Shop.update_storefront_filters(filters) do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> assign(:storefront_filters, filters)
-           |> put_flash(:info, gettext("Filter '%{key}' added", key: option_key))}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, gettext("Failed to add filter"))}
-      end
-    end
+  def handle_event("update_filter_label", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_filter_label", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("remove_filter", %{"key" => key}, socket) do
-    filters = Enum.reject(socket.assigns.storefront_filters, &(&1["key"] == key))
-
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Filter removed"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to remove filter"))}
-    end
+  def handle_event("add_metadata_filter", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("add_metadata_filter", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("reset_default_filters", _params, socket) do
-    filters = Shop.default_storefront_filters()
+  def handle_event("remove_filter", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("remove_filter", params, socket)
+    end)
+  end
 
-    case Shop.update_storefront_filters(filters) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:storefront_filters, filters)
-         |> put_flash(:info, gettext("Filters reset to defaults"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
-    end
+  @impl true
+  def handle_event("reset_default_filters", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("reset_default_filters", params, socket)
+    end)
   end
 
   defp flip(true), do: "false"
@@ -738,6 +607,28 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
             <div class="divider"></div>
 
+            <%!-- Storefront cart bar --%>
+            <div class="form-control mb-6">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text text-lg">
+                  <span class="font-semibold">{gettext("Show the storefront cart bar")}</span>
+                  <div class="text-sm text-base-content/70 mt-1">
+                    {gettext(
+                      "A compact Shop / Cart bar on catalog pages. Turn it off if your own site header already links to the cart."
+                    )}
+                  </div>
+                </span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                  checked={@show_cart_bar}
+                  phx-click="toggle_cart_bar"
+                />
+              </label>
+            </div>
+
+            <div class="divider"></div>
+
             <%!-- Category Name Display --%>
             <div class="form-control mb-6">
               <label class="label">
@@ -835,5 +726,266 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       Billing.enabled?()
   rescue
     _ -> false
+  end
+
+  defp gated_event("toggle_order_lookup_policy", _params, socket) do
+    # Checkbox ON means the SAFE value, so the stored value is inverted
+    # relative to the toggle: checked -> "strict".
+    next = if socket.assigns.order_lookup_strict, do: "link", else: "strict"
+
+    save_policy(
+      socket,
+      "shop_order_lookup_policy",
+      next,
+      gettext("Order access policy updated")
+    )
+  end
+
+  defp gated_event("toggle_allow_raw_html", _params, socket) do
+    save_policy(
+      socket,
+      "shop_allow_raw_html_descriptions",
+      flip(socket.assigns.allow_raw_html),
+      gettext("Product description rendering updated")
+    )
+  end
+
+  defp gated_event("toggle_allow_svg", _params, socket) do
+    save_policy(
+      socket,
+      "shop_allow_svg_uploads",
+      flip(socket.assigns.allow_svg),
+      gettext("SVG import policy updated")
+    )
+  end
+
+  defp gated_event("toggle_allow_private_networks", _params, socket) do
+    save_policy(
+      socket,
+      "shop_image_import_allow_private_networks",
+      flip(socket.assigns.allow_private_networks),
+      gettext("Image import network policy updated")
+    )
+  end
+
+  defp gated_event("toggle_import_cleanup_scope", _params, socket) do
+    next = if socket.assigns.cleanup_auto_created_only, do: "all_empty", else: "auto_created"
+
+    save_policy(
+      socket,
+      "shop_import_cleanup_scope",
+      next,
+      gettext("Import cleanup scope updated")
+    )
+  end
+
+  defp gated_event("save_default_tax_country", %{"country" => country}, socket) do
+    normalized = country |> to_string() |> String.trim() |> String.upcase()
+
+    # Only a blank value or a two-letter code; anything else is a typo, and a
+    # bad country code silently means "no tax" rather than a visible error.
+    if normalized == "" or normalized =~ ~r/^[A-Z]{2}$/ do
+      save_policy(
+        socket,
+        "shop_default_tax_country",
+        normalized,
+        gettext("Tax fallback country updated")
+      )
+    else
+      {:noreply,
+       put_flash(socket, :error, gettext("Enter a two-letter country code, or leave it blank."))}
+    end
+  end
+
+  defp gated_event("toggle_inventory_tracking", _params, socket) do
+    new_value = !socket.assigns.inventory_tracking
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_inventory_tracking", value_str) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:inventory_tracking, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Inventory tracking enabled"),
+             else: gettext("Inventory tracking disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
+    end
+  end
+
+  defp gated_event("update_category_display", %{"display" => display}, socket) do
+    case Settings.update_setting("shop_category_name_display", display) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:category_name_display, display)
+         |> put_flash(:info, gettext("Category display setting updated"))}
+
+      {:error, _} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Failed to update category display setting"))}
+    end
+  end
+
+  defp gated_event("toggle_sidebar_categories", _params, socket) do
+    new_value = !socket.assigns.sidebar_show_categories
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_sidebar_show_categories", value_str) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:sidebar_show_categories, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Categories in shop enabled"),
+             else: gettext("Categories in shop disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("toggle_cart_bar", _params, socket) do
+    new_value = !socket.assigns.show_cart_bar
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_show_cart_bar", value_str) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:show_cart_bar, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Storefront cart bar enabled"),
+             else: gettext("Storefront cart bar disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("update_category_icon", %{"mode" => mode}, socket) do
+    case Settings.update_setting("shop_category_icon_mode", mode) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:category_icon_mode, mode)
+         |> put_flash(:info, gettext("Category icon setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update category icon setting"))}
+    end
+  end
+
+  defp gated_event("toggle_storefront_filter", %{"key" => key}, socket) do
+    filters =
+      Enum.map(socket.assigns.storefront_filters, fn f ->
+        if f["key"] == key, do: Map.put(f, "enabled", !f["enabled"]), else: f
+      end)
+
+    case Shop.update_storefront_filters(filters) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:storefront_filters, filters)
+         |> put_flash(:info, gettext("Storefront filter updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update filter"))}
+    end
+  end
+
+  defp gated_event("update_filter_label", %{"key" => key, "label" => label}, socket) do
+    filters =
+      Enum.map(socket.assigns.storefront_filters, fn f ->
+        if f["key"] == key, do: Map.put(f, "label", label), else: f
+      end)
+
+    case Shop.update_storefront_filters(filters) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :storefront_filters, filters)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update filter label"))}
+    end
+  end
+
+  defp gated_event("add_metadata_filter", %{"key" => option_key}, socket) do
+    existing_keys = Enum.map(socket.assigns.storefront_filters, & &1["key"])
+
+    if option_key in existing_keys do
+      {:noreply,
+       put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: option_key))}
+    else
+      max_pos =
+        socket.assigns.storefront_filters
+        |> Enum.map(& &1["position"])
+        |> Enum.max(fn -> 0 end)
+
+      new_filter = %{
+        "key" => option_key,
+        "type" => "metadata_option",
+        "option_key" => option_key,
+        "label" => String.capitalize(option_key),
+        "enabled" => true,
+        "position" => max_pos + 1
+      }
+
+      filters = socket.assigns.storefront_filters ++ [new_filter]
+
+      case Shop.update_storefront_filters(filters) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:storefront_filters, filters)
+           |> put_flash(:info, gettext("Filter '%{key}' added", key: option_key))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to add filter"))}
+      end
+    end
+  end
+
+  defp gated_event("remove_filter", %{"key" => key}, socket) do
+    filters = Enum.reject(socket.assigns.storefront_filters, &(&1["key"] == key))
+
+    case Shop.update_storefront_filters(filters) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:storefront_filters, filters)
+         |> put_flash(:info, gettext("Filter removed"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to remove filter"))}
+    end
+  end
+
+  defp gated_event("reset_default_filters", _params, socket) do
+    filters = Shop.default_storefront_filters()
+
+    case Shop.update_storefront_filters(filters) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:storefront_filters, filters)
+         |> put_flash(:info, gettext("Filters reset to defaults"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
+    end
   end
 end

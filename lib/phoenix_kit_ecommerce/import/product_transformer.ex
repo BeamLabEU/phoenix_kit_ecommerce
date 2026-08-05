@@ -85,6 +85,7 @@ defmodule PhoenixKitEcommerce.Import.ProductTransformer do
       category_uuid: category_uuid,
       metadata: metadata
     }
+    |> drop_absent_columns(first_row)
   end
 
   # Build a localized field map for a single value
@@ -269,7 +270,33 @@ defmodule PhoenixKitEcommerce.Import.ProductTransformer do
       category_uuid: category_uuid,
       metadata: metadata
     }
+    |> drop_absent_columns(first_row)
   end
+
+  # Which CSV column each attribute is built from. A file that has no such
+  # column says NOTHING about the attribute, and the importer must not speak
+  # for it — emitting a blank made a re-import erase the stored value. A
+  # column that IS present and blank still comes through, so a merchant can
+  # still clear a field by exporting it empty.
+  @attr_source_columns %{
+    body_html: "Body (HTML)",
+    description: "Body (HTML)",
+    seo_title: "SEO Title",
+    seo_description: "SEO Description",
+    vendor: "Vendor",
+    tags: "Tags",
+    status: "Published",
+    featured_image: "Image Src",
+    images: "Image Src"
+  }
+
+  defp drop_absent_columns(attrs, row) when is_map(row) do
+    Enum.reduce(@attr_source_columns, attrs, fn {attr, column}, acc ->
+      if Map.has_key?(row, column), do: acc, else: Map.delete(acc, attr)
+    end)
+  end
+
+  defp drop_absent_columns(attrs, _row), do: attrs
 
   # Get option mappings from config or opts
   defp get_option_mappings(config, opts) do

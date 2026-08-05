@@ -8,10 +8,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
-    only: [format_price: 2, profile_display_name: 1, profile_address: 1, get_current_user: 1]
+    only: [
+      format_price: 2,
+      profile_display_name: 1,
+      profile_address: 1,
+      profile_email: 1,
+      get_current_user: 1
+    ]
 
   alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Routes
@@ -110,7 +118,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   defp setup_order_assigns(socket, order) do
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(order.currency)
     billing_profile = get_billing_profile(order)
     {is_guest_order, order_email} = check_guest_order(order)
 
@@ -127,8 +135,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> assign(:authenticated, authenticated)
   end
 
-  defp get_billing_profile(%{billing_profile_uuid: nil}), do: nil
-  defp get_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
+  # The order's own snapshot is the record of who it was billed to; the
+  # live profile is a fallback for orders that predate snapshots (it is
+  # editable, so preferring it made history mutable).
+  defp get_billing_profile(order) do
+    Helpers.order_billing_identity(order) || live_billing_profile(order)
+  end
+
+  defp live_billing_profile(%{billing_profile_uuid: nil}), do: nil
+  defp live_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
 
   defp check_guest_order(%{user_uuid: nil} = order) do
     email = get_in(order.billing_snapshot, ["email"])
@@ -214,8 +229,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <div class="text-sm">
                   <div class="font-medium">{profile_display_name(@billing_profile)}</div>
                   <div class="text-base-content/60">{profile_address(@billing_profile)}</div>
-                  <%= if @billing_profile.email do %>
-                    <div class="text-base-content/60">{@billing_profile.email}</div>
+                  <%= if profile_email(@billing_profile) do %>
+                    <div class="text-base-content/60">{profile_email(@billing_profile)}</div>
                   <% end %>
                 </div>
               </div>
@@ -259,7 +274,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                       <% end %>
                     </div>
                     <div class="font-medium">
-                      {format_price_string(item["total"])}
+                      {PriceDisplay.render(nil, @currency, :order,
+                        amount: item["total"],
+                        unit: item["price_unit"]
+                      )}
                     </div>
                   </div>
                 <% end %>
@@ -325,8 +343,4 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   # Helpers
-
-  defp format_price_string(nil), do: "-"
-  defp format_price_string(amount) when is_binary(amount), do: "$#{amount}"
-  defp format_price_string(amount), do: "$#{amount}"
 end
