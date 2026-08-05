@@ -47,6 +47,20 @@ defmodule PhoenixKitEcommerce.Web.Carts do
 
   @impl true
   def handle_params(params, _uri, socket) do
+    # The mount guard redirects, but a push_navigate does NOT halt the
+    # lifecycle: handle_params still runs for this request. Without the
+    # check here, a denied visitor's request still executed the cart query
+    # - which preloads :user and therefore reads customer emails. (Today
+    # the render happens to crash on a nil assign before delivering them,
+    # but a crash is not a permission check.)
+    if Authz.can?(socket, :manage_carts) do
+      load_carts(params, socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp load_carts(params, socket) do
     page = Helpers.parse_page(params["page"])
     status = params["status"]
     search = params["search"] || ""
