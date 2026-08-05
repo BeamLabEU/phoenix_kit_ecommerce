@@ -4229,50 +4229,78 @@ defmodule PhoenixKitEcommerce do
   """
   @localized_import_fields [:title, :slug, :description, :body_html, :seo_title, :seo_description]
 
-  # Fields the importers always emit and where blank means "not in the feed".
-  # `price` and `status` are deliberately absent: the feed owns those, and
-  # both always carry a real value.
-  @blank_preserving_import_fields [:vendor, :tags, :images, :featured_image, :category_uuid]
-
   def merge_localized_attrs(existing, new_attrs) do
+    language = import_language(new_attrs)
+
     @localized_import_fields
     |> Enum.reduce(new_attrs, fn field, acc ->
-      existing_map = Map.get(existing, field) || %{}
-      new_map = get_attr(acc, field) || %{}
-
-      if map_size(new_map) > 0 do
-        put_attr(acc, field, Map.merge(existing_map, new_map))
-      else
-        # Leave the stored translations alone rather than writing %{} over them.
-        drop_attr(acc, field)
-      end
+      merge_localized_field(acc, existing, field, language)
     end)
     |> merge_import_metadata(existing)
-    |> preserve_blank_import_fields(existing)
   end
 
-  defp merge_import_metadata(attrs, existing) do
-    incoming = get_attr(attrs, :metadata) || %{}
-    stored = Map.get(existing, :metadata) || %{}
+  defp merge_localized_field(attrs, existing, field, language) do
+    existing_map = Map.get(existing, field) || %{}
+    new_map = get_attr(attrs, field) || %{}
 
-    put_attr(attrs, :metadata, Map.merge(stored, incoming))
+    cond do
+      map_size(new_map) > 0 ->
+        put_attr(attrs, field, Map.merge(existing_map, new_map))
+
+      # The column IS in the file and its cell is empty: clear that one
+      # language. Writing `%{}` here erased every OTHER language too, which
+      # no feed ever asked for.
+      has_attr?(attrs, field) and is_binary(language) ->
+        put_attr(attrs, field, Map.delete(existing_map, language))
+
+      true ->
+        drop_attr(attrs, field)
+    end
   end
 
-  defp preserve_blank_import_fields(attrs, _existing) do
-    Enum.reduce(@blank_preserving_import_fields, attrs, fn field, acc ->
-      if blank_import_value?(get_attr(acc, field)), do: drop_attr(acc, field), else: acc
+  # The language a set of import attrs is written in — read off whichever
+  # localized map carries one. `title` is required, so this is nil only for a
+  # row that will fail validation anyway.
+  defp import_language(attrs) do
+    Enum.find_value(@localized_import_fields, fn field ->
+      case get_attr(attrs, field) do
+        map when is_map(map) and map_size(map) > 0 -> map |> Map.keys() |> List.first()
+        _ -> nil
+      end
     end)
   end
 
-  defp blank_import_value?(nil), do: true
-  defp blank_import_value?(""), do: true
-  defp blank_import_value?([]), do: true
-  defp blank_import_value?(map) when is_map(map), do: map_size(map) == 0
-  defp blank_import_value?(_), do: false
+  # `metadata` is DERIVED (option values, price modifiers, image mappings),
+  # not a column, so an import that describes no options is not asking to
+  # delete the admin's — or another importer's — namespaces.
+  #
+  # The merge is DEEP because these namespaces are keyed by option: a feed
+  # that ships `_price_modifiers => %{"size" => …}` says nothing about the
+  # admin-created `engraving` option living beside it, and a top-level merge
+  # deleted it. A leaf the feed does carry still wins.
+  defp merge_import_metadata(attrs, existing) do
+    case get_attr(attrs, :metadata) do
+      nil ->
+        attrs
+
+      incoming ->
+        put_attr(attrs, :metadata, deep_merge(Map.get(existing, :metadata) || %{}, incoming))
+    end
+  end
+
+  defp deep_merge(stored, incoming) when is_map(stored) and is_map(incoming) do
+    Map.merge(stored, incoming, fn _key, old, new -> deep_merge(old, new) end)
+  end
+
+  defp deep_merge(_stored, incoming), do: incoming
 
   # Helper to get attribute from either atom or string keyed map
   defp get_attr(attrs, key) when is_atom(key) do
     Map.get(attrs, key) || Map.get(attrs, to_string(key))
+  end
+
+  defp has_attr?(attrs, key) when is_atom(key) do
+    Map.has_key?(attrs, key) or Map.has_key?(attrs, to_string(key))
   end
 
   # Remove an attribute under either key spelling, so the changeset never

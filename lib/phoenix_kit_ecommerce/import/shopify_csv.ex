@@ -176,7 +176,7 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
     |> Enum.each(fn {handle, rows} ->
       first = List.first(rows)
       category = Filter.categorize(first["Title"] || "", config)
-      Logger.info("  #{handle} -> #{category}")
+      Logger.info("  #{CSVParser.display_handle(handle)} -> #{category}")
     end)
 
     %{
@@ -222,7 +222,7 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
     if Filter.should_include?(rows, config) do
       do_process_product(handle, rows, opts)
     else
-      {:skipped, handle, :filtered}
+      {:skipped, CSVParser.display_handle(handle), :filtered}
     end
   end
 
@@ -237,7 +237,15 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
 
     # Transform with config and language
     transform_opts = if language, do: [language: language], else: []
-    attrs = ProductTransformer.transform(handle, rows, categories_map, config, transform_opts)
+
+    attrs =
+      ProductTransformer.transform(
+        CSVParser.handle_value(handle),
+        rows,
+        categories_map,
+        config,
+        transform_opts
+      )
 
     # Override category if specified
     attrs =
@@ -248,7 +256,7 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
       end
 
     if dry_run do
-      {:dry_run, handle, attrs}
+      {:dry_run, CSVParser.display_handle(handle), attrs}
     else
       save_product(handle, attrs, opts)
     end
@@ -261,13 +269,16 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
       update_existing ->
         upsert_product(handle, attrs)
 
-      skip_existing && product_exists?(handle) ->
-        {:skipped, handle, :exists}
+      skip_existing && product_exists?(CSVParser.handle_value(handle)) ->
+        {:skipped, CSVParser.display_handle(handle), :exists}
 
       true ->
         create_product(handle, attrs)
     end
   end
+
+  # A handle-less group has no slug to look up — it cannot be "already there".
+  defp product_exists?(nil), do: false
 
   defp product_exists?(slug) do
     case Shop.get_product_by_slug(slug) do
@@ -279,28 +290,34 @@ defmodule PhoenixKitEcommerce.Import.ShopifyCSV do
   defp create_product(handle, attrs) do
     case Shop.create_product(attrs) do
       {:ok, product} ->
-        Logger.debug("Created: #{handle}")
+        Logger.debug("Created: #{CSVParser.display_handle(handle)}")
         {:ok, product}
 
       {:error, changeset} ->
-        Logger.warning("Failed: #{handle} - #{inspect(changeset.errors)}")
-        {:error, handle, changeset}
+        Logger.warning(
+          "Failed: #{CSVParser.display_handle(handle)} - #{inspect(changeset.errors)}"
+        )
+
+        {:error, CSVParser.display_handle(handle), changeset}
     end
   end
 
   defp upsert_product(handle, attrs) do
     case Shop.upsert_product(attrs) do
       {:ok, product, :inserted} ->
-        Logger.debug("Created: #{handle}")
+        Logger.debug("Created: #{CSVParser.display_handle(handle)}")
         {:ok, product}
 
       {:ok, product, :updated} ->
-        Logger.debug("Updated: #{handle}")
+        Logger.debug("Updated: #{CSVParser.display_handle(handle)}")
         {:updated, product}
 
       {:error, changeset} ->
-        Logger.warning("Failed: #{handle} - #{inspect(changeset.errors)}")
-        {:error, handle, changeset}
+        Logger.warning(
+          "Failed: #{CSVParser.display_handle(handle)} - #{inspect(changeset.errors)}"
+        )
+
+        {:error, CSVParser.display_handle(handle), changeset}
     end
   end
 

@@ -8,9 +8,11 @@ defmodule PhoenixKitEcommerce.Import.CSVParser do
   - Each variant row has Option1/Option2 values and prices
   """
 
-  alias PhoenixKit.Utils.Slug
-
   NimbleCSV.define(ShopifyCSV, separator: ",", escape: "\"")
+
+  # A Handle cannot contain a NUL, so a key built with this prefix can never
+  # be one a merchant wrote.
+  @blank_key_prefix "\0row:"
 
   @doc """
   Parse CSV file and group rows by Handle (product identifier).
@@ -51,23 +53,61 @@ defmodule PhoenixKitEcommerce.Import.CSVParser do
     # Group by Handle and reverse to maintain order
     rows
     |> Enum.reverse()
-    |> Enum.group_by(&group_key/1)
+    |> group_rows()
   end
 
+  @doc """
+  The handle to import a group under — `nil` for a group the file gave no
+  handle, so the product's slug is derived from its title instead.
+  """
+  def handle_value(key) do
+    if blank_handle_key?(key), do: nil, else: key
+  end
+
+  @doc "A human-readable name for a group key, for logs and result tuples."
+  def display_handle(key) do
+    if blank_handle_key?(key),
+      do: "(row #{String.trim_leading(key, @blank_key_prefix)})",
+      else: key
+  end
+
+  defp blank_handle_key?(key) when is_binary(key), do: String.starts_with?(key, @blank_key_prefix)
+  defp blank_handle_key?(_key), do: false
+
   # The handle is what makes a row a VARIANT of the row above it. Rows with a
-  # blank handle share no such relationship, yet they all grouped under the
-  # same blank key: unrelated products merged into one, the first row's title
-  # won, and every other product silently became a variant of it.
+  # blank handle share no such relationship, yet they all grouped under one
+  # blank key: unrelated products merged into a single product, the first
+  # row's title won, and the rest became its variants.
   #
-  # A blank handle falls back to the row's own title, which is what the
-  # merchant meant by it and — unlike a row number — stays the same when the
-  # file is re-exported in a different order, so a re-import still matches.
-  defp group_key(row) do
-    case row["Handle"] do
-      handle when is_binary(handle) and handle != "" -> handle
-      _ -> Slug.slugify(row["Title"] || "", transliterate: true)
+  # Blank handle + blank title is Shopify's CONTINUATION shape, so it stays
+  # with the group above it. Blank handle + a title starts a new group under a
+  # synthetic key, which is namespaced so it can never collide with a real
+  # handle in the same file (grouping by the slugified title did exactly that:
+  # a handle-less "Mug" row was absorbed into the product handled `mug`).
+  defp group_rows(rows) do
+    {groups, _last_key, _index} =
+      Enum.reduce(rows, {%{}, nil, 0}, fn row, {acc, last_key, index} ->
+        {key, index} = next_group_key(row, last_key, index)
+        {Map.update(acc, key, [row], &(&1 ++ [row])), key, index}
+      end)
+
+    groups
+  end
+
+  defp next_group_key(row, last_key, index) do
+    handle = row["Handle"]
+    title = row["Title"]
+
+    cond do
+      is_binary(handle) and handle != "" -> {handle, index}
+      blank?(title) and not is_nil(last_key) -> {last_key, index}
+      true -> {"#{@blank_key_prefix}#{index + 1}", index + 1}
     end
   end
+
+  defp blank?(nil), do: true
+  defp blank?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank?(_), do: false
 
   @doc """
   Get the first (main) row for a product group.

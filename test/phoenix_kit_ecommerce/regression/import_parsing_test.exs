@@ -43,12 +43,74 @@ defmodule PhoenixKitEcommerce.Regression.ImportParsingTest do
       assert titles == ["Blue Lamp", "Red Vase"]
     end
 
-    test "the derived key comes from the title, so a reordered re-export matches" do
+    test "a reordered re-export still yields the same products" do
       forward = write_csv(["Handle,Title,Variant Price", ",Red Vase,10.00", ",Blue Lamp,20.00"])
       reversed = write_csv(["Handle,Title,Variant Price", ",Blue Lamp,20.00", ",Red Vase,10.00"])
 
-      assert CSVParser.parse_and_group(forward) |> Map.keys() |> Enum.sort() ==
-               CSVParser.parse_and_group(reversed) |> Map.keys() |> Enum.sort()
+      # The grouping key is positional, but it never reaches the product —
+      # `handle_value/1` blanks it, so the slug is derived from the title and
+      # a re-import matches on that.
+      titles = fn path ->
+        path
+        |> CSVParser.parse_and_group()
+        |> Enum.map(fn {_key, [row | _]} -> row["Title"] end)
+        |> Enum.sort()
+      end
+
+      assert titles.(forward) == titles.(reversed)
+      assert titles.(forward) == ["Blue Lamp", "Red Vase"]
+    end
+
+    test "a handle-less row does not merge into a real handle with the same title" do
+      path =
+        write_csv([
+          "Handle,Title,Variant Price",
+          "mug,Coffee Mug,10.00",
+          ",Mug,20.00"
+        ])
+
+      grouped = CSVParser.parse_and_group(path)
+
+      assert map_size(grouped) == 2,
+             "a title-derived key collided with a handle a merchant actually wrote"
+
+      assert length(grouped["mug"]) == 1
+    end
+
+    test "a continuation row stays with the product above it" do
+      # Shopify's variant shape: only the first row of a product carries a
+      # title. With the handle blank too, the variant must not become its own
+      # product (and then fail validation for having no title).
+      path =
+        write_csv([
+          "Handle,Title,Option1 Name,Option1 Value,Variant Price",
+          ",Red Vase,Size,S,10.00",
+          ",,Size,L,14.00",
+          ",Blue Lamp,Size,S,20.00"
+        ])
+
+      grouped = CSVParser.parse_and_group(path)
+
+      assert map_size(grouped) == 2
+
+      vase =
+        Enum.find_value(grouped, fn {_k, rows} ->
+          if List.first(rows)["Title"] == "Red Vase", do: rows
+        end)
+
+      assert length(vase) == 2, "the L variant was split off its product"
+      assert Enum.map(vase, & &1["Option1 Value"]) == ["S", "L"]
+    end
+
+    test "a handle-less group imports under no handle at all" do
+      path = write_csv(["Handle,Title,Variant Price", ",Red Vase,10.00"])
+
+      [key] = CSVParser.parse_and_group(path) |> Map.keys()
+
+      refute CSVParser.handle_value(key),
+             "a synthetic grouping key must not reach the product as its slug"
+
+      assert is_binary(CSVParser.display_handle(key))
     end
 
     test "rows sharing a handle stay one product with its variants" do
