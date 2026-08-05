@@ -3144,7 +3144,7 @@ defmodule PhoenixKitEcommerce do
     )
   end
 
-  # First-class linkage (billing Order.payment_option_uuid, core V161) so an
+  # First-class linkage (billing Order.payment_option_uuid, core V162) so an
   # operator can see WHICH configured option a customer chose - several
   # options share one payment_method.
   #
@@ -3164,10 +3164,15 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  # V161 added the column. Cached in :persistent_term because this runs on
+  # V162 added the column. Cached in :persistent_term because this runs on
   # every checkout and the answer only changes when an operator migrates -
   # at which point a restart (or a cache clear) picks it up.
-  @payment_option_version 161
+  #
+  # This constant is the ONLY thing standing between a host below that
+  # version and a crash on a missing column, so it has to track the core
+  # migration's real number: it was 161 until core merged a different V161
+  # (citext username) ahead of this one.
+  @payment_option_version 162
   @payment_option_cache_key {__MODULE__, :payment_option_column?}
 
   defp payment_option_column_available? do
