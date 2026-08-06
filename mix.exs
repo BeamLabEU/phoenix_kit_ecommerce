@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.1.14"
+  @version "0.1.15"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -116,7 +116,14 @@ defmodule PhoenixKitEcommerce.MixProject do
       {:gettext, "~> 1.0"},
 
       # Billing integration for checkout and order conversion.
-      pk_dep(:phoenix_kit_billing, "~> 0.1"),
+      # 0.5.2 is the floor: that release adds `payment_option_uuid` to
+      # `PhoenixKitBilling.Order`, the column `maybe_put_payment_option/2`
+      # writes once core is migrated to V162. Below it the attr is dropped
+      # by `cast/3` and the order/payment-option linkage silently vanishes.
+      # `~> 0.1` also admitted 0.1.0, which predates the `PhoenixKitBilling`
+      # namespace entirely (it was `PhoenixKit.Modules.Billing`), and
+      # 0.1.1/0.1.2, which have no tax API — both fail to compile here.
+      pk_dep(:phoenix_kit_billing, "~> 0.5.2"),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
