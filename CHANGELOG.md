@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.15 - 2026-08-06
+
+Dependency-contract release. PR #15 raised the core floor to the release that
+actually ships the module the admin lists depend on; the post-merge review
+found the sibling billing floor stale in the same way, only wider. Findings in
+`dev_docs/pull_requests/2026/15-core-version-floor/CLAUDE_REVIEW.md`.
+
+Nothing about this package's behaviour changed — `mix.lock` already carried
+both dependencies well above the new floors. What changed is what a *consumer*
+is allowed to resolve.
+
+### Changed
+- **`phoenix_kit` floor raised to `~> 1.7.231`** (PR #15). `Web.Products` and
+  `Web.Categories` `use PhoenixKitWeb.Live.UrlState`, which first shipped in
+  core 1.7.231, while the requirement still named 1.7.214. A consumer whose
+  resolution landed below it got a package referencing a module their core
+  does not have: a compile failure from source, or an `UndefinedFunctionError`
+  on `on_mount/4` the first time an admin opened the products or categories
+  list, since the `on_mount({:url_state, cfg})` tuple is baked into the
+  `.beam`. Verified by building against both releases — 1.7.230 fails to
+  compile, 1.7.231 is clean. The floor now also agrees with
+  `@payment_option_version 162`, core's V162 migration having shipped in the
+  same release.
+- **`phoenix_kit_billing` floor raised to `~> 0.5.2`.** `~> 0.1` admitted
+  0.1.0, which predates the `PhoenixKitBilling` namespace entirely (it was
+  `PhoenixKit.Modules.Billing`, so every call site here is undefined), and
+  0.1.1–0.1.2, which have no tax API. More quietly, `Order.payment_option_uuid`
+  — the column `maybe_put_payment_option/2` writes once the host is migrated to
+  core V162 — only exists from billing 0.5.2. Below that, `cast/3` drops the
+  attr without an error and the order/payment-option linkage vanishes with
+  nothing reporting it.
+
+### Added
+- `test/phoenix_kit_ecommerce/dependency_floor_test.exs` — DB-free contract
+  test pinning the symbols the two floors exist to guarantee (`UrlState`,
+  `Migrations.Postgres.migrated_version_runtime/1`,
+  `Order.payment_option_uuid`, the billing tax trio). It asserts against the
+  resolved dependency, so it fails in any build where resolution lands below a
+  floor — the case this workspace's always-latest `mix.lock` can never
+  reproduce, which is why both defects had to be found by reading.
+
 ## 0.1.14 - 2026-08-05
 
 The storefront layout, price-unit and permission wave (PR #13) and URL-backed
