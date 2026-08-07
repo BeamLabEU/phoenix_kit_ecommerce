@@ -197,7 +197,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div>
+      <%!-- Page container. `shop_layout` renders the slot bare into the HOST's
+           app layout, so each public page brings its own wrapper; without it
+           this page runs edge-to-edge on a host whose <main> has no padding.
+           Matches catalog_category.ex. --%>
+      <div class="p-6 max-w-7xl mx-auto">
         
         <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Hero Section --%>
@@ -210,16 +214,38 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
           </div>
         </header>
 
-        <%!-- Mobile filter toggle --%>
+        <%!-- Categories on mobile. The only other category list on this page is
+             the desktop aside (`hidden lg:block`), and the category grid below
+             is behind `shop_sidebar_show_categories` — so with that setting off,
+             a phone had no way to reach a category at all. Deliberately NOT in
+             the filter drawer: a visitor looking for categories does not tap a
+             button labelled "Filters". The setting governs the big grid, not
+             whether categories are reachable, which is why this ignores it. --%>
         <div class="lg:hidden mb-4">
-          <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
-            <.icon name="hero-funnel" class="w-4 h-4" />
-            Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
-            <%= if filter_count > 0 do %>
-              <span class="badge badge-primary badge-xs">{filter_count}</span>
-            <% end %>
-          </button>
+          <CatalogSidebar.category_nav
+            categories={@categories}
+            current_category={nil}
+            current_language={@current_language}
+            category_icon_mode={@category_icon_mode}
+            category_name_wrap={@category_name_wrap}
+            open={false}
+            filter_qs={@filter_qs}
+          />
         </div>
+
+        <%!-- Mobile filter toggle. Suppressed when no filters are configured:
+             it used to render unconditionally and open an empty drawer. --%>
+        <%= if @enabled_filters != [] do %>
+          <div class="lg:hidden mb-4">
+            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+              <.icon name="hero-funnel" class="w-4 h-4" />
+              Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
+              <%= if filter_count > 0 do %>
+                <span class="badge badge-primary badge-xs">{filter_count}</span>
+              <% end %>
+            </button>
+          </div>
+        <% end %>
 
         <%!-- Mobile filter drawer (filters only, no categories) --%>
         <%= if @show_mobile_filters do %>
@@ -301,11 +327,12 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             <% end %>
 
             <%!-- Products Section --%>
+            <%!-- One cart link only. `storefront_bar` above already carries a
+                 translated one; the button that used to sit here was hardcoded
+                 English and rendered a second, identical cart affordance a few
+                 hundred pixels below the first. --%>
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-2xl font-bold">Products</h2>
-              <.link navigate={Shop.cart_url(@current_language)} class="btn btn-outline btn-sm gap-2">
-                <.icon name="hero-shopping-cart" class="w-4 h-4" /> View Cart
-              </.link>
             </div>
 
             <%= if @products == [] do %>

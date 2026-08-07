@@ -261,7 +261,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div>
+      <%!-- Page container — see shop_catalog.ex. This page and the catalog were
+           the two that never had one, and relied on the module-owned layout's
+           padding until that layout was removed. --%>
+      <div class="p-6 max-w-7xl mx-auto">
         <%!-- Header --%>
         <header class="mb-6">
           <div class="flex items-start gap-4">
