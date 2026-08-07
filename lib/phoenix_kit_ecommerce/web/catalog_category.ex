@@ -283,16 +283,33 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           </ul>
         </div>
 
-        <%!-- Mobile filter toggle --%>
+        <%!-- Categories on mobile — same treatment as the catalog page. The
+             drawer below does carry categories, but only behind a button
+             labelled "Filters", which is not where a visitor looks for them. --%>
         <div class="lg:hidden mb-4">
-          <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
-            <.icon name="hero-funnel" class="w-4 h-4" />
-            Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
-            <%= if filter_count > 0 do %>
-              <span class="badge badge-primary badge-xs">{filter_count}</span>
-            <% end %>
-          </button>
+          <CatalogSidebar.category_nav
+            categories={@categories}
+            current_category={@category}
+            current_language={@current_language}
+            category_icon_mode={@category_icon_mode}
+            category_name_wrap={@category_name_wrap}
+            open={false}
+            filter_qs={@filter_qs}
+          />
         </div>
+
+        <%!-- Mobile filter toggle. Suppressed when no filters are configured. --%>
+        <%= if @enabled_filters != [] do %>
+          <div class="lg:hidden mb-4">
+            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+              <.icon name="hero-funnel" class="w-4 h-4" />
+              Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
+              <%= if filter_count > 0 do %>
+                <span class="badge badge-primary badge-xs">{filter_count}</span>
+              <% end %>
+            </button>
+          </div>
+        <% end %>
 
         <%!-- Mobile filter drawer --%>
         <%= if @show_mobile_filters do %>
