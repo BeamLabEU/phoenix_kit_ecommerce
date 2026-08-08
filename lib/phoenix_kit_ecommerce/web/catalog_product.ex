@@ -824,7 +824,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <div class="divider"></div>
 
               <h3 class="font-semibold text-lg mb-3">
-                <.icon name="hero-tag" class="w-5 h-5 inline" /> Specifications
+                <.icon name="hero-tag" class="w-5 h-5 inline" /> {gettext("Specifications")}
               </h3>
 
               <div class="overflow-x-auto">
@@ -982,7 +982,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   disabled={@adding_to_cart}
                 >
                   <%= if @adding_to_cart do %>
-                    <span class="loading loading-spinner loading-sm"></span> Adding...
+                    <span class="loading loading-spinner loading-sm"></span> {gettext("Adding...")}
                   <% else %>
                     <.icon name="hero-shopping-cart" class="w-5 h-5 mr-2" />
                     <%= if @cart_item do %>
@@ -995,7 +995,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
                 <%!-- View Cart Link --%>
                 <.link navigate={Shop.cart_url(@current_language)} class="btn btn-outline w-full">
-                  <.icon name="hero-eye" class="w-5 h-5 mr-2" /> View Cart
+                  <.icon name="hero-eye" class="w-5 h-5 mr-2" /> {gettext("View Cart")}
                 </.link>
               </div>
             <% else %>

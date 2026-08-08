@@ -368,7 +368,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
     <div class="space-y-1">
       <%= if @has_active do %>
         <button phx-click="clear_filters" class="btn btn-outline btn-error btn-xs w-full gap-1 mb-1">
-          <.icon name="hero-x-mark" class="w-3 h-3" /> Clear filters
+          <.icon name="hero-x-mark" class="w-3 h-3" /> {gettext("Clear filters")}
         </button>
       <% end %>
 

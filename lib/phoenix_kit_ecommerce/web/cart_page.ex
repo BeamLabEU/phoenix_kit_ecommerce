@@ -548,7 +548,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                   class="btn btn-primary btn-block mt-6"
                   disabled={@cart.items == [] || (is_nil(@cart.shipping_method_uuid) && @requires_shipping)}
                 >
-                  <.icon name="hero-credit-card" class="w-5 h-5 mr-2" /> Proceed to Checkout
+                  <.icon name="hero-credit-card" class="w-5 h-5 mr-2" /> {gettext("Proceed to Checkout")}
                 </button>
 
                 <%= if @cart.items != [] do %>
