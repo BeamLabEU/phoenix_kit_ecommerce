@@ -170,20 +170,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     end
   end
 
-  defp fill_billing_form(view, country: country) do
-    form(view, "#checkout-billing-form",
-      billing: %{
-        "first_name" => "Test",
-        "last_name" => "Buyer",
-        "email" => "checkout-shipping-#{System.unique_integer([:positive])}@example.com",
-        "address_line1" => "1 Test Street",
-        "city" => "Testville",
-        "postal_code" => "10001",
-        "country" => country
-      }
-    )
-  end
-
   defp shipping_method(attrs) do
     {:ok, method} =
       Shop.create_shipping_method(%{

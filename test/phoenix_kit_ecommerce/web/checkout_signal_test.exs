@@ -8,11 +8,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutSignalTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
-  import Ecto.Query
-
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
-  alias PhoenixKitEcommerce.Test.Repo
 
   test "connected checkout mount emits shop.checkout_started once", %{conn: conn} do
     # An admin recipient must exist for the assertion to be meaningful —
@@ -64,17 +61,5 @@ defmodule PhoenixKitEcommerce.Web.CheckoutSignalTest do
     {:ok, _cart} = Shop.add_to_cart(cart, product, 1)
 
     Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})
-  end
-
-  # `notify_shop/1` never persists `:action` on the notification row (see
-  # `PhoenixKitEcommerce.Notifications.notify_shop/1`) — it's stashed under
-  # `metadata["action"]` instead, so filter there rather than a bare
-  # `action` column that does not exist on `phoenix_kit_notifications`.
-  defp count_notifications(action) do
-    "phoenix_kit_notifications"
-    |> select([n], %{uuid: n.uuid, metadata: n.metadata})
-    |> Repo.all()
-    |> Enum.filter(&(&1.metadata["action"] == action))
-    |> length()
   end
 end
