@@ -35,7 +35,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   defp do_mount(params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop always uses default language, not session
-    current_language = Helpers.get_language_from_params_or_default(params)
+    current_language =
+      params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
     categories = Shop.list_active_categories(preload: [:parent, :featured_product])
 

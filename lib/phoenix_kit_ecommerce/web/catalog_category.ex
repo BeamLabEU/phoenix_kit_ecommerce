@@ -38,7 +38,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   defp do_mount(%{"slug" => slug} = params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop/... always uses default language, not session
-    current_language = Helpers.get_language_from_params_or_default(params)
+    current_language =
+      params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
     case Shop.get_category_by_slug_localized(slug, current_language, preload: [:parent]) do
       {:error, :not_found} ->

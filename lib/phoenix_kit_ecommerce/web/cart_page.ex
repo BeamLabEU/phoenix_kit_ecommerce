@@ -46,7 +46,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     session_id = session["shop_session_id"] || generate_session_id()
 
     # Get current language for localized URLs
-    current_language = socket.assigns[:current_locale] || Translations.default_language()
+    current_language =
+      (socket.assigns[:current_locale] || Translations.default_language())
+      |> Helpers.put_content_locale()
 
     # Get current user if logged in
     user = get_current_user(socket)

@@ -49,7 +49,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   defp do_mount(%{"slug" => slug} = params, session, socket) do
-    current_language = Helpers.get_language_from_params_or_default(params)
+    current_language =
+      params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
     case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
       {:error, :not_found} ->
