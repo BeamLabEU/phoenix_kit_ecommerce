@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitWeb.Components.Core.Icon
+  alias PhoenixKitEcommerce.Vocabulary
 
   @doc """
   Renders the full catalog sidebar with filters and category tree.
@@ -93,7 +94,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                   navigate={Shop.catalog_url(@current_language) <> @filter_qs}
                   class={if is_nil(@current_category), do: "active", else: ""}
                 >
-                  <.icon name="hero-home" class="w-4 h-4" /> {gettext("All Products")}
+                  <.icon name="hero-home" class="w-4 h-4" /> {Vocabulary.all_items()}
                 </.link>
               </li>
               <%= for cat <- @categories do %>
@@ -166,7 +167,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                 navigate={Shop.catalog_url(@current_language) <> @filter_qs}
                 class={if is_nil(@current_category), do: "active", else: ""}
               >
-                <.icon name="hero-home" class="w-4 h-4" /> {gettext("All Products")}
+                <.icon name="hero-home" class="w-4 h-4" /> {Vocabulary.all_items()}
               </.link>
             </li>
             <%= for cat <- @categories do %>

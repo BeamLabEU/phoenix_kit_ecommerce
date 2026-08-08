@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Vocabulary
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, humanize_key: 1, get_current_user: 1]
@@ -293,9 +294,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                 <div class="card-body text-center py-16">
                   <.icon name="hero-shopping-cart" class="w-16 h-16 mx-auto mb-4 opacity-30" />
                   <h2 class="text-xl font-medium text-base-content/60">{gettext("Your cart is empty")}</h2>
-                  <p class="text-base-content/50 mb-6">{gettext("Add some products to get started")}</p>
+                  <p class="text-base-content/50 mb-6">{Vocabulary.add_some_to_start()}</p>
                   <.link navigate={Shop.catalog_url(@current_language)} class="btn btn-primary">
-                    {gettext("Browse Products")}
+                    {Vocabulary.browse_cta()}
                   </.link>
                 </div>
               </div>
@@ -306,7 +307,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <table class="table">
                       <thead>
                         <tr>
-                          <th class="w-1/2">{gettext("Product")}</th>
+                          <th class="w-1/2">{Vocabulary.item_column()}</th>
                           <th class="text-center">{gettext("Quantity")}</th>
                           <th class="text-right">{gettext("Price")}</th>
                           <th></th>
