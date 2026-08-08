@@ -13,7 +13,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -34,6 +36,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:inventory_tracking, config.inventory_tracking)
       |> assign(:billing_enabled, billing_enabled?())
       |> assign(:category_name_display, get_category_name_display())
+      |> assign(:catalog_vocabulary, Vocabulary.current())
+      |> assign(:hide_zero_decimals, Helpers.hide_zero_decimals?())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
       |> assign(:show_cart_bar, get_show_cart_bar())
@@ -122,6 +126,18 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   @impl true
+  def handle_event("toggle_hide_zero_decimals", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_hide_zero_decimals", params, socket)
+    end)
+  end
+
+  def handle_event("update_catalog_vocabulary", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_catalog_vocabulary", params, socket)
+    end)
+  end
+
   def handle_event("update_category_display", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_category_display", params, socket)
@@ -667,6 +683,57 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
             <div class="divider"></div>
 
+            <div>
+              <h3 class="font-medium mb-1">{gettext("Price format")}</h3>
+              <p class="text-sm text-base-content/60 mb-3">
+                {gettext(
+                  "Storefront only. Invoices and receipts always keep two decimals."
+                )}
+              </p>
+              <label class="label cursor-pointer gap-2 justify-start">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary"
+                  checked={@hide_zero_decimals}
+                  phx-click="toggle_hide_zero_decimals"
+                />
+                <span class="label-text">{gettext("Hide .00 on whole prices (40 instead of 40.00)")}</span>
+              </label>
+            </div>
+
+            <div class="divider"></div>
+
+            <div>
+              <h3 class="font-medium mb-1">{gettext("Catalogue vocabulary")}</h3>
+              <p class="text-sm text-base-content/60 mb-3">
+                {gettext(
+                  "What the storefront calls what you sell. Each option is separately translated, not a swapped word, so it reads correctly in every language."
+                )}
+              </p>
+              <div class="flex gap-4">
+                <%!-- Driven by Vocabulary.options/0, the same list the handler
+                     validates against, so a new value cannot validate and then
+                     be missing from the UI. --%>
+                <%= for value <- Vocabulary.options() do %>
+                  <% label = vocabulary_label(value) %>
+                  <label class="label cursor-pointer gap-2">
+                    <input
+                      type="radio"
+                      name="catalog_vocabulary"
+                      class="radio radio-primary"
+                      value={value}
+                      checked={@catalog_vocabulary == value}
+                      phx-click="update_catalog_vocabulary"
+                      phx-value-vocabulary={value}
+                    />
+                    <span class="label-text">{label}</span>
+                  </label>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
             <%!-- Category Icon Mode --%>
             <div class="form-control">
               <label class="label">
@@ -816,6 +883,58 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
+    end
+  end
+
+  defp gated_event("toggle_hide_zero_decimals", _params, socket) do
+    value = to_string(!socket.assigns.hide_zero_decimals)
+
+    case Settings.update_setting("shop_hide_zero_decimals", value) do
+      {:ok, _} ->
+        Activity.log("shop.price_format_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"hide_zero_decimals" => value}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:hide_zero_decimals, value == "true")
+         |> put_flash(:info, gettext("Price format updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update price format"))}
+    end
+  end
+
+  defp gated_event("update_catalog_vocabulary", %{"vocabulary" => vocabulary}, socket) do
+    if vocabulary in Vocabulary.options() do
+      case Settings.update_setting(Vocabulary.setting_key(), vocabulary) do
+        {:ok, _} ->
+          # A manage_settings-gated global write that changes every heading and
+          # empty state on the public storefront. "Who changed this, and when" is
+          # the first question after someone notices — the value is a closed
+          # enum, so recording it carries no user data.
+          Activity.log("shop.catalog_vocabulary_changed",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "setting",
+            metadata: %{"vocabulary" => vocabulary}
+          )
+
+          {:noreply,
+           socket
+           |> assign(:catalog_vocabulary, vocabulary)
+           |> put_flash(:info, gettext("Catalogue vocabulary updated"))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update catalogue vocabulary"))}
+      end
+    else
+      # Closed list: an unknown value would silently fall back to "products"
+      # on every read, which reads as the setting being ignored.
+      {:noreply, put_flash(socket, :error, gettext("Failed to update catalogue vocabulary"))}
     end
   end
 
@@ -988,4 +1107,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
         {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
     end
   end
+
+  defp vocabulary_label("services"), do: gettext("Services")
+  defp vocabulary_label("mixed"), do: gettext("Both (neutral wording)")
+  defp vocabulary_label(_), do: gettext("Products")
 end

@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Components.ShopCards
@@ -25,7 +26,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -35,7 +36,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   defp do_mount(params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop always uses default language, not session
-    current_language = Helpers.get_language_from_params_or_default(params)
+    current_language =
+      params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
     categories = Shop.list_active_categories(preload: [:parent, :featured_product])
 
@@ -70,7 +72,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
     socket =
       socket
-      |> assign(:page_title, "Shop")
+      |> assign(:page_title, gettext("Shop"))
       |> assign(:cart_count, storefront_cart_count(socket))
       |> assign(:categories, categories)
       |> assign(:products, products)
@@ -197,29 +199,57 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div>
+      <%!-- Page container. `shop_layout` renders the slot bare into the HOST's
+           app layout, so each public page brings its own wrapper; without it
+           this page runs edge-to-edge on a host whose <main> has no padding.
+           Matches catalog_category.ex. --%>
+      <div class="p-6 max-w-7xl mx-auto">
         
         <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
           <div class="text-center">
-            <h1 class="text-3xl font-bold text-base-content mb-3">Welcome to Our Shop</h1>
+            <h1 class="text-3xl font-bold text-base-content mb-3">
+              {gettext("Welcome to Our Shop")}
+            </h1>
             <p class="text-lg text-base-content/70">
-              Browse our collection of products across various categories
+              {Vocabulary.collection_blurb()}
             </p>
           </div>
         </header>
 
-        <%!-- Mobile filter toggle --%>
+        <%!-- Categories on mobile. The only other category list on this page is
+             the desktop aside (`hidden lg:block`), and the category grid below
+             is behind `shop_sidebar_show_categories` — so with that setting off,
+             a phone had no way to reach a category at all. Deliberately NOT in
+             the filter drawer: a visitor looking for categories does not tap a
+             button labelled "Filters". The setting governs the big grid, not
+             whether categories are reachable, which is why this ignores it. --%>
         <div class="lg:hidden mb-4">
-          <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
-            <.icon name="hero-funnel" class="w-4 h-4" />
-            Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
-            <%= if filter_count > 0 do %>
-              <span class="badge badge-primary badge-xs">{filter_count}</span>
-            <% end %>
-          </button>
+          <CatalogSidebar.category_nav
+            categories={@categories}
+            current_category={nil}
+            current_language={@current_language}
+            category_icon_mode={@category_icon_mode}
+            category_name_wrap={@category_name_wrap}
+            open={false}
+            filter_qs={@filter_qs}
+          />
         </div>
+
+        <%!-- Mobile filter toggle. Suppressed when no filters are configured:
+             it used to render unconditionally and open an empty drawer. --%>
+        <%= if @enabled_filters != [] do %>
+          <div class="lg:hidden mb-4">
+            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+              <.icon name="hero-funnel" class="w-4 h-4" />
+              {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
+              <%= if filter_count > 0 do %>
+                <span class="badge badge-primary badge-xs">{filter_count}</span>
+              <% end %>
+            </button>
+          </div>
+        <% end %>
 
         <%!-- Mobile filter drawer (filters only, no categories) --%>
         <%= if @show_mobile_filters do %>
@@ -268,7 +298,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             <%!-- Category Grid (controlled by setting) --%>
             <%= if @show_categories_grid && @categories != [] do %>
               <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-4">Categories</h2>
+                <h2 class="text-2xl font-bold mb-4">{gettext("Categories")}</h2>
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   <%= for cat <- @categories do %>
                     <.link
@@ -301,26 +331,29 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             <% end %>
 
             <%!-- Products Section --%>
+            <%!-- One cart link only. `storefront_bar` above already carries a
+                 translated one; the button that used to sit here was hardcoded
+                 English and rendered a second, identical cart affordance a few
+                 hundred pixels below the first. --%>
             <div class="flex items-center justify-between mb-6">
-              <h2 class="text-2xl font-bold">Products</h2>
-              <.link navigate={Shop.cart_url(@current_language)} class="btn btn-outline btn-sm gap-2">
-                <.icon name="hero-shopping-cart" class="w-4 h-4" /> View Cart
-              </.link>
+              <h2 class="text-2xl font-bold">{Vocabulary.heading()}</h2>
             </div>
 
             <%= if @products == [] do %>
               <div class="card bg-base-100 shadow-xl">
                 <div class="card-body text-center py-16">
                   <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <h3 class="text-xl font-medium text-base-content/60">No products available</h3>
+                  <h3 class="text-xl font-medium text-base-content/60">
+                    {Vocabulary.none_available()}
+                  </h3>
                   <p class="text-base-content/50">
                     <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
-                      No products match your filters.
+                      {Vocabulary.none_match_filters()}
                       <button phx-click="clear_filters" class="link link-primary">
-                        Clear filters
+                        {gettext("Clear filters")}
                       </button>
                     <% else %>
-                      Check back soon for new arrivals
+                      {gettext("Check back soon for new arrivals")}
                     <% end %>
                   </p>
                 </div>

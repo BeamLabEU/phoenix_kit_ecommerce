@@ -234,6 +234,18 @@ unprefixed names that the code never read.)
 | `shop_category_name_display` | string | `"truncate"` | `"truncate"` or `"wrap"` |
 | `shop_category_icon_mode` | string | `"none"` | Category icon rendering |
 | `shop_sidebar_show_categories` | boolean | `true` | Show the category sidebar |
+| `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
+| `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+
+`shop_catalog_vocabulary` exists because a shop selling colour grading reads
+badly under "No products match your filters". Each option is a separately
+translated set of complete sentences rather than a swapped noun — Russian and
+Estonian inflect the noun for a case the sentence chooses, so a template with a
+placeholder cannot be translated correctly. Read it through
+`PhoenixKitEcommerce.Vocabulary`, never directly.
+
+`shop_hide_zero_decimals` affects the **storefront only**. Invoices, receipts and
+credit notes keep two decimals, which is the auditable form.
 
 Tax comes from the Billing module (`billing_tax_enabled`,
 `billing_default_tax_rate`), not from shop.
@@ -280,6 +292,32 @@ Use `Scope.has_module_access?/2` to check permissions in your application.
 ### CSS Requirements
 
 This module implements `css_sources/0` returning `[:phoenix_kit_ecommerce]`, so PhoenixKit's installer automatically adds the correct `@source` directive to your `app.css` for Tailwind scanning. No manual configuration needed.
+
+### Order notifications — two switches, both off by default
+
+The module registers `shop.order_placed` and `shop.order_confirmed`, but
+**registering a notification type is not enough to deliver one**. Two settings
+gate it, and on a fresh install both are closed:
+
+1. **Global notifications must be on.** With `notifications_enabled` off,
+   `shop.order_placed` fires into silence — no error, no log line. The module
+   looks broken rather than disabled.
+2. **The recipient must be opted into a channel for that type.** External
+   channels are fail-closed per type, so a recipient with notifications enabled
+   but no Email channel on `shop.orders` still gets nothing.
+
+Until both are set, an order arrives with no alert of any kind and the only way
+to notice is to open the admin panel. A shop running in production lost a real
+customer order this way before spotting it.
+
+Recipients are the holders of the relevant permission **unioned with Owner-role
+holders and `"*"` superadmins** — neither of those has permission rows, so a
+key-only query misses the primary operator of a default install.
+
+⚠️ Note that the order-confirmation page's copy is independent of all this. It
+tells guests that an account-confirmation email is on its way, which is true and
+is the only mail checkout sends. It does **not** promise customers an order
+confirmation, because the module does not send one.
 
 ## Architecture
 

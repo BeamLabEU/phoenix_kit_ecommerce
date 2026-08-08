@@ -38,6 +38,13 @@ defmodule PhoenixKitEcommerce.PriceDisplayTest do
     )
   end
 
+  defp on_request_attrs do
+    product_attrs(%{
+      "metadata" => %{@key => PriceDisplay.build(%{}, false, true)},
+      "requires_shipping" => false
+    })
+  end
+
   defp with_display(unit, from?) do
     product_attrs(%{"metadata" => %{@key => PriceDisplay.build(unit, from?)}})
   end
@@ -55,6 +62,31 @@ defmodule PhoenixKitEcommerce.PriceDisplayTest do
       long = String.duplicate("x", 100)
       %{"unit" => %{"en" => stored}} = PriceDisplay.build(%{"en" => long}, false)
       assert String.length(stored) == 32
+    end
+
+    test "build/3 writes on_request only when true, so build/2 is unchanged" do
+      # Absence and false are the same thing to every reader, so a product that
+      # is not on-request must not gain the key on save.
+      refute Map.has_key?(PriceDisplay.build(%{"en" => "per hour"}, false, false), "on_request")
+
+      assert PriceDisplay.build(%{"en" => "per hour"}, false, true)["on_request"] == true
+
+      # The flag alone is meaningful: a service with no unit and no "From".
+      assert PriceDisplay.build(%{}, false, true) == %{
+               "unit" => %{},
+               "from" => false,
+               "on_request" => true
+             }
+
+      assert PriceDisplay.build(%{}, false, false) == %{}
+    end
+
+    test "on_request?/1 reads product, metadata and junk safely" do
+      assert PriceDisplay.on_request?(%{@key => %{"on_request" => true}})
+      refute PriceDisplay.on_request?(%{@key => %{"on_request" => false}})
+      refute PriceDisplay.on_request?(%{@key => %{}})
+      refute PriceDisplay.on_request?(%{})
+      refute PriceDisplay.on_request?(nil)
     end
 
     test "settings/1 tolerates absent, malformed and partial data" do
@@ -209,6 +241,70 @@ defmodule PhoenixKitEcommerce.PriceDisplayTest do
 
       line = Enum.find(order.line_items, &(&1["type"] == "product"))
       assert line["price_unit"] == "per hour"
+    end
+
+    test "price_on_request is snapshotted onto the cart line" do
+      {:ok, product} = Shop.create_product(on_request_attrs())
+      {:ok, cart} = Shop.create_cart(session_id: "por-#{System.unique_integer([:positive])}")
+      {:ok, cart} = Shop.add_to_cart(cart, product, 1, language: "en")
+
+      [item] = cart.items
+      assert item.metadata["price_on_request"] == true
+    end
+
+    test "price_on_request rides into the order's line items" do
+      # Regression: the flag was snapshotted onto the cart line and then DROPPED
+      # by build_order_line_items/1, so a committed order for an on-request
+      # service rendered its stored total — 0 — as "0.00". Free, permanently.
+      {:ok, product} = Shop.create_product(on_request_attrs())
+      {:ok, cart} = Shop.create_cart(session_id: "por-#{System.unique_integer([:positive])}")
+      {:ok, cart} = Shop.add_to_cart(cart, product, 1, language: "en")
+
+      {:ok, order} =
+        Shop.convert_cart_to_order(cart,
+          billing_data: %{
+            "email" => "por-#{System.unique_integer([:positive])}@example.com",
+            "country" => "US"
+          }
+        )
+
+      line = Enum.find(order.line_items, &(&1["type"] == "product"))
+      assert line["price_on_request"] == true
+    end
+
+    test "a normal product's line carries no on-request flag" do
+      {:ok, product} = Shop.create_product(product_attrs(%{"requires_shipping" => false}))
+      {:ok, cart} = Shop.create_cart(session_id: "por-#{System.unique_integer([:positive])}")
+      {:ok, cart} = Shop.add_to_cart(cart, product, 1, language: "en")
+
+      [item] = cart.items
+      refute Map.get(item.metadata || %{}, "price_on_request")
+    end
+  end
+
+  describe "price on request" do
+    test "catalog shows no amount at all, even with an option range" do
+      {:ok, product} = Shop.create_product(on_request_attrs())
+      rendered = PriceDisplay.render(product, nil, :catalog, language: "en")
+
+      assert rendered == "Price on request"
+      refute rendered =~ ~r/\d/
+    end
+
+    test "a snapshot line renders the label from its OWN flag, not the product" do
+      # The product argument is nil for :cart/:order — a deleted product must not
+      # turn an agreed on-request line back into a number.
+      assert PriceDisplay.render(nil, nil, :order,
+               amount: Decimal.new("0"),
+               unit: nil,
+               on_request: true
+             ) == "Price on request"
+
+      refute PriceDisplay.render(nil, nil, :order,
+               amount: Decimal.new("40.00"),
+               unit: nil,
+               on_request: false
+             ) == "Price on request"
     end
   end
 

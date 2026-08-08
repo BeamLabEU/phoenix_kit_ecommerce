@@ -3016,7 +3016,14 @@ defmodule PhoenixKitEcommerce do
           # Carried so invoices and the confirmation page can render the
           # unit the customer saw. Rides billing's existing line-item JSONB;
           # first-class linkage is a billing-side change.
-          "price_unit" => (item.metadata || %{})["price_unit"]
+          "price_unit" => (item.metadata || %{})["price_unit"],
+          # Carried for the same reason and with more at stake: without it the
+          # order confirmation and order-details pages fall back to formatting
+          # `total`, which for an on-request service is 0 — so a line the
+          # customer agreed as "Price on request" reads "0.00" on a COMMITTED
+          # order. The cart line snapshots this; the conversion has to forward it
+          # or the snapshot dies at the cart/order boundary.
+          "price_on_request" => (item.metadata || %{})["price_on_request"] == true
         }
       end)
 
