@@ -35,6 +35,7 @@ defmodule PhoenixKitEcommerce.Notifications do
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKitEcommerce.Translations
 
   @order_action "shop.order_placed"
   @customer_order_action "shop.order_confirmed"
@@ -144,7 +145,14 @@ defmodule PhoenixKitEcommerce.Notifications do
     )
   end
 
-  defp product_name(%{name: name}) when is_binary(name), do: name
+  # Product has no `:name` field - the display title lives in `:title`, an
+  # i18n map (`%{"en" => "..."}`). Reads it through the same fallback chain
+  # (exact language -> default language -> first available) storefront
+  # pages use, so the notification text shows the same name a shopper saw.
+  defp product_name(%{title: title}) when is_map(title) and title != %{} do
+    Translations.get(%{title: title}, :title, Translations.default_language()) || "product"
+  end
+
   defp product_name(_), do: "product"
 
   defp cart_totals(%{subtotal: subtotal, currency: currency}) when not is_nil(subtotal) do
@@ -160,9 +168,16 @@ defmodule PhoenixKitEcommerce.Notifications do
     # message with customer-facing copy and a link they can open.
     recipients = Enum.reject(recipients, &(&1 == order.user_uuid))
 
+    # `metadata["shipping_skipped"]` is stamped by
+    # `PhoenixKitEcommerce.build_order_attrs/4` when the order converted
+    # without a shipping method under the `:always`/`:fallback` skip modes -
+    # the operator still owes this buyer a delivery arrangement, and
+    # nothing else in the admin fan-out flags that.
+    suffix = if order.metadata["shipping_skipped"], do: " — shipping pending", else: ""
+
     Notifications.create_many(recipients, %{
       action: @order_action,
-      text: "New order #{order.order_number} — #{order_total(order)}",
+      text: "New order #{order.order_number} — #{order_total(order)}#{suffix}",
       icon: "hero-shopping-bag",
       link: Routes.path("/admin/shop/carts")
     })

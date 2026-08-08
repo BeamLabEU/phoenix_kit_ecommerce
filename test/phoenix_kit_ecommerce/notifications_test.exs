@@ -106,6 +106,24 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       assert length(notifications_for_action("shop.cart_first_item_added")) == before
     end
 
+    test "cart-signal text includes the product's title, not the raw struct", %{cart: cart} do
+      # Product has no `:name` field — the title lives in `:title`, an i18n
+      # map (`%{"en" => "Notify Widget"}`, set by `insert_cart_with_item/0`).
+      # Regression for `product_name/1` matching on a field that doesn't
+      # exist and silently falling back to the literal string "product".
+      PhoenixKit.Settings.update_setting_with_module(
+        "shop_notify_cart_first_item",
+        "true",
+        "shop"
+      )
+
+      [item] = cart.items
+      assert :ok = ShopNotifications.cart_item_added(cart, item, item.product)
+
+      assert [text] = notification_texts_for_action("shop.cart_first_item_added")
+      assert text =~ "Notify Widget"
+    end
+
     test "every-add toggle fires on adds after the first", %{cart: cart} do
       PhoenixKit.Settings.update_setting_with_module(
         "shop_notify_cart_first_item",
@@ -208,5 +226,16 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
     |> Repo.all()
     |> Enum.filter(&(&1.metadata["action"] == action))
     |> Enum.map(& &1.uuid)
+  end
+
+  # The rendered text of a standalone notification lives under
+  # `metadata["notification_text"]` (`create_many/2` folds the `:text`
+  # convenience key in there — see `PhoenixKit.Notifications.create_many/2`).
+  defp notification_texts_for_action(action) do
+    "phoenix_kit_notifications"
+    |> select([n], %{metadata: n.metadata})
+    |> Repo.all()
+    |> Enum.filter(&(&1.metadata["action"] == action))
+    |> Enum.map(& &1.metadata["notification_text"])
   end
 end
