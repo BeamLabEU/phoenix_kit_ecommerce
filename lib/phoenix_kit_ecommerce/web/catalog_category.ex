@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Components.ShopCards
@@ -28,7 +29,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -38,7 +39,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   defp do_mount(%{"slug" => slug} = params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop/... always uses default language, not session
-    current_language = Helpers.get_language_from_params_or_default(params)
+    current_language =
+      params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
     case Shop.get_category_by_slug_localized(slug, current_language, preload: [:parent]) do
       {:error, :not_found} ->
@@ -49,7 +51,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       {:ok, %{status: "hidden"}} ->
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, category} ->
@@ -180,14 +182,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         # Category truly not found
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, %{status: "hidden"}, _matched_lang} ->
         # Category is hidden
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, category, _matched_lang} ->
@@ -196,7 +198,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           nil ->
             {:ok,
              socket
-             |> put_flash(:error, "Category not found")
+             |> put_flash(:error, gettext("Category not found"))
              |> push_navigate(to: Shop.catalog_url(current_language))}
 
           redirect_lang ->
@@ -270,7 +272,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
-            <li><.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>Shop</.link></li>
+            <li>
+              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+                {gettext("Shop")}
+              </.link>
+            </li>
             <%= if @category.parent do %>
               <% parent_name = Translations.get(@category.parent, :name, @current_language) %>
               <li>
@@ -283,18 +289,37 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           </ul>
         </div>
 
-        <%!-- Mobile filter toggle --%>
+        <%!-- Categories on mobile — same treatment as the catalog page. The
+             drawer below does carry categories, but only behind a button
+             labelled "Filters", which is not where a visitor looks for them. --%>
         <div class="lg:hidden mb-4">
-          <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
-            <.icon name="hero-funnel" class="w-4 h-4" />
-            Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
-            <%= if filter_count > 0 do %>
-              <span class="badge badge-primary badge-xs">{filter_count}</span>
-            <% end %>
-          </button>
+          <CatalogSidebar.category_nav
+            categories={@categories}
+            current_category={@category}
+            current_language={@current_language}
+            category_icon_mode={@category_icon_mode}
+            category_name_wrap={@category_name_wrap}
+            open={false}
+            filter_qs={@filter_qs}
+          />
         </div>
 
-        <%!-- Mobile filter drawer --%>
+        <%!-- Mobile filter toggle. Suppressed when no filters are configured. --%>
+        <%= if @enabled_filters != [] do %>
+          <div class="lg:hidden mb-4">
+            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+              <.icon name="hero-funnel" class="w-4 h-4" />
+              {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
+              <%= if filter_count > 0 do %>
+                <span class="badge badge-primary badge-xs">{filter_count}</span>
+              <% end %>
+            </button>
+          </div>
+        <% end %>
+
+        <%!-- Mobile filter drawer. show_categories is FALSE: the mobile
+             category_nav above already carries them, and passing true here
+             rendered the category list twice on a phone. --%>
         <%= if @show_mobile_filters do %>
           <div class="lg:hidden mb-6">
             <div class="card bg-base-100 shadow-lg">
@@ -308,7 +333,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                   current_language={@current_language}
                   category_icon_mode={@category_icon_mode}
                   category_name_wrap={@category_name_wrap}
-                  show_categories={true}
+                  show_categories={false}
                   filter_qs={@filter_qs}
                 />
               </div>
@@ -409,26 +434,26 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
         <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
           <h3 class="text-xl font-medium text-base-content/60">
-            No products match your filters
+            {Vocabulary.none_match_filters()}
           </h3>
           <p class="text-base-content/50 mb-4">
             <button phx-click="clear_filters" class="link link-primary">
-              Clear filters
+              {gettext("Clear filters")}
             </button>
           </p>
         <% else %>
           <h3 class="text-xl font-medium text-base-content/60">
-            No products in this category
+            {Vocabulary.none_in_category()}
           </h3>
           <p class="text-base-content/50 mb-4">
-            Check back soon or browse other categories
+            {gettext("Check back soon or browse other categories")}
           </p>
         <% end %>
         <.link
           navigate={Shop.catalog_url(@current_language) <> @filter_qs}
           class="btn btn-primary"
         >
-          Browse All Products
+          {Vocabulary.browse_all()}
         </.link>
       </div>
     </div>

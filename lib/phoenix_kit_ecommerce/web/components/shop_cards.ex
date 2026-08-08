@@ -65,7 +65,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
           <span class="text-lg font-bold text-primary">
             {PriceDisplay.render(@product, @currency, :catalog, language: @language)}
           </span>
-          <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
+          <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
+               Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
             <span class="text-sm text-base-content/40 line-through">
               {Helpers.format_price(@product.compare_at_price, @currency)}
             </span>
@@ -108,7 +109,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
         <%= if @has_more do %>
           <div class="flex justify-center">
             <button phx-click="load_more" class="btn btn-primary btn-lg gap-2">
-              <.icon name="hero-arrow-down" class="w-5 h-5" /> Show More
+              <.icon name="hero-arrow-down" class="w-5 h-5" /> {gettext("Show More")}
               <span class="badge badge-ghost">{@remaining}</span>
             </button>
           </div>
@@ -136,7 +137,13 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
         <%!-- Status text --%>
         <p class="text-center text-sm text-base-content/50">
-          Showing {min(@page * @per_page, @total_products)} of {@total_products} products
+          {ngettext(
+            "Showing %{shown} of %{total} item",
+            "Showing %{shown} of %{total} items",
+            @total_products,
+            shown: min(@page * @per_page, @total_products),
+            total: @total_products
+          )}
         </p>
       </div>
     <% end %>
