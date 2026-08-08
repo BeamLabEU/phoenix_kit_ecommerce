@@ -178,7 +178,16 @@ defmodule PhoenixKitEcommerce.Notifications do
   defp import_name(%{filename: name}) when is_binary(name) and name != "", do: " (#{name})"
   defp import_name(_), do: ""
 
-  defp truncate(text, max) when byte_size(text) > max, do: binary_part(text, 0, max) <> "…"
+  # Cut on GRAPHEMES, not bytes. `binary_part/3` splits mid-character on any
+  # multi-byte text — and an import failure reason routinely carries the
+  # product title that caused it, which on a Cyrillic catalogue is entirely
+  # multi-byte. The invalid string that produced is rejected by Postgres, so
+  # `safely/1` swallowed the insert and the failure notification never
+  # arrived: silence exactly when the operator most needs to hear.
+  defp truncate(text, max) when byte_size(text) > max do
+    String.slice(text, 0, max) <> "…"
+  end
+
   defp truncate(text, _max), do: text
 
   # A notification must never take down the thing it is reporting on.

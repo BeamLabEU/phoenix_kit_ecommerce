@@ -8,6 +8,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  # Search, filters, and page live in the query string so a filtered list is a
+  # real URL: shareable, reload-proof, and Back returns to the previous query
+  # instead of leaving the page.
+  use PhoenixKitWeb.Live.UrlState,
+    params: [
+      search: [default: "", url_key: "q"],
+      status_filter: [default: nil, url_key: "status", in: ~w(active unlisted hidden)],
+      parent_filter: [default: nil, url_key: "parent"],
+      page: [default: 1, cast: :integer, min: 1]
+    ]
+
   import PhoenixKitWeb.Components.Core.BulkSelect
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
@@ -35,71 +46,63 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     socket =
       socket
       |> assign(:page_title, gettext("Categories"))
-      |> assign(:page, 1)
+      # :page, :search, :status_filter, and :parent_filter are assigned from the
+      # query string by UrlState before mount/3 runs — re-assigning them here
+      # would overwrite a shared link's state with defaults.
       |> assign(:per_page, @per_page)
-      |> assign(:search, "")
-      |> assign(:status_filter, nil)
-      |> assign(:parent_filter, nil)
+      |> assign(:categories, [])
+      |> assign(:total, 0)
       |> assign(:current_language, current_language)
       |> assign(:bulk_uuids, [])
       |> assign(:show_bulk_modal, nil)
       |> load_static_category_data()
-      |> load_filtered_categories()
 
     {:ok, socket}
   end
+
+  # The filtered list is loaded here rather than in mount/3: UrlState calls
+  # this after mount and on every change to the query string, so one code path
+  # serves the first render, a shared link, and the Back button alike.
+  #
+  # `parent_filter` is re-parsed because the query string reaches it without
+  # passing through `filter_parent`: `?parent=` is free text until it is
+  # checked. A plain `assign` on a declared param is supported — the next
+  # patch reads its merge base back from the assigns, so the URL drops the
+  # rejected value rather than resurrecting it.
+  @impl true
+  def handle_url_state(_state, socket) do
+    socket
+    |> assign(:parent_filter, parse_parent_filter(socket.assigns.parent_filter))
+    |> load_filtered_categories()
+  end
+
+  @impl true
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   # ============================================
   # EVENT HANDLERS
   # ============================================
 
+  # `replace: true` — debounced box, so a typed-out query would otherwise leave
+  # one history entry per pause and Back would walk the search string backwards.
   @impl true
   def handle_event("search", %{"search" => search}, socket) do
-    socket =
-      socket
-      |> assign(:search, search)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, [search: search], replace: true)}
   end
 
   @impl true
   def handle_event("filter_status", %{"status" => status}, socket) do
-    status = if status == "", do: nil, else: status
-
-    socket =
-      socket
-      |> assign(:status_filter, status)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, status_filter: if(status == "", do: nil, else: status))}
   end
 
   @impl true
   def handle_event("filter_parent", %{"parent" => parent}, socket) do
-    parent = if parent == "", do: nil, else: parent
-
-    socket =
-      socket
-      |> assign(:parent_filter, parent)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, parent_filter: parse_parent_filter(parent))}
   end
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = Helpers.parse_page(page)
-
-    socket =
-      socket
-      |> assign(:page, page)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, page: Helpers.parse_page(page))}
   end
 
   @impl true
@@ -214,6 +217,22 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     |> assign(:all_categories, all_categories)
     |> assign(:product_counts, product_counts)
   end
+
+  # "root" is the sentinel for "top-level only"; anything else must be a real
+  # UUID, because it goes straight into `where c.parent_uuid == ^uuid` and Ecto
+  # raises `Ecto.Query.CastError` on anything that is not one — so a
+  # hand-edited `?parent=whatever` took the whole LiveView down rather than
+  # showing an unfiltered list. Unparseable means "no filter".
+  defp parse_parent_filter("root"), do: "root"
+
+  defp parse_parent_filter(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_parent_filter(_), do: nil
 
   defp load_filtered_categories(socket) do
     parent_uuid_opt =
