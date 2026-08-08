@@ -285,12 +285,28 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                         <span class="text-base-content/60 ml-2">× {item["quantity"]}</span>
                       <% end %>
                     </div>
-                    <div class="font-medium">
+                    <%!-- The unit belongs to the UNIT price, never to the line
+                          total: "€40.00 per hour" × 2 hours is a line total of
+                          €80.00, and rendering that as "€80.00 per hour"
+                          misstates the rate the customer agreed to. Same
+                          split as the cart page. --%>
+                    <% line_por = item["price_on_request"] == true %>
+                    <div class="font-medium text-right">
                       {PriceDisplay.render(nil, @currency, :order,
                         amount: item["total"],
-                        unit: item["price_unit"],
-                        on_request: item["price_on_request"] == true
+                        on_request: line_por
                       )}
+                      <%= if !line_por and item["price_unit"] not in [nil, ""] do %>
+                        <div class="text-xs font-normal text-base-content/50">
+                          {gettext("%{price} each",
+                            price:
+                              PriceDisplay.render(nil, @currency, :order,
+                                amount: item["unit_price"],
+                                unit: item["price_unit"]
+                              )
+                          )}
+                        </div>
+                      <% end %>
                     </div>
                   </div>
                 <% end %>

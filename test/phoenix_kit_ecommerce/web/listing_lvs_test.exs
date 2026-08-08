@@ -36,6 +36,23 @@ defmodule PhoenixKitEcommerce.Web.ListingLvsTest do
       {:ok, _view, html} = live(conn, "/en/admin/shop/products")
       assert html =~ "Smoke Test Widget"
     end
+
+    # The list state lives in the query string, so every filter is free text
+    # until it is checked. `category_uuid` goes into `where p.category_uuid ==
+    # ^uuid`, where Ecto raises Ecto.Query.CastError on a non-UUID — a crashed
+    # LiveView for anyone who edits the address bar. It must fall back to an
+    # unfiltered list instead.
+    test "a malformed ?category= renders unfiltered rather than crashing", %{conn: conn} do
+      {:ok, _product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Uncategorised Widget"},
+          "price" => Decimal.new("12.00"),
+          "status" => "active"
+        })
+
+      {:ok, _view, html} = live(conn, "/en/admin/shop/products?category=not-a-uuid")
+      assert html =~ "Uncategorised Widget"
+    end
   end
 
   describe "Categories" do
@@ -50,6 +67,19 @@ defmodule PhoenixKitEcommerce.Web.ListingLvsTest do
 
       {:ok, _view, html} = live(conn, "/en/admin/shop/categories")
       assert html =~ "Smoke Category"
+    end
+
+    # Same story as ?category= on the products list: `parent_uuid` reaches
+    # `where c.parent_uuid == ^uuid` and raises on anything that is not a
+    # UUID. "root" is the one legitimate non-UUID value.
+    test "a malformed ?parent= renders unfiltered rather than crashing", %{conn: conn} do
+      {:ok, _cat} = Shop.create_category(%{"name" => %{"en" => "Root Category"}})
+
+      {:ok, _view, html} = live(conn, "/en/admin/shop/categories?parent=not-a-uuid")
+      assert html =~ "Root Category"
+
+      {:ok, _view, root_html} = live(conn, "/en/admin/shop/categories?parent=root")
+      assert root_html =~ "Root Category"
     end
   end
 
