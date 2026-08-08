@@ -66,16 +66,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       Enum.empty?(cart.items) ->
         {:ok, redirect_to_cart(socket, "Your cart is empty")}
 
-      is_nil(cart.shipping_method_uuid) and requires_shipping ->
+      missing_shipping_method_blocks_checkout?(cart, requires_shipping) ->
         {:ok, redirect_to_cart(socket, "Please select a shipping method")}
 
-      # A selection the cart has outgrown must not reach review priced at
-      # zero - it converts to a guaranteed conversion failure.
-      requires_shipping and not is_nil(cart.shipping_method_uuid) and
-          not Enum.any?(
-            Shop.get_available_shipping_methods(cart),
-            &(&1.uuid == cart.shipping_method_uuid)
-          ) ->
+      selected_shipping_method_outgrown?(cart, requires_shipping) ->
         {:ok,
          redirect_to_cart(
            socket,
@@ -85,6 +79,27 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       true ->
         {:ok, setup_checkout_assigns(socket, cart, user)}
     end
+  end
+
+  # Only bounce back to the cart page when shipping was meant to be picked
+  # THERE. With `position: :checkout` the shipping step handles it after
+  # billing; with any skip mode other than `:off` a missing method is not
+  # necessarily fatal either way - `next_step_after_billing/1` and the
+  # context's `shipping_skippable?/1` make that call once the checkout
+  # country is known.
+  defp missing_shipping_method_blocks_checkout?(cart, requires_shipping) do
+    is_nil(cart.shipping_method_uuid) and requires_shipping and
+      Shop.shipping_selection_position() == :cart and Shop.shipping_skip_mode() == :off
+  end
+
+  # A selection the cart has outgrown must not reach review priced at zero -
+  # it converts to a guaranteed conversion failure.
+  defp selected_shipping_method_outgrown?(cart, requires_shipping) do
+    requires_shipping and not is_nil(cart.shipping_method_uuid) and
+      not Enum.any?(
+        Shop.get_available_shipping_methods(cart),
+        &(&1.uuid == cart.shipping_method_uuid)
+      )
   end
 
   defp setup_checkout_assigns(socket, cart, user) do
@@ -166,9 +181,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket = do_build_checkout_socket(socket, assigns)
 
     # Mount can land directly on :review (an authenticated shopper with a
-    # saved profile and a payment option that needs no billing details).
-    # That path must price the cart too.
-    if socket.assigns.step == :review, do: enter_review(socket), else: socket
+    # saved profile and a payment option that needs no billing details) -
+    # the same "billing is settled" moment `proceed_to_review` reaches from
+    # the billing form, so it runs through the same step decision (which
+    # also prices the cart).
+    if socket.assigns.step == :review, do: advance_after_billing(socket), else: socket
   end
 
   defp do_build_checkout_socket(socket, assigns) do
@@ -191,6 +208,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:needs_billing, assigns.needs_billing)
     |> assign(:billing_data, initial_billing_data(assigns.user, assigns.cart))
     |> assign(:countries, CountryData.list_countries())
+    |> assign(:checkout_shipping_methods, [])
+    |> assign(:shipping_fallback, false)
     |> assign(:step, assigns.initial_step)
     |> assign(:processing, false)
     |> assign(:error_message, nil)
@@ -414,7 +433,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       errors = validate_billing_data(socket.assigns.billing_data)
 
       if Enum.empty?(errors) do
-        {:noreply, socket |> enter_review() |> assign(:form_errors, %{})}
+        {:noreply, socket |> advance_after_billing() |> assign(:form_errors, %{})}
       else
         {:noreply,
          socket
@@ -425,7 +444,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       if is_nil(socket.assigns.selected_profile_uuid) do
         {:noreply, put_flash(socket, :error, "Please select a billing profile")}
       else
-        {:noreply, enter_review(socket)}
+        {:noreply, advance_after_billing(socket)}
       end
     end
   end
@@ -433,6 +452,35 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   @impl true
   def handle_event("back_to_billing", _params, socket) do
     {:noreply, assign(socket, :step, :billing)}
+  end
+
+  @impl true
+  def handle_event("select_checkout_shipping", %{"method_uuid" => uuid}, socket) do
+    method = Enum.find(socket.assigns.checkout_shipping_methods, &(&1.uuid == uuid))
+
+    case method &&
+           Shop.set_cart_shipping(
+             socket.assigns.cart,
+             method,
+             socket.assigns.cart.shipping_country
+           ) do
+      {:ok, cart} -> {:noreply, assign(socket, :cart, cart)}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("shipping_continue", _params, socket) do
+    cart = socket.assigns.cart
+
+    # A method chosen from the list, or the fallback notice's own
+    # "we'll contact you" path - anything else means the shopper has not
+    # actually settled shipping yet, so the step holds.
+    if cart.shipping_method_uuid || socket.assigns.shipping_fallback do
+      {:noreply, enter_review(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -474,6 +522,71 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
        |> assign(:selected_profile_uuid, nil)
        |> put_flash(:error, gettext("That billing profile is not available."))}
     end
+  end
+
+  # The single decision point for "billing is settled, what's next" - reached
+  # both from the billing form (`proceed_to_review`, either path: an existing
+  # profile selected or new billing data saved) and from a mount that lands
+  # directly on review (`build_checkout_socket/2`, an authenticated shopper
+  # whose payment option needs no billing step at all). Both must see the
+  # same shipping step when one is due - a shopper who never touched the
+  # billing form is not exempt from picking a shipping method.
+  defp advance_after_billing(socket) do
+    case next_step_after_billing(socket) do
+      :shipping -> assign_shipping_step(socket)
+      :review -> enter_review(socket)
+    end
+  end
+
+  # `:shipping` only when there is something to decide: selection happens at
+  # checkout (not the cart page), skipping isn't unconditional (`:always`
+  # already has nothing to pick), the cart actually ships something, and no
+  # method is selected yet (a tab that already picked one, or came back from
+  # review, has nothing left to do here).
+  defp next_step_after_billing(socket) do
+    cart = socket.assigns.cart
+
+    if Shop.shipping_selection_position() == :checkout and
+         Shop.shipping_skip_mode() != :always and
+         Shop.cart_requires_shipping?(cart) and
+         is_nil(cart.shipping_method_uuid) do
+      :shipping
+    else
+      :review
+    end
+  end
+
+  # The billing identity just captured, read back as a plain country code -
+  # the shipping step needs it to filter methods and to persist onto the
+  # cart via `Shop.set_cart_shipping_country/2` BEFORE it fetches them.
+  defp billing_country(socket) do
+    if socket.assigns.use_new_profile do
+      socket.assigns.billing_data["country"]
+    else
+      case Enum.find(
+             socket.assigns.billing_profiles,
+             &(to_string(&1.uuid) == to_string(socket.assigns.selected_profile_uuid))
+           ) do
+        %{country: country} -> country
+        _ -> nil
+      end
+    end
+  end
+
+  defp assign_shipping_step(socket) do
+    cart =
+      case Shop.set_cart_shipping_country(socket.assigns.cart, billing_country(socket)) do
+        {:ok, updated} -> updated
+        {:error, _} -> socket.assigns.cart
+      end
+
+    methods = Shop.get_available_shipping_methods(cart)
+
+    socket
+    |> assign(:cart, cart)
+    |> assign(:checkout_shipping_methods, methods)
+    |> assign(:shipping_fallback, methods == [] and Shop.shipping_skip_mode() == :fallback)
+    |> assign(:step, :shipping)
   end
 
   # Entering review must show the amount that will actually be charged.
@@ -541,14 +654,19 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       not Shop.cart_requires_shipping?(cart) ->
         true
 
-      is_nil(cart.shipping_method_uuid) ->
-        false
-
-      true ->
+      not is_nil(cart.shipping_method_uuid) ->
         Enum.any?(
           Shop.get_available_shipping_methods(cart),
           &(&1.uuid == cart.shipping_method_uuid)
         )
+
+      # No method selected: only valid here if the shop allows converting
+      # without one (`:always`, or `:fallback` with nothing covering this
+      # country) - the same call `convert_cart_to_order/2` makes via
+      # `shipping_skippable?/1`, so review cannot approve a total the
+      # conversion then refuses.
+      true ->
+        Shop.shipping_skippable?(cart) != false
     end
   end
 
@@ -889,6 +1007,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   countries={@countries}
                   payment_options={@payment_options}
                 />
+              <% :shipping -> %>
+                <.shipping_step
+                  methods={@checkout_shipping_methods}
+                  fallback={@shipping_fallback}
+                  cart={@cart}
+                  currency={@currency}
+                />
               <% :review -> %>
                 <.review_step
                   cart={@cart}
@@ -1086,7 +1211,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   defp billing_form(assigns) do
     ~H"""
-    <form phx-change="update_billing" class="space-y-4">
+    <form id="checkout-billing-form" phx-change="update_billing" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <fieldset class="fieldset">
           <legend class="fieldset-legend">First Name *</legend>
@@ -1203,6 +1328,79 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </fieldset>
       </div>
     </form>
+    """
+  end
+
+  # `position: :checkout` shipping step, reached (only) from
+  # `assign_shipping_step/1` after billing. Three mutually exclusive states:
+  # methods to choose from, the fallback "we'll contact you" notice
+  # (`:fallback` mode with none covering this country), or a hard block
+  # (nothing covers it and the shop does not allow skipping).
+  defp shipping_step(assigns) do
+    ~H"""
+    <div id="checkout-shipping-step" class="card bg-base-100 shadow-lg">
+      <div class="card-body">
+        <h2 class="card-title mb-4">{gettext("Shipping")}</h2>
+
+        <%= cond do %>
+          <% @methods != [] -> %>
+            <div class="space-y-3">
+              <label
+                :for={method <- @methods}
+                id={"checkout-shipping-method-#{method.uuid}"}
+                class={[
+                  "flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-colors",
+                  if(@cart.shipping_method_uuid == method.uuid,
+                    do: "border-primary bg-primary/5",
+                    else: "border-base-300 hover:border-primary/50"
+                  )
+                ]}
+              >
+                <input
+                  type="radio"
+                  name="checkout_shipping"
+                  class="radio radio-primary"
+                  checked={@cart.shipping_method_uuid == method.uuid}
+                  phx-click="select_checkout_shipping"
+                  phx-value-method_uuid={method.uuid}
+                />
+                <div class="flex-1">
+                  <div class="font-medium">{method.name}</div>
+                  <%= if method.description do %>
+                    <div class="text-sm text-base-content/60">{method.description}</div>
+                  <% end %>
+                </div>
+                <div class="font-semibold">{format_price(method.price, @currency)}</div>
+              </label>
+            </div>
+            <button
+              id="checkout-shipping-continue"
+              class="btn btn-primary mt-6"
+              phx-click="shipping_continue"
+              disabled={is_nil(@cart.shipping_method_uuid)}
+            >
+              {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+            </button>
+          <% @fallback -> %>
+            <div id="checkout-shipping-fallback-notice" class="alert alert-info">
+              <.icon name="hero-information-circle" class="w-5 h-5" />
+              <span>
+                {gettext(
+                  "Shipping to your country will be arranged individually - we will contact you to confirm delivery and details after you place the order."
+                )}
+              </span>
+            </div>
+            <button id="checkout-shipping-continue" class="btn btn-primary mt-6" phx-click="shipping_continue">
+              {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+            </button>
+          <% true -> %>
+            <div id="checkout-shipping-blocked" class="alert alert-warning">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+              <span>{gettext("No shipping methods are available for your country.")}</span>
+            </div>
+        <% end %>
+      </div>
+    </div>
     """
   end
 
