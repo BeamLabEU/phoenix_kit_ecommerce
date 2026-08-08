@@ -40,6 +40,9 @@ defmodule PhoenixKitEcommerce.Notifications do
   @customer_order_action "shop.order_confirmed"
   @import_completed_action "shop.import_completed"
   @import_failed_action "shop.import_failed"
+  @cart_first_item_action "shop.cart_first_item_added"
+  @cart_item_action "shop.cart_item_added"
+  @checkout_started_action "shop.checkout_started"
 
   @doc """
   Notifies shop operators that an order was placed, and (separately) the
@@ -53,6 +56,102 @@ defmodule PhoenixKitEcommerce.Notifications do
       notify_customer_of_order(order)
     end)
   end
+
+  @doc """
+  Storefront signal: an item landed in a cart.
+
+  Emits `shop.cart_first_item_added` once per cart (atomic claim) when that
+  toggle is on; otherwise emits `shop.cart_item_added` per add when the
+  every-add toggle is on. A first add never produces both.
+  """
+  def cart_item_added(cart, item, product) do
+    safely(fn ->
+      first? =
+        PhoenixKitEcommerce.notify_event?(:cart_first_item) and
+          PhoenixKitEcommerce.claim_cart_flag(cart, "first_item_notified")
+
+      cond do
+        first? ->
+          notify_shop(%{
+            action: @cart_first_item_action,
+            text:
+              "New cart started: #{product_name(product)} ×#{item.quantity} — #{cart_totals(cart)}",
+            icon: "hero-shopping-cart",
+            link: Routes.path("/admin/shop/carts")
+          })
+
+        PhoenixKitEcommerce.notify_event?(:cart_item) ->
+          notify_shop(%{
+            action: @cart_item_action,
+            text:
+              "Added to cart: #{product_name(product)} ×#{item.quantity} — #{cart_totals(cart)}",
+            icon: "hero-shopping-cart",
+            link: Routes.path("/admin/shop/carts")
+          })
+
+        true ->
+          :ok
+      end
+    end)
+  end
+
+  @doc """
+  Storefront signal: a buyer reached the checkout page with a valid cart.
+  Fires once per cart (atomic claim), only when the toggle is on.
+  """
+  def checkout_started(cart) do
+    safely(fn ->
+      if PhoenixKitEcommerce.notify_event?(:checkout_started) and
+           PhoenixKitEcommerce.claim_cart_flag(cart, "checkout_notified") do
+        notify_shop(%{
+          action: @checkout_started_action,
+          text: "Checkout started: #{cart.items_count} item(s) — #{cart_totals(cart)}",
+          icon: "hero-credit-card",
+          link: Routes.path("/admin/shop/carts")
+        })
+      end
+    end)
+  end
+
+  @doc """
+  Recipients for storefront signals: the configured recipient list
+  (`shop_notification_recipients`), or every shop admin when unset/empty.
+
+  Stored as `%{"uuids" => [...]}` rather than a bare list — core's
+  `value_json` column casts through an Ecto `:map` field, which rejects a
+  top-level list at the changeset.
+  """
+  def shop_recipients do
+    case PhoenixKit.Settings.get_json_setting_cached("shop_notification_recipients", %{}) do
+      %{"uuids" => uuids} when is_list(uuids) and uuids != [] ->
+        Enum.filter(uuids, &is_binary/1)
+
+      _ ->
+        admin_recipients("shop.manage_carts")
+    end
+  end
+
+  # `create_many/2` never persists `:action` on the notification row itself
+  # (core's standalone path only carries text/icon/link through to
+  # `metadata`) — so without this, a cart-activity notification would be
+  # indistinguishable from any other once written. Stashing it under
+  # `metadata["action"]` costs nothing (the column is already an open jsonb
+  # bag) and makes the signal auditable/filterable after the fact.
+  defp notify_shop(attrs) do
+    Notifications.create_many(
+      shop_recipients(),
+      Map.put(attrs, :metadata, %{"action" => attrs.action})
+    )
+  end
+
+  defp product_name(%{name: name}) when is_binary(name), do: name
+  defp product_name(_), do: "product"
+
+  defp cart_totals(%{subtotal: subtotal, currency: currency}) when not is_nil(subtotal) do
+    "#{Decimal.round(subtotal, 2)} #{currency}"
+  end
+
+  defp cart_totals(_), do: ""
 
   defp notify_admins_of_order(order) do
     recipients = admin_recipients("shop.manage_carts")

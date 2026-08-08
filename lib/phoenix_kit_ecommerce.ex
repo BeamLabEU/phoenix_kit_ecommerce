@@ -331,6 +331,17 @@ defmodule PhoenixKitEcommerce do
             description: "A CSV import finished or failed",
             actions: ["shop.import_completed", "shop.import_failed"],
             default: true
+          },
+          %{
+            key: "cart_activity",
+            label: "Cart activity",
+            description: "A visitor added to a cart or started checkout",
+            actions: [
+              "shop.cart_first_item_added",
+              "shop.cart_item_added",
+              "shop.checkout_started"
+            ],
+            default: true
           }
         ]
       }
@@ -1783,6 +1794,37 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Atomically claims a one-shot boolean flag on the cart's metadata.
+
+  Returns `true` exactly once per (cart, flag) — the caller that wins the
+  claim; `false` for everyone after (or on any error). Used to deduplicate
+  per-cart notifications under concurrent tabs.
+  """
+  def claim_cart_flag(%Cart{uuid: uuid}, flag) when is_binary(flag) do
+    {count, _} =
+      from(c in Cart,
+        where: c.uuid == ^uuid,
+        where: fragment("NOT (COALESCE(metadata, '{}'::jsonb) \\? ?)", ^flag),
+        update: [
+          set: [
+            metadata:
+              fragment(
+                "COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(?::text, true)",
+                ^flag
+              )
+          ]
+        ]
+      )
+      |> repo().update_all([])
+
+    count == 1
+  rescue
+    error ->
+      Logger.warning("[Shop] claim_cart_flag failed: #{inspect(error)}")
+      false
+  end
+
+  @doc """
   Gets a cart by ID or UUID with items preloaded.
   """
   def get_cart(uuid) when is_binary(uuid) do
@@ -2026,6 +2068,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
         {:ok, updated_cart}
 
       error ->
@@ -2080,6 +2123,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
         {:ok, updated_cart}
 
       error ->
