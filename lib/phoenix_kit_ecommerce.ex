@@ -122,6 +122,46 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Effective shipping-skip mode for checkout.
+
+    * `:off`      — shipping method required (legacy behavior)
+    * `:fallback` — required when available; orders proceed without one when
+      no method covers the buyer's country
+    * `:always`   — shipping step disabled entirely
+  """
+  def shipping_skip_mode do
+    case Settings.get_setting_cached("shop_shipping_skip_mode", "off") do
+      "fallback" -> :fallback
+      "always" -> :always
+      _ -> :off
+    end
+  end
+
+  @doc """
+  Where the buyer picks a shipping method: on the cart page (legacy) or as
+  a checkout step after billing, when the destination country is known.
+  """
+  def shipping_selection_position do
+    case Settings.get_setting_cached("shop_shipping_selection_position", "cart") do
+      "checkout" -> :checkout
+      _ -> :cart
+    end
+  end
+
+  @notify_setting_keys %{
+    cart_first_item: "shop_notify_cart_first_item",
+    cart_item: "shop_notify_cart_item",
+    checkout_started: "shop_notify_checkout_started"
+  }
+
+  @doc """
+  Whether operators asked to be notified about the given storefront event.
+  """
+  def notify_event?(event) when is_map_key(@notify_setting_keys, event) do
+    Settings.get_setting_cached(@notify_setting_keys[event], "false") == "true"
+  end
+
+  @doc """
   Returns dashboard statistics for the shop.
   """
   def get_dashboard_stats do
