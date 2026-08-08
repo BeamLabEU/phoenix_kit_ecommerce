@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Vocabulary
 
   @impl true
   def mount(params, session, socket) do
@@ -212,7 +213,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
               {gettext("Welcome to Our Shop")}
             </h1>
             <p class="text-lg text-base-content/70">
-              {gettext("Browse our collection of products across various categories")}
+              {Vocabulary.collection_blurb()}
             </p>
           </div>
         </header>
@@ -335,7 +336,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                  English and rendered a second, identical cart affordance a few
                  hundred pixels below the first. --%>
             <div class="flex items-center justify-between mb-6">
-              <h2 class="text-2xl font-bold">{gettext("Products")}</h2>
+              <h2 class="text-2xl font-bold">{Vocabulary.heading()}</h2>
             </div>
 
             <%= if @products == [] do %>
@@ -343,11 +344,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                 <div class="card-body text-center py-16">
                   <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
                   <h3 class="text-xl font-medium text-base-content/60">
-                    {gettext("No products available")}
+                    {Vocabulary.none_available()}
                   </h3>
                   <p class="text-base-content/50">
                     <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
-                      {gettext("No products match your filters.")}
+                      {Vocabulary.none_match_filters()}
                       <button phx-click="clear_filters" class="link link-primary">
                         {gettext("Clear filters")}
                       </button>

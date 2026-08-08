@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Vocabulary
 
   @impl true
   def mount(_params, _session, socket) do
@@ -34,6 +35,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:inventory_tracking, config.inventory_tracking)
       |> assign(:billing_enabled, billing_enabled?())
       |> assign(:category_name_display, get_category_name_display())
+      |> assign(:catalog_vocabulary, Vocabulary.current())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
       |> assign(:show_cart_bar, get_show_cart_bar())
@@ -122,6 +124,12 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   @impl true
+  def handle_event("update_catalog_vocabulary", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_catalog_vocabulary", params, socket)
+    end)
+  end
+
   def handle_event("update_category_display", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_category_display", params, socket)
@@ -667,6 +675,37 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
             <div class="divider"></div>
 
+            <div>
+              <h3 class="font-medium mb-1">{gettext("Catalogue vocabulary")}</h3>
+              <p class="text-sm text-base-content/60 mb-3">
+                {gettext(
+                  "What the storefront calls what you sell. Each option is separately translated, not a swapped word, so it reads correctly in every language."
+                )}
+              </p>
+              <div class="flex gap-4">
+                <%= for {value, label} <- [
+                  {"products", gettext("Products")},
+                  {"services", gettext("Services")},
+                  {"mixed", gettext("Both (neutral wording)")}
+                ] do %>
+                  <label class="label cursor-pointer gap-2">
+                    <input
+                      type="radio"
+                      name="catalog_vocabulary"
+                      class="radio radio-primary"
+                      value={value}
+                      checked={@catalog_vocabulary == value}
+                      phx-click="update_catalog_vocabulary"
+                      phx-value-vocabulary={value}
+                    />
+                    <span class="label-text">{label}</span>
+                  </label>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
             <%!-- Category Icon Mode --%>
             <div class="form-control">
               <label class="label">
@@ -816,6 +855,25 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
+    end
+  end
+
+  defp gated_event("update_catalog_vocabulary", %{"vocabulary" => vocabulary}, socket) do
+    if vocabulary in Vocabulary.options() do
+      case Settings.update_setting(Vocabulary.setting_key(), vocabulary) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:catalog_vocabulary, vocabulary)
+           |> put_flash(:info, gettext("Catalogue vocabulary updated"))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to update catalogue vocabulary"))}
+      end
+    else
+      # Closed list: an unknown value would silently fall back to "products"
+      # on every read, which reads as the setting being ignored.
+      {:noreply, put_flash(socket, :error, gettext("Failed to update catalogue vocabulary"))}
     end
   end
 

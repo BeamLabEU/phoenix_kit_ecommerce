@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Vocabulary
 
   @impl true
   def mount(params, session, socket) do
@@ -431,7 +432,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
         <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
           <h3 class="text-xl font-medium text-base-content/60">
-            {gettext("No products match your filters")}
+            {Vocabulary.none_match_filters()}
           </h3>
           <p class="text-base-content/50 mb-4">
             <button phx-click="clear_filters" class="link link-primary">
@@ -440,7 +441,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           </p>
         <% else %>
           <h3 class="text-xl font-medium text-base-content/60">
-            {gettext("No products in this category")}
+            {Vocabulary.none_in_category()}
           </h3>
           <p class="text-base-content/50 mb-4">
             {gettext("Check back soon or browse other categories")}
@@ -450,7 +451,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           navigate={Shop.catalog_url(@current_language) <> @filter_qs}
           class="btn btn-primary"
         >
-          {gettext("Browse All Products")}
+          {Vocabulary.browse_all()}
         </.link>
       </div>
     </div>
