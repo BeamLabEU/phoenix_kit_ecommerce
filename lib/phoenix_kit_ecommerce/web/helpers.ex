@@ -38,15 +38,49 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def format_price(price, nil) do
-    "$#{Decimal.round(price, 2)}"
+    "$#{trim_price(price)}"
   end
 
   def format_price(price, code) when is_binary(code) do
-    "#{Decimal.round(price, 2)} #{code}"
+    "#{trim_price(price)} #{code}"
   end
 
   def format_price(price, currency) do
-    Currency.format_amount(price, currency)
+    # `format_amount/3` is newer than the billing version this module pins, so it
+    # is called through a runtime guard rather than a version bump — a consumer on
+    # an older billing keeps today's behaviour instead of failing to compile. The
+    # guard collapses once the pin catches up; delete it then.
+    if hide_zero_decimals?() and function_exported?(Currency, :format_amount, 3) do
+      apply(Currency, :format_amount, [price, currency, [trim_zeros: true]])
+    else
+      Currency.format_amount(price, currency)
+    end
+  end
+
+  @doc """
+  Whether the storefront drops an all-zero fractional part ("40" rather than
+  "40.00").
+
+  Off by default, because dropping the decimals is wrong for most shops. It exists
+  for shops whose prices are round by nature — services quoted in whole units,
+  where "40.00 EUR" reads as unnecessarily precise and, as one operator put it,
+  faintly alarming.
+
+  Storefront only. Invoices, receipts and credit notes keep two decimals: they are
+  accounting documents, and this setting must never reach them.
+  """
+  def hide_zero_decimals? do
+    PhoenixKit.Settings.get_setting_cached("shop_hide_zero_decimals", "false") == "true"
+  end
+
+  defp trim_price(price) do
+    rounded = Decimal.round(price, 2)
+
+    if hide_zero_decimals?() and Decimal.equal?(rounded, Decimal.round(rounded, 0)) do
+      Decimal.round(rounded, 0)
+    else
+      rounded
+    end
   end
 
   # ---------------------------------------------------------------------------

@@ -64,7 +64,8 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   @doc """
   Reads the display settings out of a product (or a raw metadata map).
 
-  Returns `%{unit: %{lang => text}, from: boolean}` with safe defaults.
+  Returns `%{unit: %{lang => text}, from: boolean, on_request: boolean}` with
+  safe defaults.
   """
   def settings(%Product{metadata: metadata}), do: settings(metadata)
 
@@ -73,11 +74,37 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
 
     %{
       unit: normalize_unit(Map.get(raw, "unit")),
-      from: Map.get(raw, "from") == true
+      from: Map.get(raw, "from") == true,
+      on_request: Map.get(raw, "on_request") == true
     }
   end
 
-  def settings(_), do: %{unit: %{}, from: false}
+  def settings(_), do: %{unit: %{}, from: false, on_request: false}
+
+  @doc """
+  Whether this product's price is negotiated rather than listed
+  ("price on request" / "цена договорная").
+
+  Read the SNAPSHOT for `:cart` and `:order` lines, never the live product —
+  `on_request_line?/1`. A product can be edited or deleted after a line is
+  created (`product_uuid` is ON DELETE SET NULL), and a line that was agreed as
+  "on request" must not later render as a number, nor a priced line as "on
+  request".
+  """
+  def on_request?(product_or_metadata) do
+    settings(product_or_metadata).on_request
+  end
+
+  @doc """
+  Whether a CART/ORDER line was created against an on-request product.
+
+  Reads the line's own snapshot, written by `CartItem.from_product/3`.
+  """
+  def on_request_line?(%{metadata: metadata}) when is_map(metadata) do
+    Map.get(metadata, "price_on_request") == true
+  end
+
+  def on_request_line?(_), do: false
 
   @doc """
   Builds the storable namespace map from admin form input.
@@ -86,13 +113,15 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   strings, and values are length-bounded — this text renders next to a
   price on a public page, it is not a description field.
   """
-  def build(unit_map, from?) do
+  def build(unit_map, from?), do: build(unit_map, from?, false)
+
+  def build(unit_map, from?, on_request?) do
     unit = normalize_unit(unit_map)
 
-    if unit == %{} and from? != true do
+    if unit == %{} and from? != true and on_request? != true do
       %{}
     else
-      %{"unit" => unit, "from" => from? == true}
+      %{"unit" => unit, "from" => from? == true, "on_request" => on_request? == true}
     end
   end
 
@@ -133,6 +162,35 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   def render(product, currency, ctx, opts \\ [])
 
   def render(%Product{} = product, currency, :catalog, opts) do
+    if on_request?(product) do
+      # No number is shown at all: the price does not exist yet. Beats any
+      # range/"From" computation below, which would invent one.
+      on_request_label()
+    else
+      do_render_catalog(product, currency, opts)
+    end
+  end
+
+  def render(product_or_nil, currency, ctx, opts) when ctx in [:selected, :cart, :order] do
+    amount = Keyword.get(opts, :amount)
+
+    # `:on_request` is passed by snapshot callers from the LINE's own metadata.
+    # Falling back to the live product is correct only for `:selected`, which is
+    # a live product view, not a stored line.
+    on_request? =
+      case Keyword.fetch(opts, :on_request) do
+        {:ok, stored} -> stored == true
+        :error -> ctx == :selected and product_or_nil != nil and on_request?(product_or_nil)
+      end
+
+    if on_request? do
+      on_request_label()
+    else
+      do_render_snapshot(product_or_nil, currency, amount, opts)
+    end
+  end
+
+  defp do_render_catalog(%Product{} = product, currency, opts) do
     language = Keyword.get(opts, :language)
     %{from: force_from} = settings(product)
     {min_price, max_price} = PhoenixKitEcommerce.get_price_range(product)
@@ -156,9 +214,7 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
     append_unit(base, unit_for(product, language))
   end
 
-  def render(product_or_nil, currency, ctx, opts) when ctx in [:selected, :cart, :order] do
-    amount = Keyword.get(opts, :amount)
-
+  defp do_render_snapshot(product_or_nil, currency, amount, opts) do
     unit =
       case Keyword.fetch(opts, :unit) do
         # Snapshot contexts pass their stored unit explicitly — including
@@ -178,6 +234,9 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   # Gettext-backed so a shop's own catalogue can translate it; the module
   # backend is injected into web/, and this module is context-side.
   defp from_label, do: gettext("From")
+
+  # "Цена договорная" — the price is agreed, not listed.
+  defp on_request_label, do: gettext("Price on request")
 
   defp normalize_unit(unit) when is_map(unit) do
     unit

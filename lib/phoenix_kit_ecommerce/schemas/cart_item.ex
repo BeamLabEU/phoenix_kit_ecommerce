@@ -163,9 +163,26 @@ defmodule PhoenixKitEcommerce.CartItem do
   # ON DELETE SET NULL), and a line the customer agreed to must not be
   # relabelled afterwards.
   defp put_price_unit(metadata, product, lang) do
-    case PhoenixKitEcommerce.PriceDisplay.unit_for(product, lang) do
-      nil -> metadata
-      unit -> Map.put(metadata, "price_unit", unit)
+    metadata =
+      case PhoenixKitEcommerce.PriceDisplay.unit_for(product, lang) do
+        nil -> metadata
+        unit -> Map.put(metadata, "price_unit", unit)
+      end
+
+    put_price_on_request(metadata, product)
+  end
+
+  # "Price on request" is snapshotted for the same reason the unit is, and the
+  # consequence of NOT doing so is worse: the flag only suppresses a number that
+  # still exists on the product, so a line whose flag was lost falls back to
+  # formatting its stored unit_price — typically 0 — and renders "0.00" where the
+  # customer agreed to "price on request". Free, permanently, on a committed
+  # order. Only written when true, so existing rows keep their shape.
+  defp put_price_on_request(metadata, product) do
+    if PhoenixKitEcommerce.PriceDisplay.on_request?(product) do
+      Map.put(metadata, "price_on_request", true)
+    else
+      metadata
     end
   end
 
