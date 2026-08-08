@@ -57,22 +57,41 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
     # for any real consumer — it only appeared to work on a dev box, which
     # resolves billing through a path dep. Cross-repo gates like that belong in a
     # PR body, not in a shim that hides the feature being unreachable.
-    Currency.format_amount(price, display_currency(currency))
+    Currency.format_amount(price, display_currency(currency, price))
   end
 
   # A DISPLAY-ONLY copy. Never persisted, and never handed to billing's invoice,
   # receipt or credit-note rendering, which must keep the currency's real
   # decimal_places — two decimals is the auditable form.
-  defp display_currency(%{decimal_places: places} = currency) do
-    if hide_zero_decimals?(),
+  #
+  # The amount is load-bearing. `format_amount/2` ROUNDS to decimal_places, so
+  # handing it 0 unconditionally does not "hide .00", it restates the price:
+  # 40.50 rendered as "41" and 1,234.99 as "1,235", on the catalog, the cart
+  # line, the tax row and the total — a figure the shopper is not charged. Zero
+  # the places only for an amount that has nothing to lose, which is the same
+  # rule `trim_decimals/2` applies to the plain-code branches.
+  defp display_currency(%{decimal_places: places} = currency, price) do
+    if hide_zero_decimals?() and whole?(price, places),
       do: %{currency | decimal_places: trimmed_places(places)},
       else: currency
   end
 
-  defp display_currency(currency), do: currency
+  defp display_currency(currency, _price), do: currency
 
   defp trimmed_places(places) when is_integer(places) and places > 0, do: 0
   defp trimmed_places(places), do: places
+
+  # Whether rounding to zero places loses nothing at this currency's precision.
+  # Anything that is not a Decimal or an integer amount answers "no" and keeps
+  # the currency's own precision: billing accepts shapes `Decimal.round/2` will
+  # not (a float raises), and the wrong answer here misstates a price.
+  defp whole?(%Decimal{} = price, places) when is_integer(places) do
+    rounded = Decimal.round(price, places)
+    Decimal.equal?(rounded, Decimal.round(rounded, 0))
+  end
+
+  defp whole?(price, places) when is_integer(price) and is_integer(places), do: true
+  defp whole?(_price, _places), do: false
 
   @doc """
   Whether the storefront drops an all-zero fractional part ("40" rather than

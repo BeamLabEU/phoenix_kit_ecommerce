@@ -4,6 +4,100 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.16 - 2026-08-08
+
+The storefront-translation, services-vocabulary and price-on-request wave
+(PR #16), plus the post-merge review in
+`dev_docs/pull_requests/2026/16-storefront-i18n-services-price-on-request/CLAUDE_REVIEW.md`.
+
+Two things a shop operator should know before upgrading. `shop_hide_zero_decimals`
+existed in the merged PR but **rounded** every non-round price on the storefront
+(40.50 rendered as "41"); it is fixed here and off by default either way. And
+"price on request" lines snapshot an amount of `0`, so the cart and order totals
+they appear in do not include them — the pages that show a total now say so.
+
+### Added
+- **Storefront i18n actually reaches the storefront.** The content language is a
+  DIALECT (`ru-RU`, `et-EE`) and this module ships `priv/gettext/{en,ru,et}` —
+  plain codes — and Gettext does not fall back between them, so every lookup
+  missed and returned its English msgid however complete the catalogues were.
+  `Helpers.put_content_locale/1` resolves the dialect against the backend's known
+  locales and is called from every public `mount/3`, which runs once per process
+  for both the dead render and the connected mount. An unknown locale RESETS to
+  the shop's configured default rather than no-opping: the dead render reuses a
+  connection process across keep-alive requests, so a no-op served the previous
+  visitor's language to the next one.
+- **`PhoenixKitEcommerce.Vocabulary`** — `shop_catalog_vocabulary` decides what
+  the storefront calls what it sells: `"products"` (default, unchanged for every
+  existing install), `"services"`, or `"mixed"` (neutral wording). Each variant is
+  a SEPARATE complete `gettext` literal, not a noun swapped into a sentence:
+  Russian and Estonian inflect the noun for a case the surrounding sentence
+  chooses, so `"No %{noun} available"` cannot be translated for a noun the
+  translator never saw.
+- **Price on request** — `Product.metadata["_price_display"]["on_request"]`
+  suppresses the amount on the storefront while the product keeps the price the
+  operator quotes from. Snapshotted onto the cart line and forwarded into the
+  order's line items, never read live: `product_uuid` is `ON DELETE SET NULL`, and
+  a line agreed as "price on request" must not later render as a number. Written
+  only when true, so no existing product gains a key on its next save.
+- **`shop_hide_zero_decimals`** — render `40` rather than `40.00` when the
+  fractional part is entirely zero. Storefront only; invoices, receipts and credit
+  notes keep two decimals, which is the auditable form.
+- **One-click product status toggle** in the admin list (active ⇄ draft only —
+  leaving `archived` is a deliberate act). Re-reads the row rather than trusting
+  the last render, and audits both the success and the failure branch.
+- **Translated storefront copy** — 48 new msgids this release, en/ru/et complete.
+
+### Fixed
+- **`shop_hide_zero_decimals` misstated prices** (review #1). Trimming is done by
+  handing billing a currency copy with `decimal_places: 0`, and
+  `Currency.format_amount/2` *rounds* to that precision — so with the setting on,
+  `40.50` rendered as "€41", `40.49` as "€40" and `1234.99` as "€1,235", on the
+  catalog price, the cart line, shipping, tax and the total. The places are now
+  zeroed only for an amount that rounding cannot change, which is the rule the
+  plain-code branches already applied.
+- **The checkout review step and the product page's "already in cart" notice
+  rendered an on-request line as `0.00`** (review #2, #3) — the cart and
+  confirmation pages routed through `PriceDisplay`, the two pages between them did
+  not, one of them being the last page before the order is placed. All five line
+  render sites now share `PriceDisplay.line_on_request?/1`.
+- **Cart and order totals no longer imply an on-request line is free** (review
+  #7). The amounts are unchanged — they are what billing charges — and the cart,
+  checkout, confirmation and order-details pages now disclose that items priced on
+  request are not included in the total.
+- **~35 untranslated strings on the checkout page**, including the entire billing
+  form (`First Name *`, `Country *`, `Select country...`), the step labels,
+  `Confirm Order` and the order summary (review #4). Also
+  `"Failed to create order. Please try again."`, `"N product(s) found"`, the three
+  `admin_edit_label` assigns, and all eight add-to-cart failure toasts, which were
+  raw English in the function the PR edited (review #5).
+- **The two public order pages translated against core's catalogue** (review #8),
+  so the locale this module sets on its own backend never applied to them: `Total`,
+  `Status`, `Pending`, `Completed`, `Clear`, `Next` and the `Access denied` flash
+  rendered English. They now use the module's backend. Admin pages' core-backend
+  labels are untouched — that is core's shared UI vocabulary.
+- **"Showing X of Y items" and "N product(s) found" bypassed `Vocabulary`**
+  (review #6) — the first had been neutralized to "items" for every shop,
+  including a products shop whose heading two lines up says "Products". Both now
+  route through `Vocabulary.showing_of/2` and `Vocabulary.count_found/1`.
+- **Cyrillic category slugs were stored empty.** `Category.slugify/1` used
+  `~r/[^\w\s-]/` without the `u` flag, which matches no Cyrillic, so a Russian-only
+  category name was stripped character by character and the category was left with
+  no URL. It now uses core's `Slug.slugify(text, transliterate: true)`, the same
+  slugifier `Product` was already on. Existing rows regenerate on their next save.
+- **The confirmation page no longer promises an email nobody sends** to a
+  signed-in customer — the only mail checkout sends is the guest account
+  confirmation.
+- **Mobile storefront navigation** — categories render as their own nav on the
+  catalog and category pages instead of hiding inside a drawer labelled "Filters"
+  (and no longer twice on a phone), and the filter button is suppressed when no
+  filters are configured rather than opening an empty drawer.
+- **Duplicate cart link** removed from the catalog page; the translated
+  `storefront_bar` above it already carries one.
+- **`compare_at_price` is suppressed for an on-request product** on the catalog
+  card and the product page — a struck-through price beside "Price on request" is
+  a number the customer was not shown.
+
 ## 0.1.15 - 2026-08-06
 
 Dependency-contract release. PR #15 raised the core floor to the release that

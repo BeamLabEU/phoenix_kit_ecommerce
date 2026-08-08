@@ -66,6 +66,36 @@ defmodule PhoenixKitEcommerce.VocabularyTest do
       end
     end
 
+    test "the counted wordings are vocabulary-aware too" do
+      # These two live outside the arity-0 list above and were the strings that
+      # got neutralized to "items" for every shop instead of routed through here,
+      # so a products shop read "Showing 12 of 40 items" under a "Products"
+      # heading.
+      for {fun, args} <- [{:count_found, [3]}, {:showing_of, [12, 40]}] do
+        rendered =
+          for v <- Vocabulary.options() do
+            set(v)
+            apply(Vocabulary, fun, args)
+          end
+
+        assert length(Enum.uniq(rendered)) == length(Vocabulary.options()),
+               "#{fun} gave duplicate wording across vocabularies: #{inspect(rendered)}"
+
+        refute Enum.any?(rendered, &(&1 in [nil, ""])), "#{fun} produced a blank"
+      end
+    end
+
+    test "a count is interpolated, not dropped" do
+      set("products")
+      assert Vocabulary.count_found(7) =~ "7"
+      assert Vocabulary.showing_of(12, 40) =~ "12"
+      assert Vocabulary.showing_of(12, 40) =~ "40"
+
+      # The singular form is reachable — a plural-only translation would render
+      # "1 products found".
+      assert Vocabulary.count_found(1) =~ "1"
+    end
+
     test "options/0 is the closed list the settings handler validates against" do
       assert Vocabulary.options() == ~w(products services mixed)
     end

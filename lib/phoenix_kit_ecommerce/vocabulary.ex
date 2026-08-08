@@ -169,6 +169,66 @@ defmodule PhoenixKitEcommerce.Vocabulary do
     end
   end
 
+  # --- counts ---------------------------------------------------------------
+
+  @doc """
+  "12 products found" — the count of matches on a category page.
+
+  A plural literal per vocabulary rather than a shared `"%{count} items found"`:
+  the noun is the word being chosen here, and Russian inflects it for a case the
+  count itself selects (`1 товар`, `2 товара`, `5 товаров`), which is why each
+  clause is its own `ngettext/4` and not a noun interpolated into one.
+  """
+  def count_found(count) do
+    case current() do
+      "services" ->
+        ngettext("%{count} service found", "%{count} services found", count, count: count)
+
+      "mixed" ->
+        ngettext("%{count} item found", "%{count} items found", count, count: count)
+
+      _ ->
+        ngettext("%{count} product found", "%{count} products found", count, count: count)
+    end
+  end
+
+  @doc """
+  "Showing 12 of 40 products" — the pagination status line.
+
+  Same reasoning as `count_found/1`. The plural is chosen by the TOTAL, which is
+  the number the noun agrees with in the source sentence.
+  """
+  def showing_of(shown, total) do
+    case current() do
+      "services" ->
+        ngettext(
+          "Showing %{shown} of %{total} service",
+          "Showing %{shown} of %{total} services",
+          total,
+          shown: shown,
+          total: total
+        )
+
+      "mixed" ->
+        ngettext(
+          "Showing %{shown} of %{total} item",
+          "Showing %{shown} of %{total} items",
+          total,
+          shown: shown,
+          total: total
+        )
+
+      _ ->
+        ngettext(
+          "Showing %{shown} of %{total} product",
+          "Showing %{shown} of %{total} products",
+          total,
+          shown: shown,
+          total: total
+        )
+    end
+  end
+
   def add_failed do
     case current() do
       "services" ->

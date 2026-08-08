@@ -290,7 +290,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                           €80.00, and rendering that as "€80.00 per hour"
                           misstates the rate the customer agreed to. Same
                           split as the cart page. --%>
-                    <% line_por = item["price_on_request"] == true %>
+                    <% line_por = PriceDisplay.line_on_request?(item) %>
                     <div class="font-medium text-right">
                       {PriceDisplay.render(nil, @currency, :order,
                         amount: item["total"],
@@ -338,6 +338,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <span>{gettext("Total")}</span>
                 <span>{format_price(@order.total, @currency)}</span>
               </div>
+
+              <%!-- The receipt for a committed order must not imply the total is
+                    everything owed when an on-request line contributed 0 to it. --%>
+              <%= if PriceDisplay.any_line_on_request?(@order.line_items) do %>
+                <p class="text-xs text-base-content/60">
+                  {gettext("Items priced on request are not included in this total.")}
+                </p>
+              <% end %>
             </div>
           </div>
         </div>

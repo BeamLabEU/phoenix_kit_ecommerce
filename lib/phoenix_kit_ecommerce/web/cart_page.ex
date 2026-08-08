@@ -405,7 +405,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               </form>
                             </td>
                             <td class="text-right">
-                              <% line_por = (item.metadata || %{})["price_on_request"] == true %>
+                              <% line_por = PriceDisplay.line_on_request?(item) %>
                               <div class="font-semibold">
                                 {PriceDisplay.render(nil, @currency, :cart,
                                   amount: item.line_total,
@@ -512,7 +512,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                 <div class="space-y-3 text-sm">
                   <div class="flex justify-between">
                     <span class="text-base-content/70">
-                      Subtotal ({@cart.items_count || 0} items)
+                      {ngettext("Subtotal (%{count} item)", "Subtotal (%{count} items)",
+                        @cart.items_count || 0,
+                        count: @cart.items_count || 0
+                      )}
                     </span>
                     <span>{format_price(@cart.subtotal, @currency)}</span>
                   </div>
@@ -554,6 +557,18 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <span>{gettext("Total")}</span>
                     <span>{format_price(@cart.total, @currency)}</span>
                   </div>
+
+                  <%!-- An on-request line contributes 0 to every figure above, so
+                        a cart holding one shows a total that is not the bill. The
+                        amount stays as billing computed it; what it leaves out is
+                        stated. --%>
+                  <%= if PriceDisplay.any_line_on_request?(@cart.items) do %>
+                    <p class="text-xs text-base-content/60">
+                      {gettext(
+                        "Items priced on request are not included in this total."
+                      )}
+                    </p>
+                  <% end %>
                 </div>
 
                 <button

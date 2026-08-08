@@ -125,7 +125,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             Settings.get_setting_cached("shop_category_icon_mode", "none")
           )
           |> assign(:admin_edit_url, Routes.path("/admin/shop/categories/#{category.uuid}/edit"))
-          |> assign(:admin_edit_label, "Edit Category")
+          |> assign(:admin_edit_label, gettext("Edit Category"))
 
         {:ok, socket}
     end
@@ -371,7 +371,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                   <p class="text-base-content/70 mt-2">{@localized_description}</p>
                 <% end %>
                 <p class="text-sm text-base-content/50 mt-2">
-                  {@total_products} product(s) found
+                  {Vocabulary.count_found(@total_products)}
                 </p>
               </div>
 

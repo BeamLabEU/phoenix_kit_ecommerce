@@ -96,6 +96,37 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   end
 
   @doc """
+  Whether a stored LINE was agreed as "price on request".
+
+  This is the snapshot side of `on_request?/1`, and every page that renders a
+  line must ask it rather than reading the live product. It accepts both shapes
+  the storefront holds a line in: a `CartItem` (the flag lives under
+  `metadata`) and an order line item (a plain map, flag at the top level).
+
+  A helper rather than the inline `(item.metadata || %{})["price_on_request"] ==
+  true` this replaces: five templates need the answer — cart, checkout review,
+  the product page's "already in cart" notice, the confirmation and order
+  details — and the two that expressed it inline were the two that got it, while
+  the other three rendered `0.00` for a line with no price.
+  """
+  def line_on_request?(%{metadata: metadata}), do: (metadata || %{})["price_on_request"] == true
+  def line_on_request?(line) when is_map(line), do: line["price_on_request"] == true
+  def line_on_request?(_), do: false
+
+  @doc """
+  Whether any line in a cart or order was agreed as "price on request".
+
+  Suppressing the amount per line leaves the TOTAL saying something the shop
+  does not mean: an on-request line snapshots 0, so a cart holding one reads
+  "Total 0.00" beside a "Proceed to Checkout" button, and a mixed cart quietly
+  omits the on-request item from a figure the shopper reads as the whole bill.
+  The totals themselves stay as they are — they are the amounts billing will
+  charge — so the pages that show one disclose what it leaves out.
+  """
+  def any_line_on_request?(lines) when is_list(lines), do: Enum.any?(lines, &line_on_request?/1)
+  def any_line_on_request?(_), do: false
+
+  @doc """
   Builds the storable namespace map from admin form input.
 
   Blank units are dropped so an untouched form does not persist empty

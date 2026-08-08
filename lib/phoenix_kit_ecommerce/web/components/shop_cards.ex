@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Helpers
 
@@ -137,13 +138,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
         <%!-- Status text --%>
         <p class="text-center text-sm text-base-content/50">
-          {ngettext(
-            "Showing %{shown} of %{total} item",
-            "Showing %{shown} of %{total} items",
-            @total_products,
-            shown: min(@page * @per_page, @total_products),
-            total: @total_products
-          )}
+          <%!-- Through Vocabulary: a shop selling products should not read
+                "items" here while every heading beside it says "Products". --%>
+          {Vocabulary.showing_of(min(@page * @per_page, @total_products), @total_products)}
         </p>
       </div>
     <% end %>
