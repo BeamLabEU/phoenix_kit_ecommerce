@@ -41,6 +41,34 @@ defmodule PhoenixKitEcommerce.Web.CartPageShippingModesTest do
     refute html =~ "id=\"cart-shipping-methods\""
   end
 
+  test "position switched to checkout after a method was already selected keeps it intact",
+       %{conn: conn, cart: cart, method: method} do
+    # Simulate the common flow: shipping was selected while position was
+    # still "cart" (the default), then the shop admin flips selection to
+    # happen at checkout instead.
+    {:ok, cart_with_shipping} = Shop.set_cart_shipping(cart, method, nil)
+    assert cart_with_shipping.shipping_method_uuid == method.uuid
+
+    PhoenixKit.Settings.update_setting_with_module(
+      "shop_shipping_selection_position",
+      "checkout",
+      "shop"
+    )
+
+    {:ok, view, html} = live(conn, "/cart")
+
+    # Cart-page selector no longer renders, but the previously stored
+    # selection must NOT have been reset by assign_cart_state/2's
+    # reconciliation logic - `reconcile_shipping_selection/5`'s
+    # `not shipping_required_here` clause is expected to leave it alone.
+    refute html =~ "id=\"cart-shipping-methods\""
+    refute view |> element("#proceed-to-checkout") |> render() =~ "disabled"
+
+    reloaded = Shop.get_cart(cart.uuid)
+    assert reloaded.shipping_method_uuid == method.uuid
+    assert Decimal.equal?(reloaded.shipping_amount, cart_with_shipping.shipping_amount)
+  end
+
   # Builds a guest cart holding one physical (shippable) item plus an
   # active shipping method, tied to a guest session the same way
   # `Web.Plugs.ShopSession` would in production — so the default
@@ -57,16 +85,16 @@ defmodule PhoenixKitEcommerce.Web.CartPageShippingModesTest do
         "weight_grams" => 500
       })
 
-    {:ok, _method} =
+    {:ok, method} =
       Shop.create_shipping_method(%{"name" => "Standard", "price" => Decimal.new("5.00")})
 
     session_id = "cart-shipping-modes-#{System.unique_integer([:positive])}"
 
     {:ok, cart} = Shop.create_cart(session_id: session_id)
-    {:ok, _cart} = Shop.add_to_cart(cart, product, 1)
+    {:ok, cart} = Shop.add_to_cart(cart, product, 1)
 
     conn = Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})
 
-    %{conn: conn}
+    %{conn: conn, cart: cart, method: method}
   end
 end
