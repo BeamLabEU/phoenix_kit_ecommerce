@@ -11,10 +11,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
+  alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Web.SEOHelpers
@@ -29,14 +32,44 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   @placeholder_data_uri "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23e5e7eb'/%3E%3Cg fill='%239ca3af'%3E%3Crect x='160' y='140' width='80' height='60' rx='4'/%3E%3Ccircle cx='180' cy='160' r='8'/%3E%3Cpath d='M160 190 l25-20 l15 15 l20-25 l20 30 v10 h-80 z'/%3E%3C/g%3E%3C/svg%3E"
 
   @impl true
-  def mount(%{"slug" => slug} = params, session, socket) do
-    current_language = get_language_from_params_or_default(params)
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
+    end
+  end
+
+  defp do_mount(%{"slug" => slug} = params, session, socket) do
+    current_language = Helpers.get_language_from_params_or_default(params)
 
     case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
       {:error, :not_found} ->
-        handle_cross_language_redirect(slug, current_language, params, socket)
+        handle_cross_language_redirect(slug, current_language, params, session, socket)
 
       {:ok, %{category: %{status: "hidden"}}} ->
+        {:ok,
+         socket
+         |> put_flash(:error, "Product not found")
+         |> push_navigate(to: Shop.catalog_url(current_language))}
+
+      {:ok, %{status: status}} when status != "active" ->
+        # The storefront must only serve ACTIVE products. `SlugResolver`
+        # applies a status filter only when a `:status` option is passed,
+        # and this call passes only `:preload` — so draft, inactive and
+        # archived products were reachable by URL, and since neither
+        # add-to-cart nor cart→order conversion re-checks status, they were
+        # also purchasable. The category's hidden status was checked; the
+        # product's own never was.
         {:ok,
          socket
          |> put_flash(:error, "Product not found")
@@ -74,6 +107,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:canonical_url, seo.canonical_url)
       |> assign(:hreflang_links, seo.hreflang_links)
       |> assign(:og, seo.og)
+      |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
       |> assign(:localized_title, localized_title)
@@ -121,7 +155,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   # Handle cross-language slug redirect
   # When user visits with a slug from a different language, redirect to correct localized URL
-  defp handle_cross_language_redirect(slug, current_language, params, socket) do
+  defp handle_cross_language_redirect(slug, current_language, params, session, socket) do
     case Shop.get_product_by_any_slug(slug, preload: [:category]) do
       {:error, :not_found} ->
         # Product truly not found
@@ -130,62 +164,82 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> put_flash(:error, "Product not found")
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
-      {:ok, %{category: %{status: "hidden"}}, _matched_lang} ->
-        # Product's category is hidden
-        {:ok,
-         socket
-         |> put_flash(:error, "Product not found")
-         |> push_navigate(to: Shop.catalog_url(current_language))}
-
       {:ok, product, _matched_lang} ->
-        # Found product in different language
-        # Check if we need to redirect or can just use the product
-        redirect_lang = Helpers.best_redirect_language(product.slug || %{})
-
-        # Normalize both languages to compare (e.g., "en" <-> "en-US")
-        current_base = DialectMapper.extract_base(current_language)
-        redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
-
-        # The language the user explicitly requested via the URL locale prefix,
-        # IF the product is actually translated into it. Without this the
-        # language switcher can never leave the slug's own language: a
-        # `/fr/<en-slug>` request bounces to `best_redirect_language` (which
-        # prefers the default) → back to `/en/…`, so the visitor sees English
-        # even though a French translation exists.
-        requested_lang = requested_translation_lang(product, current_language)
-
-        cond do
-          # No valid redirect language found
-          is_nil(redirect_lang) ->
-            {:ok,
-             socket
-             |> put_flash(:error, "Product not found")
-             |> push_navigate(to: Shop.catalog_url(current_language))}
-
-          # Product IS translated into the requested language — honor the
-          # explicit choice and redirect to that language's slug.
-          not is_nil(requested_lang) ->
-            slug = SlugResolver.product_slug(product, requested_lang)
-
-            {:ok,
-             push_navigate(socket,
-               to: Helpers.build_lang_url("/shop/product/#{slug}", requested_lang)
-             )}
-
-          # Same base language (e.g., "en" vs "en-US") - use product without redirect
-          current_base == redirect_base ->
-            # Re-run mount with found product to avoid redirect loop
-            mount_with_product(product, current_language, params, socket)
-
-          # Requested language has no translation - fall back to best language
-          true ->
-            slug = SlugResolver.product_slug(product, redirect_lang)
-
-            {:ok,
-             push_navigate(socket,
-               to: Helpers.build_lang_url("/shop/product/#{slug}", redirect_lang)
-             )}
+        if publicly_visible?(product) do
+          resolve_language_redirect(product, current_language, params, session, socket)
+        else
+          not_found(socket, current_language)
         end
+    end
+  end
+
+  # One visibility rule for the storefront, shared by both slug paths.
+  #
+  # `mount/3` rejected non-active products, but this cross-language path —
+  # reached whenever the visitor's slug resolves in another language —
+  # checked only the CATEGORY's status and handed the product straight to
+  # `mount_with_product/5`. A draft product stayed publicly reachable, and
+  # purchasable, through its other-language slug. Keeping the rule in one
+  # predicate is what stops the two paths drifting apart again.
+  defp publicly_visible?(%{status: "active"} = product) do
+    case product do
+      %{category: %{status: "hidden"}} -> false
+      _ -> true
+    end
+  end
+
+  defp publicly_visible?(_product), do: false
+
+  defp not_found(socket, current_language) do
+    {:ok,
+     socket
+     |> put_flash(:error, "Product not found")
+     |> push_navigate(to: Shop.catalog_url(current_language))}
+  end
+
+  defp resolve_language_redirect(product, current_language, params, session, socket) do
+    redirect_lang = Helpers.best_redirect_language(product.slug || %{})
+
+    # Normalize both languages to compare (e.g., "en" <-> "en-US")
+    current_base = DialectMapper.extract_base(current_language)
+    redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
+
+    # The language the user explicitly requested via the URL locale prefix,
+    # IF the product is actually translated into it. Without this the
+    # language switcher can never leave the slug's own language: a
+    # `/fr/<en-slug>` request bounces to `best_redirect_language` (which
+    # prefers the default) → back to `/en/…`, so the visitor sees English
+    # even though a French translation exists.
+    requested_lang = requested_translation_lang(product, current_language)
+
+    cond do
+      # No valid redirect language found
+      is_nil(redirect_lang) ->
+        not_found(socket, current_language)
+
+      # Product IS translated into the requested language — honor the
+      # explicit choice and redirect to that language's slug.
+      not is_nil(requested_lang) ->
+        slug = SlugResolver.product_slug(product, requested_lang)
+
+        {:ok,
+         push_navigate(socket,
+           to: Helpers.build_lang_url("/shop/product/#{slug}", requested_lang)
+         )}
+
+      # Same base language (e.g., "en" vs "en-US") - use product without redirect
+      current_base == redirect_base ->
+        # Re-run mount with found product to avoid redirect loop
+        mount_with_product(product, current_language, params, session, socket)
+
+      # Different language - redirect to correct URL
+      true ->
+        slug = SlugResolver.product_slug(product, redirect_lang)
+
+        {:ok,
+         push_navigate(socket,
+           to: Helpers.build_lang_url("/shop/product/#{slug}", redirect_lang)
+         )}
     end
   end
 
@@ -203,10 +257,17 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   # Mount product page using already-found product (avoids redirect loop)
   # Used when cross-language lookup finds a product with same base language
-  defp mount_with_product(product, current_language, params, socket) do
-    # Note: We don't have session here, so we'll generate new session_id if needed
-    # This is acceptable since this path is only hit on first mount, not during LiveView lifecycle
-    session_id = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+  defp mount_with_product(product, current_language, params, session, socket) do
+    # Use the visitor's REAL shop session, same as the direct path.
+    #
+    # This used to mint a random id, with a comment claiming the session
+    # was unavailable here — it was not; `mount/3` receives it and simply
+    # did not thread it through `handle_cross_language_redirect/5`. The
+    # consequence was silent and expensive: a guest arriving via a
+    # same-base-language slug got a cart keyed to an id their browser has
+    # never held, so their existing cart was invisible and anything they
+    # added went into an orphan cart they could never reach again.
+    session_id = session["shop_session_id"] || generate_session_id()
     user = Helpers.get_current_user(socket)
     user_uuid = if user, do: user.uuid, else: nil
 
@@ -288,7 +349,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   @impl true
   def handle_event("set_quantity", %{"quantity" => quantity}, socket) do
-    quantity = String.to_integer(quantity) |> max(1)
+    quantity = Helpers.parse_int(quantity, 1) |> max(1)
     {:noreply, assign(socket, :quantity, quantity)}
   end
 
@@ -374,6 +435,21 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
+  # Options selected or not, the cart line is created the same way; the
+  # opts differ only by the specs map.
+  defp add_to_cart(cart, product, quantity, selected_specs, socket) do
+    opts = [language: socket.assigns.current_language]
+
+    opts =
+      if selected_specs != %{} and map_size(selected_specs) > 0 do
+        Keyword.put(opts, :selected_specs, selected_specs)
+      else
+        opts
+      end
+
+    Shop.add_to_cart(cart, product, quantity, opts)
+  end
+
   defp do_add_to_cart_impl(socket) do
     socket = assign(socket, :adding_to_cart, true)
 
@@ -393,15 +469,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       calculated_price: calculated_price
     } = socket.assigns
 
-    # Add to cart with specs if any options were selected
-    has_specs = selected_specs != %{} and map_size(selected_specs) > 0
-
-    add_result =
-      if has_specs do
-        Shop.add_to_cart(cart, product, quantity, selected_specs: selected_specs)
-      else
-        Shop.add_to_cart(cart, product, quantity)
-      end
+    add_result = add_to_cart(cart, product, quantity, selected_specs, socket)
 
     case add_result do
       {:ok, updated_cart} ->
@@ -432,6 +500,24 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:cart_item, updated_cart_item)
          |> put_flash(:info, message)
          |> push_event("cart_updated", %{})}
+
+      {:error, :shop_disabled} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "The shop is currently unavailable")}
+
+      {:error, :product_not_available} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "This product is no longer available")}
+
+      {:error, {:product_not_available, _uuid}} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, "This product is no longer available")}
 
       {:error, reason} ->
         # Log error for admin monitoring
@@ -560,16 +646,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   @impl true
   def render(assigns) do
-    assigns =
-      if assigns.authenticated do
-        assign(assigns, :sidebar_after_shop, shop_sidebar(assigns))
-      else
-        assigns
-      end
-
     ~H"""
-    <ShopLayouts.shop_layout {assigns} show_sidebar={true}>
+    <ShopLayouts.shop_layout {assigns}>
       <div class="container flex-col mx-auto px-4 py-6 max-w-7xl">
+        
+        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
@@ -586,29 +667,23 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </ul>
         </div>
 
-        <div class={
-          if @authenticated,
-            do: "grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12",
-            else: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8"
-        }>
-          <%!-- Guest: category navigation only (no filters on product page) --%>
-          <%= if !@authenticated do %>
-            <aside class="hidden lg:block">
-              <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-                <div class="card-body p-4">
-                  <CatalogSidebar.category_nav
-                    categories={@categories}
-                    current_category={@product.category}
-                    current_language={@current_language}
-                    category_icon_mode={@category_icon_mode}
-                    category_name_wrap={@category_name_wrap}
-                    open={true}
-                    filter_qs={@filter_qs}
-                  />
-                </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8">
+          <%!-- Category navigation (no filters on product page) --%>
+          <aside class="hidden lg:block">
+            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
+              <div class="card-body p-4">
+                <CatalogSidebar.category_nav
+                  categories={@categories}
+                  current_category={@product.category}
+                  current_language={@current_language}
+                  category_icon_mode={@category_icon_mode}
+                  category_name_wrap={@category_name_wrap}
+                  open={true}
+                  filter_qs={@filter_qs}
+                />
               </div>
-            </aside>
-          <% end %>
+            </div>
+          </aside>
           <%!-- Product Images --%>
           <div class="space-y-4">
             <%!-- Main Image --%>
@@ -701,7 +776,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <%= if @price_affecting_specs != [] do %>
                 <%!-- Has price-affecting specs - show calculated price --%>
                 <span class="text-3xl font-bold text-primary">
-                  {format_price(@calculated_price, @currency)}
+                  {PriceDisplay.render(@product, @currency, :selected,
+                    amount: @calculated_price,
+                    language: @current_language
+                  )}
                 </span>
                 <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">
@@ -711,7 +789,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <% else %>
                 <%!-- Simple product - show base price --%>
                 <span class="text-3xl font-bold text-primary">
-                  {format_price(@product.price, @currency)}
+                  {PriceDisplay.render(@product, @currency, :catalog, language: @current_language)}
                 </span>
                 <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">
@@ -725,8 +803,31 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             </div>
 
             <%!-- Description --%>
+            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
+                  This renders on the UNAUTHENTICATED storefront, and product
+                  descriptions are writable by anyone holding the "shop"
+                  permission and by whoever supplies a CSV import file — so
+                  `sanitize={false}` here was a path from "can edit a product"
+                  to script execution in every shopper's and the Owner's
+                  browser. See PhoenixKitEcommerce.Policy. --%>
             <%= if @localized_description do %>
-              <.markdown content={@localized_description} sanitize={false} compact />
+              <.markdown
+                content={@localized_description}
+                sanitize={not Policy.allow_raw_html_descriptions?()}
+                compact
+              />
+            <% end %>
+
+            <%!-- Full body (imports put the complete supplier description in
+                  body_html and only a short extract in description). Same
+                  sanitization policy as the description above. --%>
+            <%= if @localized_body && @localized_body != "" do %>
+              <div class="mt-4">
+                <.markdown
+                  content={@localized_body}
+                  sanitize={not Policy.allow_raw_html_descriptions?()}
+                />
+              </div>
             <% end %>
 
             <%!-- Product Details --%>
@@ -1007,19 +1108,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     """
   end
 
-  defp shop_sidebar(assigns) do
-    ~H"""
-    <CatalogSidebar.category_nav
-      categories={@categories}
-      current_category={@product.category}
-      current_language={@current_language}
-      category_icon_mode={@category_icon_mode}
-      category_name_wrap={@category_name_wrap}
-      filter_qs={@filter_qs}
-    />
-    """
-  end
-
   # Private helpers
 
   defp generate_session_id do
@@ -1294,22 +1382,20 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Determine language from URL params - use locale param if present, otherwise default
   # This ensures non-localized routes (/shop/...) always use default language,
   # regardless of what's stored in session from previous visits
-  defp get_language_from_params_or_default(%{"locale" => locale}) when is_binary(locale) do
-    # Localized route - use the locale from URL
-    DialectMapper.resolve_dialect(locale)
-  end
-
-  defp get_language_from_params_or_default(_params) do
-    # Non-localized route - use admin default language for consistency with Routes.path
-    Routes.get_default_admin_locale()
-  end
 
   # PubSub event handlers
+  #
+  # Both handlers RELOAD the canonical product with its preloads and
+  # recompute every derived assign rather than trusting the broadcast
+  # payload. The previous versions swapped in the payload (or a bare
+  # `get_product!/1` without `preload: :category`) — the template branches
+  # on `@product.category`, and an `%Ecto.Association.NotLoaded{}` is
+  # truthy, so the next render crashed; the localized text, option specs
+  # and calculated price also went stale because only `:product` changed.
   @impl true
-  def handle_info({:product_updated, updated_product}, socket) do
-    # Only update if it's the same product
-    if updated_product.uuid == socket.assigns.product.uuid do
-      {:noreply, assign(socket, :product, updated_product)}
+  def handle_info({:product_updated, %{uuid: uuid}}, socket) do
+    if uuid == socket.assigns.product.uuid do
+      {:noreply, refresh_product(socket)}
     else
       {:noreply, socket}
     end
@@ -1318,11 +1404,112 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   @impl true
   def handle_info({:inventory_updated, product_uuid, _change}, socket) do
     if product_uuid == socket.assigns.product.uuid do
-      # Reload product to get updated stock
-      product = Shop.get_product!(product_uuid)
-      {:noreply, assign(socket, :product, product)}
+      {:noreply, refresh_product(socket)}
     else
       {:noreply, socket}
     end
+  end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  # Reload the canonical product (with preloads) and recompute every assign
+  # derived from it. The visitor's in-progress option selection is kept where
+  # the refreshed option set still allows it. A product that vanished or left
+  # "active" sends the shopper back to the catalog instead of a crash or a
+  # stale purchasable page.
+  defp refresh_product(socket) do
+    product = Shop.get_product(socket.assigns.product.uuid, preload: [:category])
+
+    # The SAME rule mount applies - `publicly_visible?/1` also rejects a
+    # product whose category is hidden. Checking only the product's own
+    # status let an admin move an open product into a hidden category and
+    # leave it purchasable.
+    if product && publicly_visible?(product) do
+      do_refresh_product(socket, product)
+    else
+      socket
+      |> put_flash(:info, "This product is no longer available")
+      |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
+    end
+  end
+
+  defp do_refresh_product(socket, product) do
+    current_language = socket.assigns.current_language
+    selectable_specs = Shop.get_selectable_specs(product)
+    localized_title = Translations.get(product, :title, current_language)
+
+    selected_specs = retained_specs(socket.assigns.selected_specs, selectable_specs, product)
+
+    socket
+    |> assign(:product, product)
+    |> assign(:page_title, localized_title)
+    |> assign(:selected_image, refreshed_image(socket, product))
+    |> assign(:localized_title, localized_title)
+    |> assign(:localized_description, Translations.get(product, :description, current_language))
+    |> assign(:localized_body, Translations.get(product, :body_html, current_language))
+    |> assign(:specifications, build_specifications(product))
+    |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
+    |> assign(:selectable_specs, selectable_specs)
+    |> assign(:selected_specs, selected_specs)
+    |> assign(:calculated_price, Shop.calculate_product_price(product, selected_specs))
+    |> assign(
+      :missing_required_specs,
+      get_missing_required_specs(selected_specs, selectable_specs)
+    )
+  end
+
+  # Keep the shopper's choices only where they are STILL OFFERED. Keeping a
+  # value merely because its key survived left an invisible selection: no
+  # button appeared chosen, the price was computed from the removed value,
+  # and add-to-cart then rejected it as invalid.
+  defp retained_specs(selected, selectable_specs, product) do
+    allowed =
+      Map.new(selectable_specs, fn spec -> {spec["key"], spec["options"] || []} end)
+
+    kept =
+      selected
+      |> Enum.filter(fn {key, value} ->
+        case Map.get(allowed, key) do
+          values when is_list(values) and values != [] -> value in values
+          # An option with no enumerated values (free text, number) keeps
+          # whatever the shopper entered.
+          [] -> true
+          nil -> false
+        end
+      end)
+      |> Map.new()
+
+    Map.merge(build_default_specs(selectable_specs, product.metadata || %{}), kept)
+  end
+
+  # A removed image must not stay on screen as a broken thumbnail.
+  defp refreshed_image(socket, product) do
+    current = socket.assigns[:selected_image]
+
+    still_present? =
+      is_binary(current) and
+        Enum.any?(get_display_images(product), fn uuid ->
+          current == image_url(uuid) or current == uuid
+        end)
+
+    if still_present?, do: current, else: first_image(product)
+  end
+
+  defp storefront_cart_count(session_id, user_uuid) do
+    case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
+      %{items_count: n} when is_integer(n) -> n
+      _ -> 0
+    end
+  rescue
+    _ -> 0
   end
 end

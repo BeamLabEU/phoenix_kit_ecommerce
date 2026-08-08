@@ -9,12 +9,15 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
+  alias PhoenixKit.Utils.HtmlSanitizer
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -100,34 +103,8 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   end
 
   @impl true
-  def handle_event("delete", _params, socket) do
-    product = socket.assigns.product
-
-    file_uuids =
-      if socket.assigns.delete_media_checked,
-        do: Shop.collect_product_file_uuids(product),
-        else: []
-
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
-
-        {:noreply,
-         socket
-         |> put_flash(:info, gettext("Product deleted"))
-         |> push_navigate(to: Routes.path("/admin/shop/products"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
-    end
+  def handle_event("delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("delete", params, socket) end)
   end
 
   @impl true
@@ -173,6 +150,36 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
       |> assign(:product_seo_description, product_seo_description)
 
     {:noreply, socket}
+  end
+
+  defp gated_event("delete", _params, socket) do
+    product = socket.assigns.product
+
+    file_uuids =
+      if socket.assigns.delete_media_checked,
+        do: Shop.collect_product_file_uuids(product),
+        else: []
+
+    case Shop.delete_product(product) do
+      {:ok, _} ->
+        Activity.log("shop.product_deleted",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "product",
+          resource_uuid: product.uuid,
+          metadata: %{"status" => product.status}
+        )
+
+        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, gettext("Product deleted"))
+         |> push_navigate(to: Routes.path("/admin/shop/products"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
+    end
   end
 
   @impl true
@@ -330,7 +337,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                 <%= if @product_description do %>
                   <.markdown
                     content={@product_description}
-                    sanitize={false}
+                    sanitize={not Policy.allow_raw_html_descriptions?()}
                     compact
                     class="text-base-content/80"
                   />
@@ -387,8 +394,11 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                   <div class="divider"></div>
                   <div>
                     <span class="text-base-content/60 text-sm">{gettext("Full Description:")}</span>
+                    <%!-- Imported supplier HTML. Sanitized unless an admin
+                          opted in — a bare `raw/1` here executed whatever the
+                          CSV supplied, in an admin's browser. --%>
                     <div class="prose prose-sm mt-2 max-w-none">
-                      {Phoenix.HTML.raw(@product_body_html)}
+                      {render_product_body(@product_body_html)}
                     </div>
                   </div>
                 <% end %>
@@ -851,6 +861,21 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
             name: lang.name || code
           }
         end)
+    end
+  end
+
+  # Imported supplier HTML for the "Full Description" block.
+  #
+  # This is third-party content — `body_html` is populated by the CSV
+  # import — so it goes through the core sanitizer unless an admin has
+  # explicitly opted into raw HTML. `HtmlSanitizer.sanitize/1` allowlists
+  # schemes and strips scripting constructs; `raw/1` is only reached once
+  # the content is either sanitized or deliberately trusted.
+  defp render_product_body(html) do
+    if Policy.allow_raw_html_descriptions?() do
+      Phoenix.HTML.raw(html)
+    else
+      html |> HtmlSanitizer.sanitize() |> Phoenix.HTML.raw()
     end
   end
 end

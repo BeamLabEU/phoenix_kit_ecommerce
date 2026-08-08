@@ -12,6 +12,8 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
   - Builds _option_slots structure for products using global options
   """
 
+  alias PhoenixKitEcommerce.Import.Money
+
   @max_options 10
 
   @doc """
@@ -59,7 +61,7 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     base_price =
       variants
       |> Enum.map(& &1.price)
-      |> Enum.min(fn -> Decimal.new("0") end)
+      |> decimal_min()
 
     # Build option1 data (typically Size - affects price)
     {option1_values, option1_modifiers} = build_option_data(variants, :option1_value, base_price)
@@ -136,7 +138,7 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
       variants
       |> Enum.map(& &1.price)
       |> Enum.filter(& &1)
-      |> Enum.min(fn -> Decimal.new("0") end)
+      |> decimal_min()
 
     # Build option data for each option position
     options =
@@ -226,17 +228,19 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     end
   end
 
-  defp parse_price(nil), do: nil
-  defp parse_price(""), do: nil
-
-  defp parse_price(str) when is_binary(str) do
-    str = String.trim(str)
-
-    case Decimal.parse(str) do
-      {decimal, _} -> decimal
-      :error -> nil
-    end
-  end
+  # Shopify's "Variant Price" goes through the shared supplier-money parser.
+  #
+  # This used to match `{decimal, _}` on `Decimal.parse/1` and throw the
+  # remainder away — the identical wrong-money defect that was fixed on the
+  # Prom.ua side and left standing here. A feed re-exported from a
+  # comma-decimal locale imported "12,50" as 12 and "1,234.56" as 1, and
+  # since `base_price` is the MINIMUM variant price, one mangled row set the
+  # product's price for every variant. Nothing errored; the product just
+  # went on sale at a fraction of its price.
+  #
+  # `nil` is preserved for an unreadable cell: callers already reject those
+  # variants rather than treating them as free.
+  defp parse_price(str), do: Money.parse(str)
 
   defp build_option_data(variants, field, base_price) do
     # Get unique values preserving order of first appearance
@@ -277,4 +281,15 @@ defmodule PhoenixKitEcommerce.Import.OptionBuilder do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
+
+  # Numeric minimum over Decimals; `Enum.min/2` uses Erlang term ordering,
+  # which compares %Decimal{} structs structurally rather than by value and
+  # picks the wrong element (10 over 9.99).
+  #
+  # No readable price at all yields nil, not zero. Zero imported cleanly and
+  # published a FREE product: a feed whose price column is empty, "N/A" or
+  # otherwise unparseable is a broken feed, and `price` is required, so the
+  # row now fails and is reported instead of silently listing at 0.
+  defp decimal_min([]), do: nil
+  defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 end

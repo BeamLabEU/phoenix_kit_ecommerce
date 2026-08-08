@@ -28,7 +28,24 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     ]
 
   @impl true
-  def mount(_params, session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
+    end
+  end
+
+  defp do_mount(_params, session, socket) do
     user = get_current_user(socket)
     session_id = session["shop_session_id"]
     user_uuid = if user, do: user.uuid
@@ -43,12 +60,27 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp handle_cart_validation(socket, cart, user) do
+    requires_shipping = Shop.cart_requires_shipping?(cart)
+
     cond do
       Enum.empty?(cart.items) ->
         {:ok, redirect_to_cart(socket, "Your cart is empty")}
 
-      is_nil(cart.shipping_method_uuid) ->
+      is_nil(cart.shipping_method_uuid) and requires_shipping ->
         {:ok, redirect_to_cart(socket, "Please select a shipping method")}
+
+      # A selection the cart has outgrown must not reach review priced at
+      # zero - it converts to a guaranteed conversion failure.
+      requires_shipping and not is_nil(cart.shipping_method_uuid) and
+          not Enum.any?(
+            Shop.get_available_shipping_methods(cart),
+            &(&1.uuid == cart.shipping_method_uuid)
+          ) ->
+        {:ok,
+         redirect_to_cart(
+           socket,
+           "The selected shipping method is no longer available for this cart - please pick another"
+         )}
 
       true ->
         {:ok, setup_checkout_assigns(socket, cart, user)}
@@ -130,10 +162,19 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp build_checkout_socket(socket, assigns) do
+    socket = do_build_checkout_socket(socket, assigns)
+
+    # Mount can land directly on :review (an authenticated shopper with a
+    # saved profile and a payment option that needs no billing details).
+    # That path must price the cart too.
+    if socket.assigns.step == :review, do: enter_review(socket), else: socket
+  end
+
+  defp do_build_checkout_socket(socket, assigns) do
     socket
     |> assign(:page_title, "Checkout")
     |> assign(:cart, assigns.cart)
-    |> assign(:currency, Shop.get_default_currency())
+    |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
     |> assign(:is_guest, assigns.is_guest)
     |> assign(:authenticated, assigns.authenticated)
     |> assign(:payment_options, assigns.payment_options)
@@ -292,7 +333,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     if socket.assigns.needs_billing do
       {:noreply, assign(socket, :step, :billing)}
     else
-      {:noreply, assign(socket, :step, :review)}
+      # enter_review/1, not a bare step assign: it is the only path that
+      # prices the cart with the billing country, and a review that skips
+      # it shows a tax-free total the conversion then charges tax on.
+      {:noreply, enter_review(socket)}
     end
   end
 
@@ -303,10 +347,26 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_event("select_profile", %{"profile_uuid" => profile_uuid}, socket) do
-    {:noreply,
-     socket
-     |> assign(:selected_profile_uuid, profile_uuid)
-     |> assign(:use_new_profile, false)}
+    # Only a profile that belongs to THIS user may be selected. `@billing_profiles`
+    # is already scoped by `load_billing_profiles/1` (Billing.list_user_billing_profiles
+    # for the current user), so membership in that list is the ownership check.
+    #
+    # Without it, the uuid went from the client straight onto the order, and
+    # `maybe_set_billing_snapshot` copied the referenced profile's name, address,
+    # phone and email onto the attacker's order — where the confirmation page
+    # renders them back. Any known profile uuid was a PII read.
+    #
+    # Note the sibling handler `use_new_profile` already did this correctly with
+    # `Enum.find(socket.assigns.billing_profiles, ...)`; this one just never got
+    # the same treatment.
+    if owned_profile_uuid?(socket, profile_uuid) do
+      {:noreply,
+       socket
+       |> assign(:selected_profile_uuid, profile_uuid)
+       |> assign(:use_new_profile, false)}
+    else
+      {:noreply, put_flash(socket, :error, gettext("That billing profile is not available."))}
+    end
   end
 
   @impl true
@@ -353,7 +413,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       errors = validate_billing_data(socket.assigns.billing_data)
 
       if Enum.empty?(errors) do
-        {:noreply, assign(socket, step: :review, form_errors: %{})}
+        {:noreply, socket |> enter_review() |> assign(:form_errors, %{})}
       else
         {:noreply,
          socket
@@ -364,7 +424,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       if is_nil(socket.assigns.selected_profile_uuid) do
         {:noreply, put_flash(socket, :error, "Please select a billing profile")}
       else
-        {:noreply, assign(socket, :step, :review)}
+        {:noreply, enter_review(socket)}
       end
     end
   end
@@ -397,8 +457,121 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         [billing_profile_uuid: socket.assigns.selected_profile_uuid, user_uuid: user_uuid]
       end
 
-    result = Shop.convert_cart_to_order(cart, opts)
-    {:noreply, handle_order_result(result, socket)}
+    # Re-check ownership at the point of USE, not just at selection. The
+    # selection handler guards the normal path, but `selected_profile_uuid`
+    # is plain socket state and this is the event that writes it onto a
+    # persisted order — the one place where being wrong costs someone their
+    # address. Cheap check, last line of defence.
+    if socket.assigns.use_new_profile or
+         owned_profile_uuid?(socket, socket.assigns.selected_profile_uuid) do
+      result = Shop.convert_cart_to_order(cart, opts)
+      {:noreply, handle_order_result(result, socket)}
+    else
+      {:noreply,
+       socket
+       |> assign(:processing, false)
+       |> assign(:selected_profile_uuid, nil)
+       |> put_flash(:error, gettext("That billing profile is not available."))}
+    end
+  end
+
+  # Entering review must show the amount that will actually be charged.
+  #
+  # The cart carries no shipping country until checkout supplies one, and
+  # tax is zero without it — so simply flipping to `:review` showed a
+  # pre-tax total while `convert_cart_to_order/2` went on to apply the
+  # country and charge tax. The customer approved one number and was billed
+  # another.
+  #
+  # `preview_checkout_totals/2` runs the same country resolution and
+  # recalculation the conversion does, so the review figure and the charge
+  # are produced by one code path.
+  defp enter_review(socket) do
+    socket = assign(socket, :step, :review)
+
+    case Shop.preview_checkout_totals(socket.assigns.cart, checkout_opts(socket)) do
+      {:ok, cart} ->
+        # The billing country just entered the calculation - a method that
+        # served the country-less cart may not serve THIS address, and its
+        # ineligible price is zero, so review would show an underpriced
+        # total that conversion then rejects. Catch it here, at the moment
+        # the number is first shown.
+        if shipping_selection_still_valid?(cart) do
+          assign(socket, :cart, cart)
+        else
+          socket
+          |> assign(:step, :shipping_invalid)
+          |> put_flash(
+            :error,
+            gettext(
+              "The selected shipping method is not available for your address - please pick another"
+            )
+          )
+          |> push_navigate(to: Routes.path("/cart"))
+        end
+
+      # Never block review on a pricing refresh; conversion recalculates
+      # under its own lock regardless, and a stale display is a smaller
+      # failure than a dead checkout.
+      {:error, _} ->
+        socket
+    end
+  end
+
+  # A cart change broadcast from another tab lands here. Blindly assigning
+  # it into an open REVIEW showed a total that had lost the billing country
+  # (the cart page's select_shipping deliberately clears it), so the
+  # customer approved a tax-free figure that conversion then taxed. On the
+  # review step, re-price through the same path that produced the figure in
+  # the first place.
+  defp assign_cart_repriced(socket, cart) do
+    if socket.assigns[:step] == :review do
+      case Shop.preview_checkout_totals(cart, checkout_opts(socket)) do
+        {:ok, priced} -> assign(socket, :cart, priced)
+        {:error, _} -> assign(socket, :cart, cart)
+      end
+    else
+      assign(socket, :cart, cart)
+    end
+  end
+
+  defp shipping_selection_still_valid?(cart) do
+    cond do
+      not Shop.cart_requires_shipping?(cart) ->
+        true
+
+      is_nil(cart.shipping_method_uuid) ->
+        false
+
+      true ->
+        Enum.any?(
+          Shop.get_available_shipping_methods(cart),
+          &(&1.uuid == cart.shipping_method_uuid)
+        )
+    end
+  end
+
+  # The billing identity for this checkout, in the shape both
+  # `preview_checkout_totals/2` and `convert_cart_to_order/2` expect.
+  defp checkout_opts(socket) do
+    if socket.assigns.use_new_profile do
+      [billing_data: socket.assigns.billing_data]
+    else
+      [billing_profile_uuid: socket.assigns.selected_profile_uuid]
+    end
+  end
+
+  # Membership in `@billing_profiles` IS the ownership check — that list is
+  # built by `load_billing_profiles/1` from
+  # `Billing.list_user_billing_profiles(user.uuid)`, so it only ever holds
+  # the current user's profiles.
+  defp owned_profile_uuid?(_socket, nil), do: false
+
+  defp owned_profile_uuid?(socket, profile_uuid) do
+    Enum.any?(
+      socket.assigns.billing_profiles,
+      &(to_string(&1.uuid) == to_string(profile_uuid))
+    )
   end
 
   defp handle_order_result({:ok, order}, socket) do
@@ -436,11 +609,121 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:error_message, nil)
   end
 
+  # The selected method stopped serving this cart (usually the billing
+  # country ruled it out). Send the shopper back to pick another instead of
+  # a dead generic failure.
+  defp handle_order_result({:error, :shipping_method_unavailable}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(
+      :error,
+      gettext(
+        "The selected shipping method is not available for your address - please pick another"
+      )
+    )
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, {:product_not_available, _uuid}}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("An item in your cart is no longer available"))
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, :product_not_available}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("An item in your cart is no longer available"))
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  # The billing details are missing deliverable-address fields — this is
+  # the context refusing what the review step's own validation would have
+  # caught, so return the customer to an EDITABLE billing form instead of
+  # failing generically. A saved profile that fails here (billing never
+  # required profiles to carry an address) is prefilled into the form for
+  # completion.
+  defp handle_order_result({:error, {:billing_incomplete, _missing}}, socket) do
+    socket = assign(socket, :processing, false)
+
+    socket =
+      if socket.assigns.use_new_profile do
+        socket
+      else
+        prefill_from_selected_profile(socket)
+      end
+
+    socket
+    |> assign(:step, :billing)
+    |> assign(:use_new_profile, true)
+    |> put_flash(
+      :error,
+      gettext("Please complete the billing address - a physical order needs one")
+    )
+  end
+
+  defp handle_order_result({:error, :billing_profile_not_found}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> assign(:selected_profile_uuid, nil)
+    |> assign(:step, :billing)
+    |> put_flash(:error, gettext("That billing profile is not available."))
+  end
+
+  defp handle_order_result({:error, :payment_option_unavailable}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(
+      :error,
+      gettext("The selected payment method is no longer available - please pick another")
+    )
+    |> push_navigate(to: Routes.path("/cart"))
+  end
+
+  defp handle_order_result({:error, :shop_disabled}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, gettext("The shop is currently unavailable"))
+    |> push_navigate(to: "/")
+  end
+
   defp handle_order_result({:error, _reason}, socket) do
     socket
     |> assign(:processing, false)
     |> assign(:error_message, "Failed to create order. Please try again.")
     |> put_flash(:error, "Failed to create order")
+  end
+
+  # Seed the editable billing form from the profile the customer had
+  # selected, so completing an address-less saved profile is a fill-in,
+  # not a retype.
+  defp prefill_from_selected_profile(socket) do
+    case Enum.find(
+           socket.assigns.billing_profiles,
+           &(to_string(&1.uuid) == to_string(socket.assigns.selected_profile_uuid))
+         ) do
+      nil ->
+        socket
+
+      profile ->
+        assign(socket, :billing_data, profile_form_data(profile, socket.assigns.billing_data))
+    end
+  end
+
+  # Field-for-field copy of a saved profile into the editable form's shape.
+  @profile_form_fields ~w(first_name last_name phone company_name address_line1
+                          address_line2 city state postal_code country)a
+
+  defp profile_form_data(profile, current) do
+    base =
+      Map.new(@profile_form_fields, fn field ->
+        {to_string(field), Map.get(profile, field) || ""}
+      end)
+
+    # The email is the one field the customer may have typed before picking
+    # a profile, so a blank profile email must not wipe it.
+    Map.put(base, "email", profile.email || current["email"] || "")
   end
 
   defp validate_billing_data(data) do
@@ -488,12 +771,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_info({:cart_updated, cart}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
   def handle_info({:item_added, cart, _item}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
@@ -502,18 +785,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     if Enum.empty?(cart.items) do
       {:noreply, redirect_to_cart(socket, "Your cart is empty")}
     else
-      {:noreply, assign(socket, :cart, cart)}
+      {:noreply, assign_cart_repriced(socket, cart)}
     end
   end
 
   @impl true
   def handle_info({:quantity_updated, cart, _item}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
   def handle_info({:shipping_selected, cart}, socket) do
-    {:noreply, assign(socket, :cart, cart)}
+    {:noreply, assign_cart_repriced(socket, cart)}
   end
 
   @impl true
@@ -532,6 +815,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # Cart was cleared, redirect to cart page
     {:noreply, redirect_to_cart(socket, "Your cart is empty")}
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

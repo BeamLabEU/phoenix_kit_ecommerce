@@ -58,6 +58,30 @@ This is a **library** (not a standalone Phoenix app) that provides e-commerce as
 - **ImportConfig** — CSV import profiles with keyword filtering, category rules, option mappings
 - **ImportLog** — import job tracking with progress, row counts, error details
 
+### Price display (units and "From")
+
+`PhoenixKitEcommerce.PriceDisplay` owns how a price is WRITTEN: an optional
+per-language unit ("per hour", "per m²", "в час") and an optional "From"
+prefix, stored under one reserved metadata namespace
+`Product.metadata["_price_display"]` = `%{"unit" => %{lang => text},
+"from" => bool}`. Free text, not a unit vocabulary — every shop invents
+units the next one has never heard of.
+
+`render/4` takes an explicit CONTEXT because the same product means
+different things per page:
+
+- `:catalog` — the asking price; may show "From" (explicit flag OR a real
+  option range) and derives the amount from the option-aware range
+- `:selected` — the price for the chosen options; exact, never "From"
+- `:cart` / `:order` — a SNAPSHOT; exact, never "From", and the unit comes
+  from the stored line, never the live product, so an edit or deletion
+  cannot relabel what a customer already agreed to
+
+Two paths would silently erase an admin's settings and are guarded: the
+CSV upsert (`merge_localized_attrs/2` replaces metadata wholesale) and the
+product form (its metadata build replaces too, so the inputs are real form
+fields). Absent settings render exactly what the module rendered before.
+
 ### Product Options & Dynamic Pricing
 
 Two-level option system:
@@ -104,6 +128,22 @@ Features: automatic format detection, keyword-based filtering, category assignme
 6. Settings are persisted via `PhoenixKit.Settings` API (DB-backed in parent app)
 7. Permissions are declared via `permission_metadata/0` and checked via `Scope.has_module_access?/2`
 
+### Storefront layout contract
+
+Every public storefront page — catalog, category, product, cart, checkout,
+confirmation — renders through core's `LayoutWrapper.app_layout`, i.e. the
+HOST application's configured `layouts_module`, for guests and logged-in
+visitors alike. `ShopLayouts.shop_layout/1` is the single wrapper.
+
+Until 2026-08 this dispatched three ways: a self-contained
+`shop_public_layout` for guest catalog pages (which bypassed the host
+layout entirely — the bug a host app reported), the ADMIN dashboard layout
+for any authenticated visitor, and `app_layout` only for guest
+cart/checkout. The in-page category/filter sidebar that the dashboard
+layout used to carry (`sidebar_after_shop`) now renders in the page
+templates for everyone. Don't reintroduce a module-owned top-level layout:
+the storefront is the host's surface.
+
 ### Web Layer
 
 - **Public** (8 LiveViews): ShopCatalog, CatalogCategory, CatalogProduct, CartPage, CheckoutPage, CheckoutComplete, UserOrders, UserOrderDetails
@@ -114,12 +154,58 @@ Features: automatic format detection, keyword-based filtering, category assignme
 
 ### Settings Keys
 
-All stored via PhoenixKit Settings with module `"shop"`:
+All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed** — the
+unprefixed names this section used to list (`tax_enabled`, `tax_rate`, …)
+were never what the code read.
 
-- `tax_enabled` — enable tax calculations (default: true)
-- `tax_rate` — tax rate percentage (default: 20)
-- `inventory_tracking` — track product inventory (default: true)
-- `allow_price_override` — allow per-product price overrides (default: false)
+**Behaviour**
+
+- `shop_enabled` — module master switch (default: `false`)
+- `shop_inventory_tracking` — track product inventory (default: `true`)
+- `shop_allow_price_override` — allow per-product price overrides (default: `false`)
+
+**Storefront display**
+
+- `shop_category_name_display` — `"truncate"` (default) or `"wrap"`
+- `shop_category_icon_mode` — `"none"` (default), icon rendering mode
+- `shop_sidebar_show_categories` — show the category sidebar (default: `true`)
+- `shop_show_cart_bar` — show the compact Shop/Cart bar on catalog pages
+  (default: `true`). The storefront renders inside the HOST's layout, so a
+  host whose header already links to the cart turns this off; a host whose
+  header does not must leave it on, or shoppers have no way back to their
+  cart.
+
+**Policy — read through `PhoenixKitEcommerce.Policy`, never directly**
+
+Every one is **secure by default**, and every reader fails *closed* on a
+settings-layer error. The module is the single source of truth so the admin
+UI and the enforcement points cannot disagree about a default.
+
+- `shop_order_lookup_policy` — `"strict"` (default) requires the session that
+  placed an order to view its confirmation page; `"link"` makes the UUID
+  sufficient. Only choose `"link"` if you deliberately mail order links and
+  accept the URL as the credential — the page renders the billing snapshot.
+- `shop_allow_raw_html_descriptions` — `false` (default) sanitizes product
+  descriptions. Turning it on trusts everyone who can edit a product *or
+  supply a CSV import feed* with script execution in every shopper's browser.
+- `shop_allow_svg_uploads` — `false` (default) rejects SVG in the image
+  importer. SVG can carry script and stored files are served inline.
+- `shop_image_import_allow_private_networks` — `false` (default) blocks
+  loopback/private/link-local/metadata addresses in the image importer.
+- `shop_default_tax_country` — optional two-letter fallback country for tax
+  when checkout supplied no address. Unset by default: charging tax against
+  a guessed jurisdiction is worse than charging none.
+- `shop_import_cleanup_scope` — `"auto_created"` (default) limits post-import
+  cleanup to categories the import created; `"all_empty"` restores the old
+  sweep that deleted *every* empty category, including deliberate placeholders.
+- `shop_legacy_cookie_until` — ISO8601 cutoff after which pre-signing
+  `shop_session_id` cookies stop being adopted. ⚠️ Unset means "still
+  migrating"; this is the one key here where leaving the default forever is
+  wrong, because nothing prunes carts so the window never self-closes.
+
+**Consumed from billing** (owned by `phoenix_kit_billing`, read here)
+
+- `billing_tax_enabled`, `billing_default_tax_rate`
 
 ### Cart Status Workflow
 
@@ -216,6 +302,54 @@ lib/
         └── plugs/
             └── shop_session.ex    # Guest cart session
 ```
+
+## Permissions
+
+The `"shop"` key is admin-area READ access. Four sub-permissions carry the
+capabilities (core enforces sub-implies-base):
+
+| Key | Covers |
+|-----|--------|
+| `shop.manage_catalog` | products + categories (list, form and detail pages) |
+| `shop.manage_carts` | the carts admin — **read included**, the rows carry customer contact details |
+| `shop.manage_settings` | settings, security policy, product options, shipping methods |
+| `shop.run_imports` | CSV imports and import configurations |
+
+Enforcement is **bundled-UI policy** and deliberately scoped: admin tabs
+carry their sub-key so the sidebar hides what a holder cannot use, and
+every mutating event handler re-checks through `Web.Authz` (fail-closed on
+a missing scope). The public context API stays scope-less — hosts call it
+from their own controllers, workers and scripts, and it cannot know whose
+authority those run under. Workers are authorized at ENQUEUE by the
+LiveView that starts them.
+
+Pattern for a gated handler: the public `handle_event/3` clause matches the
+event name and delegates through `Authz.authorize/3` to a private
+`gated_event/3` clause holding the original body. Keeping the body in its
+own clause is what stops the wrapper adding a nesting level to 47 handlers.
+
+⚠️ **Upgrade note.** Core auto-grants a newly discovered sub-permission to
+the Admin system role only. A CUSTOM role holding base `"shop"` keeps its
+reads but loses every mutation until an operator re-grants — secure by
+default and deliberate, but a breaking authorization change on upgrade.
+
+## Notifications and the audit trail
+
+`notification_types/0` declares three sub-types under `"shop"`: admin
+`orders`, customer `order_confirmations`, and `imports`. They are separate
+so an operator can mute the order firehose without silencing their own
+receipts.
+
+⚠️ **The audit action strings are deliberately DIFFERENT from the notify
+action strings** (`shop.order_converted` vs `shop.order_placed`;
+`shop.import_run_completed/failed` vs `shop.import_completed/failed`).
+Core's `Activity.log/1` auto-derives notifications from registered actions,
+so reusing a notify action in an audit row delivers a duplicate on top of
+the explicit fan-out. A test pins this contract — keep it.
+
+Recipients union permission holders with **Owner-role holders and `"*"`
+superadmins**: neither has permission rows, so a key-only query misses the
+primary operator of a default install.
 
 ## Critical Conventions
 
@@ -337,12 +471,19 @@ The sweep completed most of the initially-deferred items. **Completed:**
    forms** (driven by `TranslationTabs` + dynamic-option selects) and the
    **map-backed import-config form** (no changeset/`:action`) were left
    as-is — migrating them safely needs translation/validation rewiring.
-5. **Body-string gettext-backend migration** (from PR #4) —
-   `web/shop_web.ex` injects `PhoenixKitWeb.Gettext`, so ~25+ body-string
-   `gettext()` calls across `web/` resolve against the parent app's
-   catalogue rather than `PhoenixKitEcommerce.Gettext`. Migrating means
-   switching the `__using__` injection and extracting/translating
-   hundreds of msgids — a separate, larger PR.
+5. ~~**Body-string gettext-backend migration** (from PR #4)~~ — **done**
+   (commit `bce8114`). `web/shop_web.ex` now injects
+   `PhoenixKitEcommerce.Gettext` for both the LiveView and component
+   `__using__` blocks, and `priv/gettext/{en,et,ru}` each carry 547
+   msgids. Body strings in `web/` resolve against the module catalogue,
+   not the parent app's.
+
+   Practical consequence for new code: a `gettext("…")` added anywhere
+   under `web/` lands in **this module's** catalogue, so it needs
+   `mix gettext.extract && mix gettext.merge priv/gettext --no-fuzzy`
+   here — not in core. (Merge with `--no-fuzzy`: fuzzy entries are live
+   at runtime, so a plain merge after an extraction gap ships guessed
+   translations.)
 
 ## Research & Design Notes
 

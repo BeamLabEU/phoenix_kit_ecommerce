@@ -8,6 +8,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  # Search, filters, and page live in the query string so a filtered list is a
+  # real URL: shareable, reload-proof, and Back returns to the previous query
+  # instead of leaving the page.
+  use PhoenixKitWeb.Live.UrlState,
+    params: [
+      search: [default: "", url_key: "q"],
+      status_filter: [default: nil, url_key: "status", in: ~w(active unlisted hidden)],
+      parent_filter: [default: nil, url_key: "parent"],
+      page: [default: 1, cast: :integer, min: 1]
+    ]
+
   import PhoenixKitWeb.Components.Core.BulkSelect
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
@@ -19,6 +30,8 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -33,100 +46,68 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     socket =
       socket
       |> assign(:page_title, gettext("Categories"))
-      |> assign(:page, 1)
+      # :page, :search, :status_filter, and :parent_filter are assigned from the
+      # query string by UrlState before mount/3 runs — re-assigning them here
+      # would overwrite a shared link's state with defaults.
       |> assign(:per_page, @per_page)
-      |> assign(:search, "")
-      |> assign(:status_filter, nil)
-      |> assign(:parent_filter, nil)
+      |> assign(:categories, [])
+      |> assign(:total, 0)
       |> assign(:current_language, current_language)
       |> assign(:bulk_uuids, [])
       |> assign(:show_bulk_modal, nil)
       |> load_static_category_data()
-      |> load_filtered_categories()
 
     {:ok, socket}
   end
+
+  # The filtered list is loaded here rather than in mount/3: UrlState calls
+  # this after mount and on every change to the query string, so one code path
+  # serves the first render, a shared link, and the Back button alike.
+  #
+  # `parent_filter` is re-parsed because the query string reaches it without
+  # passing through `filter_parent`: `?parent=` is free text until it is
+  # checked. A plain `assign` on a declared param is supported — the next
+  # patch reads its merge base back from the assigns, so the URL drops the
+  # rejected value rather than resurrecting it.
+  @impl true
+  def handle_url_state(_state, socket) do
+    socket
+    |> assign(:parent_filter, parse_parent_filter(socket.assigns.parent_filter))
+    |> load_filtered_categories()
+  end
+
+  @impl true
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   # ============================================
   # EVENT HANDLERS
   # ============================================
 
+  # `replace: true` — debounced box, so a typed-out query would otherwise leave
+  # one history entry per pause and Back would walk the search string backwards.
   @impl true
   def handle_event("search", %{"search" => search}, socket) do
-    socket =
-      socket
-      |> assign(:search, search)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, [search: search], replace: true)}
   end
 
   @impl true
   def handle_event("filter_status", %{"status" => status}, socket) do
-    status = if status == "", do: nil, else: status
-
-    socket =
-      socket
-      |> assign(:status_filter, status)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, status_filter: if(status == "", do: nil, else: status))}
   end
 
   @impl true
   def handle_event("filter_parent", %{"parent" => parent}, socket) do
-    parent = if parent == "", do: nil, else: parent
-
-    socket =
-      socket
-      |> assign(:parent_filter, parent)
-      |> assign(:page, 1)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, parent_filter: parse_parent_filter(parent))}
   end
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
-
-    socket =
-      socket
-      |> assign(:page, page)
-      |> load_filtered_categories()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, page: Helpers.parse_page(page))}
   end
 
   @impl true
-  def handle_event("delete", %{"uuid" => uuid}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
-      category = Shop.get_category!(uuid)
-
-      case Shop.delete_category(category) do
-        {:ok, _} ->
-          Activity.log("shop.category_deleted",
-            actor_uuid: Activity.actor_uuid(socket),
-            actor_role: Activity.actor_role(socket),
-            resource_type: "category",
-            resource_uuid: category.uuid,
-            metadata: %{"status" => category.status}
-          )
-
-          {:noreply,
-           socket
-           |> load_static_category_data()
-           |> load_filtered_categories()
-           |> put_flash(:info, gettext("Category deleted"))}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, gettext("Failed to delete category"))}
-      end
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-    end
+  def handle_event("delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("delete", params, socket) end)
   end
 
   # Bulk action modals
@@ -161,75 +142,22 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   # Bulk actions (require admin role)
 
   @impl true
-  def handle_event("bulk_change_status", %{"status" => status}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
-      uuids = socket.assigns.bulk_uuids
-      count = Shop.bulk_update_category_status(uuids, status)
-
-      Activity.log("shop.categories_status_changed",
-        actor_uuid: Activity.actor_uuid(socket),
-        actor_role: Activity.actor_role(socket),
-        resource_type: "category",
-        metadata: %{"status" => status, "count" => count}
-      )
-
-      {:noreply,
-       socket
-       |> load_static_category_data()
-       |> load_filtered_categories()
-       |> assign(:bulk_uuids, [])
-       |> assign(:show_bulk_modal, nil)
-       |> put_flash(
-         :info,
-         gettext("%{count} categories updated to %{status}", count: count, status: status)
-       )}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-    end
+  def handle_event("bulk_change_status", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("bulk_change_status", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
-      uuids = socket.assigns.bulk_uuids
-      parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
-      count = Shop.bulk_update_category_parent(uuids, parent_uuid)
-
-      {:noreply,
-       socket
-       |> load_static_category_data()
-       |> load_filtered_categories()
-       |> assign(:bulk_uuids, [])
-       |> assign(:show_bulk_modal, nil)
-       |> put_flash(:info, gettext("%{count} categories updated", count: count))}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-    end
+  def handle_event("bulk_change_parent", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("bulk_change_parent", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("bulk_delete", _params, socket) do
-    if Scope.can_access_admin_area?(socket.assigns.phoenix_kit_current_scope) do
-      uuids = socket.assigns.bulk_uuids
-      count = Shop.bulk_delete_categories(uuids)
-
-      Activity.log("shop.categories_bulk_deleted",
-        actor_uuid: Activity.actor_uuid(socket),
-        actor_role: Activity.actor_role(socket),
-        resource_type: "category",
-        metadata: %{"count" => count}
-      )
-
-      {:noreply,
-       socket
-       |> load_static_category_data()
-       |> load_filtered_categories()
-       |> assign(:bulk_uuids, [])
-       |> assign(:show_bulk_modal, nil)
-       |> put_flash(:info, gettext("%{count} categories deleted", count: count))}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
-    end
+  def handle_event("bulk_delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("bulk_delete", params, socket) end)
   end
 
   # ============================================
@@ -266,6 +194,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     {:noreply, socket |> load_static_category_data() |> load_filtered_categories()}
   end
 
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
   # ============================================
   # PRIVATE HELPERS
   # ============================================
@@ -278,6 +217,22 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     |> assign(:all_categories, all_categories)
     |> assign(:product_counts, product_counts)
   end
+
+  # "root" is the sentinel for "top-level only"; anything else must be a real
+  # UUID, because it goes straight into `where c.parent_uuid == ^uuid` and Ecto
+  # raises `Ecto.Query.CastError` on anything that is not one — so a
+  # hand-edited `?parent=whatever` took the whole LiveView down rather than
+  # showing an unfiltered list. Unparseable means "no filter".
+  defp parse_parent_filter("root"), do: "root"
+
+  defp parse_parent_filter(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_parent_filter(_), do: nil
 
   defp load_filtered_categories(socket) do
     parent_uuid_opt =
@@ -673,5 +628,102 @@ defmodule PhoenixKitEcommerce.Web.Categories do
         </div>
       <% end %>
     """
+  end
+
+  defp gated_event("delete", %{"uuid" => uuid}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      category = Shop.get_category!(uuid)
+
+      case Shop.delete_category(category) do
+        {:ok, _} ->
+          Activity.log("shop.category_deleted",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "category",
+            resource_uuid: category.uuid,
+            metadata: %{"status" => category.status}
+          )
+
+          {:noreply,
+           socket
+           |> load_static_category_data()
+           |> load_filtered_categories()
+           |> put_flash(:info, gettext("Category deleted"))}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete category"))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_change_status", %{"status" => status}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      count = Shop.bulk_update_category_status(uuids, status)
+
+      Activity.log("shop.categories_status_changed",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "category",
+        metadata: %{"status" => status, "count" => count}
+      )
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(
+         :info,
+         gettext("%{count} categories updated to %{status}", count: count, status: status)
+       )}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
+      count = Shop.bulk_update_category_parent(uuids, parent_uuid)
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(:info, gettext("%{count} categories updated", count: count))}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
+  end
+
+  defp gated_event("bulk_delete", _params, socket) do
+    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+      uuids = socket.assigns.bulk_uuids
+      count = Shop.bulk_delete_categories(uuids)
+
+      Activity.log("shop.categories_bulk_deleted",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "category",
+        metadata: %{"count" => count}
+      )
+
+      {:noreply,
+       socket
+       |> load_static_category_data()
+       |> load_filtered_categories()
+       |> assign(:bulk_uuids, [])
+       |> assign(:show_bulk_modal, nil)
+       |> put_flash(:info, gettext("%{count} categories deleted", count: count))}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+    end
   end
 end

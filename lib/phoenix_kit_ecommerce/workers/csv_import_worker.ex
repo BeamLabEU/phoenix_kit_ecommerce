@@ -40,6 +40,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Import.{CSVValidator, FormatDetector}
   alias PhoenixKitEcommerce.ImportConfig
+  alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Workers.ImageMigrationWorker
 
@@ -48,7 +49,7 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
   @progress_interval 50
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"import_log_uuid" => _} = args}) do
+  def perform(%Oban.Job{args: %{"import_log_uuid" => _} = args} = job) do
     import_log_uuid = Map.fetch!(args, "import_log_uuid")
     path = Map.fetch!(args, "path")
     config_uuid = Map.get(args, "config_uuid")
@@ -58,6 +59,9 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     skip_empty_categories = Map.get(args, "skip_empty_categories", false)
 
     Logger.info("CSVImportWorker: Starting import #{import_log_uuid} from #{path}")
+
+    # Marks which categories this run is allowed to clean up afterwards.
+    started_at = DateTime.utc_now()
 
     with {:ok, import_log} <- get_import_log(import_log_uuid),
          {:ok, config} <- load_config(config_uuid, import_log),
@@ -76,15 +80,21 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
              download_images
            ),
          {:ok, _import_log} <- complete_import(import_log, stats) do
-      if skip_empty_categories, do: cleanup_empty_categories(stats)
+      if skip_empty_categories, do: cleanup_empty_categories(started_at)
       cleanup_file(path)
       broadcast_complete(import_log_uuid, stats)
+      # AFTER cleanup: "completed" must mean the whole job succeeded, not
+      # just that the rows were written.
+      notify_once(import_log, :completed, stats)
+      log_import_finished(import_log, "shop.import_run_completed", stats)
       Logger.info("CSVImportWorker: Completed import #{import_log_uuid} - #{inspect(stats)}")
       :ok
     else
       {:error, reason} = error ->
         Logger.error("CSVImportWorker: Failed import #{import_log_uuid} - #{inspect(reason)}")
         handle_failure(import_log_uuid, reason)
+
+        report_terminal_failure(job, import_log_uuid, reason)
         error
     end
   end
@@ -103,6 +113,65 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
       end)
 
     perform(%Oban.Job{job | args: new_args})
+  end
+
+  # Oban retries: notifying on every attempt turns one transient failure
+  # into three alerts followed by a success. Only the terminal one is news.
+  defp report_terminal_failure(job, import_log_uuid, reason) do
+    with true <- final_attempt?(job),
+         {:ok, import_log} <- get_import_log(import_log_uuid) do
+      notify_once(import_log, :failed, reason)
+      log_import_finished(import_log, "shop.import_run_failed", %{reason: inspect(reason)})
+    else
+      _ -> :ok
+    end
+  end
+
+  defp final_attempt?(%Oban.Job{attempt: attempt, max_attempts: max}) when is_integer(attempt),
+    do: attempt >= max
+
+  defp final_attempt?(_job), do: true
+
+  # Idempotence guard: standalone notifications carry no source key, so a
+  # re-run (a manual retry, a re-enqueued job) would notify again. The
+  # marker lives on the import log's own options map - no migration.
+  defp notify_once(import_log, kind, payload) do
+    marker = "notified_#{kind}"
+    options = import_log.options || %{}
+
+    if Map.get(options, marker) do
+      :ok
+    else
+      case kind do
+        :completed -> PhoenixKitEcommerce.Notifications.import_completed(import_log, payload)
+        :failed -> PhoenixKitEcommerce.Notifications.import_failed(import_log, payload)
+      end
+
+      Shop.update_import_log(import_log, %{options: Map.put(options, marker, true)})
+      :ok
+    end
+  rescue
+    error ->
+      Logger.warning("CSVImportWorker: notification bookkeeping failed - #{inspect(error)}")
+      :ok
+  end
+
+  # The worker owns the lifecycle rows the LiveView cannot write: it is the
+  # only place that knows an import actually finished.
+  defp log_import_finished(import_log, action, metadata) do
+    PhoenixKitEcommerce.Activity.log(action,
+      actor_uuid: import_log.user_uuid,
+      resource_type: "import_log",
+      resource_uuid: import_log.uuid,
+      mode: "worker",
+      metadata: safe_import_metadata(metadata)
+    )
+  end
+
+  # Stringify keys AND values: an import's stats map carries counts and an
+  # error term, and the audit trail must not take an arbitrary shape.
+  defp safe_import_metadata(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), to_string(v)} end)
   end
 
   # ============================================
@@ -367,8 +436,27 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     end
   end
 
-  defp cleanup_empty_categories(_stats) do
-    empty_categories = Shop.list_empty_categories()
+  # Remove categories this import created and left empty.
+  #
+  # The option is presented to the admin as cleaning up after the import,
+  # but the old implementation discarded its argument and deleted EVERY
+  # empty category in the catalog — so a deliberately-empty "Coming Soon"
+  # placeholder was destroyed by any successful import with the default
+  # option on, and there is no undo.
+  #
+  # `inserted_at >= started_at` is the proxy for "this run created it";
+  # nothing in the import pipeline records created category uuids, and
+  # threading that through every row handler to delete a few rows is not
+  # worth the coupling. An admin who genuinely wants the old sweep can
+  # choose it via `shop_import_cleanup_scope`.
+  defp cleanup_empty_categories(started_at) do
+    all_empty = Shop.list_empty_categories()
+
+    empty_categories =
+      case Policy.import_cleanup_scope() do
+        :all_empty -> all_empty
+        :auto_created -> Enum.filter(all_empty, &created_since?(&1, started_at))
+      end
 
     Enum.each(empty_categories, fn cat ->
       case Shop.delete_category(cat) do
@@ -387,6 +475,18 @@ defmodule PhoenixKitEcommerce.Workers.CSVImportWorker do
     e ->
       Logger.warning("CSVImportWorker: Category cleanup failed - #{inspect(e)}")
   end
+
+  defp created_since?(%{inserted_at: nil}, _started_at), do: false
+
+  defp created_since?(%{inserted_at: inserted_at}, started_at) do
+    DateTime.compare(to_utc(inserted_at), started_at) != :lt
+  end
+
+  defp created_since?(_category, _started_at), do: false
+
+  # Schemas store naive timestamps; normalise before comparing.
+  defp to_utc(%DateTime{} = dt), do: dt
+  defp to_utc(%NaiveDateTime{} = ndt), do: DateTime.from_naive!(ndt, "Etc/UTC")
 
   defp cleanup_file(path) do
     File.rm(path)

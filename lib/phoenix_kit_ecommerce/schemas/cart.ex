@@ -31,6 +31,9 @@ defmodule PhoenixKitEcommerce.Cart do
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
 
+  @typedoc "A shopping cart row."
+  @type t :: %__MODULE__{}
+
   schema "phoenix_kit_shop_carts" do
     # Identity
     belongs_to :user, User, foreign_key: :user_uuid, references: :uuid, type: UUIDv7

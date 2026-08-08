@@ -7,59 +7,118 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
-    only: [format_price: 2, profile_display_name: 1, profile_address: 1, get_current_user: 1]
+    only: [
+      format_price: 2,
+      profile_display_name: 1,
+      profile_address: 1,
+      profile_email: 1,
+      get_current_user: 1
+    ]
 
   alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Routes
 
   @impl true
-  def mount(%{"uuid" => uuid}, _session, socket) do
+  def mount(%{"uuid" => uuid}, session, socket) do
     user = get_current_user(socket)
+
+    # Only a session id of trusted provenance may unlock an order. An id
+    # adopted from a pre-signing cookie is replayable by anyone who obtained
+    # it out-of-band, so it identifies a CART but proves nothing about who
+    # placed an order. See `ShopSession.put_shop_session/3`.
+    shop_session_id =
+      if session["shop_session_trusted"] == true, do: session["shop_session_id"]
 
     case Billing.get_order_by_uuid(uuid) do
       nil ->
         {:ok, redirect_with_error(socket, "Order not found")}
 
       order ->
-        handle_order_access(socket, order, user)
+        handle_order_access(socket, order, user, shop_session_id)
     end
   end
 
-  defp handle_order_access(socket, order, user) do
-    if has_order_access?(order, user) do
+  defp handle_order_access(socket, order, user, shop_session_id) do
+    if has_order_access?(order, user, shop_session_id) do
       {:ok, setup_order_assigns(socket, order)}
     else
       {:ok, redirect_with_error(socket, "You don't have access to this order")}
     end
   end
 
-  defp has_order_access?(order, user) do
+  # Who may read an order confirmation — including its billing snapshot
+  # (name, address, phone, email), which this page renders.
+  #
+  # Ownership by the logged-in user always grants access. Beyond that the
+  # behaviour is an admin choice; see
+  # `PhoenixKitEcommerce.Policy.order_lookup_policy/0`.
+  #
+  #   :strict (default) — the visitor must hold the shop session that
+  #     placed the order. This is what makes a guest's own confirmation
+  #     page work right after checkout without making it world-readable.
+  #
+  #   :link — knowing the uuid is enough, for shops that deliberately mail
+  #     "view your order" links and accept the URL as the credential.
+  #
+  # The previous behaviour was unconditionally :link for guests, and worse
+  # than it looked: `guest_user_order?` returned true for ANY order whose
+  # owner had `confirmed_at: nil`, and guest checkout creates exactly such
+  # users — so every guest order, and every order of a registered but
+  # unconfirmed user, was readable forever by anyone with the uuid.
+  defp has_order_access?(order, user, shop_session_id) do
     cond do
-      # No user_uuid on order - legacy guest order
-      is_nil(order.user_uuid) -> true
-      # Logged-in user owns the order
       not is_nil(user) and order.user_uuid == user.uuid -> true
-      # Guest checkout - order belongs to unconfirmed user (allow access to confirmation page)
-      guest_user_order?(order) -> true
+      placed_in_session?(order, shop_session_id) -> true
+      Policy.order_lookup_policy() == :link -> true
       true -> false
     end
   end
 
-  # Check if order belongs to an unconfirmed guest user
-  defp guest_user_order?(%{user_uuid: nil}), do: false
+  # Orders record the shop session that placed them (see the metadata built
+  # in `PhoenixKitEcommerce.build_order_attrs/*`).
+  #
+  # Orders placed BEFORE that was recorded fall back to the cart: they
+  # carry `metadata["cart_uuid"]`, and the cart row survives conversion
+  # with its `session_id`. Without this fallback, tightening order access
+  # would have locked every existing guest out of their own past
+  # confirmation pages on upgrade — a silent break for every deployed
+  # shop, not just a theoretical one.
+  #
+  # The fallback costs one narrow query, and only for orders that predate
+  # the change AND are being viewed by someone who is not the owner.
+  defp placed_in_session?(_order, nil), do: false
+  defp placed_in_session?(_order, ""), do: false
 
-  defp guest_user_order?(%{user_uuid: user_uuid}) do
-    case Auth.get_user(user_uuid) do
-      %{confirmed_at: nil} -> true
-      _ -> false
+  defp placed_in_session?(%{metadata: metadata}, shop_session_id) when is_map(metadata) do
+    case Map.get(metadata, "session_id") do
+      stored when is_binary(stored) and stored != "" ->
+        Plug.Crypto.secure_compare(stored, shop_session_id)
+
+      _ ->
+        legacy_cart_session?(metadata, shop_session_id)
+    end
+  end
+
+  defp placed_in_session?(_order, _shop_session_id), do: false
+
+  defp legacy_cart_session?(metadata, shop_session_id) do
+    case Shop.cart_session_id(Map.get(metadata, "cart_uuid")) do
+      stored when is_binary(stored) and stored != "" ->
+        Plug.Crypto.secure_compare(stored, shop_session_id)
+
+      _ ->
+        false
     end
   end
 
   defp setup_order_assigns(socket, order) do
-    currency = Shop.get_default_currency()
+    currency = Shop.currency_for_code(order.currency)
     billing_profile = get_billing_profile(order)
     {is_guest_order, order_email} = check_guest_order(order)
 
@@ -76,8 +135,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> assign(:authenticated, authenticated)
   end
 
-  defp get_billing_profile(%{billing_profile_uuid: nil}), do: nil
-  defp get_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
+  # The order's own snapshot is the record of who it was billed to; the
+  # live profile is a fallback for orders that predate snapshots (it is
+  # editable, so preferring it made history mutable).
+  defp get_billing_profile(order) do
+    Helpers.order_billing_identity(order) || live_billing_profile(order)
+  end
+
+  defp live_billing_profile(%{billing_profile_uuid: nil}), do: nil
+  defp live_billing_profile(%{billing_profile_uuid: uuid}), do: Billing.get_billing_profile(uuid)
 
   defp check_guest_order(%{user_uuid: nil} = order) do
     email = get_in(order.billing_snapshot, ["email"])
@@ -163,8 +229,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <div class="text-sm">
                   <div class="font-medium">{profile_display_name(@billing_profile)}</div>
                   <div class="text-base-content/60">{profile_address(@billing_profile)}</div>
-                  <%= if @billing_profile.email do %>
-                    <div class="text-base-content/60">{@billing_profile.email}</div>
+                  <%= if profile_email(@billing_profile) do %>
+                    <div class="text-base-content/60">{profile_email(@billing_profile)}</div>
                   <% end %>
                 </div>
               </div>
@@ -207,8 +273,21 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                         <span class="text-base-content/60 ml-2">× {item["quantity"]}</span>
                       <% end %>
                     </div>
-                    <div class="font-medium">
-                      {format_price_string(item["total"])}
+                    <%!-- The unit belongs to the UNIT price, never to the line
+                          total: "€40.00 per hour" × 2 hours is a line total of
+                          €80.00, and rendering that as "€80.00 per hour"
+                          misstates the rate the customer agreed to. Same
+                          split as the cart page. --%>
+                    <div class="font-medium text-right">
+                      {PriceDisplay.render(nil, @currency, :order, amount: item["total"])}
+                      <%= if item["price_unit"] not in [nil, ""] do %>
+                        <div class="text-xs font-normal text-base-content/50">
+                          {PriceDisplay.render(nil, @currency, :order,
+                            amount: item["unit_price"],
+                            unit: item["price_unit"]
+                          )} each
+                        </div>
+                      <% end %>
                     </div>
                   </div>
                 <% end %>
@@ -274,8 +353,4 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   end
 
   # Helpers
-
-  defp format_price_string(nil), do: "-"
-  defp format_price_string(amount) when is_binary(amount), do: "$#{amount}"
-  defp format_price_string(amount), do: "$#{amount}"
 end

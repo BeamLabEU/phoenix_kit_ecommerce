@@ -16,7 +16,24 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   alias PhoenixKitEcommerce.Web.SEOHelpers
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(params, session, socket) do
+    # The storefront of a DISABLED shop must not be browsable or purchasable;
+    # only the order-confirmation page stays reachable (it is a receipt for an
+    # already-placed order, not shopping). Admin pages are unaffected - that is
+    # where the module gets re-enabled.
+    if Shop.enabled?() do
+      do_mount(params, session, socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "The shop is currently unavailable")
+       # The HOST's root, not Routes.path("/") - that prepends the
+       # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
+       |> push_navigate(to: "/")}
+    end
+  end
+
+  defp do_mount(params, _session, socket) do
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop always uses default language, not session
     current_language = Helpers.get_language_from_params_or_default(params)
@@ -60,6 +77,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
       |> assign(:canonical_url, seo.canonical_url)
       |> assign(:hreflang_links, seo.hreflang_links)
       |> assign(:og, seo.og)
+      |> assign(:cart_count, storefront_cart_count(socket))
       |> assign(:categories, categories)
       |> assign(:products, products)
       |> assign(:total_products, total)
@@ -183,16 +201,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   @impl true
   def render(assigns) do
-    assigns =
-      if assigns.authenticated do
-        assign(assigns, :sidebar_after_shop, shop_sidebar(assigns))
-      else
-        assigns
-      end
-
     ~H"""
-    <ShopLayouts.shop_layout {assigns} show_sidebar={true}>
+    <ShopLayouts.shop_layout {assigns}>
       <div>
+        
+        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
           <div class="text-center">
@@ -236,32 +249,28 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
           </div>
         <% end %>
 
-        <%!-- Main layout: sidebar + content --%>
-        <%!-- For authenticated users: no grid (sidebar is in dashboard layout) --%>
-        <%!-- For guests: 4-column grid with sidebar --%>
-        <div class={unless @authenticated, do: "grid grid-cols-1 lg:grid-cols-4 gap-8", else: ""}>
+        <%!-- Main layout: 4-column grid, in-page sidebar for everyone --%>
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <%!-- Sidebar: filters + optional categories --%>
-          <%= if !@authenticated do %>
-            <aside class="lg:col-span-1 hidden lg:block">
-              <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-                <div class="card-body p-4">
-                  <CatalogSidebar.catalog_sidebar
-                    filters={@enabled_filters}
-                    filter_values={@filter_values}
-                    active_filters={@active_filters}
-                    categories={@categories}
-                    current_category={nil}
-                    current_language={@current_language}
-                    category_icon_mode={@category_icon_mode}
-                    category_name_wrap={@category_name_wrap}
-                    filter_qs={@filter_qs}
-                  />
-                </div>
+          <aside class="lg:col-span-1 hidden lg:block">
+            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
+              <div class="card-body p-4">
+                <CatalogSidebar.catalog_sidebar
+                  filters={@enabled_filters}
+                  filter_values={@filter_values}
+                  active_filters={@active_filters}
+                  categories={@categories}
+                  current_category={nil}
+                  current_language={@current_language}
+                  category_icon_mode={@category_icon_mode}
+                  category_name_wrap={@category_name_wrap}
+                  filter_qs={@filter_qs}
+                />
               </div>
-            </aside>
-          <% end %>
+            </div>
+          </aside>
 
-          <div class={unless @authenticated, do: "lg:col-span-3", else: ""}>
+          <div class="lg:col-span-3">
             <%!-- Category Grid (controlled by setting) --%>
             <%= if @show_categories_grid && @categories != [] do %>
               <div class="mb-8">
@@ -323,13 +332,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                 </div>
               </div>
             <% else %>
-              <div class={[
-                "grid gap-6",
-                if(@authenticated,
-                  do: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
-                  else: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
-                )
-              ]}>
+              <div class="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
                 <%= for product <- @products do %>
                   <ShopCards.product_card
                     product={product}
@@ -358,22 +361,6 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     """
   end
 
-  defp shop_sidebar(assigns) do
-    ~H"""
-    <CatalogSidebar.catalog_sidebar
-      filters={@enabled_filters}
-      filter_values={@filter_values}
-      active_filters={@active_filters}
-      categories={@categories}
-      current_category={nil}
-      current_language={@current_language}
-      category_icon_mode={@category_icon_mode}
-      category_name_wrap={@category_name_wrap}
-      filter_qs={@filter_qs}
-    />
-    """
-  end
-
   defp category_image(category) do
     Shop.Category.get_image_url(category, size: "small")
   end
@@ -384,5 +371,21 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     page = Keyword.get(opts, :page)
 
     FilterHelpers.build_filter_url(base_path, active_filters, assigns.enabled_filters, page: page)
+  end
+
+  # Cart badge for the storefront bar. Guests and users alike; a missing
+  # cart is simply zero.
+  defp storefront_cart_count(socket) do
+    user = socket.assigns[:phoenix_kit_current_user]
+
+    case Shop.find_active_cart(
+           user_uuid: user && user.uuid,
+           session_id: socket.assigns[:session_id]
+         ) do
+      %{items_count: n} when is_integer(n) -> n
+      _ -> 0
+    end
+  rescue
+    _ -> 0
   end
 end

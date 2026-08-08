@@ -5,6 +5,19 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  # Search, filters, and page live in the query string so a filtered list is a
+  # real URL: shareable, reload-proof, and Back returns to the previous query
+  # instead of leaving the page. `status_filter` and `type_filter` default to
+  # nil (no filter), which is therefore omitted from the URL.
+  use PhoenixKitWeb.Live.UrlState,
+    params: [
+      search: [default: "", url_key: "search"],
+      status_filter: [default: nil, url_key: "status", in: ~w(active draft archived)],
+      type_filter: [default: nil, url_key: "type", in: ~w(physical digital)],
+      category_filter: [default: nil, url_key: "category"],
+      page: [default: 1, cast: :integer, min: 1, url_key: "page"]
+    ]
+
   import PhoenixKitWeb.Components.Core.BulkSelect
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
@@ -17,6 +30,8 @@ defmodule PhoenixKitEcommerce.Web.Products do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @per_page 25
 
@@ -32,7 +47,6 @@ defmodule PhoenixKitEcommerce.Web.Products do
       Events.subscribe_inventory()
     end
 
-    {products, total} = Shop.list_products_with_count(per_page: @per_page, preload: [:category])
     currency = Shop.get_default_currency()
     categories = Shop.list_categories()
 
@@ -42,14 +56,12 @@ defmodule PhoenixKitEcommerce.Web.Products do
     socket =
       socket
       |> assign(:page_title, gettext("Products"))
-      |> assign(:products, products)
-      |> assign(:total, total)
-      |> assign(:page, 1)
+      # :page, :search, :status_filter, :type_filter, and :category_filter are
+      # assigned from the query string by UrlState before mount/3 runs —
+      # re-assigning them here would overwrite a shared link's state with defaults.
+      |> assign(:products, [])
+      |> assign(:total, 0)
       |> assign(:per_page, @per_page)
-      |> assign(:search, "")
-      |> assign(:status_filter, nil)
-      |> assign(:type_filter, nil)
-      |> assign(:category_filter, nil)
       |> assign(:categories, categories)
       |> assign(:currency, currency)
       |> assign(:bulk_uuids, [])
@@ -62,99 +74,50 @@ defmodule PhoenixKitEcommerce.Web.Products do
     {:ok, socket}
   end
 
+  # The list is loaded here rather than in mount/3: UrlState calls this after
+  # mount and on every change to the query string, so one code path serves the
+  # first render, a shared link, and the Back button alike.
+  #
+  # `category_filter` is re-parsed because the query string reaches it without
+  # passing through `filter_category`: `?category=` is free text until it is
+  # checked. A plain `assign` on a declared param is supported — the next
+  # patch reads its merge base back from the assigns, so the URL drops the
+  # rejected value rather than resurrecting it.
   @impl true
-  def handle_params(params, _uri, socket) do
-    page = (params["page"] || "1") |> String.to_integer()
-    search = params["search"] || ""
-    status = if params["status"] in ["", nil], do: nil, else: params["status"]
-    type = if params["type"] in ["", nil], do: nil, else: params["type"]
-    category_uuid = parse_category_uuid(params["category"])
-
-    opts = [
-      page: page,
-      per_page: @per_page,
-      search: search,
-      status: status,
-      product_type: type,
-      category_uuid: category_uuid,
-      preload: [:category]
-    ]
-
-    {products, total} = Shop.list_products_with_count(opts)
-
-    socket =
-      socket
-      |> assign(:products, products)
-      |> assign(:total, total)
-      |> assign(:page, page)
-      |> assign(:search, search)
-      |> assign(:status_filter, status)
-      |> assign(:type_filter, type)
-      |> assign(:category_filter, category_uuid)
-
-    {:noreply, socket}
+  def handle_url_state(_state, socket) do
+    socket
+    |> assign(:category_filter, parse_category_uuid(socket.assigns.category_filter))
+    |> load_products()
   end
 
   @impl true
-  def handle_event("search", %{"search" => search}, socket) do
-    socket =
-      socket
-      |> assign(:search, search)
-      |> assign(:page, 1)
-      |> load_products()
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
-    {:noreply, socket}
+  # `replace: true` — debounced box, so a typed-out query would otherwise leave
+  # one history entry per pause and Back would walk the search string backwards.
+  @impl true
+  def handle_event("search", %{"search" => search}, socket) do
+    {:noreply, push_url_state(socket, [search: search], replace: true)}
   end
 
   @impl true
   def handle_event("filter_status", %{"status" => status}, socket) do
-    status = if status == "", do: nil, else: status
-
-    socket =
-      socket
-      |> assign(:status_filter, status)
-      |> assign(:page, 1)
-      |> load_products()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, status_filter: if(status == "", do: nil, else: status))}
   end
 
   @impl true
   def handle_event("filter_type", %{"type" => type}, socket) do
-    type = if type == "", do: nil, else: type
-
-    socket =
-      socket
-      |> assign(:type_filter, type)
-      |> assign(:page, 1)
-      |> load_products()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, type_filter: if(type == "", do: nil, else: type))}
   end
 
   @impl true
   def handle_event("filter_category", %{"category" => category}, socket) do
-    category_uuid = parse_category_uuid(category)
-
-    socket =
-      socket
-      |> assign(:category_filter, category_uuid)
-      |> assign(:page, 1)
-      |> load_products()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, category_filter: parse_category_uuid(category))}
   end
 
   @impl true
   def handle_event("change_page", %{"page" => page}, socket) do
-    page = String.to_integer(page)
-
-    socket =
-      socket
-      |> assign(:page, page)
-      |> load_products()
-
-    {:noreply, socket}
+    {:noreply, push_url_state(socket, page: Helpers.parse_page(page))}
   end
 
   @impl true
@@ -179,83 +142,17 @@ defmodule PhoenixKitEcommerce.Web.Products do
   end
 
   @impl true
-  def handle_event("execute_delete", _params, socket) do
-    product = socket.assigns.delete_target
-
-    file_uuids =
-      if socket.assigns.delete_media_checked,
-        do: Shop.collect_product_file_uuids(product),
-        else: []
-
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
-
-        {products, total} =
-          Shop.list_products_with_count(
-            page: socket.assigns.page,
-            per_page: @per_page,
-            search: socket.assigns.search,
-            status: socket.assigns.status_filter,
-            product_type: socket.assigns.type_filter,
-            category_uuid: socket.assigns.category_filter,
-            preload: [:category]
-          )
-
-        {:noreply,
-         socket
-         |> assign(:products, products)
-         |> assign(:total, total)
-         |> assign(:delete_target, nil)
-         |> assign(:delete_media_checked, false)
-         |> put_flash(:info, gettext("Product deleted"))}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> assign(:delete_target, nil)
-         |> put_flash(:error, gettext("Failed to delete product"))}
-    end
+  def handle_event("execute_delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("execute_delete", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("delete_product", %{"uuid" => uuid}, socket) do
-    product = Shop.get_product!(uuid)
-
-    case Shop.delete_product(product) do
-      {:ok, _} ->
-        Activity.log("shop.product_deleted",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "product",
-          resource_uuid: product.uuid,
-          metadata: %{"status" => product.status}
-        )
-
-        {products, total} =
-          Shop.list_products_with_count(
-            page: socket.assigns.page,
-            per_page: @per_page,
-            preload: [:category]
-          )
-
-        {:noreply,
-         socket
-         |> assign(:products, products)
-         |> assign(:total, total)
-         |> put_flash(:info, gettext("Product deleted"))}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
-    end
+  def handle_event("delete_product", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("delete_product", params, socket)
+    end)
   end
 
   # Bulk action modals — capture-then-act. Selection lives client-side in the
@@ -299,42 +196,17 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
   # Bulk actions
   @impl true
-  def handle_event("bulk_change_status", %{"status" => status}, socket) do
-    uuids = socket.assigns.bulk_uuids
-    count = Shop.bulk_update_product_status(uuids, status)
-
-    Activity.log("shop.products_status_changed",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "product",
-      metadata: %{"status" => status, "count" => count}
-    )
-
-    socket = load_products(socket)
-
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> put_flash(
-       :info,
-       gettext("%{count} products updated to %{status}", count: count, status: status)
-     )}
+  def handle_event("bulk_change_status", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("bulk_change_status", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("bulk_change_category", %{"category_uuid" => category_uuid}, socket) do
-    uuids = socket.assigns.bulk_uuids
-    category_uuid = if category_uuid == "", do: nil, else: category_uuid
-    count = Shop.bulk_update_product_category(uuids, category_uuid)
-
-    socket = load_products(socket)
-
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> put_flash(:info, gettext("%{count} products moved", count: count))}
+  def handle_event("bulk_change_category", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("bulk_change_category", params, socket)
+    end)
   end
 
   @impl true
@@ -343,32 +215,8 @@ defmodule PhoenixKitEcommerce.Web.Products do
   end
 
   @impl true
-  def handle_event("bulk_delete", _params, socket) do
-    uuids = socket.assigns.bulk_uuids
-
-    file_uuids =
-      if socket.assigns.bulk_delete_media,
-        do: Shop.collect_products_file_uuids(uuids),
-        else: []
-
-    count = Shop.bulk_delete_products(uuids)
-    if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
-
-    Activity.log("shop.products_bulk_deleted",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "product",
-      metadata: %{"count" => count}
-    )
-
-    socket = load_products(socket)
-
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> assign(:bulk_delete_media, false)
-     |> put_flash(:info, gettext("%{count} products deleted", count: count))}
+  def handle_event("bulk_delete", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("bulk_delete", params, socket) end)
   end
 
   defp load_products(socket) do
@@ -413,6 +261,17 @@ defmodule PhoenixKitEcommerce.Web.Products do
   def handle_info({:inventory_updated, _product_uuid, _change}, socket) do
     {:noreply, load_products(socket)}
   end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  #
+  # Every clause above matches a specific broadcast shape, so ANY message
+  # outside that set — a new event added to `Events`, a late reply, a
+  # library-sent message — crashed the mounted view. `Events` already
+  # publishes some events to two topics, and this module subscribes to
+  # more than one, so adding a single new event shape would have started
+  # crashing live sessions with no change here at all.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do
@@ -879,9 +738,18 @@ defmodule PhoenixKitEcommerce.Web.Products do
     """
   end
 
-  defp parse_category_uuid(nil), do: nil
-  defp parse_category_uuid(""), do: nil
-  defp parse_category_uuid(id) when is_binary(id), do: id
+  # The value goes straight into `where p.category_uuid == ^uuid`, and Ecto
+  # raises `Ecto.Query.CastError` on anything that is not a UUID — so a
+  # hand-edited `?category=whatever` took the whole LiveView down rather than
+  # showing an unfiltered list. Unparseable means "no filter".
+  defp parse_category_uuid(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp parse_category_uuid(_), do: nil
 
   defp status_badge_class("active"), do: "badge badge-success"
   defp status_badge_class("draft"), do: "badge badge-warning"
@@ -941,5 +809,148 @@ defmodule PhoenixKitEcommerce.Web.Products do
       _instance ->
         URLSigner.signed_url(file_uuid, variant)
     end
+  end
+
+  defp gated_event("execute_delete", _params, socket) do
+    product = socket.assigns.delete_target
+
+    file_uuids =
+      if socket.assigns.delete_media_checked,
+        do: Shop.collect_product_file_uuids(product),
+        else: []
+
+    case Shop.delete_product(product) do
+      {:ok, _} ->
+        Activity.log("shop.product_deleted",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "product",
+          resource_uuid: product.uuid,
+          metadata: %{"status" => product.status}
+        )
+
+        if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
+
+        {products, total} =
+          Shop.list_products_with_count(
+            page: socket.assigns.page,
+            per_page: @per_page,
+            search: socket.assigns.search,
+            status: socket.assigns.status_filter,
+            product_type: socket.assigns.type_filter,
+            category_uuid: socket.assigns.category_filter,
+            preload: [:category]
+          )
+
+        {:noreply,
+         socket
+         |> assign(:products, products)
+         |> assign(:total, total)
+         |> assign(:delete_target, nil)
+         |> assign(:delete_media_checked, false)
+         |> put_flash(:info, gettext("Product deleted"))}
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> assign(:delete_target, nil)
+         |> put_flash(:error, gettext("Failed to delete product"))}
+    end
+  end
+
+  defp gated_event("delete_product", %{"uuid" => uuid}, socket) do
+    product = Shop.get_product!(uuid)
+
+    case Shop.delete_product(product) do
+      {:ok, _} ->
+        Activity.log("shop.product_deleted",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "product",
+          resource_uuid: product.uuid,
+          metadata: %{"status" => product.status}
+        )
+
+        {products, total} =
+          Shop.list_products_with_count(
+            page: socket.assigns.page,
+            per_page: @per_page,
+            preload: [:category]
+          )
+
+        {:noreply,
+         socket
+         |> assign(:products, products)
+         |> assign(:total, total)
+         |> put_flash(:info, gettext("Product deleted"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
+    end
+  end
+
+  defp gated_event("bulk_change_status", %{"status" => status}, socket) do
+    uuids = socket.assigns.bulk_uuids
+    count = Shop.bulk_update_product_status(uuids, status)
+
+    Activity.log("shop.products_status_changed",
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "product",
+      metadata: %{"status" => status, "count" => count}
+    )
+
+    socket = load_products(socket)
+
+    {:noreply,
+     socket
+     |> assign(:bulk_uuids, [])
+     |> assign(:show_bulk_modal, nil)
+     |> put_flash(
+       :info,
+       gettext("%{count} products updated to %{status}", count: count, status: status)
+     )}
+  end
+
+  defp gated_event("bulk_change_category", %{"category_uuid" => category_uuid}, socket) do
+    uuids = socket.assigns.bulk_uuids
+    category_uuid = if category_uuid == "", do: nil, else: category_uuid
+    count = Shop.bulk_update_product_category(uuids, category_uuid)
+
+    socket = load_products(socket)
+
+    {:noreply,
+     socket
+     |> assign(:bulk_uuids, [])
+     |> assign(:show_bulk_modal, nil)
+     |> put_flash(:info, gettext("%{count} products moved", count: count))}
+  end
+
+  defp gated_event("bulk_delete", _params, socket) do
+    uuids = socket.assigns.bulk_uuids
+
+    file_uuids =
+      if socket.assigns.bulk_delete_media,
+        do: Shop.collect_products_file_uuids(uuids),
+        else: []
+
+    count = Shop.bulk_delete_products(uuids)
+    if file_uuids != [], do: Storage.queue_file_cleanup(file_uuids)
+
+    Activity.log("shop.products_bulk_deleted",
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "product",
+      metadata: %{"count" => count}
+    )
+
+    socket = load_products(socket)
+
+    {:noreply,
+     socket
+     |> assign(:bulk_uuids, [])
+     |> assign(:show_bulk_modal, nil)
+     |> assign(:bulk_delete_media, false)
+     |> put_flash(:info, gettext("%{count} products deleted", count: count))}
   end
 end
