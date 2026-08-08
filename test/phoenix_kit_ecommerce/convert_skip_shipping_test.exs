@@ -26,6 +26,7 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
     assert order.metadata["shipping_skipped"] == true
     assert order.metadata["shipping_skip_reason"] == "always"
     refute Enum.any?(order.line_items, &(&1["type"] == "shipping"))
+    assert_no_shipping_charge(order)
   end
 
   test "mode fallback converts only when no method covers the country", %{cart: cart} do
@@ -39,6 +40,7 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
     assert order.metadata["shipping_skipped"] == true
     assert order.metadata["shipping_skip_reason"] == "no_method_for_country"
     refute Enum.any?(order.line_items, &(&1["type"] == "shipping"))
+    assert_no_shipping_charge(order)
   end
 
   test "mode fallback still rejects when methods exist for the country", %{cart: cart} do
@@ -80,6 +82,23 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
     {:ok, cart} = Shop.add_to_cart(cart, product, 1)
 
     %{cart: cart, opts: [billing_data: complete_billing("EE")]}
+  end
+
+  # A skipped-shipping order must carry no shipping charge anywhere in its
+  # money math, not just in `line_items` (already checked by the caller):
+  # `total` is exactly subtotal + tax (no third component to smuggle a
+  # charge through), and the line items sum back to the subtotal - so a
+  # stray shipping amount could not hide inside either figure.
+  defp assert_no_shipping_charge(order) do
+    expected_total = Decimal.add(order.subtotal, order.tax_amount)
+    assert Decimal.equal?(order.total, expected_total)
+
+    line_items_total =
+      order.line_items
+      |> Enum.map(&Decimal.new(&1["total"]))
+      |> Enum.reduce(Decimal.new("0"), &Decimal.add/2)
+
+    assert Decimal.equal?(line_items_total, order.subtotal)
   end
 
   defp complete_billing(country) do
