@@ -26,7 +26,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
     # Point the module Gettext at a locale its catalogues contain — see
     # Helpers.put_content_locale/1. Without it this page renders English
     # while its siblings translate.
-    _ = ShopHelpers.put_content_locale(socket.assigns[:current_locale] || "en")
+    _ = ShopHelpers.put_content_locale_from(socket)
 
     if Billing.enabled?() do
       mount_with_billing(uuid, socket)

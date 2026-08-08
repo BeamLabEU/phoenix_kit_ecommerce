@@ -85,8 +85,8 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   Whether this product's price is negotiated rather than listed
   ("price on request" / "цена договорная").
 
-  Read the SNAPSHOT for `:cart` and `:order` lines, never the live product —
-  `on_request_line?/1`. A product can be edited or deleted after a line is
+  Read the LINE's own snapshot for `:cart` and `:order`
+  (`metadata["price_on_request"]`), never the live product. A product can be edited or deleted after a line is
   created (`product_uuid` is ON DELETE SET NULL), and a line that was agreed as
   "on request" must not later render as a number, nor a priced line as "on
   request".
@@ -94,17 +94,6 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   def on_request?(product_or_metadata) do
     settings(product_or_metadata).on_request
   end
-
-  @doc """
-  Whether a CART/ORDER line was created against an on-request product.
-
-  Reads the line's own snapshot, written by `CartItem.from_product/3`.
-  """
-  def on_request_line?(%{metadata: metadata}) when is_map(metadata) do
-    Map.get(metadata, "price_on_request") == true
-  end
-
-  def on_request_line?(_), do: false
 
   @doc """
   Builds the storable namespace map from admin form input.
@@ -121,7 +110,13 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
     if unit == %{} and from? != true and on_request? != true do
       %{}
     else
-      %{"unit" => unit, "from" => from? == true, "on_request" => on_request? == true}
+      base = %{"unit" => unit, "from" => from? == true}
+
+      # Written ONLY when true, so `build/2` still produces exactly the map it
+      # always did and an existing product does not silently gain a key on its
+      # next save. `settings/1` reads a missing key as false, so absence and
+      # `false` are already the same thing to every reader.
+      if on_request? == true, do: Map.put(base, "on_request", true), else: base
     end
   end
 

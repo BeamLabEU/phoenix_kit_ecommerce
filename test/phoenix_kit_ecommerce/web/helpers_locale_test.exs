@@ -1,0 +1,71 @@
+defmodule PhoenixKitEcommerce.Web.HelpersLocaleTest do
+  @moduledoc """
+  `put_content_locale/1` is the fix for a bug that made the ENTIRE module render
+  English however complete its catalogues were: the content language is a dialect
+  ("ru-RU") and the catalogues are plain codes ("ru"), and Gettext does not fall
+  back between them. The existing i18n test passes plain codes directly, which is
+  exactly why it never caught this.
+  """
+  use PhoenixKitEcommerce.DataCase, async: false
+
+  alias PhoenixKit.Settings
+  alias PhoenixKitEcommerce.Web.Helpers
+
+  @backend PhoenixKitEcommerce.Gettext
+
+  describe "put_content_locale/1" do
+    test "an exact locale is used as-is" do
+      Helpers.put_content_locale("ru")
+      assert Gettext.get_locale(@backend) == "ru"
+    end
+
+    test "a DIALECT resolves to its base language" do
+      # The regression. Without this the lookup misses and returns the msgid,
+      # which is the English source string.
+      Helpers.put_content_locale("ru-RU")
+      assert Gettext.get_locale(@backend) == "ru"
+
+      Helpers.put_content_locale("et-EE")
+      assert Gettext.get_locale(@backend) == "et"
+    end
+
+    test "an unknown locale RESETS rather than leaking the previous one" do
+      # put_locale/2 is process-scoped and the dead render reuses a connection
+      # process across keep-alive requests, so a no-op here served the previous
+      # visitor's language to the next one.
+      Helpers.put_content_locale("ru")
+      assert Gettext.get_locale(@backend) == "ru"
+
+      Helpers.put_content_locale("zz-ZZ")
+      refute Gettext.get_locale(@backend) == "ru"
+    end
+
+    test "a non-binary is returned untouched" do
+      assert Helpers.put_content_locale(nil) == nil
+    end
+
+    test "returns its input so it can sit in a pipeline" do
+      assert Helpers.put_content_locale("ru-RU") == "ru-RU"
+    end
+  end
+
+  describe "hide_zero_decimals?/0" do
+    test "defaults to off" do
+      Settings.update_setting("shop_hide_zero_decimals", "false")
+      refute Helpers.hide_zero_decimals?()
+    end
+
+    test "drops an all-zero fraction only, and never touches a real one" do
+      Settings.update_setting("shop_hide_zero_decimals", "true")
+      assert Helpers.hide_zero_decimals?()
+
+      # No currency struct: the plain-code and nil branches must agree with the
+      # currency branch about WHEN to trim.
+      assert Helpers.format_price(Decimal.new("40.00"), "EUR") == "40 EUR"
+      assert Helpers.format_price(Decimal.new("40.50"), "EUR") == "40.50 EUR"
+
+      Settings.update_setting("shop_hide_zero_decimals", "false")
+      assert Helpers.format_price(Decimal.new("40.00"), "EUR") == "40.00 EUR"
+    end
+  end
+end

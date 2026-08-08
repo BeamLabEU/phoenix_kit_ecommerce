@@ -60,7 +60,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       {:ok, %{category: %{status: "hidden"}}} ->
         {:ok,
          socket
-         |> put_flash(:error, gettext("Product not found"))
+         |> put_flash(:error, Vocabulary.not_found())
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, %{status: status}} when status != "active" ->
@@ -73,7 +73,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         # product's own never was.
         {:ok,
          socket
-         |> put_flash(:error, gettext("Product not found"))
+         |> put_flash(:error, Vocabulary.not_found())
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, product} ->
@@ -157,7 +157,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         # Product truly not found
         {:ok,
          socket
-         |> put_flash(:error, gettext("Product not found"))
+         |> put_flash(:error, Vocabulary.not_found())
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, product, _matched_lang} ->
@@ -189,7 +189,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp not_found(socket, current_language) do
     {:ok,
      socket
-     |> put_flash(:error, gettext("Product not found"))
+     |> put_flash(:error, Vocabulary.not_found())
      |> push_navigate(to: Shop.catalog_url(current_language))}
   end
 
@@ -472,13 +472,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
-         |> put_flash(:error, gettext("This product is no longer available"))}
+         |> put_flash(:error, Vocabulary.unavailable_gone())}
 
       {:error, {:product_not_available, _uuid}} ->
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
-         |> put_flash(:error, gettext("This product is no longer available"))}
+         |> put_flash(:error, Vocabulary.unavailable_gone())}
 
       {:error, reason} ->
         # Log error for admin monitoring
@@ -494,7 +494,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:adding_to_cart, false)
          |> put_flash(
            :error,
-           gettext("Unable to add this product to cart. Please refresh the page and try again.")
+           Vocabulary.add_failed()
          )}
 
       {:error, code, detail} ->
@@ -746,7 +746,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                     language: @current_language
                   )}
                 </span>
-                <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
+                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
+                     Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">
                     {format_price(@product.compare_at_price, @currency)}
                   </span>
@@ -756,7 +757,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <span class="text-3xl font-bold text-primary">
                   {PriceDisplay.render(@product, @currency, :catalog, language: @current_language)}
                 </span>
-                <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
+                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
+                     Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
                   <span class="text-xl text-base-content/40 line-through">
                     {format_price(@product.compare_at_price, @currency)}
                   </span>
@@ -1402,7 +1404,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       do_refresh_product(socket, product)
     else
       socket
-      |> put_flash(:info, gettext("This product is no longer available"))
+      |> put_flash(:info, Vocabulary.unavailable_gone())
       |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
     end
   end

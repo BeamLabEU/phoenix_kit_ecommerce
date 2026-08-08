@@ -17,9 +17,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
-  alias PhoenixKitEcommerce.Vocabulary
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, humanize_key: 1, get_current_user: 1]
@@ -405,16 +405,28 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               </form>
                             </td>
                             <td class="text-right">
+                              <% line_por = (item.metadata || %{})["price_on_request"] == true %>
                               <div class="font-semibold">
-                                {format_price(item.line_total, @currency)}
-                              </div>
-                              <div class="text-xs text-base-content/50">
                                 {PriceDisplay.render(nil, @currency, :cart,
-                                  amount: item.unit_price,
-                                  unit: (item.metadata || %{})["price_unit"],
-                                  on_request: (item.metadata || %{})["price_on_request"] == true
-                                )} each
+                                  amount: item.line_total,
+                                  unit: nil,
+                                  on_request: line_por
+                                )}
                               </div>
+                              <%!-- The per-unit line is redundant once the amount
+                                   is suppressed, and "Price on request each"
+                                   reads as nonsense. --%>
+                              <%= unless line_por do %>
+                                <div class="text-xs text-base-content/50">
+                                  {gettext("%{price} each",
+                                    price:
+                                      PriceDisplay.render(nil, @currency, :cart,
+                                        amount: item.unit_price,
+                                        unit: (item.metadata || %{})["price_unit"]
+                                      )
+                                  )}
+                                </div>
+                              <% end %>
                             </td>
                             <td>
                               <button

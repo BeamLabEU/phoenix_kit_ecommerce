@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   def mount(%{"uuid" => uuid}, session, socket) do
     # Without this the page renders English whatever the locale — see
     # Helpers.put_content_locale/1.
-    _ = Helpers.put_content_locale(socket.assigns[:current_locale] || "en")
+    _ = Helpers.put_content_locale_from(socket)
     user = get_current_user(socket)
 
     # Only a session id of trusted provenance may unlock an order. An id

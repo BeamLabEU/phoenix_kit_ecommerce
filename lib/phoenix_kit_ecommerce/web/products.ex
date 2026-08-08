@@ -946,7 +946,15 @@ defmodule PhoenixKitEcommerce.Web.Products do
   end
 
   defp gated_event("toggle_status", %{"uuid" => uuid}, socket) do
-    product = Enum.find(socket.assigns.products, &(&1.uuid == uuid))
+    # Re-read rather than trusting socket.assigns, which is as old as the last
+    # render. Deciding "is this active or draft" against a stale row means an
+    # admin who archived it in another tab gets it silently un-archived — the
+    # exact transition the clause below refuses to guess at.
+    product =
+      case Shop.get_product(uuid) do
+        nil -> nil
+        fresh -> fresh
+      end
 
     case product do
       %{status: old} when old in ["active", "draft"] ->
@@ -964,7 +972,17 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
             {:noreply, load_products(socket)}
 
-          {:error, _} ->
+          {:error, reason} ->
+            # Logged on BOTH branches: this handler turns a four-step change into
+            # one click, so the volume is about to rise, and a rejected changeset
+            # with no audit row leaves nothing to diagnose from.
+            Activity.log_failed("shop.product_status_changed", reason,
+              actor_uuid: Activity.actor_uuid(socket),
+              resource_type: "product",
+              resource_uuid: uuid,
+              metadata: %{"from" => old, "to" => new}
+            )
+
             {:noreply, put_flash(socket, :error, gettext("Failed to update status"))}
         end
 
