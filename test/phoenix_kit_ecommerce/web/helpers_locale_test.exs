@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.HelpersLocaleTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   alias PhoenixKit.Settings
+  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce.Web.Helpers
 
   @backend PhoenixKitEcommerce.Gettext
@@ -66,6 +67,38 @@ defmodule PhoenixKitEcommerce.Web.HelpersLocaleTest do
 
       Settings.update_setting("shop_hide_zero_decimals", "false")
       assert Helpers.format_price(Decimal.new("40.00"), "EUR") == "40.00 EUR"
+    end
+
+    test "the CURRENCY branch trims without rounding a real fraction" do
+      # The regression this test's sibling asserted the contract for but never
+      # exercised. Trimming is implemented by handing billing a currency whose
+      # decimal_places is 0, and `format_amount/2` ROUNDS to that precision — so
+      # zeroing it unconditionally turned 40.50 into "€41" and 1234.99 into
+      # "€1,235" on the catalog, the cart line, the tax row and the total: a
+      # figure the shopper is never charged.
+      currency = %Currency{symbol: "€", decimal_places: 2}
+
+      Settings.update_setting("shop_hide_zero_decimals", "true")
+
+      assert Helpers.format_price(Decimal.new("40.00"), currency) == "€40"
+      assert Helpers.format_price(Decimal.new("40.50"), currency) == "€40.50"
+      assert Helpers.format_price(Decimal.new("40.49"), currency) == "€40.49"
+      assert Helpers.format_price(Decimal.new("1234.99"), currency) == "€1,234.99"
+      assert Helpers.format_price(Decimal.new("1234.00"), currency) == "€1,234"
+
+      # Off, the currency's own precision is untouched.
+      Settings.update_setting("shop_hide_zero_decimals", "false")
+      assert Helpers.format_price(Decimal.new("40.00"), currency) == "€40.00"
+      assert Helpers.format_price(Decimal.new("40.50"), currency) == "€40.50"
+    end
+
+    test "a zero-decimal currency is left alone" do
+      # Nothing to trim, and `%{currency | decimal_places: 0}` must not turn a
+      # JPY-style currency into something else.
+      currency = %Currency{symbol: "¥", decimal_places: 0}
+
+      Settings.update_setting("shop_hide_zero_decimals", "true")
+      assert Helpers.format_price(Decimal.new("4000"), currency) == "¥4,000"
     end
   end
 end

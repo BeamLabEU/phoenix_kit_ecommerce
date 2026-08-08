@@ -144,7 +144,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
       |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, "Edit Product")
+      |> assign(:admin_edit_label, gettext("Edit Product"))
 
     {:ok, socket}
   end
@@ -303,7 +303,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
       |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, "Edit Product")
+      |> assign(:admin_edit_label, gettext("Edit Product"))
 
     {:ok, socket}
   end
@@ -518,43 +518,63 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   # Get user-friendly error message based on error code and details
   # Keep messages concise for toast display (max ~80 chars per line)
+  #
+  # These are flash messages a SHOPPER sees, so they are wrapped for the same
+  # reason the markup around them is: an untranslated toast is as visible as an
+  # untranslated heading. Interpolated values (an option key, a stock count)
+  # ride as bindings rather than being built into the msgid, or the translator
+  # gets a different string for every product.
   defp get_user_friendly_error_message(:invalid_option_value, detail) do
     option_name = detail[:key] || gettext("option")
 
     case detail[:value] do
       nil ->
-        "Selected options are no longer available.\nPlease refresh and select again."
+        gettext("Selected options are no longer available.\nPlease refresh and select again.")
 
       val ->
-        "Option \"#{option_name}: #{val}\" is no longer available.\nPlease refresh the page for current options."
+        gettext(
+          "Option \"%{option}: %{value}\" is no longer available.\nPlease refresh the page for current options.",
+          option: option_name,
+          value: val
+        )
     end
   end
 
   defp get_user_friendly_error_message(:unknown_option_key, detail) do
-    option_name = detail[:key] || "option"
-    "Option \"#{option_name}\" does not exist.\nProduct was updated - please reload the page."
+    option_name = detail[:key] || gettext("option")
+
+    gettext(
+      "Option \"%{option}\" does not exist.\nProduct was updated - please reload the page.",
+      option: option_name
+    )
   end
 
   defp get_user_friendly_error_message(:missing_required_option, detail) do
-    missing_option = if is_binary(detail), do: detail, else: "required option"
-    "Missing required option: #{missing_option}.\nPlease select all required parameters."
+    missing_option = if is_binary(detail), do: detail, else: gettext("required option")
+
+    gettext("Missing required option: %{option}.\nPlease select all required parameters.",
+      option: missing_option
+    )
   end
 
   defp get_user_friendly_error_message(:out_of_stock, _detail) do
-    "Product is out of stock.\nPlease try again later or choose another product."
+    gettext("This item is out of stock.\nPlease try again later or choose another one.")
   end
 
   defp get_user_friendly_error_message(:insufficient_stock, detail) do
     available = detail[:available] || 0
-    "Insufficient stock (only #{available} available).\nPlease reduce quantity."
+
+    gettext("Insufficient stock (only %{count} available).\nPlease reduce quantity.",
+      count: available
+    )
   end
 
   defp get_user_friendly_error_message(:price_changed, _detail) do
-    "Product price has changed.\nPlease refresh to see current price."
+    gettext("The price has changed.\nPlease refresh to see the current price.")
   end
 
   defp get_user_friendly_error_message(_code, _detail) do
-    "Unable to add to cart.\nPlease try again or contact support."
+    gettext("Unable to add to cart.\nPlease try again or contact support.")
   end
 
   # Log cart errors for admin monitoring and debugging
@@ -968,11 +988,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                     <.icon name="hero-shopping-cart" class="w-5 h-5" />
                     <div>
                       <span class="font-medium">{gettext("Already in cart:")}</span>
+                      <%!-- The line's OWN flag. An on-request line stores 0, so
+                            formatting it printed "1 × 0.00 = 0.00" directly under
+                            a headline price reading "Price on request". --%>
                       <span>
-                        {@cart_item.quantity} × {format_price(@cart_item.unit_price, @currency)} = {format_price(
-                          @cart_item.line_total,
-                          @currency
-                        )}
+                        <%= if PriceDisplay.line_on_request?(@cart_item) do %>
+                          {gettext("Qty: %{count}", count: @cart_item.quantity)}
+                        <% else %>
+                          {@cart_item.quantity} × {format_price(@cart_item.unit_price, @currency)} = {format_price(
+                            @cart_item.line_total,
+                            @currency
+                          )}
+                        <% end %>
                       </span>
                     </div>
                   </div>

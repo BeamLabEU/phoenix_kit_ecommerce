@@ -920,14 +920,8 @@ defmodule PhoenixKitEcommerce.Web.Products do
     # render. Deciding "is this active or draft" against a stale row means an
     # admin who archived it in another tab gets it silently un-archived — the
     # exact transition the clause below refuses to guess at.
-    product =
-      case Shop.get_product(uuid) do
-        nil -> nil
-        fresh -> fresh
-      end
-
-    case product do
-      %{status: old} when old in ["active", "draft"] ->
+    case Shop.get_product(uuid) do
+      %{status: old} = product when old in ["active", "draft"] ->
         new = if old == "active", do: "draft", else: "active"
 
         case Shop.update_product(product, %{"status" => new}) do
