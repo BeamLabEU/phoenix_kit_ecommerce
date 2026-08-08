@@ -126,7 +126,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
     socket
-    |> assign(:page_title, "Order Confirmed")
+    |> assign(:page_title, gettext("Order Confirmed"))
     |> assign(:order, order)
     |> assign(:currency, currency)
     |> assign(:billing_profile, billing_profile)
@@ -173,9 +173,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
           <div class="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <.icon name="hero-check-circle" class="w-12 h-12 text-success" />
           </div>
-          <h1 class="text-3xl font-bold mb-2">Order Confirmed!</h1>
+          <h1 class="text-3xl font-bold mb-2">{gettext("Order Confirmed!")}</h1>
           <p class="text-base-content/60">
-            Thank you for your order. We've received your order and will process it shortly.
+            {gettext("Thank you for your order. We've received your order and will process it shortly.")}
           </p>
         </div>
 
@@ -186,17 +186,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               <div class="flex items-start gap-4">
                 <.icon name="hero-envelope" class="w-8 h-8 text-info flex-shrink-0" />
                 <div>
-                  <h3 class="font-semibold text-lg">Check your inbox</h3>
+                  <h3 class="font-semibold text-lg">{gettext("Check your inbox")}</h3>
                   <p class="text-sm mt-1">
                     We've sent a confirmation email to <strong>{@order_email}</strong>.
                   </p>
                   <ol class="text-sm mt-3 space-y-1.5 list-decimal list-inside text-base-content/80">
-                    <li>Open the email titled <strong>"Confirm your account"</strong></li>
-                    <li>Click the confirmation link inside</li>
-                    <li>Your account will be activated and you can track your order</li>
+                    <li>
+                      {gettext("Open the email titled")}
+                      <strong>{gettext("Confirm your account")}</strong>
+                    </li>
+                    <li>{gettext("Click the confirmation link inside")}</li>
+                    <li>{gettext("Your account will be activated and you can track your order")}</li>
                   </ol>
                   <p class="text-xs text-base-content/50 mt-3">
-                    Don't see it? Check your spam or junk folder. The email may take a minute to arrive.
+                    {gettext("Don't see it? Check your spam or junk folder. The email may take a minute to arrive.")}
                   </p>
                 </div>
               </div>
@@ -207,11 +210,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
         <%!-- Order Number --%>
         <div class="card bg-base-100 shadow-lg mb-6">
           <div class="card-body text-center">
-            <div class="text-sm text-base-content/60">Order Number</div>
+            <div class="text-sm text-base-content/60">{gettext("Order Number")}</div>
             <div class="text-2xl font-mono font-bold">{@order.order_number}</div>
             <%= unless @is_guest_order do %>
+              <%!-- Deliberately does NOT promise a confirmation email. Nothing in
+                   this module sends one to a signed-in customer: the only mail
+                   checkout sends is the guest ACCOUNT confirmation above. The
+                   sentence that used to sit here was simply false, and a live
+                   shop reported it. --%>
               <div class="text-sm text-base-content/60 mt-2">
-                A confirmation email will be sent to your email address.
+                {gettext("You can follow this order from your account at any time.")}
               </div>
             <% end %>
           </div>
@@ -220,12 +228,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
         <%!-- Order Details --%>
         <div class="card bg-base-100 shadow-lg mb-6">
           <div class="card-body">
-            <h2 class="card-title mb-4">Order Details</h2>
+            <h2 class="card-title mb-4">{gettext("Order Details")}</h2>
 
             <%!-- Billing Info --%>
             <%= if @billing_profile do %>
               <div class="mb-6">
-                <h3 class="font-medium text-sm text-base-content/70 mb-2">Billing Information</h3>
+                <h3 class="font-medium text-sm text-base-content/70 mb-2">{gettext("Billing Information")}</h3>
                 <div class="text-sm">
                   <div class="font-medium">{profile_display_name(@billing_profile)}</div>
                   <div class="text-base-content/60">{profile_address(@billing_profile)}</div>
@@ -238,7 +246,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               <%!-- Guest order - show billing snapshot --%>
               <%= if @order.billing_snapshot && map_size(@order.billing_snapshot) > 0 do %>
                 <div class="mb-6">
-                  <h3 class="font-medium text-sm text-base-content/70 mb-2">Billing Information</h3>
+                  <h3 class="font-medium text-sm text-base-content/70 mb-2">{gettext("Billing Information")}</h3>
                   <div class="text-sm">
                     <div class="font-medium">
                       {@order.billing_snapshot["first_name"]} {@order.billing_snapshot["last_name"]}
@@ -263,7 +271,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
             <%!-- Items --%>
             <div class="mb-6">
-              <h3 class="font-medium text-sm text-base-content/70 mb-2">Items</h3>
+              <h3 class="font-medium text-sm text-base-content/70 mb-2">{gettext("Items")}</h3>
               <div class="space-y-3">
                 <%= for item <- @order.line_items || [] do %>
                   <div class="flex justify-between items-center text-sm">
@@ -287,26 +295,26 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
             <%!-- Totals --%>
             <div class="border-t pt-4 space-y-2">
               <div class="flex justify-between text-sm">
-                <span class="text-base-content/70">Subtotal</span>
+                <span class="text-base-content/70">{gettext("Subtotal")}</span>
                 <span>{format_price(@order.subtotal, @currency)}</span>
               </div>
 
               <%= if @order.tax_amount && Decimal.compare(@order.tax_amount, Decimal.new("0")) == :gt do %>
                 <div class="flex justify-between text-sm">
-                  <span class="text-base-content/70">Tax</span>
+                  <span class="text-base-content/70">{gettext("Tax")}</span>
                   <span>{format_price(@order.tax_amount, @currency)}</span>
                 </div>
               <% end %>
 
               <%= if @order.discount_amount && Decimal.compare(@order.discount_amount, Decimal.new("0")) == :gt do %>
                 <div class="flex justify-between text-sm text-success">
-                  <span>Discount</span>
+                  <span>{gettext("Discount")}</span>
                   <span>-{format_price(@order.discount_amount, @currency)}</span>
                 </div>
               <% end %>
 
               <div class="flex justify-between text-lg font-bold pt-2 border-t">
-                <span>Total</span>
+                <span>{gettext("Total")}</span>
                 <span>{format_price(@order.total, @currency)}</span>
               </div>
             </div>
@@ -318,8 +326,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
           <div class="card-body">
             <div class="flex items-center justify-between">
               <div>
-                <h3 class="font-medium">Order Status</h3>
-                <p class="text-sm text-base-content/60">Your order is being processed</p>
+                <h3 class="font-medium">{gettext("Order Status")}</h3>
+                <p class="text-sm text-base-content/60">{gettext("Your order is being processed")}</p>
               </div>
               <div class="badge badge-warning badge-lg capitalize">{@order.status}</div>
             </div>

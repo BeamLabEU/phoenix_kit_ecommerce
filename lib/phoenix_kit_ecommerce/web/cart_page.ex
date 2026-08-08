@@ -34,7 +34,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -75,7 +75,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     socket =
       socket
-      |> assign(:page_title, "Shopping Cart")
+      |> assign(:page_title, gettext("Shopping Cart"))
       |> assign(:session_id, session_id)
       |> assign(:currency, currency)
       |> assign(:authenticated, authenticated)
@@ -102,10 +102,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
           {:noreply,
            socket
            |> assign_cart_state(updated_cart)
-           |> put_flash(:info, "Item removed from cart")}
+           |> put_flash(:info, gettext("Item removed from cart"))}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to remove item")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
       end
     else
       {:noreply, socket}
@@ -124,7 +124,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
           {:noreply, assign(socket, :cart, updated_cart)}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to set shipping method")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to set shipping method"))}
       end
     else
       {:noreply, socket}
@@ -137,10 +137,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     cond do
       cart.items == [] ->
-        {:noreply, put_flash(socket, :error, "Your cart is empty")}
+        {:noreply, put_flash(socket, :error, gettext("Your cart is empty"))}
 
       is_nil(cart.shipping_method_uuid) and socket.assigns.requires_shipping ->
-        {:noreply, put_flash(socket, :error, "Please select a shipping method")}
+        {:noreply, put_flash(socket, :error, gettext("Please select a shipping method"))}
 
       true ->
         {:noreply, push_navigate(socket, to: Shop.checkout_url(socket.assigns.current_language))}
@@ -177,7 +177,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                put_flash(
                  socket,
                  :error,
-                 "The selected shipping method is no longer available for this cart - please pick another"
+                 gettext(
+                   "The selected shipping method is no longer available for this cart - please pick another"
+                 )
                )}
 
             _ ->
@@ -200,7 +202,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
           {:noreply, assign_cart_state(socket, updated_cart)}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to update quantity")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update quantity"))}
       end
     else
       {:noreply, socket}
@@ -275,8 +277,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
               <.icon name="hero-arrow-left" class="w-4 h-4" />
             </.link>
             <div class="flex-1 min-w-0">
-              <h1 class="text-3xl font-bold text-base-content">Shopping Cart</h1>
-              <p class="text-base-content/70 mt-1">Review your items before checkout</p>
+              <h1 class="text-3xl font-bold text-base-content">{gettext("Shopping Cart")}</h1>
+              <p class="text-base-content/70 mt-1">{gettext("Review your items before checkout")}</p>
             </div>
           </div>
         </header>
@@ -288,10 +290,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
               <div class="card bg-base-100 shadow-xl">
                 <div class="card-body text-center py-16">
                   <.icon name="hero-shopping-cart" class="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <h2 class="text-xl font-medium text-base-content/60">Your cart is empty</h2>
-                  <p class="text-base-content/50 mb-6">Add some products to get started</p>
+                  <h2 class="text-xl font-medium text-base-content/60">{gettext("Your cart is empty")}</h2>
+                  <p class="text-base-content/50 mb-6">{gettext("Add some products to get started")}</p>
                   <.link navigate={Shop.catalog_url(@current_language)} class="btn btn-primary">
-                    Browse Products
+                    {gettext("Browse Products")}
                   </.link>
                 </div>
               </div>
@@ -302,9 +304,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <table class="table">
                       <thead>
                         <tr>
-                          <th class="w-1/2">Product</th>
-                          <th class="text-center">Quantity</th>
-                          <th class="text-right">Price</th>
+                          <th class="w-1/2">{gettext("Product")}</th>
+                          <th class="text-center">{gettext("Quantity")}</th>
+                          <th class="text-right">{gettext("Price")}</th>
                           <th></th>
                         </tr>
                       </thead>
@@ -381,7 +383,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                       <span class="line-through text-base-content/40">
                                         {format_price(item.compare_at_price, @currency)}
                                       </span>
-                                      <span class="text-success ml-1">On sale!</span>
+                                      <span class="text-success ml-1">{gettext("On sale!")}</span>
                                     </div>
                                   <% end %>
                                 </div>
@@ -432,12 +434,12 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
             <%= if @cart.items != [] && @requires_shipping do %>
               <div class="card bg-base-100 shadow-xl mt-6">
                 <div class="card-body">
-                  <h2 class="card-title mb-4">Shipping Method</h2>
+                  <h2 class="card-title mb-4">{gettext("Shipping Method")}</h2>
 
                   <%= if @shipping_methods == [] do %>
                     <div class="alert alert-warning">
                       <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                      <span>No shipping methods available for your selection</span>
+                      <span>{gettext("No shipping methods available for your selection")}</span>
                     </div>
                   <% else %>
                     <div class="space-y-3">
@@ -469,7 +471,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                           </div>
                           <div class="text-right">
                             <%= if ShippingMethod.free_for?(method, @cart.subtotal || Decimal.new("0")) do %>
-                              <span class="badge badge-success">FREE</span>
+                              <span class="badge badge-success">{gettext("FREE")}</span>
                             <% else %>
                               <span class="font-semibold">
                                 {format_price(method.price, @currency)}
@@ -489,7 +491,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
           <div class="lg:col-span-1">
             <div class="card bg-base-100 shadow-xl sticky top-6">
               <div class="card-body">
-                <h2 class="card-title mb-4">Order Summary</h2>
+                <h2 class="card-title mb-4">{gettext("Order Summary")}</h2>
 
                 <div class="space-y-3 text-sm">
                   <div class="flex justify-between">
@@ -500,15 +502,15 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                   </div>
 
                   <div class="flex justify-between">
-                    <span class="text-base-content/70">Shipping</span>
+                    <span class="text-base-content/70">{gettext("Shipping")}</span>
                     <%= if !@requires_shipping do %>
-                      <span class="text-base-content/50">Not needed</span>
+                      <span class="text-base-content/50">{gettext("Not needed")}</span>
                     <% else %>
                     <%= if is_nil(@cart.shipping_method_uuid) do %>
-                      <span class="text-base-content/50">Select method</span>
+                      <span class="text-base-content/50">{gettext("Select method")}</span>
                     <% else %>
                       <%= if Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq do %>
-                        <span class="text-success">FREE</span>
+                        <span class="text-success">{gettext("FREE")}</span>
                       <% else %>
                         <span>{format_price(@cart.shipping_amount, @currency)}</span>
                       <% end %>
@@ -518,14 +520,14 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
                   <%= if @cart.discount_amount && Decimal.compare(@cart.discount_amount, Decimal.new("0")) == :gt do %>
                     <div class="flex justify-between text-success">
-                      <span>Discount</span>
+                      <span>{gettext("Discount")}</span>
                       <span>-{format_price(@cart.discount_amount, @currency)}</span>
                     </div>
                   <% end %>
 
                   <%= if @cart.tax_amount && Decimal.compare(@cart.tax_amount, Decimal.new("0")) == :gt do %>
                     <div class="flex justify-between">
-                      <span class="text-base-content/70">Tax</span>
+                      <span class="text-base-content/70">{gettext("Tax")}</span>
                       <span>{format_price(@cart.tax_amount, @currency)}</span>
                     </div>
                   <% end %>
@@ -533,7 +535,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                   <div class="divider my-2"></div>
 
                   <div class="flex justify-between text-lg font-bold">
-                    <span>Total</span>
+                    <span>{gettext("Total")}</span>
                     <span>{format_price(@cart.total, @currency)}</span>
                   </div>
                 </div>
@@ -548,7 +550,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
                 <%= if @cart.items != [] do %>
                   <p class="text-xs text-center text-base-content/50 mt-3">
-                    Secure checkout powered by PhoenixKit
+                    {gettext("Secure checkout powered by PhoenixKit")}
                   </p>
                 <% end %>
               </div>

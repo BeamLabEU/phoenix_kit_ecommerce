@@ -41,7 +41,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -58,7 +58,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       {:ok, %{category: %{status: "hidden"}}} ->
         {:ok,
          socket
-         |> put_flash(:error, "Product not found")
+         |> put_flash(:error, gettext("Product not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, %{status: status}} when status != "active" ->
@@ -71,7 +71,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         # product's own never was.
         {:ok,
          socket
-         |> put_flash(:error, "Product not found")
+         |> put_flash(:error, gettext("Product not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, product} ->
@@ -155,7 +155,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         # Product truly not found
         {:ok,
          socket
-         |> put_flash(:error, "Product not found")
+         |> put_flash(:error, gettext("Product not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, product, _matched_lang} ->
@@ -187,7 +187,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp not_found(socket, current_language) do
     {:ok,
      socket
-     |> put_flash(:error, "Product not found")
+     |> put_flash(:error, gettext("Product not found"))
      |> push_navigate(to: Shop.catalog_url(current_language))}
   end
 
@@ -464,19 +464,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
-         |> put_flash(:error, "The shop is currently unavailable")}
+         |> put_flash(:error, gettext("The shop is currently unavailable"))}
 
       {:error, :product_not_available} ->
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
-         |> put_flash(:error, "This product is no longer available")}
+         |> put_flash(:error, gettext("This product is no longer available"))}
 
       {:error, {:product_not_available, _uuid}} ->
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
-         |> put_flash(:error, "This product is no longer available")}
+         |> put_flash(:error, gettext("This product is no longer available"))}
 
       {:error, reason} ->
         # Log error for admin monitoring
@@ -492,7 +492,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:adding_to_cart, false)
          |> put_flash(
            :error,
-           "Unable to add this product to cart. Please refresh the page and try again."
+           gettext("Unable to add this product to cart. Please refresh the page and try again.")
          )}
 
       {:error, code, detail} ->
@@ -517,7 +517,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Get user-friendly error message based on error code and details
   # Keep messages concise for toast display (max ~80 chars per line)
   defp get_user_friendly_error_message(:invalid_option_value, detail) do
-    option_name = detail[:key] || "option"
+    option_name = detail[:key] || gettext("option")
 
     case detail[:value] do
       nil ->
@@ -613,7 +613,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
-            <li><.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>Shop</.link></li>
+            <li>
+              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+                {gettext("Shop")}
+              </.link>
+            </li>
             <%= if @product.category do %>
               <% cat_name = Translations.get(@product.category, :name, @current_language) %>
               <li>
@@ -795,7 +799,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <div class="grid grid-cols-2 gap-4 text-sm">
               <%= if @product.weight_grams && @product.weight_grams > 0 do %>
                 <div>
-                  <span class="text-base-content/60">Weight:</span>
+                  <span class="text-base-content/60">{gettext("Weight:")}</span>
                   <span class="ml-2 font-medium">{@product.weight_grams}g</span>
                 </div>
               <% end %>
@@ -803,7 +807,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <%= if @product.category do %>
                 <% cat_name = Translations.get(@product.category, :name, @current_language) %>
                 <div>
-                  <span class="text-base-content/60">Category:</span>
+                  <span class="text-base-content/60">{gettext("Category:")}</span>
                   <.link
                     navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}
                     class="ml-2 link link-primary"
@@ -851,7 +855,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   <div class="space-y-4">
                     <h3 class="font-semibold text-lg">
                       <.icon name="hero-adjustments-horizontal" class="w-5 h-5 inline" />
-                      Choose Options
+                      {gettext("Choose Options")}
                     </h3>
 
                     <%= for attr <- @selectable_specs do %>
@@ -868,7 +872,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                           <% end %>
                         </legend>
                         <%= if is_missing do %>
-                          <p class="fieldset-label text-error">Please select an option</p>
+                          <p class="fieldset-label text-error">{gettext("Please select an option")}</p>
                         <% end %>
                         <div class="flex flex-wrap gap-2">
                           <%= for opt_value <- get_option_values(@product, attr) do %>
@@ -906,7 +910,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
                 <%!-- Quantity Selector --%>
                 <fieldset class="fieldset">
-                  <legend class="fieldset-legend">Quantity</legend>
+                  <legend class="fieldset-legend">{gettext("Quantity")}</legend>
                   <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                     <div class="flex items-center gap-1">
                       <button
@@ -959,7 +963,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   <div class="alert alert-info">
                     <.icon name="hero-shopping-cart" class="w-5 h-5" />
                     <div>
-                      <span class="font-medium">Already in cart:</span>
+                      <span class="font-medium">{gettext("Already in cart:")}</span>
                       <span>
                         {@cart_item.quantity} × {format_price(@cart_item.unit_price, @currency)} = {format_price(
                           @cart_item.line_total,
@@ -981,9 +985,9 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   <% else %>
                     <.icon name="hero-shopping-cart" class="w-5 h-5 mr-2" />
                     <%= if @cart_item do %>
-                      Add More to Cart
+                      {gettext("Add More to Cart")}
                     <% else %>
-                      Add to Cart
+                      {gettext("Add to Cart")}
                     <% end %>
                   <% end %>
                 </button>
@@ -996,7 +1000,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <% else %>
               <div class="alert alert-warning">
                 <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                <span>This product is currently unavailable</span>
+                <span>{gettext("This product is currently unavailable")}</span>
               </div>
             <% end %>
 
@@ -1396,7 +1400,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       do_refresh_product(socket, product)
     else
       socket
-      |> put_flash(:info, "This product is no longer available")
+      |> put_flash(:info, gettext("This product is no longer available"))
       |> push_navigate(to: Shop.catalog_url(socket.assigns.current_language))
     end
   end
