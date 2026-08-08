@@ -177,6 +177,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
           <p class="text-base-content/60">
             Thank you for your order. We've received your order and will process it shortly.
           </p>
+          <%= if @order.metadata["shipping_skipped"] do %>
+            <div id="shipping-pending-notice" class="alert alert-info mt-4">
+              {gettext("We will contact you to arrange shipping and confirm your order details.")}
+            </div>
+          <% end %>
         </div>
 
         <%!-- Guest Order Email Confirmation Reminder --%>
