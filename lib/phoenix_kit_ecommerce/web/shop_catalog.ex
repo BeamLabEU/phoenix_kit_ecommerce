@@ -25,7 +25,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -70,7 +70,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
     socket =
       socket
-      |> assign(:page_title, "Shop")
+      |> assign(:page_title, gettext("Shop"))
       |> assign(:cart_count, storefront_cart_count(socket))
       |> assign(:categories, categories)
       |> assign(:products, products)
@@ -207,9 +207,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
           <div class="text-center">
-            <h1 class="text-3xl font-bold text-base-content mb-3">Welcome to Our Shop</h1>
+            <h1 class="text-3xl font-bold text-base-content mb-3">
+              {gettext("Welcome to Our Shop")}
+            </h1>
             <p class="text-lg text-base-content/70">
-              Browse our collection of products across various categories
+              {gettext("Browse our collection of products across various categories")}
             </p>
           </div>
         </header>
@@ -294,7 +296,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             <%!-- Category Grid (controlled by setting) --%>
             <%= if @show_categories_grid && @categories != [] do %>
               <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-4">Categories</h2>
+                <h2 class="text-2xl font-bold mb-4">{gettext("Categories")}</h2>
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   <%= for cat <- @categories do %>
                     <.link
@@ -332,22 +334,24 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                  English and rendered a second, identical cart affordance a few
                  hundred pixels below the first. --%>
             <div class="flex items-center justify-between mb-6">
-              <h2 class="text-2xl font-bold">Products</h2>
+              <h2 class="text-2xl font-bold">{gettext("Products")}</h2>
             </div>
 
             <%= if @products == [] do %>
               <div class="card bg-base-100 shadow-xl">
                 <div class="card-body text-center py-16">
                   <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <h3 class="text-xl font-medium text-base-content/60">No products available</h3>
+                  <h3 class="text-xl font-medium text-base-content/60">
+                    {gettext("No products available")}
+                  </h3>
                   <p class="text-base-content/50">
                     <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
-                      No products match your filters.
+                      {gettext("No products match your filters.")}
                       <button phx-click="clear_filters" class="link link-primary">
-                        Clear filters
+                        {gettext("Clear filters")}
                       </button>
                     <% else %>
-                      Check back soon for new arrivals
+                      {gettext("Check back soon for new arrivals")}
                     <% end %>
                   </p>
                 </div>

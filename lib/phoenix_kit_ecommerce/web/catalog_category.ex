@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -49,7 +49,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       {:ok, %{status: "hidden"}} ->
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, category} ->
@@ -180,14 +180,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         # Category truly not found
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, %{status: "hidden"}, _matched_lang} ->
         # Category is hidden
         {:ok,
          socket
-         |> put_flash(:error, "Category not found")
+         |> put_flash(:error, gettext("Category not found"))
          |> push_navigate(to: Shop.catalog_url(current_language))}
 
       {:ok, category, _matched_lang} ->
@@ -196,7 +196,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           nil ->
             {:ok,
              socket
-             |> put_flash(:error, "Category not found")
+             |> put_flash(:error, gettext("Category not found"))
              |> push_navigate(to: Shop.catalog_url(current_language))}
 
           redirect_lang ->
@@ -270,7 +270,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
-            <li><.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>Shop</.link></li>
+            <li>
+              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+                {gettext("Shop")}
+              </.link>
+            </li>
             <%= if @category.parent do %>
               <% parent_name = Translations.get(@category.parent, :name, @current_language) %>
               <li>
@@ -426,26 +430,26 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <.icon name="hero-cube" class="w-16 h-16 mx-auto mb-4 opacity-30" />
         <%= if FilterHelpers.has_active_filters?(@active_filters) do %>
           <h3 class="text-xl font-medium text-base-content/60">
-            No products match your filters
+            {gettext("No products match your filters")}
           </h3>
           <p class="text-base-content/50 mb-4">
             <button phx-click="clear_filters" class="link link-primary">
-              Clear filters
+              {gettext("Clear filters")}
             </button>
           </p>
         <% else %>
           <h3 class="text-xl font-medium text-base-content/60">
-            No products in this category
+            {gettext("No products in this category")}
           </h3>
           <p class="text-base-content/50 mb-4">
-            Check back soon or browse other categories
+            {gettext("Check back soon or browse other categories")}
           </p>
         <% end %>
         <.link
           navigate={Shop.catalog_url(@current_language) <> @filter_qs}
           class="btn btn-primary"
         >
-          Browse All Products
+          {gettext("Browse All Products")}
         </.link>
       </div>
     </div>

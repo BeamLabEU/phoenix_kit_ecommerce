@@ -8,6 +8,12 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
 
   use Phoenix.Component
 
+  # This component is `use Phoenix.Component` rather than the module's own
+  # `PhoenixKitEcommerce.Web` macros, so it does NOT inherit the Gettext backend
+  # those inject. Declared explicitly, or every string here silently stays
+  # English while its siblings translate.
+  use Gettext, backend: PhoenixKitEcommerce.Gettext
+
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Translations
@@ -55,7 +61,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
         <%= if @has_active do %>
           <div class="mb-3">
             <button phx-click="clear_filters" class="btn btn-outline btn-error btn-xs w-full gap-1">
-              <.icon name="hero-x-mark" class="w-3 h-3" /> Clear all filters
+              <.icon name="hero-x-mark" class="w-3 h-3" /> {gettext("Clear all filters")}
             </button>
           </div>
         <% end %>
@@ -77,7 +83,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
             <.icon
               name="hero-chevron-right"
               class="w-3 h-3 transition-transform group-open:rotate-90"
-            /> Categories <span class="badge badge-ghost badge-xs ml-1">{length(@categories)}</span>
+            /> {gettext("Categories")}
+            <span class="badge badge-ghost badge-xs ml-1">{length(@categories)}</span>
           </summary>
           <div class="pt-1 max-h-64 overflow-y-auto">
             <ul class="menu menu-sm p-0">
@@ -86,7 +93,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                   navigate={Shop.catalog_url(@current_language) <> @filter_qs}
                   class={if is_nil(@current_category), do: "active", else: ""}
                 >
-                  <.icon name="hero-home" class="w-4 h-4" /> All Products
+                  <.icon name="hero-home" class="w-4 h-4" /> {gettext("All Products")}
                 </.link>
               </li>
               <%= for cat <- @categories do %>
@@ -149,7 +156,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
           <.icon
             name="hero-chevron-right"
             class="w-3 h-3 transition-transform group-open:rotate-90"
-          /> Categories <span class="badge badge-ghost badge-xs ml-1">{length(@categories)}</span>
+          /> {gettext("Categories")}
+            <span class="badge badge-ghost badge-xs ml-1">{length(@categories)}</span>
         </summary>
         <div class="pt-1 max-h-64 overflow-y-auto">
           <ul class="menu menu-sm p-0">
@@ -158,7 +166,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                 navigate={Shop.catalog_url(@current_language) <> @filter_qs}
                 class={if is_nil(@current_category), do: "active", else: ""}
               >
-                <.icon name="hero-home" class="w-4 h-4" /> All Products
+                <.icon name="hero-home" class="w-4 h-4" /> {gettext("All Products")}
               </.link>
             </li>
             <%= for cat <- @categories do %>
@@ -228,7 +236,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
               name="price_min"
               value={@min_val && Decimal.to_string(@min_val)}
               placeholder={
-                if @range_min, do: Decimal.round(@range_min, 0) |> Decimal.to_string(), else: "Min"
+                if @range_min, do: Decimal.round(@range_min, 0) |> Decimal.to_string(), else: gettext("Min")
               }
               class="input input-sm w-full"
               min="0"
@@ -240,7 +248,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
               name="price_max"
               value={@max_val && Decimal.to_string(@max_val)}
               placeholder={
-                if @range_max, do: Decimal.round(@range_max, 0) |> Decimal.to_string(), else: "Max"
+                if @range_max, do: Decimal.round(@range_max, 0) |> Decimal.to_string(), else: gettext("Max")
               }
               class="input input-sm w-full"
               min="0"
@@ -249,7 +257,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
           </div>
           <%= if @range_min && @range_max do %>
             <p class="text-xs text-base-content/50">
-              Range: {Decimal.round(@range_min, 2) |> Decimal.to_string()} – {Decimal.round(
+              {gettext("Range:")} {Decimal.round(@range_min, 2) |> Decimal.to_string()} – {Decimal.round(
                 @range_max,
                 2
               )
@@ -257,7 +265,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
             </p>
           <% end %>
           <button type="submit" class="btn btn-primary btn-xs w-full gap-1">
-            <.icon name="hero-funnel" class="w-3 h-3" /> Apply
+            <.icon name="hero-funnel" class="w-3 h-3" /> {gettext("Apply")}
           </button>
         </form>
       </div>
@@ -285,7 +293,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
       </summary>
       <div class="pt-1 pb-2 max-h-48 overflow-y-auto space-y-1">
         <%= if @values == [] do %>
-          <p class="text-xs text-base-content/40 italic">No options available</p>
+          <p class="text-xs text-base-content/40 italic">{gettext("No options available")}</p>
         <% else %>
           <%= for item <- @values do %>
             <label class="flex items-center gap-2 cursor-pointer hover:bg-base-200 rounded px-1 py-0.5">
@@ -328,7 +336,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
             class="input input-sm join-item w-full"
             autocomplete="off"
           />
-          <button type="submit" class="btn btn-primary btn-sm join-item" aria-label="Search">
+          <button type="submit" class="btn btn-primary btn-sm join-item" aria-label={gettext("Search")}>
             <.icon name="hero-magnifying-glass" class="w-4 h-4" />
           </button>
         </form>
