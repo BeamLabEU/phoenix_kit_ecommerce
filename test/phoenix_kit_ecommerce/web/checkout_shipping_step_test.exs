@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
+  alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
 
   test "position=checkout: shipping step appears after billing with country-filtered methods",
@@ -71,6 +72,52 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     assert has_element?(view, "button[phx-click='confirm_order']")
   end
 
+  # Regression for the 4th checkout entry path: an authenticated shopper
+  # whose payment option needs no billing profile (`requires_billing_profile:
+  # false`) reaches review through `proceed_to_billing`'s else-branch, not
+  # through `advance_after_billing/1` like the other three paths (mount,
+  # and both `proceed_to_review` branches). With position=checkout and a
+  # shippable cart, that branch used to skip the shipping step entirely.
+  test "authenticated + billing-less payment option: proceed_to_billing still honors the shipping step",
+       %{conn: conn} do
+    PhoenixKit.Settings.update_setting_with_module(
+      "shop_shipping_selection_position",
+      "checkout",
+      "shop"
+    )
+
+    method = shipping_method(countries: ["EE"])
+    conn = conn |> setup_shippable_cart_session() |> put_test_scope(fake_scope())
+
+    # Two active options so mount stops on :payment (needs_payment_selection)
+    # instead of auto-selecting a lone one - the payment step's own continue
+    # button is what exercises `proceed_to_billing`. `code` is a fixed
+    # enum (PhoenixKitBilling.PaymentOption.codes/0) and core seeds a row
+    # per code, so activate the seeded ones rather than inserting - a
+    # fresh insert of an already-taken code violates its unique index.
+    _cod = ensure_payment_option("cod", "offline", requires_billing_profile: true)
+
+    no_billing_option =
+      ensure_payment_option("stripe", "online",
+        provider: "stripe",
+        requires_billing_profile: false
+      )
+
+    {:ok, view, _html} = live(conn, "/checkout")
+
+    assert has_element?(view, "button[phx-click='proceed_to_billing']")
+
+    view
+    |> element("input[phx-value-option_uuid='#{no_billing_option.uuid}']")
+    |> render_click()
+
+    html = view |> element("button[phx-click='proceed_to_billing']") |> render_click()
+
+    assert html =~ "id=\"checkout-shipping-step\""
+    assert has_element?(view, "#checkout-shipping-method-#{method.uuid}")
+    refute has_element?(view, "button[phx-click='confirm_order']")
+  end
+
   test "off + uncovered country blocks at shipping step", %{conn: conn} do
     PhoenixKit.Settings.update_setting_with_module(
       "shop_shipping_selection_position",
@@ -96,6 +143,31 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     render_click(view, "shipping_continue", %{})
     refute has_element?(view, "button[phx-click='confirm_order']")
     assert has_element?(view, "#checkout-shipping-blocked")
+  end
+
+  # Core migrations seed one row per `PaymentOption.codes/0` entry
+  # (inactive, default `requires_billing_profile`), so `code` is never
+  # free to insert fresh - fetch the seeded row and flip it to what this
+  # test needs instead.
+  defp ensure_payment_option(code, type, attrs) do
+    attrs =
+      attrs
+      |> Keyword.put(:active, true)
+      |> Map.new(fn {k, v} -> {to_string(k), v} end)
+
+    case Billing.get_payment_option_by_code(code) do
+      nil ->
+        {:ok, option} =
+          Billing.create_payment_option(
+            Map.merge(attrs, %{"name" => code, "code" => code, "type" => type})
+          )
+
+        option
+
+      option ->
+        {:ok, option} = Billing.update_payment_option(option, attrs)
+        option
+    end
   end
 
   defp fill_billing_form(view, country: country) do

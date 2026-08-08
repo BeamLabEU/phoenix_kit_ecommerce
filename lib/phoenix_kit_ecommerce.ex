@@ -3935,7 +3935,12 @@ defmodule PhoenixKitEcommerce do
       |> then(&repo().get_by(ShippingMethod, uuid: &1))
       |> calculate_method_shipping(subtotal, total_weight, cart.shipping_country)
     else
-      cart.shipping_amount || Decimal.new("0")
+      # No method selected, no charge - never echo back a stale
+      # `cart.shipping_amount` from a previously-selected method that was
+      # since cleared. This function's result is written straight back onto
+      # the cart's `shipping_amount` by the caller, so echoing a stale value
+      # here would persist it indefinitely.
+      Decimal.new("0")
     end
   end
 

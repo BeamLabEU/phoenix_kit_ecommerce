@@ -353,10 +353,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     if socket.assigns.needs_billing do
       {:noreply, assign(socket, :step, :billing)}
     else
-      # enter_review/1, not a bare step assign: it is the only path that
-      # prices the cart with the billing country, and a review that skips
-      # it shows a tax-free total the conversion then charges tax on.
-      {:noreply, enter_review(socket)}
+      # advance_after_billing/1, not a bare step assign: it is the single
+      # decision point for "billing is settled, what's next" - a shippable
+      # cart with position=checkout still needs the :shipping step (or its
+      # fallback notice) before review, and it is also the only path that
+      # prices the cart with the billing country, so a review that skips it
+      # shows a tax-free total the conversion then charges tax on.
+      {:noreply, advance_after_billing(socket)}
     end
   end
 
