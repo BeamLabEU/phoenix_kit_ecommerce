@@ -191,7 +191,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <div>
                   <h3 class="font-semibold text-lg">{gettext("Check your inbox")}</h3>
                   <p class="text-sm mt-1">
-                    We've sent a confirmation email to <strong>{@order_email}</strong>.
+                    {gettext("We've sent a confirmation email to")}
+                    <strong>{@order_email}</strong>.
                   </p>
                   <ol class="text-sm mt-3 space-y-1.5 list-decimal list-inside text-base-content/80">
                     <li>
@@ -341,11 +342,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
         <%!-- Actions --%>
         <div class="flex justify-center gap-4">
           <.link navigate={Routes.path("/shop")} class="btn btn-primary">
-            <.icon name="hero-shopping-bag" class="w-5 h-5 mr-2" /> Continue Shopping
+            <.icon name="hero-shopping-bag" class="w-5 h-5 mr-2" /> {gettext("Continue Shopping")}
           </.link>
           <%= if @authenticated do %>
             <.link navigate={Routes.path("/dashboard/orders")} class="btn btn-outline">
-              <.icon name="hero-clipboard-document-list" class="w-5 h-5 mr-2" /> My Orders
+              <.icon name="hero-clipboard-document-list" class="w-5 h-5 mr-2" /> {gettext("My Orders")}
             </.link>
           <% end %>
         </div>

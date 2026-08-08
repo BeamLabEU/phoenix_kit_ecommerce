@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [
@@ -29,6 +30,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def mount(params, session, socket) do
+    # Point the module Gettext at a locale its catalogues contain — see
+    # Helpers.put_content_locale/1. Without it this page renders English
+    # while its siblings translate.
+    _ = Helpers.put_content_locale(socket.assigns[:current_locale] || "en")
     # The storefront of a DISABLED shop must not be browsable or purchasable;
     # only the order-confirmation page stays reachable (it is a receipt for an
     # already-placed order, not shopping). Admin pages are unaffected - that is

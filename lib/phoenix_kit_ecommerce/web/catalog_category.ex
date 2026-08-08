@@ -308,7 +308,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           <div class="lg:hidden mb-4">
             <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
               <.icon name="hero-funnel" class="w-4 h-4" />
-              Filters <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
+              {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
               <%= if filter_count > 0 do %>
                 <span class="badge badge-primary badge-xs">{filter_count}</span>
               <% end %>
