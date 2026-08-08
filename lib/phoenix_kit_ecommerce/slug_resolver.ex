@@ -88,36 +88,19 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   @spec find_product_by_slug(String.t(), String.t(), keyword()) ::
           {:ok, Product.t()} | {:error, :not_found}
   def find_product_by_slug(url_slug, language, opts \\ []) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
     status = Keyword.get(opts, :status)
 
     # Localized fields: slug is a JSONB map like %{"en" => "planter", "ru" => "kashpo"}
-    # Search for exact language match or fallback to default language
     query =
       from(p in Product,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^url_slug
-          ),
+        where: ^slug_matches(language, url_slug),
+        order_by: ^slug_preference(language, url_slug),
         limit: 1
       )
 
-    query =
-      if status do
-        from(p in query, where: p.status == ^status)
-      else
-        query
-      end
-
-    query =
-      if preload != [] do
-        from(p in query, preload: ^preload)
-      else
-        query
-      end
+    query = if status, do: from(p in query, where: p.status == ^status), else: query
+    query = if preload != [], do: from(p in query, preload: ^preload), else: query
 
     case repo().one(query) do
       nil -> {:error, :not_found}
@@ -142,27 +125,18 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   @spec find_product_by_translated_slug(String.t(), String.t(), keyword()) ::
           {:ok, Product.t()} | {:error, :not_found}
   def find_product_by_translated_slug(url_slug, language, opts \\ []) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
 
-    # Localized fields: slug is a JSONB map
+    # EXACT means exact: this asks whether the translation itself exists, so
+    # it must not fall back to another spelling of the language the way the
+    # URL-resolving finders do.
     query =
       from(p in Product,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^url_slug
-          ),
+        where: fragment("slug->>? = ?", ^normalize_language(language), ^url_slug),
         limit: 1
       )
 
-    query =
-      if preload != [] do
-        from(p in query, preload: ^preload)
-      else
-        query
-      end
+    query = if preload != [], do: from(p in query, preload: ^preload), else: query
 
     case repo().one(query) do
       nil -> {:error, :not_found}
@@ -199,35 +173,19 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   @spec find_category_by_slug(String.t(), String.t(), keyword()) ::
           {:ok, Category.t()} | {:error, :not_found}
   def find_category_by_slug(url_slug, language, opts \\ []) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
     status = Keyword.get(opts, :status)
 
     # Localized fields: slug is a JSONB map
     query =
       from(c in Category,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^url_slug
-          ),
+        where: ^slug_matches(language, url_slug),
+        order_by: ^slug_preference(language, url_slug),
         limit: 1
       )
 
-    query =
-      if status do
-        from(c in query, where: c.status == ^status)
-      else
-        query
-      end
-
-    query =
-      if preload != [] do
-        from(c in query, preload: ^preload)
-      else
-        query
-      end
+    query = if status, do: from(c in query, where: c.status == ^status), else: query
+    query = if preload != [], do: from(c in query, preload: ^preload), else: query
 
     case repo().one(query) do
       nil -> {:error, :not_found}
@@ -248,27 +206,16 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   @spec find_category_by_translated_slug(String.t(), String.t(), keyword()) ::
           {:ok, Category.t()} | {:error, :not_found}
   def find_category_by_translated_slug(url_slug, language, opts \\ []) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
 
-    # Localized fields: slug is a JSONB map
+    # Exact by contract — see `find_product_by_translated_slug/3`.
     query =
       from(c in Category,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^url_slug
-          ),
+        where: fragment("slug->>? = ?", ^normalize_language(language), ^url_slug),
         limit: 1
       )
 
-    query =
-      if preload != [] do
-        from(c in query, preload: ^preload)
-      else
-        query
-      end
+    query = if preload != [], do: from(c in query, preload: ^preload), else: query
 
     case repo().one(query) do
       nil -> {:error, :not_found}
@@ -292,19 +239,13 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec find_products_by_slugs([String.t()], String.t(), keyword()) :: [Product.t()]
   def find_products_by_slugs(url_slugs, language, opts \\ []) when is_list(url_slugs) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
     status = Keyword.get(opts, :status)
 
     # Localized fields: slug is a JSONB map
     query =
       from(p in Product,
-        where:
-          fragment(
-            "slug->>? = ANY(?)",
-            ^lang,
-            ^url_slugs
-          )
+        where: ^slug_matches_any(language, url_slugs)
       )
 
     query =
@@ -321,7 +262,8 @@ defmodule PhoenixKitEcommerce.SlugResolver do
         query
       end
 
-    repo().all(query)
+    # A row can satisfy more than one spelling of the requested language.
+    query |> repo().all() |> Enum.uniq_by(& &1.uuid)
   end
 
   @doc """
@@ -334,19 +276,13 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec find_categories_by_slugs([String.t()], String.t(), keyword()) :: [Category.t()]
   def find_categories_by_slugs(url_slugs, language, opts \\ []) when is_list(url_slugs) do
-    lang = normalize_language(language)
     preload = Keyword.get(opts, :preload, [])
     status = Keyword.get(opts, :status)
 
     # Localized fields: slug is a JSONB map
     query =
       from(c in Category,
-        where:
-          fragment(
-            "slug->>? = ANY(?)",
-            ^lang,
-            ^url_slugs
-          )
+        where: ^slug_matches_any(language, url_slugs)
       )
 
     query =
@@ -363,7 +299,8 @@ defmodule PhoenixKitEcommerce.SlugResolver do
         query
       end
 
-    repo().all(query)
+    # A row can satisfy more than one spelling of the requested language.
+    query |> repo().all() |> Enum.uniq_by(& &1.uuid)
   end
 
   # ============================================================================
@@ -391,18 +328,12 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec product_slug_exists?(String.t(), String.t(), keyword()) :: boolean()
   def product_slug_exists?(slug, language, opts \\ []) do
-    lang = normalize_language(language)
     exclude_uuid = Keyword.get(opts, :exclude_uuid)
 
     # Localized fields: slug is a JSONB map
     query =
       from(p in Product,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^slug
-          ),
+        where: ^slug_matches(language, slug),
         select: count(p.uuid)
       )
 
@@ -426,18 +357,12 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec category_slug_exists?(String.t(), String.t(), keyword()) :: boolean()
   def category_slug_exists?(slug, language, opts \\ []) do
-    lang = normalize_language(language)
     exclude_uuid = Keyword.get(opts, :exclude_uuid)
 
     # Localized fields: slug is a JSONB map
     query =
       from(c in Category,
-        where:
-          fragment(
-            "slug->>? = ?",
-            ^lang,
-            ^slug
-          ),
+        where: ^slug_matches(language, slug),
         select: count(c.uuid)
       )
 
@@ -470,11 +395,7 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec product_slug(Product.t(), String.t()) :: String.t() | nil
   def product_slug(%Product{} = product, language) do
-    lang = normalize_language(language)
-    slug_map = product.slug || %{}
-
-    # Localized fields approach: slug is directly a map
-    slug_map[lang] || slug_map[default_language()] || first_slug(slug_map)
+    localized_slug(product.slug || %{}, language)
   end
 
   @doc """
@@ -489,11 +410,7 @@ defmodule PhoenixKitEcommerce.SlugResolver do
   """
   @spec category_slug(Category.t(), String.t()) :: String.t() | nil
   def category_slug(%Category{} = category, language) do
-    lang = normalize_language(language)
-    slug_map = category.slug || %{}
-
-    # Localized fields approach: slug is directly a map
-    slug_map[lang] || slug_map[default_language()] || first_slug(slug_map)
+    localized_slug(category.slug || %{}, language)
   end
 
   # ============================================================================
@@ -650,6 +567,61 @@ defmodule PhoenixKitEcommerce.SlugResolver do
       true ->
         lang
     end
+  end
+
+  # Every spelling of the same language, most specific first.
+  #
+  # A localized map is keyed however its WRITER keyed it - the admin form and
+  # both CSV importers store the shop's language code verbatim - while every
+  # lookup here first normalized that code to a dialect ("en" -> "en-US").
+  # On a shop whose language is the base code the two never met: product and
+  # category pages 404'd, and a re-import could not find the product it had
+  # just created (inserting a duplicate, or failing the unique index). The
+  # moduledoc's promise of base-code matching only ever held in one direction.
+  defp language_keys(language) when is_binary(language) do
+    [language, normalize_language(language), DialectMapper.extract_base(language)]
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp language_keys(_language), do: []
+
+  # An OR of equalities over the candidate spellings.
+  #
+  # No index serves `slug->>? = ?` today (the JSONB GIN index cannot answer
+  # it, and the functional unique index is on a different expression), so
+  # this is a sequential scan either way — which is exactly why it is ONE
+  # query with an OR rather than one query per spelling.
+  defp slug_matches(language, url_slug) do
+    Enum.reduce(language_keys(language), dynamic(false), fn key, acc ->
+      dynamic(^acc or fragment("slug->>? = ?", ^key, ^url_slug))
+    end)
+  end
+
+  # Two products CAN hold the same slug string under different spellings of
+  # one language (a shop that changed its language config mid-life), and an
+  # OR with `limit: 1` would then return an arbitrary one. Rank the spelling
+  # the caller actually asked for first so the answer is deterministic.
+  defp slug_preference(language, url_slug) do
+    case language_keys(language) do
+      [exact | _] ->
+        dynamic(fragment("CASE WHEN slug->>? = ? THEN 0 ELSE 1 END", ^exact, ^url_slug))
+
+      [] ->
+        dynamic(0)
+    end
+  end
+
+  defp slug_matches_any(language, url_slugs) do
+    Enum.reduce(language_keys(language), dynamic(false), fn key, acc ->
+      dynamic(^acc or fragment("slug->>? = ANY(?)", ^key, ^url_slugs))
+    end)
+  end
+
+  defp localized_slug(slug_map, language) do
+    Enum.find_value(language_keys(language), &slug_map[&1]) ||
+      Enum.find_value(language_keys(default_language()), &slug_map[&1]) ||
+      first_slug(slug_map)
   end
 
   defp default_language do

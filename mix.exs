@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.1.12"
+  @version "0.1.15"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -106,13 +106,24 @@ defmodule PhoenixKitEcommerce.MixProject do
       # 1.7.214+ required: Scope.can_access_admin_area?/1 (the rename of the
       # now-`@deprecated` Scope.admin?/1) — an older core has no such function,
       # so this is an UndefinedFunctionError at runtime, not a warning.
-      pk_dep(:phoenix_kit, "~> 1.7.214"),
+      # 1.7.231 is the floor: that release ships
+      # `PhoenixKitWeb.Live.UrlState`, which 2 LiveView files in this
+      # module `use`. Anything below it resolves a core with no such
+      # module, and the failure surfaces in the consumer's build.
+      pk_dep(:phoenix_kit, "~> 1.7.231"),
 
       # Gettext for per-module i18n of sidebar tab labels.
       {:gettext, "~> 1.0"},
 
       # Billing integration for checkout and order conversion.
-      pk_dep(:phoenix_kit_billing, "~> 0.1"),
+      # 0.5.2 is the floor: that release adds `payment_option_uuid` to
+      # `PhoenixKitBilling.Order`, the column `maybe_put_payment_option/2`
+      # writes once core is migrated to V162. Below it the attr is dropped
+      # by `cast/3` and the order/payment-option linkage silently vanishes.
+      # `~> 0.1` also admitted 0.1.0, which predates the `PhoenixKitBilling`
+      # namespace entirely (it was `PhoenixKit.Modules.Billing`), and
+      # 0.1.1/0.1.2, which have no tax API — both fail to compile here.
+      pk_dep(:phoenix_kit_billing, "~> 0.5.2"),
       # Optional: only the AI-translate UI/adapter use it, and both compile out
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).

@@ -15,7 +15,9 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.OptionTypes
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import TranslationTabs
 
@@ -142,20 +144,8 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   end
 
   @impl true
-  def handle_event("save", %{"category" => category_params}, socket) do
-    # Add Storage image_uuid from socket assigns
-    category_params = Map.put(category_params, "image_uuid", socket.assigns.image_uuid)
-
-    # Build localized field attrs from main form values and translations
-    category_params =
-      build_localized_params(
-        socket.assigns.category,
-        category_params,
-        socket.assigns[:category_translations] || %{},
-        socket.assigns.default_language
-      )
-
-    save_category(socket, socket.assigns.live_action, category_params)
+  def handle_event("save", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("save", params, socket) end)
   end
 
   def handle_event("switch_language", %{"language" => language}, socket) do
@@ -241,73 +231,24 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   end
 
   @impl true
-  def handle_event("save_category_option", %{"option" => params}, socket) do
-    form_data = parse_opt_form_data(params)
-    opt = build_option(form_data)
-
-    current = socket.assigns.category_options
-    editing = socket.assigns.editing_opt
-
-    updated_opts = apply_option_change(current, editing, opt)
-
-    try do
-      do_save_category_options(socket, updated_opts, editing)
-    rescue
-      e ->
-        require Logger
-        Logger.error("Category option save failed: #{Exception.message(e)}")
-        {:noreply, put_flash(socket, :error, gettext("Something went wrong. Please try again."))}
-    end
+  def handle_event("save_category_option", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("save_category_option", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("delete_category_option", %{"key" => key}, socket) do
-    updated_opts = Enum.reject(socket.assigns.category_options, &(&1["key"] == key))
-
-    case Options.update_category_options(socket.assigns.category, updated_opts) do
-      {:ok, updated_category} ->
-        merged = Options.merge_schemas(socket.assigns.global_options, updated_opts)
-
-        {:noreply,
-         socket
-         |> assign(:category, updated_category)
-         |> assign(:category_options, updated_opts)
-         |> assign(:merged_preview, merged)
-         |> put_flash(:info, gettext("Option removed"))}
-
-      {:error, reason} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Error: %{reason}", reason: inspect(reason)))}
-    end
+  def handle_event("delete_category_option", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("delete_category_option", params, socket)
+    end)
   end
 
   @impl true
-  def handle_event("reorder_category_options", %{"ordered_ids" => ordered_keys}, socket) do
-    current = socket.assigns.category_options
-
-    reordered =
-      ordered_keys
-      |> Enum.with_index()
-      |> Enum.map(fn {key, idx} ->
-        opt = Enum.find(current, &(&1["key"] == key))
-        if opt, do: Map.put(opt, "position", idx), else: nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    case Options.update_category_options(socket.assigns.category, reordered) do
-      {:ok, updated_category} ->
-        merged = Options.merge_schemas(socket.assigns.global_options, reordered)
-
-        {:noreply,
-         socket
-         |> assign(:category, updated_category)
-         |> assign(:category_options, reordered)
-         |> assign(:merged_preview, merged)}
-
-      {:error, reason} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Reorder failed: %{reason}", reason: inspect(reason)))}
-    end
+  def handle_event("reorder_category_options", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("reorder_category_options", params, socket)
+    end)
   end
 
   @impl true
@@ -320,9 +261,14 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   @impl true
   def handle_event("remove_opt_option", %{"index" => idx}, socket) do
     form_data = socket.assigns.opt_form_data
-    index = String.to_integer(idx)
-    updated = %{form_data | options: List.delete_at(form_data.options, index)}
-    {:noreply, assign(socket, :opt_form_data, updated)}
+    index = Helpers.parse_int(idx, -1)
+
+    if index < 0 do
+      {:noreply, socket}
+    else
+      updated = %{form_data | options: List.delete_at(form_data.options, index)}
+      {:noreply, assign(socket, :opt_form_data, updated)}
+    end
   end
 
   defp apply_option_change(current, nil, opt) do
@@ -979,7 +925,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
 
   defp parse_options(options) when is_map(options) do
     options
-    |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+    |> Enum.sort_by(fn {k, _v} -> Helpers.parse_int(k, 0) end)
     |> Enum.map(fn {_k, v} -> v end)
     |> Enum.reject(&(&1 == ""))
   end
@@ -1037,5 +983,93 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     |> Map.put("name", localized_attrs[:name])
     |> Map.put("slug", localized_attrs[:slug])
     |> Map.put("description", localized_attrs[:description])
+  end
+
+  defp gated_event("save", %{"category" => category_params}, socket) do
+    # Add Storage image_uuid from socket assigns
+    category_params = Map.put(category_params, "image_uuid", socket.assigns.image_uuid)
+
+    # Build localized field attrs from main form values and translations
+    category_params =
+      build_localized_params(
+        socket.assigns.category,
+        category_params,
+        socket.assigns[:category_translations] || %{},
+        socket.assigns.default_language
+      )
+
+    save_category(socket, socket.assigns.live_action, category_params)
+  end
+
+  defp gated_event("save_category_option", %{"option" => params}, socket) do
+    form_data = parse_opt_form_data(params)
+    opt = build_option(form_data)
+
+    current = socket.assigns.category_options
+    editing = socket.assigns.editing_opt
+
+    updated_opts = apply_option_change(current, editing, opt)
+
+    try do
+      do_save_category_options(socket, updated_opts, editing)
+    rescue
+      e ->
+        require Logger
+        Logger.error("Category option save failed: #{Exception.message(e)}")
+
+        {:noreply, put_flash(socket, :error, gettext("Something went wrong. Please try again."))}
+    end
+  end
+
+  defp gated_event("delete_category_option", %{"key" => key}, socket) do
+    updated_opts = Enum.reject(socket.assigns.category_options, &(&1["key"] == key))
+
+    case Options.update_category_options(socket.assigns.category, updated_opts) do
+      {:ok, updated_category} ->
+        merged = Options.merge_schemas(socket.assigns.global_options, updated_opts)
+
+        {:noreply,
+         socket
+         |> assign(:category, updated_category)
+         |> assign(:category_options, updated_opts)
+         |> assign(:merged_preview, merged)
+         |> put_flash(:info, gettext("Option removed"))}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Error: %{reason}", reason: inspect(reason)))}
+    end
+  end
+
+  defp gated_event("reorder_category_options", %{"ordered_ids" => ordered_keys}, socket) do
+    current = socket.assigns.category_options
+
+    reordered =
+      ordered_keys
+      |> Enum.with_index()
+      |> Enum.map(fn {key, idx} ->
+        opt = Enum.find(current, &(&1["key"] == key))
+        if opt, do: Map.put(opt, "position", idx), else: nil
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    case Options.update_category_options(socket.assigns.category, reordered) do
+      {:ok, updated_category} ->
+        merged = Options.merge_schemas(socket.assigns.global_options, reordered)
+
+        {:noreply,
+         socket
+         |> assign(:category, updated_category)
+         |> assign(:category_options, reordered)
+         |> assign(:merged_preview, merged)}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Reorder failed: %{reason}", reason: inspect(reason))
+         )}
+    end
   end
 end

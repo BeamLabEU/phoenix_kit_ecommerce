@@ -796,9 +796,43 @@ defmodule PhoenixKitEcommerce.Options do
 
     if option_values != %{} do
       image_mappings = Map.get(metadata, "_image_mappings", %{})
-      Enum.filter(specs, &spec_has_product_values?(&1, option_values, image_mappings))
+
+      specs
+      |> Enum.filter(&spec_has_product_values?(&1, option_values, image_mappings))
+      |> Enum.map(&narrow_spec_options(&1, option_values))
     else
       specs
+    end
+  end
+
+  # Rewrite the spec's "options" to the product's restricted value list.
+  #
+  # Dropping whole KEYS without narrowing the surviving specs' value lists
+  # left three consumers wrong at once: default selection took the schema's
+  # first value even when the product excluded it, request validation
+  # accepted any schema value the UI never offered, and the price range
+  # walked modifier entries for excluded values (a product restricted to
+  # ["Red"] still advertised "From" pricing off an excluded "Gold" +100).
+  defp narrow_spec_options(spec, option_values) do
+    case Map.get(option_values, spec["key"]) do
+      values when is_list(values) and values != [] ->
+        case spec["options"] do
+          schema_options when is_list(schema_options) and schema_options != [] ->
+            # Intersect preserving the schema's order; a product value that
+            # is not in the schema list is kept too (products may carry
+            # bespoke values discovered from metadata).
+            narrowed =
+              Enum.filter(schema_options, &(&1 in values)) ++
+                Enum.reject(values, &(&1 in schema_options))
+
+            Map.put(spec, "options", narrowed)
+
+          _ ->
+            Map.put(spec, "options", values)
+        end
+
+      _ ->
+        spec
     end
   end
 
@@ -1131,13 +1165,7 @@ defmodule PhoenixKitEcommerce.Options do
         Decimal.add(acc, value)
       end)
 
-    # Apply percent modifier: intermediate * (1 + percent_sum/100)
-    if Decimal.compare(percent_sum, Decimal.new("0")) == :gt do
-      multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
-      Decimal.mult(intermediate, multiplier) |> Decimal.round(2)
-    else
-      intermediate
-    end
+    apply_percent(intermediate, percent_sum)
   end
 
   def calculate_final_price(_, _, base_price, _), do: base_price || Decimal.new("0")
@@ -1219,33 +1247,18 @@ defmodule PhoenixKitEcommerce.Options do
       # Calculate min/max for percent modifiers (considering overrides)
       {percent_min, percent_max} = get_effective_modifier_range(percent_specs, metadata)
 
-      # Calculate min price: (base + fixed_min) * (1 + percent_min/100)
-      min_intermediate = Decimal.add(base, fixed_min)
+      # Both ends go through `apply_percent/2`, the SAME helper
+      # `calculate_final_price/4` uses. They must not diverge: this range is
+      # the storefront's "From $X" and the other function is what the
+      # customer is actually charged, so any rule applied to one and not the
+      # other is a price the shop advertises but does not honour.
+      min_price = apply_percent(Decimal.add(base, fixed_min), percent_min)
+      max_price = apply_percent(Decimal.add(base, fixed_max), percent_max)
 
-      min_price =
-        if Decimal.compare(percent_min, Decimal.new("0")) == :gt do
-          multiplier =
-            Decimal.add(Decimal.new("1"), Decimal.div(percent_min, Decimal.new("100")))
-
-          Decimal.mult(min_intermediate, multiplier) |> Decimal.round(2)
-        else
-          min_intermediate
-        end
-
-      # Calculate max price: (base + fixed_max) * (1 + percent_max/100)
-      max_intermediate = Decimal.add(base, fixed_max)
-
-      max_price =
-        if Decimal.compare(percent_max, Decimal.new("0")) == :gt do
-          multiplier =
-            Decimal.add(Decimal.new("1"), Decimal.div(percent_max, Decimal.new("100")))
-
-          Decimal.mult(max_intermediate, multiplier) |> Decimal.round(2)
-        else
-          max_intermediate
-        end
-
-      {min_price, max_price}
+      # A negative percent multiplier (below -100%) inverts the ordering of
+      # the two ends, so order them numerically rather than trusting that
+      # min_intermediate <= max_intermediate carried through the multiply.
+      {Decimal.min(min_price, max_price), Decimal.max(min_price, max_price)}
     end
   end
 
@@ -1268,8 +1281,8 @@ defmodule PhoenixKitEcommerce.Options do
         {min_acc, max_acc}
       else
         {
-          Decimal.add(min_acc, Enum.min(values)),
-          Decimal.add(max_acc, Enum.max(values))
+          Decimal.add(min_acc, decimal_min(values)),
+          Decimal.add(max_acc, decimal_max(values))
         }
       end
     end)
@@ -1295,14 +1308,21 @@ defmodule PhoenixKitEcommerce.Options do
       modifiers =
         resolve_modifiers(allow_override, metadata, option_key, default_modifiers)
 
+      # Only values the product actually offers participate in the range.
+      # The spec's "options" list is already narrowed to the product's
+      # `_option_values` upstream; without this Map.take an excluded value's
+      # modifier (a "Gold" +100 on a product restricted to ["Red"]) still
+      # widened the advertised range.
+      modifiers = restrict_to_offered_values(modifiers, opt["options"])
+
       values = Map.values(modifiers) |> Enum.map(&parse_decimal/1)
 
       if Enum.empty?(values) do
         {min_acc, max_acc}
       else
         {
-          Decimal.add(min_acc, Enum.min(values)),
-          Decimal.add(max_acc, Enum.max(values))
+          Decimal.add(min_acc, decimal_min(values)),
+          Decimal.add(max_acc, decimal_max(values))
         }
       end
     end)
@@ -1313,6 +1333,16 @@ defmodule PhoenixKitEcommerce.Options do
   end
 
   def get_effective_modifier_range(_, _), do: {Decimal.new("0"), Decimal.new("0")}
+
+  # Every offered value participates: one WITHOUT a modifier entry costs the
+  # base price (0 delta), which is usually the cheap end of the range.
+  # Dropping it made a product whose default option is free advertise its
+  # most expensive combination as its only price.
+  defp restrict_to_offered_values(modifiers, allowed) when is_list(allowed) and allowed != [] do
+    Map.new(allowed, fn value -> {value, Map.get(modifiers, value, "0")} end)
+  end
+
+  defp restrict_to_offered_values(modifiers, _allowed), do: modifiers
 
   defp resolve_modifiers(true, %{"_price_modifiers" => %{} = pm}, option_key, default_modifiers) do
     case Map.get(pm, option_key) do
@@ -1335,6 +1365,15 @@ defmodule PhoenixKitEcommerce.Options do
     end
   end
 
+  # The legacy/override map shape (`%{"type" => "percent", "value" => "50"}`)
+  # is what `get_effective_modifier_info/3` reads on the CHARGED path, so
+  # the range must read it too. Falling through to 0 here made the catalog
+  # advertise a price the cart then disagreed with: "From $20" for an item
+  # whose Premium option charges $30.
+  defp parse_decimal(%{"value" => value}) when is_binary(value) and value != "" do
+    parse_decimal(value)
+  end
+
   defp parse_decimal(value) do
     require Logger
 
@@ -1354,4 +1393,52 @@ defmodule PhoenixKitEcommerce.Options do
   defp uuid_string?(string) when is_binary(string) do
     match?({:ok, _}, Ecto.UUID.cast(string))
   end
+
+  # Apply a summed percent modifier to an already-fixed-adjusted amount,
+  # then round and floor. The single place these three rules live, because
+  # `calculate_final_price/4` (what the customer is charged) and
+  # `get_price_range/3` (the "From $X" the storefront advertises) each had
+  # their own copy and each copy was wrong in the same three ways:
+  #
+  #   * The percent was gated on `compare(sum, 0) == :gt`, so a NEGATIVE
+  #     percent was silently discarded and every percentage discount did
+  #     nothing: -20% on 100.00 returned 100.00. A surcharge worked, a
+  #     discount did not — the asymmetry is what let it survive.
+  #   * Rounding lived INSIDE the percent branch, so a fixed-only modifier
+  #     returned an unrounded value (base 10.00 + "0.005" -> 10.005) which
+  #     then hit a DECIMAL(12,2) column and was rounded independently at the
+  #     line total, breaking `line_total = unit_price * quantity`.
+  #   * Nothing floored at zero, so a modifier large enough to invert the
+  #     price produced a negative number — a storefront reading "From
+  #     $-5.00", and an order changeset rejecting a negative total far from
+  #     its cause.
+  #
+  # `calculate_final_price/4` was fixed on its own; the range function kept
+  # all three. Sharing the helper is what stops them drifting again.
+  defp apply_percent(amount, percent_sum) do
+    percent_applied =
+      if Decimal.equal?(percent_sum, Decimal.new("0")) do
+        amount
+      else
+        multiplier = Decimal.add(Decimal.new("1"), Decimal.div(percent_sum, Decimal.new("100")))
+        Decimal.mult(amount, multiplier)
+      end
+
+    percent_applied
+    |> Decimal.max(Decimal.new("0"))
+    |> Decimal.round(2)
+  end
+
+  # Numeric min/max over Decimals.
+  #
+  # `Enum.min/1` and `Enum.max/1` fall back to Erlang TERM ordering, which
+  # compares `%Decimal{}` structs field by field — sign, then coefficient,
+  # then exponent — not by value. So `Enum.min([10, 9.99])` returns 10 and
+  # `Enum.max` returns 9.99: the price range comes out inverted, and it is
+  # customer-visible in the storefront's "From $X" display.
+  #
+  #     Enum.min([Decimal.new("10"), Decimal.new("9.99")])  #=> 10   WRONG
+  #     decimal_min([Decimal.new("10"), Decimal.new("9.99")]) #=> 9.99
+  defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
+  defp decimal_max([first | rest]), do: Enum.reduce(rest, first, &Decimal.max/2)
 end

@@ -46,6 +46,11 @@ defmodule PhoenixKitEcommerce.LiveCase do
     pid = Sandbox.start_owner!(TestRepo, shared: not tags[:async])
     on_exit(fn -> Sandbox.stop_owner(pid) end)
 
+    # Storefront mounts and purchase mutations are gated on the module being
+    # enabled; the suite runs with the shop ON (see the same block in
+    # DataCase). Tests covering the disabled behaviour flip it off themselves.
+    PhoenixKit.Settings.update_setting("shop_enabled", "true")
+
     conn =
       Phoenix.ConnTest.build_conn()
       |> Plug.Test.init_test_session(%{})
@@ -68,7 +73,17 @@ defmodule PhoenixKitEcommerce.LiveCase do
     * `:user_uuid` — defaults to a fresh UUIDv4
     * `:email` — defaults to a unique-suffix string
     * `:roles` — list of role-name strings; defaults to `["Owner"]`
-    * `:permissions` — list of module-key strings; defaults to `["shop"]`
+    * `:permissions` — permission keys; defaults to the FULL shop key set
+      (base + every sub-permission), i.e. an operator who can do everything.
+      Pass a narrower list to express a denied capability:
+
+          fake_scope(permissions: ["shop", "shop.manage_catalog"])
+          fake_scope(permissions: ["shop"], roles: ["Employee"])
+
+      ⚠️ `roles` matters as much as `permissions`: `can_access_admin_area?/1`
+      consults ROLES, so a scope left at the `["Owner"]` default passes the
+      admin gate no matter how empty its permission set is. A test that means
+      to express "denied" must narrow both axes.
     * `:authenticated?` — defaults to `true`
 
   ## Example
@@ -80,7 +95,7 @@ defmodule PhoenixKitEcommerce.LiveCase do
     user_uuid = Keyword.get(opts, :user_uuid, Ecto.UUID.generate())
     email = Keyword.get(opts, :email, "test-#{System.unique_integer([:positive])}@example.com")
     roles = Keyword.get(opts, :roles, ["Owner"])
-    permissions = Keyword.get(opts, :permissions, ["shop"])
+    permissions = Keyword.get(opts, :permissions, shop_permissions())
     authenticated? = Keyword.get(opts, :authenticated?, true)
 
     user = %{uuid: user_uuid, email: email}
@@ -91,6 +106,18 @@ defmodule PhoenixKitEcommerce.LiveCase do
       cached_roles: roles,
       cached_permissions: MapSet.new(permissions)
     }
+  end
+
+  @doc """
+  The base key plus every sub-permission this module declares — derived
+  from `permission_metadata/0` so a newly declared capability is covered
+  by the default fixture instead of silently failing every existing test.
+  """
+  def shop_permissions do
+    meta = PhoenixKitEcommerce.permission_metadata()
+    subs = Map.get(meta, :sub_permissions, [])
+
+    [meta.key | Enum.map(subs, &"#{meta.key}.#{&1.key}")]
   end
 
   @doc """
