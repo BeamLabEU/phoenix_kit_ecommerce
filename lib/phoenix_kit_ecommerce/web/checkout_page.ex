@@ -94,6 +94,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # Subscribe to cart events for real-time sync across tabs
     if connected?(socket) do
       Events.subscribe_to_cart(cart)
+      PhoenixKitEcommerce.Notifications.checkout_started(cart)
     end
 
     # Load and auto-select payment option
