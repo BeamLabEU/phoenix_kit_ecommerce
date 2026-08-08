@@ -8,12 +8,12 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
-  alias PhoenixKitEcommerce.Vocabulary
 
   @impl true
   def mount(params, session, socket) do

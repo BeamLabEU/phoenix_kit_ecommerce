@@ -33,7 +33,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # Point the module Gettext at a locale its catalogues contain — see
     # Helpers.put_content_locale/1. Without it this page renders English
     # while its siblings translate.
-    _ = Helpers.put_content_locale(socket.assigns[:current_locale] || "en")
+    _ = Helpers.put_content_locale_from(socket)
     # The storefront of a DISABLED shop must not be browsable or purchasable;
     # only the order-confirmation page stays reachable (it is a receipt for an
     # already-placed order, not shopping). Admin pages are unaffected - that is
@@ -43,7 +43,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -57,7 +57,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       nil ->
-        {:ok, redirect_to_cart(socket, "Your cart is empty")}
+        {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
 
       cart ->
         handle_cart_validation(socket, cart, user)
@@ -69,10 +69,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
     cond do
       Enum.empty?(cart.items) ->
-        {:ok, redirect_to_cart(socket, "Your cart is empty")}
+        {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
 
       is_nil(cart.shipping_method_uuid) and requires_shipping ->
-        {:ok, redirect_to_cart(socket, "Please select a shipping method")}
+        {:ok, redirect_to_cart(socket, gettext("Please select a shipping method"))}
 
       # A selection the cart has outgrown must not reach review priced at
       # zero - it converts to a guaranteed conversion failure.
@@ -84,7 +84,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         {:ok,
          redirect_to_cart(
            socket,
-           "The selected shipping method is no longer available for this cart - please pick another"
+           gettext(
+             "The selected shipping method is no longer available for this cart - please pick another"
+           )
          )}
 
       true ->
@@ -177,7 +179,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   defp do_build_checkout_socket(socket, assigns) do
     socket
-    |> assign(:page_title, "Checkout")
+    |> assign(:page_title, gettext("Checkout"))
     |> assign(:cart, assigns.cart)
     |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
     |> assign(:is_guest, assigns.is_guest)
@@ -326,7 +328,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
            |> assign(:needs_billing, needs_billing)}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to set payment option")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to set payment option"))}
       end
     else
       {:noreply, socket}
@@ -423,11 +425,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         {:noreply,
          socket
          |> assign(:form_errors, errors)
-         |> put_flash(:error, "Please fill in all required fields")}
+         |> put_flash(:error, gettext("Please fill in all required fields"))}
       end
     else
       if is_nil(socket.assigns.selected_profile_uuid) do
-        {:noreply, put_flash(socket, :error, "Please select a billing profile")}
+        {:noreply, put_flash(socket, :error, gettext("Please select a billing profile"))}
       else
         {:noreply, enter_review(socket)}
       end
@@ -603,7 +605,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp handle_order_result({:error, :no_shipping_method}, socket) do
     socket
     |> assign(:processing, false)
-    |> put_flash(:error, "Please select a shipping method")
+    |> put_flash(:error, gettext("Please select a shipping method"))
     |> push_navigate(to: Routes.path("/cart"))
   end
 
@@ -697,7 +699,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:processing, false)
     |> assign(:error_message, "Failed to create order. Please try again.")
-    |> put_flash(:error, "Failed to create order")
+    |> put_flash(:error, gettext("Failed to create order"))
   end
 
   # Seed the editable billing form from the profile the customer had
@@ -788,7 +790,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   def handle_info({:item_removed, cart, _item_id}, socket) do
     # If cart becomes empty, redirect to cart page
     if Enum.empty?(cart.items) do
-      {:noreply, redirect_to_cart(socket, "Your cart is empty")}
+      {:noreply, redirect_to_cart(socket, gettext("Your cart is empty"))}
     else
       {:noreply, assign_cart_repriced(socket, cart)}
     end
@@ -818,7 +820,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   @impl true
   def handle_info({:cart_cleared, _cart}, socket) do
     # Cart was cleared, redirect to cart page
-    {:noreply, redirect_to_cart(socket, "Your cart is empty")}
+    {:noreply, redirect_to_cart(socket, gettext("Your cart is empty"))}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
@@ -848,7 +850,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="steps w-full mb-8">
           <%= if length(@payment_options) > 1 do %>
             <div class={["step", @step in [:payment, :billing, :review] && "step-primary"]}>
-              Payment
+              {gettext("Payment")}
             </div>
           <% end %>
           <%= if @needs_billing do %>
@@ -862,10 +864,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <div class="alert alert-info mb-6">
             <.icon name="hero-envelope" class="w-5 h-5" />
             <div>
-              <div class="font-semibold">Checking out as a guest</div>
+              <div class="font-semibold">{gettext("Checking out as a guest")}</div>
               <div class="text-sm">
-                After placing your order, we'll send a confirmation email to verify your address.
-                Check your inbox and click the link to activate your account and track your order.
+                {gettext(
+                  "After placing your order, we'll send a confirmation email to verify your address. Check your inbox and click the link to activate your account and track your order."
+                )}
               </div>
             </div>
           </div>
@@ -979,9 +982,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="card-body">
         <h2 class="card-title mb-4">
           <%= if @is_guest or @billing_profiles == [] do %>
-            Billing Information
+            {gettext("Billing Information")}
           <% else %>
-            Select Billing Profile
+            {gettext("Select Billing Profile")}
           <% end %>
         </h2>
 
@@ -1391,10 +1394,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             <div class="flex items-start gap-4">
               <.icon name="hero-user-circle" class="w-8 h-8 text-warning flex-shrink-0" />
               <div>
-                <h3 class="font-semibold text-lg">Account already exists</h3>
+                <h3 class="font-semibold text-lg">{gettext("Account already exists")}</h3>
                 <p class="text-sm mt-1">
-                  An account with this email is already registered.
-                  Please log in to complete your order.
+                  {gettext(
+                    "An account with this email is already registered. Please log in to complete your order."
+                  )}
                 </p>
                 <div class="mt-3">
                   <.link
@@ -1402,7 +1406,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                     class="btn btn-primary btn-sm"
                   >
                     <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4 mr-1" />
-                    Log in to continue
+                    {gettext("Log in to continue")}
                   </.link>
                 </div>
               </div>

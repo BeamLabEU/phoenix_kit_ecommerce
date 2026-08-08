@@ -17,9 +17,9 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitWeb.Components.Core.Icon
-  alias PhoenixKitEcommerce.Vocabulary
 
   @doc """
   Renders the full catalog sidebar with filters and category tree.

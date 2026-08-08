@@ -11,12 +11,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
-  alias PhoenixKitEcommerce.Vocabulary
 
   @impl true
   def mount(params, session, socket) do
@@ -317,7 +317,9 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           </div>
         <% end %>
 
-        <%!-- Mobile filter drawer --%>
+        <%!-- Mobile filter drawer. show_categories is FALSE: the mobile
+             category_nav above already carries them, and passing true here
+             rendered the category list twice on a phone. --%>
         <%= if @show_mobile_filters do %>
           <div class="lg:hidden mb-6">
             <div class="card bg-base-100 shadow-lg">
@@ -331,7 +333,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                   current_language={@current_language}
                   category_icon_mode={@category_icon_mode}
                   category_name_wrap={@category_name_wrap}
-                  show_categories={true}
+                  show_categories={false}
                   filter_qs={@filter_qs}
                 />
               </div>

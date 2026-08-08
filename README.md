@@ -234,6 +234,18 @@ unprefixed names that the code never read.)
 | `shop_category_name_display` | string | `"truncate"` | `"truncate"` or `"wrap"` |
 | `shop_category_icon_mode` | string | `"none"` | Category icon rendering |
 | `shop_sidebar_show_categories` | boolean | `true` | Show the category sidebar |
+| `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
+| `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+
+`shop_catalog_vocabulary` exists because a shop selling colour grading reads
+badly under "No products match your filters". Each option is a separately
+translated set of complete sentences rather than a swapped noun — Russian and
+Estonian inflect the noun for a case the sentence chooses, so a template with a
+placeholder cannot be translated correctly. Read it through
+`PhoenixKitEcommerce.Vocabulary`, never directly.
+
+`shop_hide_zero_decimals` affects the **storefront only**. Invoices, receipts and
+credit notes keep two decimals, which is the auditable form.
 
 Tax comes from the Billing module (`billing_tax_enabled`,
 `billing_default_tax_rate`), not from shop.

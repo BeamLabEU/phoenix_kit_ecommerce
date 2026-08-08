@@ -31,6 +31,7 @@ defmodule PhoenixKitEcommerce.CartItem do
   import Ecto.Changeset
 
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
@@ -135,8 +136,15 @@ defmodule PhoenixKitEcommerce.CartItem do
       product_title: get_localized_string(product.title, lang),
       product_slug: get_localized_string(product.slug, lang),
       product_image: get_product_image_url(product),
-      unit_price: product.price,
-      compare_at_price: product.compare_at_price,
+      # An on-request line carries NO amount. The product keeps its price —
+      # that is the figure the operator quotes from — but the customer never
+      # saw it and never agreed to it, so it must not enter a cart total, an
+      # order total or an invoice. Suppressing the number per-line while the
+      # total still summed it was incoherent: the cart said "Price on request"
+      # and then printed the sum of the very numbers it had just hidden.
+      unit_price: if(PriceDisplay.on_request?(product), do: Decimal.new(0), else: product.price),
+      compare_at_price:
+        if(PriceDisplay.on_request?(product), do: nil, else: product.compare_at_price),
       # Line amounts are summed in the CART's currency frame, so the line
       # snapshots that frame when the caller supplies it; the product's own
       # currency field is usually the schema's untouched default.
@@ -164,7 +172,7 @@ defmodule PhoenixKitEcommerce.CartItem do
   # relabelled afterwards.
   defp put_price_unit(metadata, product, lang) do
     metadata =
-      case PhoenixKitEcommerce.PriceDisplay.unit_for(product, lang) do
+      case PriceDisplay.unit_for(product, lang) do
         nil -> metadata
         unit -> Map.put(metadata, "price_unit", unit)
       end
@@ -179,7 +187,7 @@ defmodule PhoenixKitEcommerce.CartItem do
   # customer agreed to "price on request". Free, permanently, on a committed
   # order. Only written when true, so existing rows keep their shape.
   defp put_price_on_request(metadata, product) do
-    if PhoenixKitEcommerce.PriceDisplay.on_request?(product) do
+    if PriceDisplay.on_request?(product) do
       Map.put(metadata, "price_on_request", true)
     else
       metadata
