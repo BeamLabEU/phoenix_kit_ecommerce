@@ -281,6 +281,32 @@ Use `Scope.has_module_access?/2` to check permissions in your application.
 
 This module implements `css_sources/0` returning `[:phoenix_kit_ecommerce]`, so PhoenixKit's installer automatically adds the correct `@source` directive to your `app.css` for Tailwind scanning. No manual configuration needed.
 
+### Order notifications — two switches, both off by default
+
+The module registers `shop.order_placed` and `shop.order_confirmed`, but
+**registering a notification type is not enough to deliver one**. Two settings
+gate it, and on a fresh install both are closed:
+
+1. **Global notifications must be on.** With `notifications_enabled` off,
+   `shop.order_placed` fires into silence — no error, no log line. The module
+   looks broken rather than disabled.
+2. **The recipient must be opted into a channel for that type.** External
+   channels are fail-closed per type, so a recipient with notifications enabled
+   but no Email channel on `shop.orders` still gets nothing.
+
+Until both are set, an order arrives with no alert of any kind and the only way
+to notice is to open the admin panel. A shop running in production lost a real
+customer order this way before spotting it.
+
+Recipients are the holders of the relevant permission **unioned with Owner-role
+holders and `"*"` superadmins** — neither of those has permission rows, so a
+key-only query misses the primary operator of a default install.
+
+⚠️ Note that the order-confirmation page's copy is independent of all this. It
+tells guests that an account-confirmation email is on its way, which is true and
+is the only mail checkout sends. It does **not** promise customers an order
+confirmation, because the module does not send one.
+
 ## Architecture
 
 ```
