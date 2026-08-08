@@ -287,7 +287,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                     <div class="font-medium">
                       {PriceDisplay.render(nil, @currency, :order,
                         amount: item["total"],
-                        unit: item["price_unit"]
+                        unit: item["price_unit"],
+                        on_request: item["price_on_request"] == true
                       )}
                     </div>
                   </div>

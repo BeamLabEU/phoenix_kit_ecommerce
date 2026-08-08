@@ -410,7 +410,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               <div class="text-xs text-base-content/50">
                                 {PriceDisplay.render(nil, @currency, :cart,
                                   amount: item.unit_price,
-                                  unit: (item.metadata || %{})["price_unit"]
+                                  unit: (item.metadata || %{})["price_unit"],
+                                  on_request: (item.metadata || %{})["price_on_request"] == true
                                 )} each
                               </div>
                             </td>
