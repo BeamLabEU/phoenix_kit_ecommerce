@@ -80,6 +80,40 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
+  Point this module's Gettext backend at `language`, falling back to the base
+  language when the catalogue has no dialect.
+
+  Without this the storefront renders English in every locale, however complete
+  the catalogues are. The content language here is a DIALECT (`resolve_dialect/1`
+  returns "ru-RU", "et-EE", "en-US"), and that is also what core puts into the
+  process locale — but this module ships `priv/gettext/{en,ru,et}`, plain codes
+  with no region. Gettext does not fall back from "ru-RU" to "ru" on its own, so
+  every lookup missed and returned its msgid, which is the English source string.
+
+  Core's own catalogue has the same plain-code shape, so this is not specific to
+  the shop; it is why a fully translated module can still render entirely in
+  English. Verified on a dev box: `put_locale("ru")` translates,
+  `put_locale("ru-RU")` does not.
+
+  Called from `mount/3`, which runs once per process for both the dead render and
+  the connected mount, so the whole lifecycle of that LiveView is covered.
+  """
+  def put_content_locale(language) when is_binary(language) do
+    known = Gettext.known_locales(PhoenixKitEcommerce.Gettext)
+    base = language |> String.split(~r/[-_]/) |> List.first()
+
+    cond do
+      language in known -> Gettext.put_locale(PhoenixKitEcommerce.Gettext, language)
+      base in known -> Gettext.put_locale(PhoenixKitEcommerce.Gettext, base)
+      true -> :ok
+    end
+
+    language
+  end
+
+  def put_content_locale(language), do: language
+
+  @doc """
   Find the best enabled language that has a slug for this entity.
 
   Prefers the default language, then checks other enabled languages.
