@@ -34,7 +34,7 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
 
     # The fixture's active method only covers "EE" - "US" is not served by
     # anything, so fallback must let this one through.
-    opts = [billing_data: complete_billing("US")]
+    opts = [billing_data: complete_billing("US", "skip-shipping")]
 
     assert {:ok, order} = Shop.convert_cart_to_order(cart, opts)
     assert order.metadata["shipping_skipped"] == true
@@ -47,7 +47,7 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
     PhoenixKit.Settings.update_setting_with_module("shop_shipping_skip_mode", "fallback", "shop")
 
     # "EE" IS covered by the fixture's method - fallback must not skip it.
-    opts = [billing_data: complete_billing("EE")]
+    opts = [billing_data: complete_billing("EE", "skip-shipping")]
 
     assert {:error, :no_shipping_method} = Shop.convert_cart_to_order(cart, opts)
   end
@@ -81,7 +81,7 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
 
     {:ok, cart} = Shop.add_to_cart(cart, product, 1)
 
-    %{cart: cart, opts: [billing_data: complete_billing("EE")]}
+    %{cart: cart, opts: [billing_data: complete_billing("EE", "skip-shipping")]}
   end
 
   # A skipped-shipping order must carry no shipping charge anywhere in its
@@ -99,17 +99,5 @@ defmodule PhoenixKitEcommerce.ConvertSkipShippingTest do
       |> Enum.reduce(Decimal.new("0"), &Decimal.add/2)
 
     assert Decimal.equal?(line_items_total, order.subtotal)
-  end
-
-  defp complete_billing(country) do
-    %{
-      "email" => "skip-shipping-#{System.unique_integer([:positive])}@example.com",
-      "first_name" => "Test",
-      "last_name" => "Buyer",
-      "address_line1" => "1 Test Street",
-      "city" => "Testville",
-      "postal_code" => "10001",
-      "country" => country
-    }
   end
 end

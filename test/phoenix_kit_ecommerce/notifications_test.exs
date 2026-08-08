@@ -100,7 +100,7 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
 
       [item] = cart.items
       assert :ok = ShopNotifications.cart_item_added(cart, item, item.product)
-      assert length(notifications_for_action("shop.cart_first_item_added")) >= 1
+      assert notifications_for_action("shop.cart_first_item_added") != []
       before = length(notifications_for_action("shop.cart_first_item_added"))
       assert :ok = ShopNotifications.cart_item_added(cart, item, item.product)
       assert length(notifications_for_action("shop.cart_first_item_added")) == before
@@ -138,7 +138,7 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       assert notifications_for_action("shop.cart_item_added") == []
       # second → every-add action
       :ok = ShopNotifications.cart_item_added(cart, item, item.product)
-      assert length(notifications_for_action("shop.cart_item_added")) >= 1
+      assert notifications_for_action("shop.cart_item_added") != []
     end
 
     test "checkout_started notifies once per cart", %{cart: cart} do
@@ -214,28 +214,5 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
     {:ok, _} = Roles.assign_role(user, "Admin")
     {:ok, _} = Permissions.grant_permission(role.uuid, "shop.manage_carts")
     user
-  end
-
-  # `create_many/2` never persists `:action` on the notification row (see
-  # `PhoenixKitEcommerce.Notifications.notify_shop/1`) — it's stashed under
-  # `metadata["action"]` instead, so filter there rather than a bare
-  # `action` column that does not exist on `phoenix_kit_notifications`.
-  defp notifications_for_action(action) do
-    "phoenix_kit_notifications"
-    |> select([n], %{uuid: n.uuid, metadata: n.metadata})
-    |> Repo.all()
-    |> Enum.filter(&(&1.metadata["action"] == action))
-    |> Enum.map(& &1.uuid)
-  end
-
-  # The rendered text of a standalone notification lives under
-  # `metadata["notification_text"]` (`create_many/2` folds the `:text`
-  # convenience key in there — see `PhoenixKit.Notifications.create_many/2`).
-  defp notification_texts_for_action(action) do
-    "phoenix_kit_notifications"
-    |> select([n], %{metadata: n.metadata})
-    |> Repo.all()
-    |> Enum.filter(&(&1.metadata["action"] == action))
-    |> Enum.map(& &1.metadata["notification_text"])
   end
 end

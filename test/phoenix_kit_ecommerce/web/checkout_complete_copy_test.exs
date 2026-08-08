@@ -55,7 +55,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutCompleteCopyTest do
     {:ok, cart} = Shop.create_cart(session_id: session_id)
     {:ok, cart} = Shop.add_to_cart(cart, product, 1)
 
-    {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: complete_billing("EE"))
+    {:ok, order} =
+      Shop.convert_cart_to_order(cart,
+        billing_data: complete_billing("EE", "checkout-complete-copy")
+      )
 
     order
   end
@@ -84,21 +87,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutCompleteCopyTest do
     {:ok, cart} = Shop.add_to_cart(cart, product, 1)
     {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
 
-    {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: complete_billing("EE"))
+    {:ok, order} =
+      Shop.convert_cart_to_order(cart,
+        billing_data: complete_billing("EE", "checkout-complete-copy")
+      )
 
     order
-  end
-
-  defp complete_billing(country) do
-    %{
-      "email" => "checkout-complete-copy-#{System.unique_integer([:positive])}@example.com",
-      "first_name" => "Test",
-      "last_name" => "Buyer",
-      "address_line1" => "1 Test Street",
-      "city" => "Testville",
-      "postal_code" => "10001",
-      "country" => country
-    }
   end
 
   # `CheckoutComplete.mount/2` only grants access via a TRUSTED shop

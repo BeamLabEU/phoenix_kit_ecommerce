@@ -1002,11 +1002,14 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   defp gated_event("save_notification_recipients", params, socket) do
+    candidate_uuids = MapSet.new(socket.assigns.recipient_candidates, & &1.uuid)
+
     selected =
       params
       |> Map.get("recipients", %{})
       |> Enum.filter(fn {_uuid, v} -> v == "true" end)
       |> Enum.map(&elem(&1, 0))
+      |> Enum.filter(&MapSet.member?(candidate_uuids, &1))
 
     case Settings.update_json_setting_with_module(
            "shop_notification_recipients",
