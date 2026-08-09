@@ -38,15 +38,86 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def format_price(price, nil) do
-    "$#{Decimal.round(price, 2)}"
+    "$#{trim_decimals(price, 2)}"
   end
 
   def format_price(price, code) when is_binary(code) do
-    "#{Decimal.round(price, 2)} #{code}"
+    "#{trim_decimals(price, 2)} #{code}"
   end
 
   def format_price(price, currency) do
-    Currency.format_amount(price, currency)
+    # Trimming is done by handing billing a currency whose `decimal_places` is 0,
+    # NOT by a newer billing API. That keeps this working against the PUBLISHED
+    # billing every host actually resolves, and keeps the symbol and thousands
+    # separator billing's business rather than ours.
+    #
+    # An earlier version called a new `format_amount/3` behind a
+    # `function_exported?/3` guard. It was dead on arrival: the published billing
+    # has no such arity, so the guard was always false and the setting did nothing
+    # for any real consumer — it only appeared to work on a dev box, which
+    # resolves billing through a path dep. Cross-repo gates like that belong in a
+    # PR body, not in a shim that hides the feature being unreachable.
+    Currency.format_amount(price, display_currency(currency, price))
+  end
+
+  # A DISPLAY-ONLY copy. Never persisted, and never handed to billing's invoice,
+  # receipt or credit-note rendering, which must keep the currency's real
+  # decimal_places — two decimals is the auditable form.
+  #
+  # The amount is load-bearing. `format_amount/2` ROUNDS to decimal_places, so
+  # handing it 0 unconditionally does not "hide .00", it restates the price:
+  # 40.50 rendered as "41" and 1,234.99 as "1,235", on the catalog, the cart
+  # line, the tax row and the total — a figure the shopper is not charged. Zero
+  # the places only for an amount that has nothing to lose, which is the same
+  # rule `trim_decimals/2` applies to the plain-code branches.
+  defp display_currency(%{decimal_places: places} = currency, price) do
+    if hide_zero_decimals?() and whole?(price, places),
+      do: %{currency | decimal_places: trimmed_places(places)},
+      else: currency
+  end
+
+  defp display_currency(currency, _price), do: currency
+
+  defp trimmed_places(places) when is_integer(places) and places > 0, do: 0
+  defp trimmed_places(places), do: places
+
+  # Whether rounding to zero places loses nothing at this currency's precision.
+  # Anything that is not a Decimal or an integer amount answers "no" and keeps
+  # the currency's own precision: billing accepts shapes `Decimal.round/2` will
+  # not (a float raises), and the wrong answer here misstates a price.
+  defp whole?(%Decimal{} = price, places) when is_integer(places) do
+    rounded = Decimal.round(price, places)
+    Decimal.equal?(rounded, Decimal.round(rounded, 0))
+  end
+
+  defp whole?(price, places) when is_integer(price) and is_integer(places), do: true
+  defp whole?(_price, _places), do: false
+
+  @doc """
+  Whether the storefront drops an all-zero fractional part ("40" rather than
+  "40.00").
+
+  Off by default, because dropping the decimals is wrong for most shops. It exists
+  for shops whose prices are round by nature — services quoted in whole units,
+  where "40.00 EUR" reads as unnecessarily precise and, as one operator put it,
+  faintly alarming.
+
+  Storefront only. Invoices, receipts and credit notes keep two decimals: they are
+  accounting documents, and this setting must never reach them.
+  """
+  def hide_zero_decimals? do
+    PhoenixKit.Settings.get_setting_cached("shop_hide_zero_decimals", "false") == "true"
+  end
+
+  # Only drops the fraction when nothing is lost: 40.00 -> 40, but 40.50 stays.
+  defp trim_decimals(price, places) do
+    rounded = Decimal.round(price, places)
+
+    if hide_zero_decimals?() and Decimal.equal?(rounded, Decimal.round(rounded, 0)) do
+      Decimal.round(rounded, 0)
+    else
+      rounded
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -77,6 +148,74 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
   def get_language_from_params_or_default(_params) do
     Translations.default_language()
+  end
+
+  @doc """
+  Point this module's Gettext backend at `language`, falling back to the base
+  language when the catalogue has no dialect.
+
+  Without this the storefront renders English in every locale, however complete
+  the catalogues are. The content language here is a DIALECT (`resolve_dialect/1`
+  returns "ru-RU", "et-EE", "en-US"), and that is also what core puts into the
+  process locale — but this module ships `priv/gettext/{en,ru,et}`, plain codes
+  with no region. Gettext does not fall back from "ru-RU" to "ru" on its own, so
+  every lookup missed and returned its msgid, which is the English source string.
+
+  Core's own catalogue has the same plain-code shape, so this is not specific to
+  the shop; it is why a fully translated module can still render entirely in
+  English. Verified on a dev box: `put_locale("ru")` translates,
+  `put_locale("ru-RU")` does not.
+
+  Called from `mount/3`, which runs once per process for both the dead render and
+  the connected mount, so the whole lifecycle of that LiveView is covered.
+  """
+  def put_content_locale(language) when is_binary(language) do
+    known = Gettext.known_locales(PhoenixKitEcommerce.Gettext)
+    base = language |> String.split(~r/[-_]/) |> List.first()
+
+    cond do
+      language in known ->
+        Gettext.put_locale(PhoenixKitEcommerce.Gettext, language)
+
+      base in known ->
+        Gettext.put_locale(PhoenixKitEcommerce.Gettext, base)
+
+      true ->
+        # Reset rather than no-op. `put_locale/2` is process-scoped, and the dead
+        # render runs in a connection process that is reused across keep-alive
+        # requests — leaving it untouched means a request for an unsupported
+        # locale inherits whatever the PREVIOUS request on that connection set,
+        # so a French visitor could be served a Russian storefront.
+        Gettext.put_locale(PhoenixKitEcommerce.Gettext, default_gettext_locale())
+    end
+
+    language
+  end
+
+  def put_content_locale(language), do: language
+
+  @doc """
+  Sets the content locale from a socket, falling back to the shop's CONFIGURED
+  default rather than a hardcoded "en".
+
+  `:current_locale` is supplied by core's live_session `on_mount`; a host that
+  mounts these LiveViews outside it gets `nil`, and a hardcoded English fallback
+  would force English on a shop whose default language is Russian.
+  """
+  def put_content_locale_from(socket) do
+    put_content_locale(socket.assigns[:current_locale] || Translations.default_language())
+  end
+
+  defp default_gettext_locale do
+    known = Gettext.known_locales(PhoenixKitEcommerce.Gettext)
+    default = Translations.default_language()
+    base = default |> to_string() |> String.split(~r/[-_]/) |> List.first()
+
+    cond do
+      default in known -> default
+      base in known -> base
+      true -> Gettext.get_locale(PhoenixKitEcommerce.Gettext)
+    end
   end
 
   @doc """

@@ -23,6 +23,11 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
 
   @impl true
   def mount(%{"uuid" => uuid}, _session, socket) do
+    # Point the module Gettext at a locale its catalogues contain — see
+    # Helpers.put_content_locale/1. Without it this page renders English
+    # while its siblings translate.
+    _ = ShopHelpers.put_content_locale_from(socket)
+
     if Billing.enabled?() do
       mount_with_billing(uuid, socket)
     else
@@ -47,7 +52,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
         if order.user_uuid != current_user.uuid do
           {:ok,
            socket
-           |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Access denied"))
+           |> put_flash(:error, gettext("Access denied"))
            |> push_navigate(to: Routes.path("/dashboard/orders"))}
         else
           {:ok, setup_order_assigns(socket, order, current_user)}

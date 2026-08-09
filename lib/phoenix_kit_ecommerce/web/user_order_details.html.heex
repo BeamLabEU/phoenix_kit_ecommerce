@@ -54,14 +54,23 @@
                         €80.00, and rendering that as "€80.00 per hour"
                         misstates the rate the customer agreed to. Same split
                         as the cart page. --%>
+                  <% line_por = PriceDisplay.line_on_request?(item) %>
                   <div class="font-medium text-right">
-                    {PriceDisplay.render(nil, @currency, :order, amount: item["total"])}
-                    <%= if item["price_unit"] not in [nil, ""] do %>
+                    {PriceDisplay.render(nil, @currency, :order,
+                      amount: item["total"],
+                      on_request: line_por
+                    )}
+                    <%!-- Suppressed for an on-request line: there is no rate to
+                          state, and "Price on request each" reads as nonsense. --%>
+                    <%= if !line_por and item["price_unit"] not in [nil, ""] do %>
                       <div class="text-xs font-normal text-base-content/50">
-                        {PriceDisplay.render(nil, @currency, :order,
-                          amount: item["unit_price"],
-                          unit: item["price_unit"]
-                        )} each
+                        {gettext("%{price} each",
+                          price:
+                            PriceDisplay.render(nil, @currency, :order,
+                              amount: item["unit_price"],
+                              unit: item["price_unit"]
+                            )
+                        )}
                       </div>
                     <% end %>
                   </div>
@@ -93,9 +102,17 @@
               <% end %>
 
               <div class="flex justify-between text-lg font-bold pt-2 border-t border-base-200">
-                <span>{Gettext.gettext(PhoenixKitWeb.Gettext, "Total")}</span>
+                <span>{gettext("Total")}</span>
                 <span>{format_price(@order.total, @currency)}</span>
               </div>
+
+              <%!-- Same disclosure as the confirmation page: an on-request line
+                    contributed 0, so the total is not the whole bill. --%>
+              <%= if PriceDisplay.any_line_on_request?(@order.line_items) do %>
+                <p class="text-xs text-base-content/60">
+                  {gettext("Items priced on request are not included in this total.")}
+                </p>
+              <% end %>
             </div>
           </div>
         </div>
@@ -154,7 +171,7 @@
 
             <%!-- Status --%>
             <div class="mb-4">
-              <span class="text-sm text-base-content/70">{Gettext.gettext(PhoenixKitWeb.Gettext, "Status")}</span>
+              <span class="text-sm text-base-content/70">{gettext("Status")}</span>
               <div class="mt-1">
                 <span class={"badge #{status_badge_class(@order.status)} capitalize"}>
                   {@order.status}
@@ -182,7 +199,7 @@
 
             <%!-- Total --%>
             <div class="mb-4">
-              <span class="text-sm text-base-content/70">{Gettext.gettext(PhoenixKitWeb.Gettext, "Total")}</span>
+              <span class="text-sm text-base-content/70">{gettext("Total")}</span>
               <div class="mt-1 text-xl font-bold">{format_price(@order.total, @currency)}</div>
             </div>
 

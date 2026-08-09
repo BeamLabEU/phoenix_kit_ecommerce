@@ -16,7 +16,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [
@@ -29,6 +31,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def mount(params, session, socket) do
+    # Point the module Gettext at a locale its catalogues contain — see
+    # Helpers.put_content_locale/1. Without it this page renders English
+    # while its siblings translate.
+    _ = Helpers.put_content_locale_from(socket)
     # The storefront of a DISABLED shop must not be browsable or purchasable;
     # only the order-confirmation page stays reachable (it is a receipt for an
     # already-placed order, not shopping). Admin pages are unaffected - that is
@@ -38,7 +44,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     else
       {:ok,
        socket
-       |> put_flash(:error, "The shop is currently unavailable")
+       |> put_flash(:error, gettext("The shop is currently unavailable"))
        # The HOST's root, not Routes.path("/") - that prepends the
        # PhoenixKit prefix ("/phoenix_kit/"), which no route serves.
        |> push_navigate(to: "/")}
@@ -52,7 +58,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       nil ->
-        {:ok, redirect_to_cart(socket, "Your cart is empty")}
+        {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
 
       cart ->
         handle_cart_validation(socket, cart, user)
@@ -64,16 +70,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
     cond do
       Enum.empty?(cart.items) ->
-        {:ok, redirect_to_cart(socket, "Your cart is empty")}
+        {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
 
       missing_shipping_method_blocks_checkout?(cart, requires_shipping) ->
-        {:ok, redirect_to_cart(socket, "Please select a shipping method")}
+        {:ok, redirect_to_cart(socket, gettext("Please select a shipping method"))}
 
       selected_shipping_method_outgrown?(cart, requires_shipping) ->
         {:ok,
          redirect_to_cart(
            socket,
-           "The selected shipping method is no longer available for this cart - please pick another"
+           gettext(
+             "The selected shipping method is no longer available for this cart - please pick another"
+           )
          )}
 
       true ->
@@ -190,7 +198,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   defp do_build_checkout_socket(socket, assigns) do
     socket
-    |> assign(:page_title, "Checkout")
+    |> assign(:page_title, gettext("Checkout"))
     |> assign(:cart, assigns.cart)
     |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
     |> assign(:is_guest, assigns.is_guest)
@@ -341,7 +349,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
            |> assign(:needs_billing, needs_billing)}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to set payment option")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to set payment option"))}
       end
     else
       {:noreply, socket}
@@ -441,11 +449,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         {:noreply,
          socket
          |> assign(:form_errors, errors)
-         |> put_flash(:error, "Please fill in all required fields")}
+         |> put_flash(:error, gettext("Please fill in all required fields"))}
       end
     else
       if is_nil(socket.assigns.selected_profile_uuid) do
-        {:noreply, put_flash(socket, :error, "Please select a billing profile")}
+        {:noreply, put_flash(socket, :error, gettext("Please select a billing profile"))}
       else
         {:noreply, advance_after_billing(socket)}
       end
@@ -720,7 +728,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp handle_order_result({:error, :no_shipping_method}, socket) do
     socket
     |> assign(:processing, false)
-    |> put_flash(:error, "Please select a shipping method")
+    |> put_flash(:error, gettext("Please select a shipping method"))
     |> push_navigate(to: Routes.path("/cart"))
   end
 
@@ -813,8 +821,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp handle_order_result({:error, _reason}, socket) do
     socket
     |> assign(:processing, false)
-    |> assign(:error_message, "Failed to create order. Please try again.")
-    |> put_flash(:error, "Failed to create order")
+    |> assign(:error_message, gettext("Failed to create order. Please try again."))
+    |> put_flash(:error, gettext("Failed to create order"))
   end
 
   # Seed the editable billing form from the profile the customer had
@@ -905,7 +913,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   def handle_info({:item_removed, cart, _item_id}, socket) do
     # If cart becomes empty, redirect to cart page
     if Enum.empty?(cart.items) do
-      {:noreply, redirect_to_cart(socket, "Your cart is empty")}
+      {:noreply, redirect_to_cart(socket, gettext("Your cart is empty"))}
     else
       {:noreply, assign_cart_repriced(socket, cart)}
     end
@@ -935,7 +943,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   @impl true
   def handle_info({:cart_cleared, _cart}, socket) do
     # Cart was cleared, redirect to cart page
-    {:noreply, redirect_to_cart(socket, "Your cart is empty")}
+    {:noreply, redirect_to_cart(socket, gettext("Your cart is empty"))}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
@@ -955,7 +963,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     <ShopLayouts.shop_layout {assigns}>
       <div class="p-6 max-w-6xl mx-auto">
         <div class="flex items-center justify-between mb-8">
-          <h1 class="text-3xl font-bold">Checkout</h1>
+          <h1 class="text-3xl font-bold">{gettext("Checkout")}</h1>
           <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
             <.icon name="hero-arrow-left" class="w-4 h-4" />
           </.link>
@@ -965,13 +973,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="steps w-full mb-8">
           <%= if length(@payment_options) > 1 do %>
             <div class={["step", @step in [:payment, :billing, :review] && "step-primary"]}>
-              Payment
+              {gettext("Payment")}
             </div>
           <% end %>
           <%= if @needs_billing do %>
-            <div class={["step", @step in [:billing, :review] && "step-primary"]}>Billing</div>
+            <div class={["step", @step in [:billing, :review] && "step-primary"]}>
+              {gettext("Billing")}
+            </div>
           <% end %>
-          <div class={["step", @step == :review && "step-primary"]}>Review & Confirm</div>
+          <div class={["step", @step == :review && "step-primary"]}>
+            {gettext("Review & Confirm")}
+          </div>
         </div>
 
         <%!-- Guest Checkout Info --%>
@@ -979,10 +991,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <div class="alert alert-info mb-6">
             <.icon name="hero-envelope" class="w-5 h-5" />
             <div>
-              <div class="font-semibold">Checking out as a guest</div>
+              <div class="font-semibold">{gettext("Checking out as a guest")}</div>
               <div class="text-sm">
-                After placing your order, we'll send a confirmation email to verify your address.
-                Check your inbox and click the link to activate your account and track your order.
+                {gettext(
+                  "After placing your order, we'll send a confirmation email to verify your address. Check your inbox and click the link to activate your account and track your order."
+                )}
               </div>
             </div>
           </div>
@@ -1052,7 +1065,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     ~H"""
     <div class="card bg-base-100 shadow-lg">
       <div class="card-body">
-        <h2 class="card-title mb-4">Select Payment Method</h2>
+        <h2 class="card-title mb-4">{gettext("Select Payment Method")}</h2>
 
         <div class="space-y-3">
           <%= for option <- @payment_options do %>
@@ -1086,9 +1099,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="card-actions justify-end mt-6">
           <button phx-click="proceed_to_billing" class="btn btn-primary">
             <%= if @needs_billing do %>
-              Continue to Billing <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+              {gettext("Continue to Billing")}
+              <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
             <% else %>
-              Continue to Review <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+              {gettext("Continue to Review")}
+              <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
             <% end %>
           </button>
         </div>
@@ -1103,9 +1118,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="card-body">
         <h2 class="card-title mb-4">
           <%= if @is_guest or @billing_profiles == [] do %>
-            Billing Information
+            {gettext("Billing Information")}
           <% else %>
-            Select Billing Profile
+            {gettext("Select Billing Profile")}
           <% end %>
         </h2>
 
@@ -1134,7 +1149,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             <div></div>
           <% end %>
           <button phx-click="proceed_to_review" class="btn btn-primary">
-            Continue to Review <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+            {gettext("Continue to Review")}
+            <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
           </button>
         </div>
       </div>
@@ -1150,11 +1166,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="alert alert-info mb-4">
           <.icon name="hero-information-circle" class="w-5 h-5" />
           <span>
-            You have multiple billing profiles. Please select one or <.link
-              navigate={Routes.path("/dashboard/billing-profiles")}
-              class="link"
-            >
-              set a default in your account settings
+            {gettext("You have multiple billing profiles. Please select one or")}
+            <.link navigate={Routes.path("/dashboard/billing-profiles")} class="link">
+              {gettext("set a default in your account settings")}
             </.link>.
           </span>
         </div>
@@ -1182,7 +1196,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
               <div class="font-medium flex items-center gap-2">
                 {profile_display_name(profile)}
                 <%= if profile.is_default do %>
-                  <span class="badge badge-primary badge-sm">Default</span>
+                  <span class="badge badge-primary badge-sm">{gettext("Default")}</span>
                 <% end %>
               </div>
               <div class="text-sm text-base-content/60 mt-1">
@@ -1217,7 +1231,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     <form id="checkout-billing-form" phx-change="update_billing" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">First Name *</legend>
+          <legend class="fieldset-legend">{gettext("First Name *")}</legend>
           <input
             type="text"
             name="billing[first_name]"
@@ -1231,7 +1245,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">Last Name *</legend>
+          <legend class="fieldset-legend">{gettext("Last Name *")}</legend>
           <input
             type="text"
             name="billing[last_name]"
@@ -1247,7 +1261,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">Email *</legend>
+          <legend class="fieldset-legend">{gettext("Email *")}</legend>
           <input
             type="email"
             name="billing[email]"
@@ -1261,7 +1275,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">Phone</legend>
+          <legend class="fieldset-legend">{gettext("Phone")}</legend>
           <input
             type="tel"
             name="billing[phone]"
@@ -1272,13 +1286,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       </div>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">Address *</legend>
+        <legend class="fieldset-legend">{gettext("Address *")}</legend>
         <input
           type="text"
           name="billing[address_line1]"
           value={@billing_data["address_line1"]}
           class={["input", @form_errors[:address_line1] && "input-error"]}
-          placeholder="Street address"
+          placeholder={gettext("Street address")}
           required
         />
         <%= if @form_errors[:address_line1] do %>
@@ -1288,7 +1302,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">City *</legend>
+          <legend class="fieldset-legend">{gettext("City *")}</legend>
           <input
             type="text"
             name="billing[city]"
@@ -1302,7 +1316,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">Postal Code</legend>
+          <legend class="fieldset-legend">{gettext("Postal Code")}</legend>
           <input
             type="text"
             name="billing[postal_code]"
@@ -1312,13 +1326,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">Country *</legend>
+          <legend class="fieldset-legend">{gettext("Country *")}</legend>
           <select
             name="billing[country]"
             class={["select", @form_errors[:country] && "select-error"]}
             required
           >
-            <option value="">Select country...</option>
+            <option value="">{gettext("Select country...")}</option>
             <%= for country <- @countries do %>
               <option value={country.alpha2} selected={@billing_data["country"] == country.alpha2}>
                 {country.name}
@@ -1426,10 +1440,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="card-title">Payment Method</h2>
+            <h2 class="card-title">{gettext("Payment Method")}</h2>
             <%= if length(@payment_options) > 1 do %>
               <button phx-click="back_to_payment" class="btn btn-ghost btn-sm">
-                <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> Change
+                <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Change")}
               </button>
             <% end %>
           </div>
@@ -1458,9 +1472,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="card bg-base-100 shadow-lg">
           <div class="card-body">
             <div class="flex items-center justify-between mb-4">
-              <h2 class="card-title">Billing Information</h2>
+              <h2 class="card-title">{gettext("Billing Information")}</h2>
               <button phx-click="back_to_billing" class="btn btn-ghost btn-sm">
-                <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> Change
+                <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Change")}
               </button>
             </div>
 
@@ -1504,9 +1518,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="card-title">Shipping Method</h2>
+            <h2 class="card-title">{gettext("Shipping Method")}</h2>
             <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
-              <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> Change
+              <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Change")}
             </.link>
           </div>
 
@@ -1520,7 +1534,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
               </div>
               <div class="font-semibold">
                 <%= if Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq do %>
-                  <span class="text-success">FREE</span>
+                  <span class="text-success">{gettext("FREE")}</span>
                 <% else %>
                   {format_price(@cart.shipping_amount, @currency)}
                 <% end %>
@@ -1534,9 +1548,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="card-title">Order Items</h2>
+            <h2 class="card-title">{gettext("Order Items")}</h2>
             <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
-              <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> Edit Cart
+              <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Edit Cart")}
             </.link>
           </div>
 
@@ -1568,12 +1582,34 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                       <% end %>
                     </div>
                   <% end %>
+                  <%!-- An on-request line carries no amount — its stored
+                        unit_price is 0 — so formatting it prints "1 × 0.00" and
+                        "0.00" on the LAST page before the order is placed. The
+                        cart and confirmation pages route through PriceDisplay
+                        for exactly this reason; the page between them did not,
+                        which is the page where the customer commits. --%>
+                  <% line_por = PriceDisplay.line_on_request?(item) %>
                   <div class="text-sm text-base-content/60">
-                    Qty: {item.quantity} × {format_price(item.unit_price, @currency)}
+                    <%= if line_por do %>
+                      {gettext("Qty: %{count}", count: item.quantity)}
+                    <% else %>
+                      {gettext("Qty: %{count} × %{price}",
+                        count: item.quantity,
+                        price:
+                          PriceDisplay.render(nil, @currency, :cart,
+                            amount: item.unit_price,
+                            unit: (item.metadata || %{})["price_unit"]
+                          )
+                      )}
+                    <% end %>
                   </div>
                 </div>
                 <div class="font-semibold">
-                  {format_price(item.line_total, @currency)}
+                  {PriceDisplay.render(nil, @currency, :cart,
+                    amount: item.line_total,
+                    unit: nil,
+                    on_request: line_por
+                  )}
                 </div>
               </div>
             <% end %>
@@ -1588,10 +1624,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             <div class="flex items-start gap-4">
               <.icon name="hero-user-circle" class="w-8 h-8 text-warning flex-shrink-0" />
               <div>
-                <h3 class="font-semibold text-lg">Account already exists</h3>
+                <h3 class="font-semibold text-lg">{gettext("Account already exists")}</h3>
                 <p class="text-sm mt-1">
-                  An account with this email is already registered.
-                  Please log in to complete your order.
+                  {gettext(
+                    "An account with this email is already registered. Please log in to complete your order."
+                  )}
                 </p>
                 <div class="mt-3">
                   <.link
@@ -1599,7 +1636,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                     class="btn btn-primary btn-sm"
                   >
                     <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4 mr-1" />
-                    Log in to continue
+                    {gettext("Log in to continue")}
                   </.link>
                 </div>
               </div>
@@ -1636,9 +1673,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           disabled={@processing}
         >
           <%= if @processing do %>
-            <span class="loading loading-spinner loading-sm"></span> Processing...
+            <span class="loading loading-spinner loading-sm"></span> {gettext("Processing...")}
           <% else %>
-            <.icon name="hero-check" class="w-5 h-5 mr-2" /> Confirm Order
+            <.icon name="hero-check" class="w-5 h-5 mr-2" /> {gettext("Confirm Order")}
           <% end %>
         </button>
       </div>
@@ -1650,23 +1687,28 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     ~H"""
     <div class="card bg-base-100 shadow-lg sticky top-6">
       <div class="card-body">
-        <h2 class="card-title mb-4">Order Summary</h2>
+        <h2 class="card-title mb-4">{gettext("Order Summary")}</h2>
 
         <div class="space-y-3 text-sm">
           <div class="flex justify-between">
             <span class="text-base-content/70">
-              Subtotal ({@cart.items_count || 0} items)
+              <%!-- One literal per plural form: the count is inside the label, and
+                    Russian needs three forms for it. --%>
+              {ngettext("Subtotal (%{count} item)", "Subtotal (%{count} items)",
+                @cart.items_count || 0,
+                count: @cart.items_count || 0
+              )}
             </span>
             <span>{format_price(@cart.subtotal, @currency)}</span>
           </div>
 
           <div class="flex justify-between">
-            <span class="text-base-content/70">Shipping</span>
+            <span class="text-base-content/70">{gettext("Shipping")}</span>
             <%= if is_nil(@cart.shipping_method_uuid) do %>
               <span class="text-base-content/50">-</span>
             <% else %>
               <%= if Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq do %>
-                <span class="text-success">FREE</span>
+                <span class="text-success">{gettext("FREE")}</span>
               <% else %>
                 <span>{format_price(@cart.shipping_amount, @currency)}</span>
               <% end %>
@@ -1675,14 +1717,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
           <%= if @cart.tax_amount && Decimal.compare(@cart.tax_amount, Decimal.new("0")) == :gt do %>
             <div class="flex justify-between">
-              <span class="text-base-content/70">Tax</span>
+              <span class="text-base-content/70">{gettext("Tax")}</span>
               <span>{format_price(@cart.tax_amount, @currency)}</span>
             </div>
           <% end %>
 
           <%= if @cart.discount_amount && Decimal.compare(@cart.discount_amount, Decimal.new("0")) == :gt do %>
             <div class="flex justify-between text-success">
-              <span>Discount</span>
+              <span>{gettext("Discount")}</span>
               <span>-{format_price(@cart.discount_amount, @currency)}</span>
             </div>
           <% end %>
@@ -1690,9 +1732,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <div class="divider my-2"></div>
 
           <div class="flex justify-between text-lg font-bold">
-            <span>Total</span>
+            <span>{gettext("Total")}</span>
             <span>{format_price(@cart.total, @currency)}</span>
           </div>
+
+          <%!-- Same disclosure as the cart page, and it matters more here: this
+                is the figure the shopper confirms. --%>
+          <%= if PriceDisplay.any_line_on_request?(@cart.items) do %>
+            <p class="text-xs text-base-content/60">
+              {gettext("Items priced on request are not included in this total.")}
+            </p>
+          <% end %>
         </div>
       </div>
     </div>

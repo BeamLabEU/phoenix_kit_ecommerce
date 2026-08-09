@@ -155,6 +155,13 @@ defmodule PhoenixKitEcommerce.Web.Products do
     end)
   end
 
+  @impl true
+  def handle_event("toggle_status", params, socket) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("toggle_status", params, socket)
+    end)
+  end
+
   # Bulk action modals — capture-then-act. Selection lives client-side in the
   # BulkSelectScope hook; each of these events is fired by a distinct
   # `data-bulk-action` button and carries the hook's currently-selected UUIDs
@@ -517,12 +524,31 @@ defmodule PhoenixKitEcommerce.Web.Products do
                         </div>
                       </div>
                     </.table_default_cell>
-                    <.table_default_cell
-                      class="cursor-pointer"
-                      phx-click="view_product"
-                      phx-value-uuid={product.uuid}
-                    >
-                      <span class={status_badge_class(product.status)}>{product.status}</span>
+                    <%!-- Status is a one-click toggle, not a link into the product.
+                         Changing active<->draft used to cost four steps: open the
+                         product, open its edit form, pick from a select, save.
+                         Deliberately does NOT carry the row's view_product click,
+                         or every toggle would also navigate away. Archived is left
+                         inert — leaving that state is a deliberate act, not a
+                         toggle. --%>
+                    <.table_default_cell>
+                      <%= if product.status in ["active", "draft"] do %>
+                        <button
+                          type="button"
+                          phx-click="toggle_status"
+                          phx-value-uuid={product.uuid}
+                          class={[status_badge_class(product.status), "cursor-pointer"]}
+                          title={
+                            if product.status == "active",
+                              do: gettext("Click to make it a draft"),
+                              else: gettext("Click to publish")
+                          }
+                        >
+                          {product.status}
+                        </button>
+                      <% else %>
+                        <span class={status_badge_class(product.status)}>{product.status}</span>
+                      <% end %>
                     </.table_default_cell>
                     <.table_default_cell
                       class="cursor-pointer"
@@ -886,6 +912,48 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to delete product"))}
+    end
+  end
+
+  defp gated_event("toggle_status", %{"uuid" => uuid}, socket) do
+    # Re-read rather than trusting socket.assigns, which is as old as the last
+    # render. Deciding "is this active or draft" against a stale row means an
+    # admin who archived it in another tab gets it silently un-archived — the
+    # exact transition the clause below refuses to guess at.
+    case Shop.get_product(uuid) do
+      %{status: old} = product when old in ["active", "draft"] ->
+        new = if old == "active", do: "draft", else: "active"
+
+        case Shop.update_product(product, %{"status" => new}) do
+          {:ok, _} ->
+            Activity.log("shop.product_status_changed",
+              actor_uuid: Activity.actor_uuid(socket),
+              actor_role: Activity.actor_role(socket),
+              resource_type: "product",
+              resource_uuid: uuid,
+              metadata: %{"from" => old, "to" => new}
+            )
+
+            {:noreply, load_products(socket)}
+
+          {:error, reason} ->
+            # Logged on BOTH branches: this handler turns a four-step change into
+            # one click, so the volume is about to rise, and a rejected changeset
+            # with no audit row leaves nothing to diagnose from.
+            Activity.log_failed("shop.product_status_changed", reason,
+              actor_uuid: Activity.actor_uuid(socket),
+              resource_type: "product",
+              resource_uuid: uuid,
+              metadata: %{"from" => old, "to" => new}
+            )
+
+            {:noreply, put_flash(socket, :error, gettext("Failed to update status"))}
+        end
+
+      # Archived, or a row that is no longer on screen after a concurrent
+      # change: do nothing rather than guess which transition was meant.
+      _ ->
+        {:noreply, socket}
     end
   end
 
