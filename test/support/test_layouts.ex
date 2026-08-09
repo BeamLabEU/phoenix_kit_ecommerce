@@ -30,16 +30,20 @@ defmodule PhoenixKitEcommerce.Test.Layouts do
 
   def app(assigns) do
     ~H"""
+    <%!-- Ids are namespaced: core's LayoutWrapper renders the REAL flash inside
+          the LiveView tree, and a bare `flash-error` here collides with it —
+          LiveView aborts a test on a duplicate id. Same reason root.html.heex
+          deliberately carries no flash. --%>
     <div id="test-flashes">
-      <div :if={msg = Phoenix.Flash.get(@flash, :info)} id="flash-info" data-flash-kind="info">
+      <div :if={msg = Phoenix.Flash.get(@flash, :info)} id="test-flash-info" data-flash-kind="info">
         {msg}
       </div>
-      <div :if={msg = Phoenix.Flash.get(@flash, :error)} id="flash-error" data-flash-kind="error">
+      <div :if={msg = Phoenix.Flash.get(@flash, :error)} id="test-flash-error" data-flash-kind="error">
         {msg}
       </div>
       <div
         :if={msg = Phoenix.Flash.get(@flash, :warning)}
-        id="flash-warning"
+        id="test-flash-warning"
         data-flash-kind="warning"
       >
         {msg}

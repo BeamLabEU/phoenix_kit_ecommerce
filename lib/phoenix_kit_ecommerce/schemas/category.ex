@@ -28,7 +28,6 @@ defmodule PhoenixKitEcommerce.Category do
   import Ecto.Changeset
 
   alias PhoenixKit.Modules.Storage.URLSigner
-  alias PhoenixKit.Utils.Slug
 
   @type t :: %__MODULE__{}
 
@@ -351,15 +350,8 @@ defmodule PhoenixKitEcommerce.Category do
     end
   end
 
-  # Core's shared slugifier, with transliteration on. The local version this
-  # replaced was ASCII-only: `\w` without the `u` flag matches no Cyrillic, so
-  # a Russian-only category name was stripped character by character and stored
-  # as an EMPTY slug, leaving the category with no URL. Product was already
-  # moved onto this; Category was not, so the same title worked as a product
-  # and silently broke as a category.
-  defp slugify(text) when is_binary(text) do
-    Slug.slugify(text, transliterate: true)
-  end
-
-  defp slugify(_), do: ""
+  # Delegated rather than reimplemented. This rule has drifted between Product
+  # and Category twice — Cyrillic, then German — and each time the fix reached
+  # only one of them. See PhoenixKitEcommerce.Slugify.
+  defp slugify(text), do: PhoenixKitEcommerce.Slugify.slugify(text)
 end

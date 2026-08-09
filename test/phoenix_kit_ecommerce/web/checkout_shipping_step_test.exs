@@ -218,7 +218,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     assert has_element?(view, "button[phx-click='confirm_order']")
 
     # Back to billing, now shipping somewhere the EE-only method cannot go.
-    view |> element("button[phx-click='back_to_billing']") |> render_click()
+    # Three buttons carry this event (the review "Change" link, the summary
+    # pencil and the footer arrow). Scope to the first so the selector stays
+    # unambiguous if another is added.
+    view |> element("button[phx-click='back_to_billing']", "Change") |> render_click()
     view |> fill_billing_form(country: "US") |> render_change()
     html = view |> element("button[phx-click='proceed_to_review']") |> render_click()
 
@@ -289,9 +292,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
   end
 
   defp shipping_method(attrs) do
+    # The name drives the slug, and the slug is unique — a test that needs two
+    # methods (e.g. one per country) hit "has already been taken" on the second.
+    unique = System.unique_integer([:positive])
+
     {:ok, method} =
       Shop.create_shipping_method(%{
-        "name" => "Standard",
+        "name" => "Standard #{unique}",
         "price" => Decimal.new("5.00"),
         "active" => true,
         "countries" => Keyword.fetch!(attrs, :countries)
