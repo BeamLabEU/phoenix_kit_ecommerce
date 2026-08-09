@@ -40,7 +40,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
     case Billing.get_order_by_uuid(uuid) do
       nil ->
-        {:ok, redirect_with_error(socket, "Order not found")}
+        {:ok, redirect_with_error(socket, gettext("Order not found"))}
 
       order ->
         handle_order_access(socket, order, user, shop_session_id)
@@ -51,7 +51,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     if has_order_access?(order, user, shop_session_id) do
       {:ok, setup_order_assigns(socket, order)}
     else
-      {:ok, redirect_with_error(socket, "You don't have access to this order")}
+      {:ok, redirect_with_error(socket, gettext("You don't have access to this order"))}
     end
   end
 

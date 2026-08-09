@@ -1684,6 +1684,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp order_summary(assigns) do
+    assigns =
+      assign_new(assigns, :requires_shipping, fn -> Shop.cart_requires_shipping?(assigns.cart) end)
+
     ~H"""
     <div class="card bg-base-100 shadow-lg sticky top-6">
       <div class="card-body">
@@ -1704,14 +1707,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
           <div class="flex justify-between">
             <span class="text-base-content/70">{gettext("Shipping")}</span>
+            <%= if !@requires_shipping do %>
+              <span class="text-base-content/50">{gettext("Not needed")}</span>
+            <% else %>
             <%= if is_nil(@cart.shipping_method_uuid) do %>
-              <span class="text-base-content/50">-</span>
+              <span class="text-base-content/50">{gettext("Select method")}</span>
             <% else %>
               <%= if Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq do %>
                 <span class="text-success">{gettext("FREE")}</span>
               <% else %>
                 <span>{format_price(@cart.shipping_amount, @currency)}</span>
               <% end %>
+            <% end %>
             <% end %>
           </div>
 

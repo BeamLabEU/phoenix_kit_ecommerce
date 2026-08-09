@@ -118,6 +118,48 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     refute has_element?(view, "button[phx-click='confirm_order']")
   end
 
+  # Regression for the exact line `build_checkout_socket/2`'s own comment
+  # calls out: mount can land directly on :review (an authenticated shopper
+  # with a payment option that needs no billing profile, and no billing
+  # profile prompt pending) - the same "billing is settled" moment
+  # `advance_after_billing/1` reaches from every other entry path. With
+  # position=checkout and a shippable cart, the shipping step must still
+  # appear on that path, reached with ZERO clicks (mount alone), not just
+  # via the button-click paths the tests above cover.
+  test "mount alone (billing-less payment option, authenticated) lands on the shipping step",
+       %{conn: conn} do
+    PhoenixKit.Settings.update_setting_with_module(
+      "shop_shipping_selection_position",
+      "checkout",
+      "shop"
+    )
+
+    method = shipping_method(countries: ["EE"])
+    conn = conn |> setup_shippable_cart_session() |> put_test_scope(fake_scope())
+
+    # Core seeds "cod" active by default - deactivate it so the only active
+    # option is the billing-less one below. With exactly one active option,
+    # `maybe_auto_select_payment/2` auto-selects it, and since
+    # `payment_option_needs_billing?/3` is false for it, mount's
+    # `determine_initial_step/5` computes :review directly - no clicks.
+    case Billing.get_payment_option_by_code("cod") do
+      nil -> :ok
+      cod -> {:ok, _} = Billing.update_payment_option(cod, %{"active" => false})
+    end
+
+    _stripe =
+      ensure_payment_option("stripe", "online",
+        provider: "stripe",
+        requires_billing_profile: false
+      )
+
+    {:ok, view, html} = live(conn, "/checkout")
+
+    assert html =~ "id=\"checkout-shipping-step\""
+    assert has_element?(view, "#checkout-shipping-method-#{method.uuid}")
+    refute has_element?(view, "button[phx-click='confirm_order']")
+  end
+
   test "off + uncovered country blocks at shipping step", %{conn: conn} do
     PhoenixKit.Settings.update_setting_with_module(
       "shop_shipping_selection_position",

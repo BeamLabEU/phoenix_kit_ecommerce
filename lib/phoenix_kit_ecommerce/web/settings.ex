@@ -8,10 +8,12 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Settings
+  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Authz
@@ -73,8 +75,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   defp load_recipient_candidates do
-    PhoenixKitEcommerce.Notifications.admin_recipients("shop.manage_carts")
-    |> Enum.map(&PhoenixKit.Users.Auth.get_user/1)
+    ShopNotifications.admin_recipients("shop.manage_carts")
+    |> Enum.map(&Auth.get_user/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.sort_by(& &1.email)
   end
@@ -389,7 +391,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             >
               <h3 class="font-medium mb-1">{gettext("Recipients")}</h3>
               <p class="text-xs text-base-content/60 mb-2">
-                {gettext("Leave all unchecked to notify every shop administrator.")}
+                {gettext(
+                  "Applies to the cart-activity notifications above. Leave all unchecked to notify every shop administrator."
+                )}
               </p>
               <%= for user <- @recipient_candidates do %>
                 <label class="label cursor-pointer justify-start gap-3">
