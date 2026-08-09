@@ -69,6 +69,7 @@ defmodule PhoenixKitEcommerce.Notifications do
     safely(fn ->
       first? =
         PhoenixKitEcommerce.notify_event?(:cart_first_item) and
+          cart.items_count == item.quantity and
           PhoenixKitEcommerce.claim_cart_flag(cart, "first_item_notified")
 
       cond do

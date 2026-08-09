@@ -141,6 +141,100 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       assert notifications_for_action("shop.cart_item_added") != []
     end
 
+    test "toggle flipped on mid-lifecycle does not misfire first-item on a non-empty cart" do
+      # Cart already has two items in it BEFORE the first-item toggle is
+      # ever turned on — simulates an admin flipping the setting while
+      # shoppers already have carts in progress. The next add must not be
+      # mistaken for "this cart's actual first item".
+      owner = fixture_user()
+
+      {:ok, product_a} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Widget A"},
+          "price" => Decimal.new("10.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "product_type" => "digital",
+          "requires_shipping" => false,
+          "weight_grams" => 0
+        })
+
+      {:ok, product_b} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Widget B"},
+          "price" => Decimal.new("5.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "product_type" => "digital",
+          "requires_shipping" => false,
+          "weight_grams" => 0
+        })
+
+      {:ok, cart} = Shop.create_cart(user_uuid: owner.uuid)
+      {:ok, cart} = Shop.add_to_cart(cart, product_a, 1)
+
+      # Only now does the operator turn the toggle on — after the cart
+      # already has an item in it.
+      PhoenixKit.Settings.update_setting_with_module(
+        "shop_notify_cart_first_item",
+        "true",
+        "shop"
+      )
+
+      {:ok, cart} = Shop.add_to_cart(cart, product_b, 1)
+      cart = Repo.preload(cart, [items: :product], force: true)
+      [new_item] = Enum.filter(cart.items, &(&1.product_uuid == product_b.uuid))
+
+      assert cart.items_count == 2
+      assert :ok = ShopNotifications.cart_item_added(cart, new_item, new_item.product)
+      assert notifications_for_action("shop.cart_first_item_added") == []
+    end
+
+    test "toggle flipped on mid-lifecycle still emits every-add when that toggle is on" do
+      owner = fixture_user()
+
+      {:ok, product_a} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Widget A"},
+          "price" => Decimal.new("10.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "product_type" => "digital",
+          "requires_shipping" => false,
+          "weight_grams" => 0
+        })
+
+      {:ok, product_b} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Widget B"},
+          "price" => Decimal.new("5.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "product_type" => "digital",
+          "requires_shipping" => false,
+          "weight_grams" => 0
+        })
+
+      {:ok, cart} = Shop.create_cart(user_uuid: owner.uuid)
+      {:ok, cart} = Shop.add_to_cart(cart, product_a, 1)
+
+      PhoenixKit.Settings.update_setting_with_module(
+        "shop_notify_cart_first_item",
+        "true",
+        "shop"
+      )
+
+      PhoenixKit.Settings.update_setting_with_module("shop_notify_cart_item", "true", "shop")
+
+      {:ok, cart} = Shop.add_to_cart(cart, product_b, 1)
+      cart = Repo.preload(cart, [items: :product], force: true)
+      [new_item] = Enum.filter(cart.items, &(&1.product_uuid == product_b.uuid))
+
+      assert :ok = ShopNotifications.cart_item_added(cart, new_item, new_item.product)
+      assert notifications_for_action("shop.cart_first_item_added") == []
+      assert notifications_for_action("shop.cart_item_added") != []
+    end
+
     test "checkout_started notifies once per cart", %{cart: cart} do
       PhoenixKit.Settings.update_setting_with_module(
         "shop_notify_checkout_started",
@@ -178,6 +272,35 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       )
 
       assert u1 in ShopNotifications.shop_recipients()
+    end
+  end
+
+  describe "claim_cart_flag/2 under real concurrency" do
+    # The sequential "second call returns false" coverage above (e.g. "first
+    # add notifies once per cart...") is a reasonable proxy for the atomic
+    # `UPDATE ... WHERE NOT (metadata ? flag)` claim, but doesn't actually
+    # contend the row. This test races ~8 processes against the same
+    # cart/flag pair to back the changelog's claim ("concurrent tabs cannot
+    # double-fire") with a real race rather than an inference from the SQL.
+    #
+    # `async: false` above puts this module's sandbox owner in `shared`
+    # mode (`shared: not tags[:async]` in `DataCase`), so every spawned
+    # task shares the same DB connection without needing explicit
+    # `Sandbox.allow/3` calls.
+    test "exactly one of many concurrent claims on the same cart/flag succeeds" do
+      cart = insert_cart_with_item()
+
+      results =
+        1..8
+        |> Task.async_stream(
+          fn _ -> Shop.claim_cart_flag(cart, "concurrent_claim_test") end,
+          max_concurrency: 8,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, claimed?} -> claimed? end)
+
+      assert length(results) == 8
+      assert Enum.count(results, & &1) == 1
     end
   end
 
