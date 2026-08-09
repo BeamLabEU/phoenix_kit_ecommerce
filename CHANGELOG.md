@@ -102,6 +102,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   four nested-module-alias findings.
 - Estonian and Russian catalogues complete again — the AI-translate UI
   strings shipped untranslated.
+- **One slug rule for products and categories** (PR #18).
+  `PhoenixKitEcommerce.Slugify` replaces the two private implementations that
+  had drifted twice — Cyrillic (categories stored an EMPTY slug for a
+  Russian-only name, so the category had no URL) and then German. German
+  category names now slug `groesse-fussball` rather than `gro-e-fu-ball`.
+  Slugs are only generated for a language that has none, so no existing URL
+  changes; this affects content created from here on.
+  ⚠️ **Known limitation:** the German ä/ö/ü expansion is not language-scoped,
+  so Estonian and other languages using those characters slug with doubled
+  vowels (`Müük` → `mueuek`, where core alone would give `muuk`). Pinned by
+  test in `slugify_test.exs`; under investigation.
+- Slug regression tests no longer require PostgreSQL to run: the pure cases
+  moved off `DataCase` (whose `:integration` moduletag excluded them on a
+  database-less checkout — the suite for a twice-recurring bug was the part
+  that did not run), leaving only the schema-parity check DB-backed. That
+  check now drives both schemas through their changeset rather than
+  comparing a raw function to a changeset.
+- Removed a stale `glob_ex` entry from `mix.lock` (`mix deps.unlock
+  --check-unused` is clean again), and fixed three broken checkout tests:
+  a shipping-method fixture whose non-unique name collided on the unique
+  slug, an ambiguous `back_to_billing` selector, and a `flash-error` id in
+  the test layout that collided with the real flash core renders inside the
+  LiveView tree.
 
 ## 0.1.16 - 2026-08-08
 

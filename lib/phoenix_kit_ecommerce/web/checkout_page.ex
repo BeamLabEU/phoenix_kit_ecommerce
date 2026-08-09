@@ -1552,7 +1552,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <div class="card-body">
             <div class="flex items-center justify-between mb-4">
               <h2 class="card-title">{gettext("Billing Information")}</h2>
-              <button phx-click="back_to_billing" class="btn btn-ghost btn-sm">
+              <button
+                id="checkout-review-change-billing"
+                phx-click="back_to_billing"
+                class="btn btn-ghost btn-sm"
+              >
                 <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Change")}
               </button>
             </div>
