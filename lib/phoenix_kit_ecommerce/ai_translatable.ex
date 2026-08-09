@@ -209,7 +209,9 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   # suffix, so the language always gets a non-empty per-language slug instead
   # of silently serving the default-language URL.
   defp slug_base(translated_title, slug_map, target_lang) do
-    case translated_title |> Product.slugify() |> String.slice(0, @slug_max_len) do
+    # target_lang is the language the TRANSLATED title is in, so the slug must be
+    # generated in it — a German translation wants ö -> oe, an Estonian one ö -> o.
+    case translated_title |> Product.slugify(target_lang) |> String.slice(0, @slug_max_len) do
       "" -> "#{default_lang_slug(slug_map)}-#{target_lang}"
       base -> base
     end

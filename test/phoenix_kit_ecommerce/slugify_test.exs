@@ -1,71 +1,86 @@
 defmodule PhoenixKitEcommerce.SlugifyTest do
   @moduledoc """
-  This rule has drifted between Product and Category twice — Cyrillic, then
-  German — and each time the fix landed on one schema only, so a title that
-  worked as a product silently broke as a category.
+  Slug generation for shop content.
 
-  Plain `ExUnit.Case`, deliberately: `Slugify.slugify/1` is a pure function
-  and these cases need no database. Under `DataCase` they inherited its
-  `@moduletag :integration` and were skipped entirely on a checkout without
-  PostgreSQL — the regression suite for the bug that has recurred twice was
-  the part that did not run. The schema-parity check, which does need a
-  connection, lives in `PhoenixKitEcommerce.SlugifyParityTest`.
+  This rule drifted between Product and Category twice — Cyrillic, then German —
+  and each time the fix landed on one schema only, so a title that worked as a
+  product silently broke as a category. It now lives in one place for the whole
+  ecosystem (`locale_slug`, via `PhoenixKit.Utils.Slug`), so a third drift is not
+  reachable: there is no second implementation to drift from.
+
+  ## The behaviour change worth knowing about
+
+  The old `PhoenixKitEcommerce.Slugify` applied German expansion **unconditionally**
+  — every language got `ö → oe`. That was the same bug the `slugger` package has:
+  correct for German, wrong for Estonian, where `ö` folds to `o`. Expansion is now
+  conditional on the language, which is why every case below passes one.
+
+  Plain `ExUnit.Case`, deliberately: these are pure-function cases and need no
+  database. Under `DataCase` they would inherit `@moduletag :integration` and be
+  skipped on a checkout without PostgreSQL — the regression suite for a bug that has
+  recurred twice would be the part that does not run. The schema-parity check, which
+  does need a connection, lives in `PhoenixKitEcommerce.SlugifyParityTest`.
   """
   use ExUnit.Case, async: true
 
-  alias PhoenixKitEcommerce.Slugify
+  alias PhoenixKitEcommerce.Product
 
-  describe "German" do
-    test "expands ß rather than dropping it to a separator" do
-      # Core turns "Größe Fußball" into "gro-e-fu-ball": ö decomposes to o,
-      # and ß is discarded, leaving the separator behind it.
-      assert Slugify.slugify("Größe Fußball") == "groesse-fussball"
+  describe "German — but only when the text is German" do
+    test "expands umlauts and ß for de" do
+      # Core used to produce "gro-e-fu-ball": ö decomposes to o, and ß is discarded,
+      # leaving the separator behind it.
+      assert Product.slugify("Größe Fußball", "de") == "groesse-fussball"
+      assert Product.slugify("Öl", "de") == "oel"
+      assert Product.slugify("Ähre", "de") == "aehre"
+      assert Product.slugify("ÜBER", "de") == "ueber"
     end
 
-    test "handles uppercase forms, which appear before core lowercases" do
-      assert Slugify.slugify("Öl") == "oel"
-      assert Slugify.slugify("Ähre") == "aehre"
-      assert Slugify.slugify("ÜBER") == "ueber"
+    test "does NOT expand for Estonian, which folds the same letters" do
+      # The bug the old module had. Estonian ö is its own letter, not a decorated o.
+      assert Product.slugify("Töö õun", "et") == "too-oun"
+      assert Product.slugify("Öl", "et") == "ol"
+    end
+
+    test "with no language, folds rather than expands" do
+      # Correct and conservative: a usable slug, just not locale-tuned. Note this
+      # DIFFERS from the old module, which expanded for everyone.
+      assert Product.slugify("Größe Fußball") == "grosse-fussball"
     end
   end
 
   describe "Cyrillic" do
     test "transliterates rather than producing an empty slug" do
-      # An ASCII-only slugifier stripped every character and stored "".
-      assert Slugify.slugify("Видеопродакшн") == "videoprodakshn"
-      assert Slugify.slugify("Цветокоррекция") == "tsvetokorrektsiya"
+      # An ASCII-only slugifier stripped every character and stored "" — which
+      # callers read as "no slug yet" and regenerated forever.
+      assert Product.slugify("Видеопродакшн", "ru") == "videoprodakshn"
+      assert Product.slugify("Цветокоррекция", "ru") == "tsvetokorrektsiya"
+    end
+
+    test "works with no language too" do
+      assert Product.slugify("Видеопродакшн") == "videoprodakshn"
     end
   end
 
   describe "ordinary input" do
-    test "lowercases and hyphenates" do
-      assert Slugify.slugify("Corporate Video") == "corporate-video"
+    test "plain ASCII is unchanged" do
+      assert Product.slugify("Corporate Video") == "corporate-video"
+      assert Product.slugify("Corporate Video", "en") == "corporate-video"
     end
 
-    test "non-binary input yields an empty slug rather than raising" do
-      assert Slugify.slugify(nil) == ""
-      assert Slugify.slugify(42) == ""
+    test "blank and nil are empty, never a crash" do
+      assert Product.slugify("") == ""
+      assert Product.slugify(nil) == ""
+      assert Product.slugify("!!!") == ""
     end
   end
 
-  describe "the German table is not language-scoped" do
-    # Pinning the KNOWN limitation, not endorsing it. `ä/ö/ü` are expanded
-    # for every language, but core already transliterates them correctly on
-    # its own (`Müük` -> `muuk`, `Tänav` -> `tanav`); only `ß` genuinely
-    # needs the pre-pass. So Estonian — one of this module's three shipped
-    # locales — slugs with doubled vowels.
-    #
-    # Left as-is by decision (2026-08-09); reported upstream. This test is
-    # here so the behaviour is visible and a future fix is a deliberate
-    # edit rather than a surprise.
-    test "Estonian titles get the German expansion too" do
-      assert Slugify.slugify("Müük") == "mueuek"
-      assert Slugify.slugify("Tänav") == "taenav"
-    end
-
-    test "characters core already handles well are unaffected" do
-      # õ is not in the table, so Estonian gets core's correct answer here.
-      assert Slugify.slugify("Jõgi") == "jogi"
+  describe "one implementation, ecosystem-wide" do
+    test "Product and Category cannot disagree, because neither owns the rule" do
+      # Both now call PhoenixKit.Utils.Slug. This assertion is close to a tautology
+      # by construction — which is the point. It used to be the thing that broke.
+      for text <- ["Größe Fußball", "Видеопродакшн", "Öl", "Müük"], lang <- ["de", "et", nil] do
+        assert Product.slugify(text, lang) == PhoenixKit.Utils.Slug.slugify(text, locale: lang)
+      end
     end
   end
 end
