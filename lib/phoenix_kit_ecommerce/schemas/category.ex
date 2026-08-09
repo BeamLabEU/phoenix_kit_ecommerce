@@ -356,5 +356,5 @@ defmodule PhoenixKitEcommerce.Category do
   #
   # `lang` is the language the name is IN, and it changes the answer: German ö -> oe,
   # Estonian ö -> o. The reduce above had it bound and was throwing it away.
-  defp slugify(text, lang), do: Slug.slugify(text, locale: lang)
+  defp slugify(text, lang), do: Slug.slugify(text, locale: lang, transliterate: true)
 end

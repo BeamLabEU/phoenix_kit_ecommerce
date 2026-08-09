@@ -294,7 +294,8 @@ defmodule PhoenixKitEcommerce.Product do
 
   Passing `nil` still produces a correct slug, just not locale-tuned.
   """
-  def slugify(text, lang \\ nil), do: Slug.slugify(text, locale: lang)
+  def slugify(text, lang \\ nil),
+    do: Slug.slugify(text, locale: lang, transliterate: true)
 
   defp default_language do
     alias PhoenixKit.Modules.Languages
