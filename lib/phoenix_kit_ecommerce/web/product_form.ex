@@ -153,7 +153,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     translatable_fields = Translations.product_fields()
     translations_map = TranslationTabs.build_translations_map(product, translatable_fields)
 
-    %{unit: price_unit, from: price_from} = PriceDisplay.settings(product)
+    %{unit: price_unit, from: price_from, on_request: price_on_request} =
+      PriceDisplay.settings(product)
 
     socket
     |> assign(:enabled_languages, enabled_languages)
@@ -164,6 +165,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:product_translations, translations_map)
     |> assign(:price_unit, price_unit)
     |> assign(:price_from, price_from)
+    |> assign(:price_on_request, price_on_request)
     |> assign_ai_state(product)
   end
 
@@ -365,10 +367,14 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
       :price_unit,
       PriceDisplay.settings(%{
         PriceDisplay.metadata_key() =>
-          PriceDisplay.build(product_params["price_unit"] || %{}, false)
+          PriceDisplay.build(product_params["price_unit"] || %{}, false, false)
       }).unit
     )
     |> assign(:price_from, product_params["price_from"] in ["true", true, "on"])
+    |> assign(
+      :price_on_request,
+      product_params["price_on_request"] in ["true", true, "on"]
+    )
     |> then(&{:noreply, &1})
   end
 
@@ -1018,6 +1024,16 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                     checked={@price_from}
                     label={gettext("Show \"From\" before the price")}
                     wrapper_class="h-12 px-4 bg-base-200 rounded-lg"
+                  />
+                  <%!-- Suppresses the amount entirely on the storefront. The
+                       price field stays required and keeps its value: it is what
+                       the operator quotes from, and a cart line still needs a
+                       number to snapshot. --%>
+                  <.checkbox
+                    name="product[price_on_request]"
+                    checked={@price_on_request}
+                    label={gettext("Price on request (hide the amount)")}
+                    wrapper_class="h-12 px-4 bg-base-200 rounded-lg mt-2"
                   />
                 </div>
               </div>
@@ -2567,7 +2583,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     cleaned_metadata =
       case PriceDisplay.build(
              product_params["price_unit"] || %{},
-             product_params["price_from"] in ["true", true, "on"]
+             product_params["price_from"] in ["true", true, "on"],
+             product_params["price_on_request"] in ["true", true, "on"]
            ) do
         empty when empty == %{} -> Map.delete(cleaned_metadata, PriceDisplay.metadata_key())
         display -> Map.put(cleaned_metadata, PriceDisplay.metadata_key(), display)
@@ -2575,7 +2592,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
     product_params =
       product_params
-      |> Map.drop(["price_unit", "price_from"])
+      |> Map.drop(["price_unit", "price_from", "price_on_request"])
       |> Map.put("metadata", cleaned_metadata)
 
     # Extract featured and gallery from unified image list

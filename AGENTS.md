@@ -58,14 +58,19 @@ This is a **library** (not a standalone Phoenix app) that provides e-commerce as
 - **ImportConfig** — CSV import profiles with keyword filtering, category rules, option mappings
 - **ImportLog** — import job tracking with progress, row counts, error details
 
-### Price display (units and "From")
+### Price display (units, "From", and price on request)
 
 `PhoenixKitEcommerce.PriceDisplay` owns how a price is WRITTEN: an optional
-per-language unit ("per hour", "per m²", "в час") and an optional "From"
-prefix, stored under one reserved metadata namespace
-`Product.metadata["_price_display"]` = `%{"unit" => %{lang => text},
-"from" => bool}`. Free text, not a unit vocabulary — every shop invents
-units the next one has never heard of.
+per-language unit ("per hour", "per m²", "в час"), an optional "From"
+prefix, and an optional "price on request" flag, stored under one reserved
+metadata namespace `Product.metadata["_price_display"]` =
+`%{"unit" => %{lang => text}, "from" => bool, "on_request" => bool}`. Free
+text, not a unit vocabulary — every shop invents units the next one has
+never heard of.
+
+`"on_request"` is written **only when true**, so `build/2` produces exactly
+the map it always did and an existing product does not gain a key on its
+next save; `settings/1` reads a missing key as `false`.
 
 `render/4` takes an explicit CONTEXT because the same product means
 different things per page:
@@ -76,6 +81,17 @@ different things per page:
 - `:cart` / `:order` — a SNAPSHOT; exact, never "From", and the unit comes
   from the stored line, never the live product, so an edit or deletion
   cannot relabel what a customer already agreed to
+
+**"Price on request" must be SNAPSHOTTED onto the line, not read live.**
+`CartItem.from_product/3` writes `metadata["price_on_request"]` beside
+`price_unit`, and `convert_cart_to_order/2` forwards it into the order's
+line items. The flag only suppresses a number that still exists on the
+product, so a line that lost it falls back to formatting its stored
+`unit_price` — typically `0` — and renders "0.00" where the customer agreed
+to "price on request": free, on a committed order. `product_uuid` is
+`ON DELETE SET NULL`, so this is reachable simply by deleting a product.
+The forwarding step was missed once and caught only by review; there is now
+a regression test for both the cart line and the order line.
 
 Two paths would silently erase an admin's settings and are guarded: the
 CSV upsert (`merge_localized_attrs/2` replaces metadata wholesale) and the
@@ -144,6 +160,39 @@ layout used to carry (`sidebar_after_shop`) now renders in the page
 templates for everyone. Don't reintroduce a module-owned top-level layout:
 the storefront is the host's surface.
 
+### Storefront i18n contract
+
+Two things must both be true for a storefront string to appear translated,
+and each has failed independently:
+
+1. **The string is wrapped.** Six public files carried zero `gettext` calls
+   while three beside them were fully translated, so a trilingual shop
+   rendered its product content in Estonian inside an entirely English
+   frame. Flash messages and `page_title` count — they are as visible to a
+   customer as anything in the markup.
+2. **The backend is pointed at a locale the catalogue HAS.** The content
+   language is a DIALECT (`resolve_dialect/1` returns `"ru-RU"`, `"et-EE"`,
+   `"en-US"`) and core writes that into the process locale, but this module
+   ships `priv/gettext/{en,ru,et}` — plain codes. **Gettext does not fall
+   back from `ru-RU` to `ru`**, so every lookup misses and returns its
+   msgid, which is the English source string. `Helpers.put_content_locale/1`
+   resolves the dialect against the backend's known locales and is called
+   from `mount/3`, which runs once per process for both the dead render and
+   the connected mount.
+
+⚠️ A page can be fully translated and completely inert at the same time —
+`checkout_page.ex` was exactly that. When adding a public page, call
+`put_content_locale/1` in its `mount/3` or it will render English while its
+siblings translate.
+
+`catalog_sidebar.ex` is `use Phoenix.Component`, not the module's own web
+macros, so it does NOT inherit the Gettext backend those inject and declares
+one explicitly. Any new component outside `web/` must do the same.
+
+Strings that must NEVER be wrapped: `push_event` names, URL paths, route
+segments, setting keys. Two of these were wrapped once and would have broken
+at runtime in every non-English locale.
+
 ### Web Layer
 
 - **Public** (8 LiveViews): ShopCatalog, CatalogCategory, CatalogProduct, CartPage, CheckoutPage, CheckoutComplete, UserOrders, UserOrderDetails
@@ -174,6 +223,19 @@ were never what the code read.
   host whose header already links to the cart turns this off; a host whose
   header does not must leave it on, or shoppers have no way back to their
   cart.
+- `shop_catalog_vocabulary` — `"products"` (default), `"services"` or
+  `"mixed"`. What the storefront calls what it sells. Read through
+  `PhoenixKitEcommerce.Vocabulary`, never directly. Each variant is a
+  SEPARATE complete `gettext` literal, not a noun swapped into a sentence:
+  Russian and Estonian inflect the noun for a case the surrounding sentence
+  chooses (`товаров` vs `услуг` share neither stem nor ending), so a
+  `"No %{noun} available"` template cannot be translated correctly for a noun
+  the translator never saw. Adding a vocabulary means adding a clause and a
+  literal to every function in that module.
+- `shop_hide_zero_decimals` — render `40` rather than `40.00` when the
+  fractional part is entirely zero (default: `false`). **Storefront only.**
+  Invoices, receipts and credit notes call billing's `format_amount/2`
+  directly and keep two decimals, which is the auditable form.
 
 **Policy — read through `PhoenixKitEcommerce.Policy`, never directly**
 

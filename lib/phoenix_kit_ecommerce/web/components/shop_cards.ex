@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
   alias PhoenixKitEcommerce.Web.Helpers
 
@@ -65,7 +66,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
           <span class="text-lg font-bold text-primary">
             {PriceDisplay.render(@product, @currency, :catalog, language: @language)}
           </span>
-          <%= if @product.compare_at_price && Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
+          <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
+               Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
             <span class="text-sm text-base-content/40 line-through">
               {Helpers.format_price(@product.compare_at_price, @currency)}
             </span>
@@ -108,7 +110,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
         <%= if @has_more do %>
           <div class="flex justify-center">
             <button phx-click="load_more" class="btn btn-primary btn-lg gap-2">
-              <.icon name="hero-arrow-down" class="w-5 h-5" /> Show More
+              <.icon name="hero-arrow-down" class="w-5 h-5" /> {gettext("Show More")}
               <span class="badge badge-ghost">{@remaining}</span>
             </button>
           </div>
@@ -136,7 +138,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
         <%!-- Status text --%>
         <p class="text-center text-sm text-base-content/50">
-          Showing {min(@page * @per_page, @total_products)} of {@total_products} products
+          <%!-- Through Vocabulary: a shop selling products should not read
+                "items" here while every heading beside it says "Products". --%>
+          {Vocabulary.showing_of(min(@page * @per_page, @total_products), @total_products)}
         </p>
       </div>
     <% end %>
