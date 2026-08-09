@@ -36,8 +36,6 @@ defmodule PhoenixKitEcommerce.Product do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
-  alias PhoenixKit.Utils.Slug
-
   @type t :: %__MODULE__{}
 
   @statuses ["draft", "active", "archived"]
@@ -289,29 +287,8 @@ defmodule PhoenixKitEcommerce.Product do
   # the AI translation adapter (AITranslatable.slug_base/3) calls this
   # directly to derive a per-language slug from a translated title.
   #
-  # German characters are mapped BEFORE the core pass: NFD stripping turns
-  # ö into "o" and drops ß entirely ("Größe Fußball" → "gro-e-fu-ball"),
-  # while German orthography expects oe/ue/ae/ss ("groesse-fussball").
-  @german_translit %{
-    "ä" => "ae",
-    "ö" => "oe",
-    "ü" => "ue",
-    "Ä" => "Ae",
-    "Ö" => "Oe",
-    "Ü" => "Ue",
-    "ß" => "ss",
-    "ẞ" => "Ss"
-  }
-
   @doc "Slug generation used for per-language slugs (public for the AI adapter)."
-  def slugify(text) when is_binary(text) do
-    text
-    |> String.graphemes()
-    |> Enum.map_join("", &Map.get(@german_translit, &1, &1))
-    |> Slug.slugify(transliterate: true)
-  end
-
-  def slugify(_), do: ""
+  defdelegate slugify(text), to: PhoenixKitEcommerce.Slugify
 
   defp default_language do
     alias PhoenixKit.Modules.Languages
