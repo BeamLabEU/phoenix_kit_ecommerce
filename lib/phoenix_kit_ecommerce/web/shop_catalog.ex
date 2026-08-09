@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.SEOHelpers
 
   @impl true
   def mount(params, session, socket) do
@@ -70,9 +71,14 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     # Get current path for language switcher
     current_path = socket.assigns[:url_path] || "/shop"
 
+    seo = SEOHelpers.catalog_seo(current_language)
+
     socket =
       socket
       |> assign(:page_title, gettext("Shop"))
+      |> assign(:canonical_url, seo.canonical_url)
+      |> assign(:hreflang_links, seo.hreflang_links)
+      |> assign(:og, seo.og)
       |> assign(:cart_count, storefront_cart_count(socket))
       |> assign(:categories, categories)
       |> assign(:products, products)

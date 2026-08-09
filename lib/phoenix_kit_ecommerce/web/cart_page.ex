@@ -64,11 +64,22 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       Events.subscribe_to_cart(cart)
     end
 
-    # Get available shipping methods
-    shipping_methods = Shop.get_available_shipping_methods(cart)
+    # Shipping selection only happens on this page when it hasn't been
+    # skipped entirely and the shop's configured selection position is
+    # "cart" (vs. "checkout"). When it's not required here, skip fetching
+    # methods and auto-selecting one - `assign_cart_state/2` mirrors this
+    # same gate so a later PubSub update can't resurrect the selector.
+    cart =
+      if shipping_required_here?() do
+        # Get available shipping methods
+        shipping_methods = Shop.get_available_shipping_methods(cart)
 
-    # Auto-select cheapest shipping method if none selected
-    {:ok, cart} = Shop.auto_select_shipping_method(cart, shipping_methods)
+        # Auto-select cheapest shipping method if none selected
+        {:ok, cart} = Shop.auto_select_shipping_method(cart, shipping_methods)
+        cart
+      else
+        cart
+      end
 
     # Get default currency from Billing
     currency = Shop.currency_for_code(cart.currency)
@@ -142,7 +153,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       cart.items == [] ->
         {:noreply, put_flash(socket, :error, gettext("Your cart is empty"))}
 
-      is_nil(cart.shipping_method_uuid) and socket.assigns.requires_shipping ->
+      is_nil(cart.shipping_method_uuid) and socket.assigns.requires_shipping and
+        socket.assigns.shipping_required_here and socket.assigns.skip_mode == :off ->
         {:noreply, put_flash(socket, :error, gettext("Please select a shipping method"))}
 
       true ->
@@ -155,45 +167,102 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   # the requires-shipping flag the template gates on. Without the clearing,
   # a method that fell out of eligibility stayed selected at zero cost and
   # checkout ran into an inevitable conversion failure.
+  #
+  # Also the single place PubSub-driven cart updates (handle_info) run
+  # through, so shipping methods are only (re)fetched here under the same
+  # `shipping_required_here?/0` gate `do_mount/2` applies before its own
+  # fetch+auto-select - otherwise a `:cart_updated` broadcast landing after
+  # an admin flips the position to "checkout" would resurrect the cart-page
+  # selector.
   defp assign_cart_state(socket, cart) do
-    shipping_methods = Shop.get_available_shipping_methods(cart)
     requires_shipping = Shop.cart_requires_shipping?(cart)
+    skip_mode = Shop.shipping_skip_mode()
+    position = Shop.shipping_selection_position()
+    shipping_required_here = skip_mode != :always and position == :cart
+
+    shipping_methods = load_shipping_methods(cart, requires_shipping, shipping_required_here)
 
     {cart, socket} =
-      cond do
-        is_nil(cart.shipping_method_uuid) ->
-          {cart, socket}
-
-        not requires_shipping ->
-          case Shop.clear_cart_shipping(cart) do
-            {:ok, cleared} -> {cleared, socket}
-            _ -> {cart, socket}
-          end
-
-        Enum.any?(shipping_methods, &(&1.uuid == cart.shipping_method_uuid)) ->
-          {cart, socket}
-
-        true ->
-          case Shop.clear_cart_shipping(cart) do
-            {:ok, cleared} ->
-              {cleared,
-               put_flash(
-                 socket,
-                 :error,
-                 gettext(
-                   "The selected shipping method is no longer available for this cart - please pick another"
-                 )
-               )}
-
-            _ ->
-              {cart, socket}
-          end
-      end
+      reconcile_shipping_selection(
+        cart,
+        socket,
+        requires_shipping,
+        shipping_required_here,
+        shipping_methods
+      )
 
     socket
     |> assign(:cart, cart)
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
+    |> assign(:skip_mode, skip_mode)
+    |> assign(:shipping_position, position)
+    |> assign(:shipping_required_here, shipping_required_here)
+  end
+
+  # Available shipping methods are only fetched when shipping is both
+  # needed by the cart's contents and meant to be picked on this page -
+  # same gate `do_mount/2` applies before its own fetch+auto-select.
+  defp load_shipping_methods(cart, requires_shipping, shipping_required_here) do
+    if requires_shipping and shipping_required_here do
+      Shop.get_available_shipping_methods(cart)
+    else
+      []
+    end
+  end
+
+  # Drops a shipping selection the cart has outgrown (or stopped needing)
+  # so a method that fell out of eligibility can't stay selected at zero
+  # cost and run checkout into an inevitable conversion failure.
+  defp reconcile_shipping_selection(
+         cart,
+         socket,
+         requires_shipping,
+         shipping_required_here,
+         shipping_methods
+       ) do
+    cond do
+      is_nil(cart.shipping_method_uuid) ->
+        {cart, socket}
+
+      not requires_shipping ->
+        drop_shipping_selection(cart, socket)
+
+      not shipping_required_here ->
+        {cart, socket}
+
+      Enum.any?(shipping_methods, &(&1.uuid == cart.shipping_method_uuid)) ->
+        {cart, socket}
+
+      true ->
+        drop_shipping_selection(
+          cart,
+          socket,
+          gettext(
+            "The selected shipping method is no longer available for this cart - please pick another"
+          )
+        )
+    end
+  end
+
+  # Clears the cart's shipping selection, optionally flashing an error
+  # explaining why. Leaves cart/socket untouched if the clear fails.
+  defp drop_shipping_selection(cart, socket, flash_message \\ nil) do
+    case Shop.clear_cart_shipping(cart) do
+      {:ok, cleared} ->
+        socket = if flash_message, do: put_flash(socket, :error, flash_message), else: socket
+        {cleared, socket}
+
+      _ ->
+        {cart, socket}
+    end
+  end
+
+  # Shipping selection only happens on the cart page when it hasn't been
+  # skipped entirely (`skip_mode != :always`) and the shop's configured
+  # selection position is "cart" (vs. "checkout").
+  defp shipping_required_here? do
+    Shop.shipping_skip_mode() != :always and Shop.shipping_selection_position() == :cart
   end
 
   defp update_item_quantity(socket, item_uuid, quantity) do
@@ -446,9 +515,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
               </div>
             <% end %>
 
-            <%!-- Shipping Section (digital-only carts don't ship) --%>
-            <%= if @cart.items != [] && @requires_shipping do %>
-              <div class="card bg-base-100 shadow-xl mt-6">
+            <%!-- Shipping Section (digital-only carts don't ship; also hidden
+            when shipping selection is skipped or happens at checkout) --%>
+            <%= if @cart.items != [] && @requires_shipping && @shipping_required_here do %>
+              <div id="cart-shipping-methods" class="card bg-base-100 shadow-xl mt-6">
                 <div class="card-body">
                   <h2 class="card-title mb-4">{gettext("Shipping Method")}</h2>
 
@@ -572,9 +642,14 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                 </div>
 
                 <button
+                  id="proceed-to-checkout"
                   phx-click="proceed_to_checkout"
                   class="btn btn-primary btn-block mt-6"
-                  disabled={@cart.items == [] || (is_nil(@cart.shipping_method_uuid) && @requires_shipping)}
+                  disabled={
+                    @cart.items == [] ||
+                      (is_nil(@cart.shipping_method_uuid) && @requires_shipping &&
+                         @shipping_required_here && @skip_mode == :off)
+                  }
                 >
                   <.icon name="hero-credit-card" class="w-5 h-5 mr-2" /> {gettext("Proceed to Checkout")}
                 </button>

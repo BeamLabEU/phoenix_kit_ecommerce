@@ -8,10 +8,12 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Settings
+  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Authz
@@ -43,9 +45,40 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
+      |> assign(
+        :notify_cart_first_item,
+        Settings.get_setting_cached("shop_notify_cart_first_item", "false") == "true"
+      )
+      |> assign(
+        :notify_cart_item,
+        Settings.get_setting_cached("shop_notify_cart_item", "false") == "true"
+      )
+      |> assign(
+        :notify_checkout_started,
+        Settings.get_setting_cached("shop_notify_checkout_started", "false") == "true"
+      )
+      |> assign(:notification_recipients, notification_recipients())
+      |> assign(:recipient_candidates, load_recipient_candidates())
       |> assign_policy()
 
     {:ok, socket}
+  end
+
+  # Stored as `%{"uuids" => [...]}` — core's `value_json` column casts
+  # through an Ecto `:map` field, which rejects a top-level list at the
+  # changeset (see `PhoenixKitEcommerce.Notifications.shop_recipients/0`).
+  defp notification_recipients do
+    case Settings.get_json_setting_cached("shop_notification_recipients", %{}) do
+      %{"uuids" => uuids} when is_list(uuids) -> uuids
+      _ -> []
+    end
+  end
+
+  defp load_recipient_candidates do
+    ShopNotifications.admin_recipients("shop.manage_carts")
+    |> Enum.map(&Auth.get_user/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort_by(& &1.email)
   end
 
   # Read every policy toggle through PhoenixKitEcommerce.Policy so the admin
@@ -126,18 +159,48 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   @impl true
+  def handle_event("toggle_notify_cart_first_item", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_notify_cart_first_item", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_notify_cart_item", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_notify_cart_item", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_notify_checkout_started", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_notify_checkout_started", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("save_notification_recipients", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_notification_recipients", params, socket)
+    end)
+  end
+
+  @impl true
   def handle_event("toggle_hide_zero_decimals", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_hide_zero_decimals", params, socket)
     end)
   end
 
+  @impl true
   def handle_event("update_catalog_vocabulary", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_catalog_vocabulary", params, socket)
     end)
   end
 
+  @impl true
   def handle_event("update_category_display", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_category_display", params, socket)
@@ -271,6 +334,83 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 />
               </label>
             </div>
+          </div>
+        </div>
+
+        <%!-- Storefront notifications --%>
+        <div class="card bg-base-100 shadow-xl mb-6" id="shop-notifications-card">
+          <div class="card-body">
+            <h2 class="card-title">{gettext("Storefront notifications")}</h2>
+            <p class="text-sm text-base-content/60">
+              {gettext(
+                "Notify shop operators about cart activity. Delivery uses each recipient's own notification channels (email, Telegram, in-app)."
+              )}
+            </p>
+
+            <div class="form-control">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text">{gettext("First item added to a cart")}</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-secondary"
+                  id="toggle-notify-cart-first-item"
+                  checked={@notify_cart_first_item}
+                  phx-click="toggle_notify_cart_first_item"
+                />
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text">{gettext("Every item added to a cart")}</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-secondary"
+                  id="toggle-notify-cart-item"
+                  checked={@notify_cart_item}
+                  phx-click="toggle_notify_cart_item"
+                />
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer justify-between">
+                <span class="label-text">{gettext("Buyer proceeded to checkout")}</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-secondary"
+                  id="toggle-notify-checkout-started"
+                  checked={@notify_checkout_started}
+                  phx-click="toggle_notify_checkout_started"
+                />
+              </label>
+            </div>
+
+            <form
+              phx-submit="save_notification_recipients"
+              id="shop-notification-recipients-form"
+              class="mt-4"
+            >
+              <h3 class="font-medium mb-1">{gettext("Recipients")}</h3>
+              <p class="text-xs text-base-content/60 mb-2">
+                {gettext(
+                  "Applies to the cart-activity notifications above. Leave all unchecked to notify every shop administrator."
+                )}
+              </p>
+              <%= for user <- @recipient_candidates do %>
+                <label class="label cursor-pointer justify-start gap-3">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    name={"recipients[#{user.uuid}]"}
+                    value="true"
+                    checked={user.uuid in @notification_recipients}
+                  />
+                  <span class="label-text">{user.email}</span>
+                </label>
+              <% end %>
+              <button type="submit" class="btn btn-primary btn-sm mt-2">
+                {gettext("Save recipients")}
+              </button>
+            </form>
           </div>
         </div>
 
@@ -883,6 +1023,80 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update inventory setting"))}
+    end
+  end
+
+  defp gated_event("toggle_notify_cart_first_item", _params, socket) do
+    new_value = !socket.assigns.notify_cart_first_item
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting_with_module("shop_notify_cart_first_item", value_str, "shop") do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:notify_cart_first_item, new_value)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
+  defp gated_event("toggle_notify_cart_item", _params, socket) do
+    new_value = !socket.assigns.notify_cart_item
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting_with_module("shop_notify_cart_item", value_str, "shop") do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:notify_cart_item, new_value)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
+  defp gated_event("toggle_notify_checkout_started", _params, socket) do
+    new_value = !socket.assigns.notify_checkout_started
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting_with_module("shop_notify_checkout_started", value_str, "shop") do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:notify_checkout_started, new_value)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
+  defp gated_event("save_notification_recipients", params, socket) do
+    candidate_uuids = MapSet.new(socket.assigns.recipient_candidates, & &1.uuid)
+
+    selected =
+      params
+      |> Map.get("recipients", %{})
+      |> Enum.filter(fn {_uuid, v} -> v == "true" end)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.filter(&MapSet.member?(candidate_uuids, &1))
+
+    case Settings.update_json_setting_with_module(
+           "shop_notification_recipients",
+           %{"uuids" => selected},
+           "shop"
+         ) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:notification_recipients, selected)
+         |> put_flash(:info, gettext("Notification recipients updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update recipients"))}
     end
   end
 

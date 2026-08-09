@@ -20,6 +20,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.SEOHelpers
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
@@ -100,9 +101,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       Events.subscribe_inventory()
     end
 
+    seo = SEOHelpers.product_seo(product, current_language)
+
     socket =
       socket
-      |> assign(:page_title, localized_title)
+      |> assign(:page_title, seo.page_title)
+      |> assign(:canonical_url, seo.canonical_url)
+      |> assign(:hreflang_links, seo.hreflang_links)
+      |> assign(:og, seo.og)
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
@@ -200,10 +206,28 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     current_base = DialectMapper.extract_base(current_language)
     redirect_base = redirect_lang && DialectMapper.extract_base(redirect_lang)
 
+    # The language the user explicitly requested via the URL locale prefix,
+    # IF the product is actually translated into it. Without this the
+    # language switcher can never leave the slug's own language: a
+    # `/fr/<en-slug>` request bounces to `best_redirect_language` (which
+    # prefers the default) → back to `/en/…`, so the visitor sees English
+    # even though a French translation exists.
+    requested_lang = requested_translation_lang(product, current_language)
+
     cond do
       # No valid redirect language found
       is_nil(redirect_lang) ->
         not_found(socket, current_language)
+
+      # Product IS translated into the requested language — honor the
+      # explicit choice and redirect to that language's slug.
+      not is_nil(requested_lang) ->
+        slug = SlugResolver.product_slug(product, requested_lang)
+
+        {:ok,
+         push_navigate(socket,
+           to: Helpers.build_lang_url("/shop/product/#{slug}", requested_lang)
+         )}
 
       # Same base language (e.g., "en" vs "en-US") - use product without redirect
       current_base == redirect_base ->
@@ -219,6 +243,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
            to: Helpers.build_lang_url("/shop/product/#{slug}", redirect_lang)
          )}
     end
+  end
+
+  # The requested language (base-matched) when the product has a non-empty
+  # slug for it — i.e. it is genuinely translated into what the URL asked for.
+  # Returns the product's own language code (e.g. "fr-FR") or nil.
+  defp requested_translation_lang(product, current_language) do
+    base = DialectMapper.extract_base(current_language)
+    slug_map = product.slug || %{}
+
+    Enum.find(Map.keys(slug_map), fn code ->
+      DialectMapper.extract_base(code) == base and Map.get(slug_map, code) not in [nil, ""]
+    end)
   end
 
   # Mount product page using already-found product (avoids redirect loop)
@@ -269,9 +305,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       Events.subscribe_inventory()
     end
 
+    seo = SEOHelpers.product_seo(product, current_language)
+
     socket =
       socket
-      |> assign(:page_title, localized_title)
+      |> assign(:page_title, seo.page_title)
+      |> assign(:canonical_url, seo.canonical_url)
+      |> assign(:hreflang_links, seo.hreflang_links)
+      |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
       |> assign(:localized_title, localized_title)
