@@ -281,12 +281,11 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
-  # Core's shared slugifier, with transliteration on: the local ASCII-only
-  # version stripped every character of a Cyrillic title and stored an empty
-  # slug, which leaves the product with no URL at all. Public (not `defp`):
-  # the AI translation adapter (AITranslatable.slug_base/3) calls this
-  # directly to derive a per-language slug from a translated title.
-  #
+  # Public (not `defp`) because the AI translation adapter
+  # (AITranslatable.slug_base/3) calls it directly to derive a per-language
+  # slug from a translated title. The rule itself lives in
+  # PhoenixKitEcommerce.Slugify — see that module for why it is shared with
+  # Category rather than reimplemented here.
   @doc "Slug generation used for per-language slugs (public for the AI adapter)."
   defdelegate slugify(text), to: PhoenixKitEcommerce.Slugify
 

@@ -218,10 +218,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     assert has_element?(view, "button[phx-click='confirm_order']")
 
     # Back to billing, now shipping somewhere the EE-only method cannot go.
-    # Three buttons carry this event (the review "Change" link, the summary
-    # pencil and the footer arrow). Scope to the first so the selector stays
-    # unambiguous if another is added.
-    view |> element("button[phx-click='back_to_billing']", "Change") |> render_click()
+    # The review step carries two `back_to_billing` buttons (the billing
+    # card's pencil and the footer arrow), so the bare event selector is
+    # ambiguous. Target the id rather than the label: the label is a
+    # gettext string, and this suite is not pinned to an English locale.
+    view |> element("#checkout-review-change-billing") |> render_click()
     view |> fill_billing_form(country: "US") |> render_change()
     html = view |> element("button[phx-click='proceed_to_review']") |> render_click()
 
