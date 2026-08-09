@@ -36,6 +36,8 @@ defmodule PhoenixKitEcommerce.Product do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKit.Utils.Slug
+
   @type t :: %__MODULE__{}
 
   @statuses ["draft", "active", "archived"]
@@ -263,12 +265,11 @@ defmodule PhoenixKitEcommerce.Product do
     title_map = get_field(changeset, :title) || %{}
     slug_map = get_field(changeset, :slug) || %{}
 
-    # For each language with a title but no slug, generate one
+    # For each language with a title but no slug, generate one — IN that language.
     updated_slugs =
       Enum.reduce(title_map, slug_map, fn {lang, title}, acc ->
         if Map.get(acc, lang) in [nil, ""] and title not in [nil, ""] do
-          generated = slugify(title)
-          Map.put(acc, lang, generated)
+          Map.put(acc, lang, slugify(title, lang))
         else
           acc
         end
@@ -281,13 +282,19 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
-  # Public (not `defp`) because the AI translation adapter
-  # (AITranslatable.slug_base/3) calls it directly to derive a per-language
-  # slug from a translated title. The rule itself lives in
-  # PhoenixKitEcommerce.Slugify — see that module for why it is shared with
-  # Category rather than reimplemented here.
-  @doc "Slug generation used for per-language slugs (public for the AI adapter)."
-  defdelegate slugify(text), to: PhoenixKitEcommerce.Slugify
+  @doc """
+  Slug generation for per-language slugs. Public because the AI translation adapter
+  (`AITranslatable.slug_base/3`) derives a slug from a translated title.
+
+  `lang` is the language the text is IN, and it changes the answer: German `ö`
+  expands to `oe` while Estonian `ö` folds to `o`, and Ukrainian Cyrillic follows
+  Ukraine's own romanization rather than Russian's. The reduce above had `lang`
+  bound and was discarding it, so every language got the neutral rule — a German
+  title slugged `grosse` where German orthography wants `groesse`.
+
+  Passing `nil` still produces a correct slug, just not locale-tuned.
+  """
+  def slugify(text, lang \\ nil), do: Slug.slugify(text, locale: lang)
 
   defp default_language do
     alias PhoenixKit.Modules.Languages

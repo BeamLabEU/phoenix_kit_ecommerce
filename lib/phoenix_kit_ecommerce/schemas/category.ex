@@ -28,6 +28,7 @@ defmodule PhoenixKitEcommerce.Category do
   import Ecto.Changeset
 
   alias PhoenixKit.Modules.Storage.URLSigner
+  alias PhoenixKit.Utils.Slug
 
   @type t :: %__MODULE__{}
 
@@ -288,8 +289,7 @@ defmodule PhoenixKitEcommerce.Category do
     updated_slugs =
       Enum.reduce(name_map, slug_map, fn {lang, name}, acc ->
         if Map.get(acc, lang) in [nil, ""] and name not in [nil, ""] do
-          generated = slugify(name)
-          Map.put(acc, lang, generated)
+          Map.put(acc, lang, slugify(name, lang))
         else
           acc
         end
@@ -350,8 +350,11 @@ defmodule PhoenixKitEcommerce.Category do
     end
   end
 
-  # Delegated rather than reimplemented. This rule has drifted between Product
-  # and Category twice — Cyrillic, then German — and each time the fix reached
-  # only one of them. See PhoenixKitEcommerce.Slugify.
-  defp slugify(text), do: PhoenixKitEcommerce.Slugify.slugify(text)
+  # Core's rule, not a local copy. This drifted between Product and Category twice
+  # — Cyrillic, then German — and each time the fix reached only one of them. There
+  # is now one implementation for the whole ecosystem, in `locale_slug`.
+  #
+  # `lang` is the language the name is IN, and it changes the answer: German ö -> oe,
+  # Estonian ö -> o. The reduce above had it bound and was throwing it away.
+  defp slugify(text, lang), do: Slug.slugify(text, locale: lang)
 end

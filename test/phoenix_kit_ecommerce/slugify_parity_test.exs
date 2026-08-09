@@ -7,11 +7,15 @@ defmodule PhoenixKitEcommerce.SlugifyParityTest do
   from `PhoenixKitEcommerce.SlugifyTest` — the pure-function cases there
   must keep running on a checkout with no PostgreSQL.
 
-  Both sides go through the CHANGESET, not through `Product.slugify/1`.
+  Both sides go through the CHANGESET, not through `Product.slugify/2`.
   Comparing the raw function on one side to a changeset on the other only
   proves the two functions agree; the drift that actually shipped twice was
   about what each *schema* does when deriving a slug, so that is what this
   compares.
+
+  Since both schemas now pass the map key as the language, this also pins that
+  each schema slugs a German entry AS German and an Estonian entry AS Estonian —
+  the reduce in both had the language bound and was discarding it.
   """
   use PhoenixKitEcommerce.DataCase, async: true
 
@@ -46,15 +50,24 @@ defmodule PhoenixKitEcommerce.SlugifyParityTest do
     end
   end
 
+  test "each schema slugs an entry in the language of its own map key" do
+    # Both reduces had `lang` bound and were throwing it away, so every language
+    # got the neutral rule. German wants oe, Estonian wants o, from the same text.
+    assert derived_slug(Product, :title, "Größe", "de") == "groesse"
+    assert derived_slug(Category, :name, "Größe", "de") == "groesse"
+    assert derived_slug(Product, :title, "Größe", "et") == "grosse"
+    assert derived_slug(Category, :name, "Größe", "et") == "grosse"
+  end
+
   # The slug each schema's changeset derives for the "en" entry of its own
   # title field. Both schemas key the generated slug map by language, so a
   # single-language input yields a single-key map.
-  defp derived_slug(schema, title_field, text) do
+  defp derived_slug(schema, title_field, text, lang \\ "en") do
     struct(schema)
-    |> schema.changeset(%{to_string(title_field) => %{"en" => text}})
+    |> schema.changeset(%{to_string(title_field) => %{lang => text}})
     |> Ecto.Changeset.get_change(:slug)
     |> case do
-      %{"en" => slug} -> slug
+      %{^lang => slug} -> slug
       other -> other
     end
   end
