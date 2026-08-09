@@ -132,24 +132,25 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   def ensure_prompt do
     if Code.ensure_loaded?(PhoenixKitAI) and function_exported?(PhoenixKitAI, :create_prompt, 1) do
       case PhoenixKitAI.get_prompt_by_slug(@prompt_slug) do
-        nil ->
-          case PhoenixKitAI.create_prompt(prompt_attrs()) do
-            {:ok, prompt} ->
-              {:ok, prompt.uuid}
-
-            {:error, _} ->
-              # Lost a create race — re-read by slug.
-              case PhoenixKitAI.get_prompt_by_slug(@prompt_slug) do
-                nil -> {:error, :prompt_create_failed}
-                prompt -> {:ok, prompt.uuid}
-              end
-          end
-
-        prompt ->
-          {:ok, prompt.uuid}
+        nil -> create_prompt()
+        prompt -> {:ok, prompt.uuid}
       end
     else
       {:error, :ai_not_installed}
+    end
+  end
+
+  defp create_prompt do
+    case PhoenixKitAI.create_prompt(prompt_attrs()) do
+      {:ok, prompt} ->
+        {:ok, prompt.uuid}
+
+      {:error, _} ->
+        # Lost a create race — re-read by slug.
+        case PhoenixKitAI.get_prompt_by_slug(@prompt_slug) do
+          nil -> {:error, :prompt_create_failed}
+          prompt -> {:ok, prompt.uuid}
+        end
     end
   end
 
@@ -160,24 +161,25 @@ defmodule PhoenixKitEcommerce.AITranslatable do
       query = Product |> where([p], p.uuid == ^uuid) |> lock("FOR UPDATE")
 
       case repo().one(query) do
-        nil ->
-          repo().rollback(:resource_not_found)
-
-        %Product{} = fresh ->
-          changes =
-            translated
-            |> Enum.reduce(%{}, fn {schema_field, value}, acc ->
-              merged = Map.put(Map.get(fresh, schema_field) || %{}, target_lang, value)
-              Map.put(acc, schema_field, merged)
-            end)
-            |> maybe_put_slug(fresh, target_lang, translated[:title])
-
-          case fresh |> Ecto.Changeset.change(changes) |> repo().update() do
-            {:ok, updated} -> updated
-            {:error, reason} -> repo().rollback(reason)
-          end
+        nil -> repo().rollback(:resource_not_found)
+        %Product{} = fresh -> write_merged(fresh, target_lang, translated)
       end
     end)
+  end
+
+  defp write_merged(%Product{} = fresh, target_lang, translated) do
+    changes =
+      translated
+      |> Enum.reduce(%{}, fn {schema_field, value}, acc ->
+        merged = Map.put(Map.get(fresh, schema_field) || %{}, target_lang, value)
+        Map.put(acc, schema_field, merged)
+      end)
+      |> maybe_put_slug(fresh, target_lang, translated[:title])
+
+    case fresh |> Ecto.Changeset.change(changes) |> repo().update() do
+      {:ok, updated} -> updated
+      {:error, reason} -> repo().rollback(reason)
+    end
   end
 
   # A locally-generated slug from the translated title, ONLY when the target

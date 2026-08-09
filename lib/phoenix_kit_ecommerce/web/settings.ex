@@ -59,6 +59,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       )
       |> assign(:notification_recipients, notification_recipients())
       |> assign(:recipient_candidates, load_recipient_candidates())
+      |> assign(:shipping_skip_mode, to_string(Shop.shipping_skip_mode()))
+      |> assign(:shipping_selection_position, to_string(Shop.shipping_selection_position()))
       |> assign_policy()
 
     {:ok, socket}
@@ -183,6 +185,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("save_notification_recipients", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("save_notification_recipients", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("update_shipping_skip_mode", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_shipping_skip_mode", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("update_shipping_selection_position", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_shipping_selection_position", params, socket)
     end)
   end
 
@@ -333,6 +349,89 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   phx-click="toggle_inventory_tracking"
                 />
               </label>
+            </div>
+          </div>
+        </div>
+
+        <%!-- Shipping requirement & where it is picked. Both settings were
+             read by the storefront and the conversion from the day they
+             landed, but had no UI at all — the only way to change them was
+             to write the setting row by hand. --%>
+        <div class="card bg-base-100 shadow-xl mb-6" id="shop-shipping-modes-card">
+          <div class="card-body">
+            <h2 class="card-title">{gettext("Shipping requirement")}</h2>
+
+            <div class="form-control">
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext(
+                  "What happens when no active shipping method covers the buyer's country."
+                )}
+              </p>
+              <div class="flex flex-col gap-2">
+                <label
+                  :for={
+                    {value, label} <- [
+                      {"off", gettext("Require a shipping method (default)")},
+                      {"fallback",
+                       gettext(
+                         "Allow the order through when nothing covers the country - contact the buyer afterwards"
+                       )},
+                      {"always", gettext("Never ask for a shipping method")}
+                    ]
+                  }
+                  class="label cursor-pointer justify-start gap-3"
+                >
+                  <input
+                    type="radio"
+                    name="shipping_skip_mode"
+                    class="radio radio-primary"
+                    id={"shipping-skip-mode-#{value}"}
+                    value={value}
+                    checked={@shipping_skip_mode == value}
+                    phx-click="update_shipping_skip_mode"
+                    phx-value-mode={value}
+                  />
+                  <span class="label-text">{label}</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text text-lg font-semibold">
+                  {gettext("Where the buyer picks a shipping method")}
+                </span>
+              </label>
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext(
+                  "On the cart page the destination country is not known yet, so every method is listed. As a checkout step after billing, methods are filtered by the real country."
+                )}
+              </p>
+              <div class="flex flex-col gap-2">
+                <label
+                  :for={
+                    {value, label} <- [
+                      {"cart", gettext("Cart page (default)")},
+                      {"checkout", gettext("Checkout step, after billing")}
+                    ]
+                  }
+                  class="label cursor-pointer justify-start gap-3"
+                >
+                  <input
+                    type="radio"
+                    name="shipping_selection_position"
+                    class="radio radio-primary"
+                    id={"shipping-position-#{value}"}
+                    value={value}
+                    checked={@shipping_selection_position == value}
+                    phx-click="update_shipping_selection_position"
+                    phx-value-position={value}
+                  />
+                  <span class="label-text">{label}</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -1098,6 +1197,64 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update recipients"))}
     end
+  end
+
+  # Closed enums, validated here for the same reason the vocabulary setting
+  # is: `PhoenixKitEcommerce.shipping_skip_mode/0` and
+  # `shipping_selection_position/0` fall back to the safe legacy value on
+  # anything they do not recognise, so an unknown value would read as the
+  # setting being silently ignored.
+  @shipping_skip_modes ~w(off fallback always)
+  @shipping_positions ~w(cart checkout)
+
+  defp gated_event("update_shipping_skip_mode", %{"mode" => mode}, socket)
+       when mode in @shipping_skip_modes do
+    case Settings.update_setting_with_module("shop_shipping_skip_mode", mode, "shop") do
+      {:ok, _} ->
+        # A manage_settings-gated write that decides whether an order can be
+        # placed with no shipping method at all — exactly the setting an
+        # operator asks "who changed this" about after a pending order shows up.
+        Activity.log("shop.shipping_skip_mode_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"mode" => mode}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:shipping_skip_mode, mode)
+         |> put_flash(:info, gettext("Shipping requirement updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update shipping requirement"))}
+    end
+  end
+
+  defp gated_event("update_shipping_skip_mode", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Failed to update shipping requirement"))}
+  end
+
+  defp gated_event("update_shipping_selection_position", %{"position" => position}, socket)
+       when position in @shipping_positions do
+    case Settings.update_setting_with_module(
+           "shop_shipping_selection_position",
+           position,
+           "shop"
+         ) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:shipping_selection_position, position)
+         |> put_flash(:info, gettext("Shipping selection step updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update shipping selection step"))}
+    end
+  end
+
+  defp gated_event("update_shipping_selection_position", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Failed to update shipping selection step"))}
   end
 
   defp gated_event("toggle_hide_zero_decimals", _params, socket) do

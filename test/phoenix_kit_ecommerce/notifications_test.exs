@@ -262,6 +262,24 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       assert ShopNotifications.shop_recipients() == [u1]
     end
 
+    test "shop_recipients drops a stored uuid that is no longer a shop admin" do
+      # The setting is a snapshot of who was an operator the day it was
+      # saved. Revoking someone's shop access has to stop the cart-activity
+      # feed too — those messages carry what visitors are shopping for.
+      %{uuid: admin_uuid} = create_admin_user()
+      %{uuid: outsider_uuid} = fixture_user()
+
+      PhoenixKit.Settings.update_json_setting_with_module(
+        "shop_notification_recipients",
+        %{"uuids" => [admin_uuid, outsider_uuid]},
+        "shop"
+      )
+
+      recipients = ShopNotifications.shop_recipients()
+      assert admin_uuid in recipients
+      refute outsider_uuid in recipients
+    end
+
     test "shop_recipients falls back to all admins when list empty" do
       %{uuid: u1} = create_admin_user()
 

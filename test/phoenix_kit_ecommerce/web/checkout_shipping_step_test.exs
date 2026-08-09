@@ -187,6 +187,82 @@ defmodule PhoenixKitEcommerce.Web.CheckoutShippingStepTest do
     assert has_element?(view, "#checkout-shipping-blocked")
   end
 
+  # Regression for a closed loop with no way out. With position=checkout the
+  # cart page renders NO shipping section, so `enter_review/1`'s "please pick
+  # another" bounce to `/cart` stranded the shopper: nothing there to change,
+  # and "Proceed to Checkout" walked back into the same rejection in
+  # `mount/3`. Reachable by editing billing to a country the already-chosen
+  # method does not serve. The step that owns the choice has to reclaim it.
+  test "editing billing to a country the chosen method does not serve returns to the shipping step",
+       %{conn: conn} do
+    PhoenixKit.Settings.update_setting_with_module(
+      "shop_shipping_selection_position",
+      "checkout",
+      "shop"
+    )
+
+    ee_method = shipping_method(countries: ["EE"])
+    us_method = shipping_method(countries: ["US"])
+    conn = setup_shippable_cart_session(conn)
+
+    {:ok, view, _html} = live(conn, "/checkout")
+
+    view |> fill_billing_form(country: "EE") |> render_change()
+    view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+    view
+    |> element("#checkout-shipping-method-#{ee_method.uuid} input[type='radio']")
+    |> render_click()
+
+    view |> element("#checkout-shipping-continue") |> render_click()
+    assert has_element?(view, "button[phx-click='confirm_order']")
+
+    # Back to billing, now shipping somewhere the EE-only method cannot go.
+    view |> element("button[phx-click='back_to_billing']") |> render_click()
+    view |> fill_billing_form(country: "US") |> render_change()
+    html = view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+    # Back on the step that owns the choice - NOT redirected to a cart page
+    # that has no shipping section - with the stale selection dropped and the
+    # methods that actually serve the new country offered.
+    assert html =~ "id=\"checkout-shipping-step\""
+    assert has_element?(view, "#checkout-shipping-method-#{us_method.uuid}")
+    refute has_element?(view, "#checkout-shipping-method-#{ee_method.uuid}")
+    refute has_element?(view, "button[phx-click='confirm_order']")
+
+    # And the shopper can finish from here.
+    view
+    |> element("#checkout-shipping-method-#{us_method.uuid} input[type='radio']")
+    |> render_click()
+
+    view |> element("#checkout-shipping-continue") |> render_click()
+    assert has_element?(view, "button[phx-click='confirm_order']")
+  end
+
+  # The blocked state offers no Continue by design; without a way back the
+  # shopper cannot reach the one thing that would fix it - their address.
+  test "blocked shipping step still offers a way back to billing", %{conn: conn} do
+    PhoenixKit.Settings.update_setting_with_module(
+      "shop_shipping_selection_position",
+      "checkout",
+      "shop"
+    )
+
+    _method = shipping_method(countries: ["US"])
+    conn = setup_shippable_cart_session(conn)
+
+    {:ok, view, _html} = live(conn, "/checkout")
+
+    view |> fill_billing_form(country: "EE") |> render_change()
+    view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+    assert has_element?(view, "#checkout-shipping-blocked")
+    assert has_element?(view, "#checkout-shipping-back")
+
+    view |> element("#checkout-shipping-back") |> render_click()
+    assert has_element?(view, "#checkout-billing-form")
+  end
+
   # Core migrations seed one row per `PaymentOption.codes/0` entry
   # (inactive, default `requires_billing_profile`), so `code` is never
   # free to insert fresh - fetch the seeded row and flip it to what this
