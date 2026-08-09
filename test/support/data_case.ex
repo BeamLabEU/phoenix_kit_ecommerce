@@ -30,6 +30,8 @@ defmodule PhoenixKitEcommerce.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import PhoenixKitEcommerce.ActivityLogAssertions
+      import PhoenixKitEcommerce.NotificationAssertions
+      import PhoenixKitEcommerce.CheckoutFixtures
       import PhoenixKitEcommerce.DataCase
     end
   end

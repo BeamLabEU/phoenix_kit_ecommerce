@@ -122,6 +122,46 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Effective shipping-skip mode for checkout.
+
+    * `:off`      — shipping method required (legacy behavior)
+    * `:fallback` — required when available; orders proceed without one when
+      no method covers the buyer's country
+    * `:always`   — shipping step disabled entirely
+  """
+  def shipping_skip_mode do
+    case Settings.get_setting_cached("shop_shipping_skip_mode", "off") do
+      "fallback" -> :fallback
+      "always" -> :always
+      _ -> :off
+    end
+  end
+
+  @doc """
+  Where the buyer picks a shipping method: on the cart page (legacy) or as
+  a checkout step after billing, when the destination country is known.
+  """
+  def shipping_selection_position do
+    case Settings.get_setting_cached("shop_shipping_selection_position", "cart") do
+      "checkout" -> :checkout
+      _ -> :cart
+    end
+  end
+
+  @notify_setting_keys %{
+    cart_first_item: "shop_notify_cart_first_item",
+    cart_item: "shop_notify_cart_item",
+    checkout_started: "shop_notify_checkout_started"
+  }
+
+  @doc """
+  Whether operators asked to be notified about the given storefront event.
+  """
+  def notify_event?(event) when is_map_key(@notify_setting_keys, event) do
+    Settings.get_setting_cached(@notify_setting_keys[event], "false") == "true"
+  end
+
+  @doc """
   Returns dashboard statistics for the shop.
   """
   def get_dashboard_stats do
@@ -291,6 +331,17 @@ defmodule PhoenixKitEcommerce do
             description: "A CSV import finished or failed",
             actions: ["shop.import_completed", "shop.import_failed"],
             default: true
+          },
+          %{
+            key: "cart_activity",
+            label: "Cart activity",
+            description: "A visitor added to a cart or started checkout",
+            actions: [
+              "shop.cart_first_item_added",
+              "shop.cart_item_added",
+              "shop.checkout_started"
+            ],
+            default: true
           }
         ]
       }
@@ -429,6 +480,14 @@ defmodule PhoenixKitEcommerce do
 
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitEcommerce.Web.Routes
+
+  @doc """
+  PhoenixKitAI translation adapters (duck-typed discovery — see
+  `PhoenixKitAI.Translatables`).
+  """
+  def ai_translatables do
+    [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+  end
 
   # ============================================
   # PRODUCTS
@@ -1583,6 +1642,34 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether this cart may convert without a shipping method, and why.
+
+  The country checked is the effective checkout country - `cart.shipping_country`
+  as of `apply_checkout_shipping_country/2`, which must have already run.
+  Returns `false` (never skippable) when the mode is `:off`, or when the
+  mode is `:fallback` but a method still covers the cart's country - that
+  case stays a hard requirement, not a fallback.
+  """
+  @spec shipping_skippable?(Cart.t()) ::
+          false | {:skip, :always} | {:skip, :no_method_for_country}
+  def shipping_skippable?(%Cart{} = cart) do
+    case shipping_skip_mode() do
+      :always ->
+        {:skip, :always}
+
+      :fallback ->
+        if get_available_shipping_methods(cart) == [] do
+          {:skip, :no_method_for_country}
+        else
+          false
+        end
+
+      :off ->
+        false
+    end
+  end
+
+  @doc """
   Gets a shipping method by ID or UUID.
   """
   def get_shipping_method(id) when is_binary(id) do
@@ -1732,6 +1819,37 @@ defmodule PhoenixKitEcommerce do
       {:ok, cart} -> {:ok, repo().preload(cart, [:items, :shipping_method])}
       error -> error
     end
+  end
+
+  @doc """
+  Atomically claims a one-shot boolean flag on the cart's metadata.
+
+  Returns `true` exactly once per (cart, flag) — the caller that wins the
+  claim; `false` for everyone after (or on any error). Used to deduplicate
+  per-cart notifications under concurrent tabs.
+  """
+  def claim_cart_flag(%Cart{uuid: uuid}, flag) when is_binary(flag) do
+    {count, _} =
+      from(c in Cart,
+        where: c.uuid == ^uuid,
+        where: fragment("NOT (COALESCE(metadata, '{}'::jsonb) \\? ?)", ^flag),
+        update: [
+          set: [
+            metadata:
+              fragment(
+                "COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(?::text, true)",
+                ^flag
+              )
+          ]
+        ]
+      )
+      |> repo().update_all([])
+
+    count == 1
+  rescue
+    error ->
+      Logger.warning("[Shop] claim_cart_flag failed: #{inspect(error)}")
+      false
   end
 
   @doc """
@@ -1978,6 +2096,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
         {:ok, updated_cart}
 
       error ->
@@ -2032,6 +2151,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
         {:ok, updated_cart}
 
       error ->
@@ -2831,7 +2951,14 @@ defmodule PhoenixKitEcommerce do
 
       # Only carts with a shippable line need a shipping method; a
       # digital-only cart converts without one (and without a charge).
-      is_nil(cart.shipping_method_uuid) and items_require_shipping?(cart.items) ->
+      #
+      # A missing method is rejected HERE only when the shop requires one
+      # outright (`:off`). `:fallback` and `:always` defer the decision to
+      # `validate_shipping_method_available/1`, which runs after
+      # `apply_checkout_shipping_country/2` - the skip decision needs the
+      # checkout country this cart does not have yet.
+      is_nil(cart.shipping_method_uuid) and items_require_shipping?(cart.items) and
+          shipping_skip_mode() == :off ->
         {:error, :no_shipping_method}
 
       true ->
@@ -2949,6 +3076,30 @@ defmodule PhoenixKitEcommerce do
   defp blank_field?(nil), do: true
   defp blank_field?(value) when is_binary(value), do: String.trim(value) == ""
   defp blank_field?(_), do: false
+
+  # No method selected: `validate_cart_contents/1` already let this cart
+  # through, which only happens when the skip mode is not `:off`. Now that
+  # the checkout country is on the cart, decide for real - `:always` skips
+  # unconditionally, `:fallback` only when no method covers this country
+  # (a covered country stays a hard requirement), and the decision is
+  # stamped onto the in-memory cart for `build_order_attrs/4` to read.
+  defp validate_shipping_method_available(%Cart{shipping_method_uuid: nil} = cart) do
+    if items_require_shipping?(cart.items) do
+      case shipping_skippable?(cart) do
+        {:skip, reason} ->
+          {:ok,
+           %{
+             cart
+             | metadata: Map.put(cart.metadata || %{}, "shipping_skip_reason", to_string(reason))
+           }}
+
+        false ->
+          {:error, :no_shipping_method}
+      end
+    else
+      {:ok, cart}
+    end
+  end
 
   # Re-validate the shipping method AFTER the checkout country has been
   # applied, not before: a method may be eligible for a country-less cart
@@ -3088,7 +3239,14 @@ defmodule PhoenixKitEcommerce do
             # on the cart - the order must not reference a method it never
             # charged for.
             "shipping_method_uuid" =>
-              if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid)
+              if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid),
+            # Set by `validate_shipping_method_available/1` when the cart
+            # converted without a method under `:always`/`:fallback` - the
+            # durable record of WHY, since the cart row's in-memory stamp
+            # (see that function) is never persisted.
+            "shipping_skipped" =>
+              items_require_shipping?(cart.items) and is_nil(cart.shipping_method_uuid),
+            "shipping_skip_reason" => (cart.metadata || %{})["shipping_skip_reason"]
           }
           |> Map.merge(payment_option_metadata(cart))
       }
@@ -3784,7 +3942,12 @@ defmodule PhoenixKitEcommerce do
       |> then(&repo().get_by(ShippingMethod, uuid: &1))
       |> calculate_method_shipping(subtotal, total_weight, cart.shipping_country)
     else
-      cart.shipping_amount || Decimal.new("0")
+      # No method selected, no charge - never echo back a stale
+      # `cart.shipping_amount` from a previously-selected method that was
+      # since cleared. This function's result is written straight back onto
+      # the cart's `shipping_amount` by the caller, so echoing a stale value
+      # here would persist it indefinitely.
+      Decimal.new("0")
     end
   end
 

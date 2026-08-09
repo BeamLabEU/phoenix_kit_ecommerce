@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+- **Cart-activity notifications for shop operators.** Three individually
+  toggleable storefront signals — first item added to a cart, every item
+  added, and checkout started — delivered through core's notification layer
+  (each recipient's own channels: in-app, email, Telegram). New settings card
+  under Shop → Settings: per-event toggles plus a recipient list chosen from
+  shop administrators (empty list = all admins). Per-cart deduplication is an
+  atomic jsonb flag claim, so concurrent tabs cannot double-fire; the
+  checkout signal only fires on a connected LiveView mount, so crawlers and
+  static renders never claim the flag. All sends are best-effort: a
+  notification failure can never break the storefront action. Settings:
+  `shop_notify_cart_first_item`, `shop_notify_cart_item`,
+  `shop_notify_checkout_started`, `shop_notification_recipients`.
+- **Shipping-skip modes.** `shop_shipping_skip_mode` — `off` (legacy hard
+  requirement), `fallback` (orders may proceed without a shipping method when
+  no active method covers the buyer's country), `always` (shipping step
+  disabled). Skipped orders carry `"shipping_skipped" => true` and a
+  `"shipping_skip_reason"` in order metadata, add no synthetic shipping line
+  item, charge no shipping amount, and suffix the operator's new-order
+  notification with "— shipping pending". Server-side conversion re-validates
+  the mode independently of the LiveView.
+- **Configurable shipping-selection position.** `shop_shipping_selection_position`
+  — `cart` (legacy) or `checkout`: the buyer picks a shipping method as a
+  checkout step after billing, when the destination country is known, so
+  methods are filtered by real country instead of the cart page's
+  country-blind list. With `fallback`, an uncovered country collapses the
+  step into a localized "we will contact you" notice.
+- **Localized shipping-pending notices** (en/ru/et) on the checkout shipping
+  step and the order-completion page.
+
+### Fixed
+- German titles now slugify with orthographic expansions (`Größe Fußball` →
+  `groesse-fussball`, not `gro-e-fu-ball`): ä/ö/ü/ß map to ae/oe/ue/ss before
+  core's transliteration pass.
+- Operator new-order and cart-activity notifications now show the product's
+  real localized title (the previous code matched a nonexistent `:name`
+  field and always fell back to "product").
+- Orders converted without a shipping method can never inherit a stale
+  shipping charge: `calculate_shipping/3` returns 0 when no method is set.
+- The billing-less checkout path (authenticated buyer, payment option not
+  requiring a billing profile) now routes through the same shipping-step
+  decision as every other path instead of jumping straight to review.
+
 ## 0.1.16 - 2026-08-08
 
 The storefront-translation, services-vocabulary and price-on-request wave

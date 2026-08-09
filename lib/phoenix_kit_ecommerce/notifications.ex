@@ -35,11 +35,15 @@ defmodule PhoenixKitEcommerce.Notifications do
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKitEcommerce.Translations
 
   @order_action "shop.order_placed"
   @customer_order_action "shop.order_confirmed"
   @import_completed_action "shop.import_completed"
   @import_failed_action "shop.import_failed"
+  @cart_first_item_action "shop.cart_first_item_added"
+  @cart_item_action "shop.cart_item_added"
+  @checkout_started_action "shop.checkout_started"
 
   @doc """
   Notifies shop operators that an order was placed, and (separately) the
@@ -54,6 +58,110 @@ defmodule PhoenixKitEcommerce.Notifications do
     end)
   end
 
+  @doc """
+  Storefront signal: an item landed in a cart.
+
+  Emits `shop.cart_first_item_added` once per cart (atomic claim) when that
+  toggle is on; otherwise emits `shop.cart_item_added` per add when the
+  every-add toggle is on. A first add never produces both.
+  """
+  def cart_item_added(cart, item, product) do
+    safely(fn ->
+      first? =
+        PhoenixKitEcommerce.notify_event?(:cart_first_item) and
+          cart.items_count == item.quantity and
+          PhoenixKitEcommerce.claim_cart_flag(cart, "first_item_notified")
+
+      cond do
+        first? ->
+          notify_shop(%{
+            action: @cart_first_item_action,
+            text:
+              "New cart started: #{product_name(product)} ×#{item.quantity} — #{cart_totals(cart)}",
+            icon: "hero-shopping-cart",
+            link: Routes.path("/admin/shop/carts")
+          })
+
+        PhoenixKitEcommerce.notify_event?(:cart_item) ->
+          notify_shop(%{
+            action: @cart_item_action,
+            text:
+              "Added to cart: #{product_name(product)} ×#{item.quantity} — #{cart_totals(cart)}",
+            icon: "hero-shopping-cart",
+            link: Routes.path("/admin/shop/carts")
+          })
+
+        true ->
+          :ok
+      end
+    end)
+  end
+
+  @doc """
+  Storefront signal: a buyer reached the checkout page with a valid cart.
+  Fires once per cart (atomic claim), only when the toggle is on.
+  """
+  def checkout_started(cart) do
+    safely(fn ->
+      if PhoenixKitEcommerce.notify_event?(:checkout_started) and
+           PhoenixKitEcommerce.claim_cart_flag(cart, "checkout_notified") do
+        notify_shop(%{
+          action: @checkout_started_action,
+          text: "Checkout started: #{cart.items_count} item(s) — #{cart_totals(cart)}",
+          icon: "hero-credit-card",
+          link: Routes.path("/admin/shop/carts")
+        })
+      end
+    end)
+  end
+
+  @doc """
+  Recipients for storefront signals: the configured recipient list
+  (`shop_notification_recipients`), or every shop admin when unset/empty.
+
+  Stored as `%{"uuids" => [...]}` rather than a bare list — core's
+  `value_json` column casts through an Ecto `:map` field, which rejects a
+  top-level list at the changeset.
+  """
+  def shop_recipients do
+    case PhoenixKit.Settings.get_json_setting_cached("shop_notification_recipients", %{}) do
+      %{"uuids" => uuids} when is_list(uuids) and uuids != [] ->
+        Enum.filter(uuids, &is_binary/1)
+
+      _ ->
+        admin_recipients("shop.manage_carts")
+    end
+  end
+
+  # `create_many/2` never persists `:action` on the notification row itself
+  # (core's standalone path only carries text/icon/link through to
+  # `metadata`) — so without this, a cart-activity notification would be
+  # indistinguishable from any other once written. Stashing it under
+  # `metadata["action"]` costs nothing (the column is already an open jsonb
+  # bag) and makes the signal auditable/filterable after the fact.
+  defp notify_shop(attrs) do
+    Notifications.create_many(
+      shop_recipients(),
+      Map.put(attrs, :metadata, %{"action" => attrs.action})
+    )
+  end
+
+  # Product has no `:name` field - the display title lives in `:title`, an
+  # i18n map (`%{"en" => "..."}`). Reads it through the same fallback chain
+  # (exact language -> default language -> first available) storefront
+  # pages use, so the notification text shows the same name a shopper saw.
+  defp product_name(%{title: title}) when is_map(title) and title != %{} do
+    Translations.get(%{title: title}, :title, Translations.default_language()) || "product"
+  end
+
+  defp product_name(_), do: "product"
+
+  defp cart_totals(%{subtotal: subtotal, currency: currency}) when not is_nil(subtotal) do
+    "#{Decimal.round(subtotal, 2)} #{currency}"
+  end
+
+  defp cart_totals(_), do: ""
+
   defp notify_admins_of_order(order) do
     recipients = admin_recipients("shop.manage_carts")
 
@@ -61,9 +169,16 @@ defmodule PhoenixKitEcommerce.Notifications do
     # message with customer-facing copy and a link they can open.
     recipients = Enum.reject(recipients, &(&1 == order.user_uuid))
 
+    # `metadata["shipping_skipped"]` is stamped by
+    # `PhoenixKitEcommerce.build_order_attrs/4` when the order converted
+    # without a shipping method under the `:always`/`:fallback` skip modes -
+    # the operator still owes this buyer a delivery arrangement, and
+    # nothing else in the admin fan-out flags that.
+    suffix = if order.metadata["shipping_skipped"], do: " — shipping pending", else: ""
+
     Notifications.create_many(recipients, %{
       action: @order_action,
-      text: "New order #{order.order_number} — #{order_total(order)}",
+      text: "New order #{order.order_number} — #{order_total(order)}#{suffix}",
       icon: "hero-shopping-bag",
       link: Routes.path("/admin/shop/carts")
     })

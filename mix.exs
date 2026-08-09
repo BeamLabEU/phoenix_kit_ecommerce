@@ -124,6 +124,10 @@ defmodule PhoenixKitEcommerce.MixProject do
       # namespace entirely (it was `PhoenixKit.Modules.Billing`), and
       # 0.1.1/0.1.2, which have no tax API — both fail to compile here.
       pk_dep(:phoenix_kit_billing, "~> 0.5.2"),
+      # Optional: only the AI-translate UI/adapter use it, and both compile out
+      # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
+      # the actual API used (Translatable behaviour, AITranslate components).
+      pk_dep(:phoenix_kit_ai, "~> 0.17", optional: true),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
