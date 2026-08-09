@@ -585,12 +585,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   defp assign_shipping_step(socket) do
-    cart =
-      case Shop.set_cart_shipping_country(socket.assigns.cart, billing_country(socket)) do
-        {:ok, updated} -> updated
-        {:error, _} -> socket.assigns.cart
-      end
-
+    cart = apply_billing_country(socket.assigns.cart, billing_country(socket))
     methods = Shop.get_available_shipping_methods(cart)
 
     socket
@@ -599,6 +594,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:shipping_fallback, methods == [] and Shop.shipping_skip_mode() == :fallback)
     |> assign(:step, :shipping)
   end
+
+  # A blank country must never overwrite one the cart already carries: the
+  # billing-less payment option reaches this step with no profile and no
+  # form data, and writing nil there would clear a country the cart was
+  # already scoped to and quietly widen the method list back to the
+  # country-blind one this step exists to avoid.
+  defp apply_billing_country(cart, country) when is_binary(country) and country != "" do
+    case Shop.set_cart_shipping_country(cart, country) do
+      {:ok, updated} -> updated
+      {:error, _} -> cart
+    end
+  end
+
+  defp apply_billing_country(cart, _country), do: cart
 
   # Entering review must show the amount that will actually be charged.
   #
@@ -625,14 +634,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           assign(socket, :cart, cart)
         else
           socket
-          |> assign(:step, :shipping_invalid)
-          |> put_flash(
-            :error,
-            gettext(
-              "The selected shipping method is not available for your address - please pick another"
-            )
-          )
-          |> push_navigate(to: Routes.path("/cart"))
+          |> assign(:cart, cart)
+          |> reject_invalid_shipping_selection()
         end
 
       # Never block review on a pricing refresh; conversion recalculates
@@ -640,6 +643,49 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       # failure than a dead checkout.
       {:error, _} ->
         socket
+    end
+  end
+
+  # "Pick another" has to point at a page that HAS a picker.
+  #
+  # With `position: :cart` that is the cart page, and bouncing there is
+  # right. With `position: :checkout` the cart page deliberately renders no
+  # shipping section at all (see `CartPage.shipping_required_here?/0`), so
+  # the redirect used to strand the shopper: the cart offered nothing to
+  # change, and "Proceed to Checkout" walked straight back into the same
+  # rejection in `mount/3` (`selected_shipping_method_outgrown?/2`) — a
+  # closed loop with no way out. Reachable by editing billing back to a
+  # country the chosen method does not serve.
+  #
+  # So for `:checkout` we drop the now-ineligible selection and re-enter the
+  # step that owns the choice, with the methods for the country the shopper
+  # actually just entered.
+  defp reject_invalid_shipping_selection(socket) do
+    message =
+      gettext(
+        "The selected shipping method is not available for your address - please pick another"
+      )
+
+    if Shop.shipping_selection_position() == :checkout do
+      socket
+      |> assign(:cart, drop_shipping_selection(socket.assigns.cart))
+      |> assign_shipping_step()
+      |> put_flash(:error, message)
+    else
+      socket
+      |> assign(:step, :shipping_invalid)
+      |> put_flash(:error, message)
+      |> push_navigate(to: Routes.path("/cart"))
+    end
+  end
+
+  # Clearing must not be able to leave the ineligible method in place —
+  # `assign_shipping_step/1` would then render an unchecked list with
+  # Continue still enabled, and Continue leads straight back here.
+  defp drop_shipping_selection(cart) do
+    case Shop.clear_cart_shipping(cart) do
+      {:ok, cleared} -> cleared
+      _ -> %{cart | shipping_method_uuid: nil, shipping_amount: nil}
     end
   end
 
@@ -972,15 +1018,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <%!-- Steps Indicator --%>
         <div class="steps w-full mb-8">
           <%= if length(@payment_options) > 1 do %>
-            <div class={["step", @step in [:payment, :billing, :review] && "step-primary"]}>
+            <div class={["step", @step in [:payment, :billing, :shipping, :review] && "step-primary"]}>
               {gettext("Payment")}
             </div>
           <% end %>
           <%= if @needs_billing do %>
-            <div class={["step", @step in [:billing, :review] && "step-primary"]}>
+            <div class={["step", @step in [:billing, :shipping, :review] && "step-primary"]}>
               {gettext("Billing")}
             </div>
           <% end %>
+          <%!-- Only a checkout-position shop ever reaches :shipping; without
+               this chip the whole indicator went blank on that step. --%>
+          <div :if={@step == :shipping} class="step step-primary">
+            {gettext("Shipping")}
+          </div>
           <div class={["step", @step == :review && "step-primary"]}>
             {gettext("Review & Confirm")}
           </div>
@@ -1029,6 +1080,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   fallback={@shipping_fallback}
                   cart={@cart}
                   currency={@currency}
+                  needs_billing={@needs_billing}
                 />
               <% :review -> %>
                 <.review_step
@@ -1390,14 +1442,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                 <div class="font-semibold">{format_price(method.price, @currency)}</div>
               </label>
             </div>
-            <button
-              id="checkout-shipping-continue"
-              class="btn btn-primary mt-6"
-              phx-click="shipping_continue"
-              disabled={is_nil(@cart.shipping_method_uuid)}
-            >
-              {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
-            </button>
+            <div class="flex items-center gap-3 mt-6">
+              <button
+                id="checkout-shipping-continue"
+                class="btn btn-primary"
+                phx-click="shipping_continue"
+                disabled={not Enum.any?(@methods, &(&1.uuid == @cart.shipping_method_uuid))}
+              >
+                {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+              </button>
+              <.shipping_back_button needs_billing={@needs_billing} />
+            </div>
           <% @fallback -> %>
             <div id="checkout-shipping-fallback-notice" class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -1407,17 +1462,41 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                 )}
               </span>
             </div>
-            <button id="checkout-shipping-continue" class="btn btn-primary mt-6" phx-click="shipping_continue">
-              {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
-            </button>
+            <div class="flex items-center gap-3 mt-6">
+              <button id="checkout-shipping-continue" class="btn btn-primary" phx-click="shipping_continue">
+                {gettext("Continue")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-2" />
+              </button>
+              <.shipping_back_button needs_billing={@needs_billing} />
+            </div>
           <% true -> %>
             <div id="checkout-shipping-blocked" class="alert alert-warning">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
               <span>{gettext("No shipping methods are available for your country.")}</span>
             </div>
+            <div class="mt-6">
+              <.shipping_back_button needs_billing={@needs_billing} />
+            </div>
         <% end %>
       </div>
     </div>
+    """
+  end
+
+  # The blocked state has no Continue by design — the shop does not deliver
+  # there — so without a way back the shopper is stranded on a step whose
+  # only remedy (a different address) lives on the previous one. The cart
+  # link in the page header is not that remedy: under `position: :checkout`
+  # the cart page renders no shipping section at all.
+  defp shipping_back_button(assigns) do
+    ~H"""
+    <button
+      :if={@needs_billing}
+      id="checkout-shipping-back"
+      phx-click="back_to_billing"
+      class="btn btn-ghost"
+    >
+      <.icon name="hero-arrow-left" class="w-4 h-4 mr-2" /> {gettext("Back")}
+    </button>
     """
   end
 

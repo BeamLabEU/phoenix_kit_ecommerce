@@ -237,6 +237,36 @@ were never what the code read.
   Invoices, receipts and credit notes call billing's `format_amount/2`
   directly and keep two decimals, which is the auditable form.
 
+**Shipping — read through `PhoenixKitEcommerce`, never directly**
+
+- `shop_shipping_skip_mode` — `"off"` (default, a shippable cart must carry
+  a method), `"fallback"` (an order may convert without one when no active
+  method covers the buyer's country) or `"always"` (never ask). Read via
+  `shipping_skip_mode/0`; the skip decision itself is
+  `shipping_skippable?/1`, which **must run after
+  `apply_checkout_shipping_country/2`** — it is a question about the
+  checkout country, which the cart does not carry until then. Skipped
+  orders stamp `metadata["shipping_skipped"]` +
+  `metadata["shipping_skip_reason"]`, add no shipping line and no charge.
+- `shop_shipping_selection_position` — `"cart"` (default) or `"checkout"`.
+  Read via `shipping_selection_position/0`. ⚠️ Under `"checkout"` the cart
+  page renders **no** shipping section at all, so nothing may redirect a
+  shopper there to "pick another method" — `CheckoutPage` re-enters its own
+  `:shipping` step instead. A `/cart` bounce under this setting is a closed
+  loop with no way out; that was a real bug.
+
+**Storefront notifications**
+
+- `shop_notify_cart_first_item`, `shop_notify_cart_item`,
+  `shop_notify_checkout_started` — per-event toggles, all `"false"` by
+  default. Read through `notify_event?/1`.
+- `shop_notification_recipients` — `%{"uuids" => [...]}` (a bare list is
+  rejected: core's `value_json` casts through an Ecto `:map` field). Empty
+  or unset means "every shop admin". The stored list is intersected with
+  current `shop.manage_carts` holders on every send — the setting is a
+  snapshot of who was an operator that day, and revoking shop access has to
+  stop the cart-activity feed too.
+
 **Policy — read through `PhoenixKitEcommerce.Policy`, never directly**
 
 Every one is **secure by default**, and every reader fails *closed* on a

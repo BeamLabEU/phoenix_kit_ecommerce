@@ -122,14 +122,23 @@ defmodule PhoenixKitEcommerce.Notifications do
   Stored as `%{"uuids" => [...]}` rather than a bare list — core's
   `value_json` column casts through an Ecto `:map` field, which rejects a
   top-level list at the changeset.
+
+  The stored list is re-checked against `shop.manage_carts` holders on
+  every send, not only when the admin saved it: the setting is a snapshot
+  of who was an operator that day, and revoking someone's shop access has
+  to stop the cart-activity feed too — those messages carry what visitors
+  are shopping for and what their carts are worth. Fails closed, since
+  `admin_recipients/1` rescues to `[]`.
   """
   def shop_recipients do
+    current_admins = admin_recipients("shop.manage_carts")
+
     case PhoenixKit.Settings.get_json_setting_cached("shop_notification_recipients", %{}) do
       %{"uuids" => uuids} when is_list(uuids) and uuids != [] ->
-        Enum.filter(uuids, &is_binary/1)
+        Enum.filter(uuids, &(is_binary(&1) and &1 in current_admins))
 
       _ ->
-        admin_recipients("shop.manage_carts")
+        current_admins
     end
   end
 
@@ -150,8 +159,11 @@ defmodule PhoenixKitEcommerce.Notifications do
   # i18n map (`%{"en" => "..."}`). Reads it through the same fallback chain
   # (exact language -> default language -> first available) storefront
   # pages use, so the notification text shows the same name a shopper saw.
-  defp product_name(%{title: title}) when is_map(title) and title != %{} do
-    Translations.get(%{title: title}, :title, Translations.default_language()) || "product"
+  # The product struct is passed through as-is, not rebuilt into a bare
+  # `%{title: ...}` map: `Translations.get/3` is specced on `struct()`, so
+  # the rebuilt map broke the contract and failed `mix dialyzer`.
+  defp product_name(%{title: title} = product) when is_map(title) and title != %{} do
+    Translations.get(product, :title, Translations.default_language()) || "product"
   end
 
   defp product_name(_), do: "product"

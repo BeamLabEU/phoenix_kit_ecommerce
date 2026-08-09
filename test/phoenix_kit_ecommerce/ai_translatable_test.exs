@@ -1,6 +1,7 @@
 defmodule PhoenixKitEcommerce.AITranslatableTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
+  alias Ecto.Adapters.SQL.Sandbox
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.AITranslatable
   alias PhoenixKitEcommerce.Product
@@ -99,7 +100,7 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     tasks =
       for {lang, title} <- [{"fr", "Vase FR"}, {"de", "Vase DE"}] do
         Task.async(fn ->
-          Ecto.Adapters.SQL.Sandbox.allow(repo(), parent, self())
+          Sandbox.allow(repo(), parent, self())
           AITranslatable.put_translation(product, lang, %{"title" => title}, [])
         end)
       end

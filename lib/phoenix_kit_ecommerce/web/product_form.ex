@@ -170,6 +170,11 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   end
 
   if @ai_translate? do
+    # Aliased inside this block, not at the top of the module: the optional
+    # dep's modules do not exist in a phoenix_kit_ai-less build, and a
+    # top-level alias would be evaluated there too.
+    alias PhoenixKitAI.Components.AITranslate
+    alias PhoenixKitAI.Components.AITranslate.FormGlue
     alias PhoenixKitEcommerce.AITranslatable
 
     # AI-translate mount state: :edit gets the full pipeline wiring, :new (no
@@ -177,7 +182,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     # the shared default — seo fields are outside its vocabulary.
     defp assign_ai_state(socket, %Product{uuid: uuid} = product) when is_binary(uuid) do
       socket =
-        PhoenixKitAI.Components.AITranslate.FormGlue.assign_ai_translation(
+        FormGlue.assign_ai_translation(
           socket,
           AITranslatable.resource_type(),
           product,
@@ -195,7 +200,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     end
 
     defp assign_ai_state(socket, _product) do
-      PhoenixKitAI.Components.AITranslate.FormGlue.assign_ai_translation(
+      FormGlue.assign_ai_translation(
         socket,
         AITranslatable.resource_type(),
         nil,
@@ -265,12 +270,12 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
         assign(
           assigns,
           :ai_cfg,
-          PhoenixKitAI.Components.AITranslate.FormGlue.ai_translate_config(assigns)
+          FormGlue.ai_translate_config(assigns)
         )
 
       ~H"""
       <div :if={@ai_translation_available?} class="flex items-center gap-3">
-        <PhoenixKitAI.Components.AITranslate.ai_translate_progress ai_translate={@ai_cfg} />
+        <AITranslate.ai_translate_progress ai_translate={@ai_cfg} />
         <button type="button" class="btn btn-primary gap-2" phx-click="ai_toggle_modal">
           <.icon name="hero-language" class="w-5 h-5" />
           {gettext("Translate with AI")}
@@ -284,11 +289,11 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
         assign(
           assigns,
           :ai_cfg,
-          PhoenixKitAI.Components.AITranslate.FormGlue.ai_translate_config(assigns)
+          FormGlue.ai_translate_config(assigns)
         )
 
       ~H"""
-      <PhoenixKitAI.Components.AITranslate.ai_translate_modal
+      <AITranslate.ai_translate_modal
         :if={@ai_translation_available?}
         ai_translate={@ai_cfg}
       />

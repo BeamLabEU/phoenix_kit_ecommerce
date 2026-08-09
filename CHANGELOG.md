@@ -35,6 +35,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   step into a localized "we will contact you" notice.
 - **Localized shipping-pending notices** (en/ru/et) on the checkout shipping
   step and the order-completion page.
+- **Admin UI for the two shipping settings.** `shop_shipping_skip_mode` and
+  `shop_shipping_selection_position` shipped read-only — the storefront and
+  the conversion honored both from day one, but nothing rendered a control,
+  so changing either meant writing the setting row by hand. Shop → Settings
+  now carries a "Shipping requirement" card for both, validated against
+  their closed enums and audit-logged for the skip mode.
+- **AI product translation** (PR #17 carried the `phase4-catalog-ai` branch).
+  `PhoenixKitEcommerce.AITranslatable` implements PhoenixKitAI's
+  `Translatable` contract for products (`shop_product`): title, description,
+  body, seo_title and seo_description translated from an explicit source
+  language, merged under `FOR UPDATE` so concurrent per-language jobs never
+  drop a sibling, with its own prompt (seo fields are outside the shared
+  prompt's vocabulary). Slugs are never taken from the model — they are
+  regenerated locally from the translated title, and only when the target
+  language has none, so re-translation cannot change a published URL. The
+  product form grows a "Translate with AI" button and modal. `phoenix_kit_ai`
+  is an **optional** dependency: all of it compiles out when absent.
+- **Multi-domain catalog SEO assigns.** `Web.SEOHelpers` builds
+  canonical / og / hreflang data for the catalog, category and product
+  pages, resolving a per-language canonical host through the workspace-wide
+  `config :phoenix_kit, :canonical_host_resolver` MFA (absent ⇒ today's
+  single-host behavior). hreflang inclusion is decided on the RAW slug map,
+  never on `SlugResolver`'s silent default-language fallback.
+- **Explicit language wins on product URLs.** `/fr/<en-slug>` now redirects
+  to the French slug when the product is genuinely translated into French,
+  instead of bouncing back to the default language — the language switcher
+  could previously never leave the slug's own language.
 
 ### Fixed
 - German titles now slugify with orthographic expansions (`Größe Fußball` →
@@ -48,6 +75,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The billing-less checkout path (authenticated buyer, payment option not
   requiring a billing profile) now routes through the same shipping-step
   decision as every other path instead of jumping straight to review.
+- **Checkout could dead-end under `shipping_selection_position: "checkout"`.**
+  Editing billing to a country the already-chosen method does not serve sent
+  the shopper to the cart page to "pick another" — but that setting is
+  exactly what makes the cart page render no shipping section, and
+  "Proceed to Checkout" walked straight back into the same rejection: a
+  closed loop with no way out. Checkout now drops the ineligible selection
+  and re-enters its own shipping step with the methods for the country just
+  entered.
+- The blocked shipping step (no method covers the country, skipping off)
+  offers a way back to billing; it previously had neither Continue nor Back,
+  stranding the shopper on a step whose only remedy is a different address.
+- The checkout step indicator no longer goes blank on the shipping step, and
+  the step's Continue button now requires a method from the current list
+  rather than any non-nil selection.
+- The shipping step no longer clears a cart's shipping country when the
+  checkout path supplies none (a billing-less payment option), which
+  silently widened the method list back to the country-blind one.
+- `shop_notification_recipients` is intersected with current
+  `shop.manage_carts` holders on every send: revoking someone's shop access
+  now stops their cart-activity feed instead of leaving them on a snapshot
+  list.
+- `mix credo --strict` and `mix dialyzer` are green again (both failed as
+  merged, so `mix precommit` was red): `Translations.get/3` was called with a
+  rebuilt map where its spec requires a struct, plus two nesting-depth and
+  four nested-module-alias findings.
+- Estonian and Russian catalogues complete again — the AI-translate UI
+  strings shipped untranslated.
 
 ## 0.1.16 - 2026-08-08
 
