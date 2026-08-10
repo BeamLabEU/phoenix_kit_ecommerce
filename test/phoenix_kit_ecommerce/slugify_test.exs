@@ -23,6 +23,7 @@ defmodule PhoenixKitEcommerce.SlugifyTest do
   """
   use ExUnit.Case, async: true
 
+  alias PhoenixKit.Utils.Slug
   alias PhoenixKitEcommerce.Product
 
   describe "German — but only when the text is German" do
@@ -79,7 +80,7 @@ defmodule PhoenixKitEcommerce.SlugifyTest do
       # Both now call PhoenixKit.Utils.Slug. This assertion is close to a tautology
       # by construction — which is the point. It used to be the thing that broke.
       for text <- ["Größe Fußball", "Видеопродакшн", "Öl", "Müük"], lang <- ["de", "et", nil] do
-        assert Product.slugify(text, lang) == PhoenixKit.Utils.Slug.slugify(text, locale: lang)
+        assert Product.slugify(text, lang) == Slug.slugify(text, locale: lang)
       end
     end
   end

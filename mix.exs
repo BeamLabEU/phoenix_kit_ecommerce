@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.1.16"
+  @version "0.2.0"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -110,7 +110,7 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `PhoenixKitWeb.Live.UrlState`, which 2 LiveView files in this
       # module `use`. Anything below it resolves a core with no such
       # module, and the failure surfaces in the consumer's build.
-      pk_dep(:phoenix_kit, "~> 1.7.231"),
+      pk_dep(:phoenix_kit, "~> 2.0"),
 
       # Gettext for per-module i18n of sidebar tab labels.
       {:gettext, "~> 1.0"},
@@ -123,11 +123,11 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `~> 0.1` also admitted 0.1.0, which predates the `PhoenixKitBilling`
       # namespace entirely (it was `PhoenixKit.Modules.Billing`), and
       # 0.1.1/0.1.2, which have no tax API — both fail to compile here.
-      pk_dep(:phoenix_kit_billing, "~> 0.5.2"),
+      pk_dep(:phoenix_kit_billing, "~> 0.7"),
       # Optional: only the AI-translate UI/adapter use it, and both compile out
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).
-      pk_dep(:phoenix_kit_ai, "~> 0.17", optional: true),
+      pk_dep(:phoenix_kit_ai, "~> 0.18", optional: true),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},

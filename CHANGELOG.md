@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.2.0 - 2026-08-10
+
+### Changed
+
+- **⚠️ Requires `phoenix_kit ~> 2.0`.** The core pin moved to `~> 2.0`, so this
+  release no longer resolves against core 1.7.
+
+  Core 2.0.0 squashes the migration chain into a single `V135` baseline and makes
+  V135 the chain's floor: `mix ecto.migrate` now *refuses* on a database below it
+  rather than migrating. Check `mix phoenix_kit.status` **before** upgrading. A
+  host below V135 must install `phoenix_kit 1.7.236` — the migration bridge, the
+  last release carrying the full pre-squash chain — migrate until the reported
+  version is at least V135, and only then move to 2.0.
+
+  This package does not call migration internals, so the change is the pin
+  itself.
+
+- Sibling pins raised in step, each to that package's first release requiring
+  core 2.0: `phoenix_kit_billing` → `~> 0.7`, `phoenix_kit_ai` (optional) → `~> 0.18`.
+
+### Removed
+
+- **`PhoenixKitEcommerce.Slugify` is deleted (PR #19).** It existed to apply a
+  German expansion table (`ö` → `oe`, `ß` → `ss`) before handing off to core,
+  because core's slug rule could not express a locale. Core 2.0.0 removes that
+  reason: `PhoenixKit.Utils.Slug` delegates to the `locale_slug` package and
+  `:locale` is first-class, so `Slug.slugify(text, locale: lang)` subsumes the
+  local table. There is now one slug implementation for the whole ecosystem.
+
+### Changed
+
+- **Each language's slug is generated as that language (PR #19).** Product and
+  category slugs pass the record's language through as `locale:`, so a German
+  title expands `ö`/`ß` while an Estonian one folds them — one table could not
+  do both, which is why the local copy existed. Stored slugs are not rewritten;
+  only newly generated ones change.
+
 ## Unreleased
 
 ### Added
