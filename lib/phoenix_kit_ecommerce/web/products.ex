@@ -296,14 +296,14 @@ defmodule PhoenixKitEcommerce.Web.Products do
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
             <%!-- Search --%>
             <div class="lg:col-span-2">
-              <label class="label"><span class="label-text">{gettext("Search")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Search")}</span></label>
               <form phx-submit="search" phx-change="search">
                 <input
                   type="text"
                   name="search"
                   value={@search}
                   placeholder={gettext("Search products...")}
-                  class="input input-bordered w-full focus:input-primary"
+                  class="input w-full focus:input-primary"
                   phx-debounce="300"
                 />
               </form>
@@ -311,9 +311,9 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
             <%!-- Status Filter --%>
             <div>
-              <label class="label"><span class="label-text">{gettext("Status")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Status")}</span></label>
               <form phx-change="filter_status">
-                <select class="select select-bordered w-full focus:select-primary" name="status">
+                <select class="select w-full focus:select-primary" name="status">
                   <option value="" selected={is_nil(@status_filter)}>{gettext("All Status")}</option>
                   <option value="active" selected={@status_filter == "active"}>{gettext("Active")}</option>
                   <option value="draft" selected={@status_filter == "draft"}>{gettext("Draft")}</option>
@@ -324,9 +324,9 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
             <%!-- Type Filter --%>
             <div>
-              <label class="label"><span class="label-text">{gettext("Type")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Type")}</span></label>
               <form phx-change="filter_type">
-                <select class="select select-bordered w-full focus:select-primary" name="type">
+                <select class="select w-full focus:select-primary" name="type">
                   <option value="" selected={is_nil(@type_filter)}>{gettext("All Types")}</option>
                   <option value="physical" selected={@type_filter == "physical"}>{gettext("Physical")}</option>
                   <option value="digital" selected={@type_filter == "digital"}>{gettext("Digital")}</option>
@@ -336,9 +336,9 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
             <%!-- Category Filter --%>
             <div>
-              <label class="label"><span class="label-text">{gettext("Category")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Category")}</span></label>
               <form phx-change="filter_category">
-                <select class="select select-bordered w-full focus:select-primary" name="category">
+                <select class="select w-full focus:select-primary" name="category">
                   <option value="" selected={is_nil(@category_filter)}>{gettext("All Categories")}</option>
                   <%= for category <- @categories do %>
                     <option value={category.uuid} selected={@category_filter == category.uuid}>
@@ -351,7 +351,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
 
             <%!-- Add Button --%>
             <div>
-              <label class="label"><span class="label-text">&nbsp;</span></label>
+              <label class="label"><span class="fieldset-legend">&nbsp;</span></label>
               <.link
                 navigate={Routes.path("/admin/shop/products/new")}
                 class="btn btn-primary w-full"
@@ -725,7 +725,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                 phx-click="toggle_bulk_delete_media"
                 checked={@bulk_delete_media}
               />
-              <span class="label-text">{gettext("Delete associated media files (orphaned only)")}</span>
+              <span class="fieldset-legend">{gettext("Delete associated media files (orphaned only)")}</span>
             </label>
             <div class="modal-action">
               <button phx-click="close_bulk_modal" class="btn">{gettext("Cancel")}</button>
@@ -751,7 +751,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                 phx-click="toggle_delete_media"
                 checked={@delete_media_checked}
               />
-              <span class="label-text">{gettext("Delete associated media files (orphaned only)")}</span>
+              <span class="fieldset-legend">{gettext("Delete associated media files (orphaned only)")}</span>
             </label>
             <div class="modal-action">
               <button phx-click="cancel_delete" class="btn">{gettext("Cancel")}</button>

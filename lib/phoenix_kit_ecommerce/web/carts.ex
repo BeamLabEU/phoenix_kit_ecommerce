@@ -126,14 +126,14 @@ defmodule PhoenixKitEcommerce.Web.Carts do
           <div class="flex flex-col lg:flex-row gap-4">
             <%!-- Search --%>
             <div class="flex-1">
-              <label class="label"><span class="label-text">{gettext("Search")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Search")}</span></label>
               <form phx-submit="search" phx-change="search">
                 <input
                   type="text"
                   name="search"
                   value={@search}
                   placeholder={gettext("Search by email or session ID...")}
-                  class="input input-bordered w-full focus:input-primary"
+                  class="input w-full focus:input-primary"
                   phx-debounce="300"
                 />
               </form>
@@ -141,9 +141,9 @@ defmodule PhoenixKitEcommerce.Web.Carts do
 
             <%!-- Status Filter --%>
             <div class="w-full lg:w-48">
-              <label class="label"><span class="label-text">{gettext("Status")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Status")}</span></label>
               <select
-                class="select select-bordered w-full focus:select-primary"
+                class="select w-full focus:select-primary"
                 phx-change="filter_status"
                 name="status"
               >

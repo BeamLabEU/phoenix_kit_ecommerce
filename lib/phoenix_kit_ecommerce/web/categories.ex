@@ -283,14 +283,14 @@ defmodule PhoenixKitEcommerce.Web.Categories do
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <%!-- Search --%>
             <div class="lg:col-span-2">
-              <label class="label"><span class="label-text">{gettext("Search")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Search")}</span></label>
               <form phx-submit="search" phx-change="search">
                 <input
                   type="text"
                   name="search"
                   value={@search}
                   placeholder={gettext("Search categories...")}
-                  class="input input-bordered w-full focus:input-primary"
+                  class="input w-full focus:input-primary"
                   phx-debounce="300"
                 />
               </form>
@@ -298,9 +298,9 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
             <%!-- Status Filter --%>
             <div>
-              <label class="label"><span class="label-text">{gettext("Status")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Status")}</span></label>
               <form phx-change="filter_status">
-                <select class="select select-bordered w-full focus:select-primary" name="status">
+                <select class="select w-full focus:select-primary" name="status">
                   <option value="" selected={is_nil(@status_filter)}>{gettext("All Status")}</option>
                   <option value="active" selected={@status_filter == "active"}>{gettext("Active")}</option>
                   <option value="unlisted" selected={@status_filter == "unlisted"}>{gettext("Unlisted")}</option>
@@ -311,9 +311,9 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
             <%!-- Parent Filter --%>
             <div>
-              <label class="label"><span class="label-text">{gettext("Parent")}</span></label>
+              <label class="label"><span class="fieldset-legend">{gettext("Parent")}</span></label>
               <form phx-change="filter_parent">
-                <select class="select select-bordered w-full focus:select-primary" name="parent">
+                <select class="select w-full focus:select-primary" name="parent">
                   <option value="" selected={is_nil(@parent_filter)}>{gettext("All Categories")}</option>
                   <option value="root" selected={@parent_filter == "root"}>{gettext("Root Only")}</option>
                   <%= for category <- @all_categories do %>
@@ -327,7 +327,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
             <%!-- Add Button --%>
             <div>
-              <label class="label"><span class="label-text">&nbsp;</span></label>
+              <label class="label"><span class="fieldset-legend">&nbsp;</span></label>
               <.link
                 navigate={Routes.path("/admin/shop/categories/new")}
                 class="btn btn-primary w-full"

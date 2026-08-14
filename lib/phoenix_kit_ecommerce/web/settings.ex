@@ -334,9 +334,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <.icon name="hero-archive-box" class="w-6 h-6" /> Inventory
             </h2>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Track Inventory")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext("Enable stock tracking for products (Phase 2)")}
@@ -361,7 +361,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
           <div class="card-body">
             <h2 class="card-title">{gettext("Shipping requirement")}</h2>
 
-            <div class="form-control">
+            <div class="fieldset">
               <p class="text-sm text-base-content/70 mb-3">
                 {gettext(
                   "What happens when no active shipping method covers the buyer's country."
@@ -391,16 +391,16 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_shipping_skip_mode"
                     phx-value-mode={value}
                   />
-                  <span class="label-text">{label}</span>
+                  <span class="fieldset-legend">{label}</span>
                 </label>
               </div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label">
-                <span class="label-text text-lg font-semibold">
+                <span class="fieldset-legend text-lg font-semibold">
                   {gettext("Where the buyer picks a shipping method")}
                 </span>
               </label>
@@ -429,7 +429,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_shipping_selection_position"
                     phx-value-position={value}
                   />
-                  <span class="label-text">{label}</span>
+                  <span class="fieldset-legend">{label}</span>
                 </label>
               </div>
             </div>
@@ -446,9 +446,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               )}
             </p>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text">{gettext("First item added to a cart")}</span>
+                <span class="fieldset-legend">{gettext("First item added to a cart")}</span>
                 <input
                   type="checkbox"
                   class="toggle toggle-secondary"
@@ -458,9 +458,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 />
               </label>
             </div>
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text">{gettext("Every item added to a cart")}</span>
+                <span class="fieldset-legend">{gettext("Every item added to a cart")}</span>
                 <input
                   type="checkbox"
                   class="toggle toggle-secondary"
@@ -470,9 +470,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 />
               </label>
             </div>
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text">{gettext("Buyer proceeded to checkout")}</span>
+                <span class="fieldset-legend">{gettext("Buyer proceeded to checkout")}</span>
                 <input
                   type="checkbox"
                   class="toggle toggle-secondary"
@@ -503,7 +503,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     value="true"
                     checked={user.uuid in @notification_recipients}
                   />
-                  <span class="label-text">{user.email}</span>
+                  <span class="fieldset-legend">{user.email}</span>
                 </label>
               <% end %>
               <button type="submit" class="btn btn-primary btn-sm mt-2">
@@ -526,9 +526,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               )}
             </p>
 
-            <div class="form-control mb-4">
+            <div class="fieldset mb-4">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Order pages need the buyer's session")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext(
@@ -545,9 +545,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               </label>
             </div>
 
-            <div class="form-control mb-4">
+            <div class="fieldset mb-4">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Allow raw HTML in product descriptions")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext(
@@ -564,9 +564,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               </label>
             </div>
 
-            <div class="form-control mb-4">
+            <div class="fieldset mb-4">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Allow SVG images from import")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext(
@@ -583,9 +583,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               </label>
             </div>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">
                     {gettext("Let image import reach internal addresses")}
                   </span>
@@ -614,9 +614,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               {gettext("Import Behaviour")}
             </h2>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">
                     {gettext("Cleanup removes only categories the import created")}
                   </span>
@@ -656,7 +656,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 value={@default_tax_country}
                 maxlength="2"
                 placeholder={gettext("e.g. EE")}
-                class="input input-bordered w-32 uppercase"
+                class="input w-32 uppercase"
               />
               <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
             </form>
@@ -684,9 +684,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <.icon name="hero-tag" class="w-6 h-6" /> {gettext("Product Options")}
             </h2>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Global Product Options")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext("Define options that apply to all products (size, color, material, etc.)")}
@@ -713,9 +713,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <.icon name="hero-funnel" class="w-6 h-6" /> {gettext("Import Configurations")}
             </h2>
 
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("CSV Import Filters")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext("Configure keyword filters and category rules for CSV product imports")}
@@ -776,7 +776,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                             type="text"
                             name="label"
                             value={filter["label"]}
-                            class="input input-bordered input-xs w-32"
+                            class="input input-xs w-32"
                           />
                         </form>
                       </td>
@@ -843,9 +843,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             </h2>
 
             <%!-- Show Categories in Shop --%>
-            <div class="form-control mb-6">
+            <div class="fieldset mb-6">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Show Categories in Shop")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext("Display category cards above products in the main shop page")}
@@ -863,9 +863,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             <div class="divider"></div>
 
             <%!-- Storefront cart bar --%>
-            <div class="form-control mb-6">
+            <div class="fieldset mb-6">
               <label class="label cursor-pointer justify-between">
-                <span class="label-text text-lg">
+                <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Show the storefront cart bar")}</span>
                   <div class="text-sm text-base-content/70 mt-1">
                     {gettext(
@@ -885,9 +885,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             <div class="divider"></div>
 
             <%!-- Category Name Display --%>
-            <div class="form-control mb-6">
+            <div class="fieldset mb-6">
               <label class="label">
-                <span class="label-text text-lg font-semibold">{gettext("Category Name Display")}</span>
+                <span class="fieldset-legend text-lg font-semibold">{gettext("Category Name Display")}</span>
               </label>
               <p class="text-sm text-base-content/70 mb-3">
                 {gettext("How category names should be displayed in the sidebar")}
@@ -903,7 +903,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_category_display"
                     phx-value-display="truncate"
                   />
-                  <span class="label-text">{gettext("Truncate (single line)")}</span>
+                  <span class="fieldset-legend">{gettext("Truncate (single line)")}</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                   <input
@@ -915,7 +915,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_category_display"
                     phx-value-display="wrap"
                   />
-                  <span class="label-text">{gettext("Wrap (multi-line)")}</span>
+                  <span class="fieldset-legend">{gettext("Wrap (multi-line)")}</span>
                 </label>
               </div>
             </div>
@@ -936,7 +936,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   checked={@hide_zero_decimals}
                   phx-click="toggle_hide_zero_decimals"
                 />
-                <span class="label-text">{gettext("Hide .00 on whole prices (40 instead of 40.00)")}</span>
+                <span class="fieldset-legend">{gettext("Hide .00 on whole prices (40 instead of 40.00)")}</span>
               </label>
             </div>
 
@@ -965,7 +965,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                       phx-click="update_catalog_vocabulary"
                       phx-value-vocabulary={value}
                     />
-                    <span class="label-text">{label}</span>
+                    <span class="fieldset-legend">{label}</span>
                   </label>
                 <% end %>
               </div>
@@ -974,9 +974,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             <div class="divider"></div>
 
             <%!-- Category Icon Mode --%>
-            <div class="form-control">
+            <div class="fieldset">
               <label class="label">
-                <span class="label-text text-lg font-semibold">{gettext("Category Icons")}</span>
+                <span class="fieldset-legend text-lg font-semibold">{gettext("Category Icons")}</span>
               </label>
               <p class="text-sm text-base-content/70 mb-3">
                 {gettext("Show icons next to category names in sidebar")}
@@ -992,7 +992,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_category_icon"
                     phx-value-mode="none"
                   />
-                  <span class="label-text">{gettext("No icons")}</span>
+                  <span class="fieldset-legend">{gettext("No icons")}</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                   <input
@@ -1004,7 +1004,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_category_icon"
                     phx-value-mode="folder"
                   />
-                  <span class="label-text">{gettext("Folder icon")}</span>
+                  <span class="fieldset-legend">{gettext("Folder icon")}</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                   <input
@@ -1016,7 +1016,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     phx-click="update_category_icon"
                     phx-value-mode="category"
                   />
-                  <span class="label-text">{gettext("Category image")}</span>
+                  <span class="fieldset-legend">{gettext("Category image")}</span>
                 </label>
               </div>
             </div>

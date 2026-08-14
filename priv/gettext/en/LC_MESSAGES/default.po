@@ -4059,9 +4059,9 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1452
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1467
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Continue"
-msgstr "Continue Shopping"
+msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:463
 #, elixir-autogen, elixir-format
@@ -4071,14 +4071,14 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1140
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1156
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1172
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Failed to update notification setting"
-msgstr "Failed to update setting"
+msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1198
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Failed to update recipients"
-msgstr "Failed to update setting"
+msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:451
 #, elixir-autogen, elixir-format
@@ -4086,7 +4086,7 @@ msgid "First item added to a cart"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1474
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "No shipping methods are available for your country."
 msgstr ""
 

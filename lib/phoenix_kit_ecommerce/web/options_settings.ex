@@ -403,40 +403,40 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
 
             <.form for={%{}} phx-change="validate_form" phx-submit="save_option" class="space-y-4">
               <%!-- Label --%>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Label *</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">Label *</span></label>
                 <input
                   type="text"
                   name="option[label]"
                   value={@form_data.label}
-                  class="input input-bordered"
+                  class="input"
                   placeholder="e.g., Material"
                   required
                 />
               </div>
 
               <%!-- Key --%>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Key</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">Key</span></label>
                 <input
                   type="text"
                   name="option[key]"
                   value={@form_data.key}
-                  class="input input-bordered font-mono"
+                  class="input font-mono"
                   placeholder="Auto-generated from label"
                   disabled={@editing_option != nil}
                 />
                 <label class="label">
-                  <span class="label-text-alt text-base-content/60">
+                  <span class="fieldset-label text-base-content/60">
                     Lowercase with underscores, auto-generated from label
                   </span>
                 </label>
               </div>
 
               <%!-- Type --%>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Type *</span></label>
-                <select name="option[type]" class="select select-bordered">
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">Type *</span></label>
+                <select name="option[type]" class="select">
                   <%= for type <- @supported_types do %>
                     <option value={type} selected={@form_data.type == type}>
                       {type}
@@ -447,9 +447,9 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
 
               <%!-- Options (for select/multiselect) --%>
               <%= if @form_data.type in ["select", "multiselect"] do %>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label">
-                    <span class="label-text">Options *</span>
+                    <span class="fieldset-legend">Options *</span>
                     <button
                       type="button"
                       phx-click="add_option"
@@ -465,7 +465,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           type="text"
                           name={"option[options][#{idx}]"}
                           value={opt}
-                          class="input input-bordered input-sm flex-1"
+                          class="input input-sm flex-1"
                           placeholder="Option value"
                         />
                         <button
@@ -485,7 +485,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                 </div>
 
                 <%!-- Affects Price Toggle --%>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label cursor-pointer justify-start gap-3">
                     <input
                       type="checkbox"
@@ -495,10 +495,10 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                       phx-click="toggle_affects_price"
                       class="checkbox checkbox-primary"
                     />
-                    <span class="label-text">Affects Price</span>
+                    <span class="fieldset-legend">Affects Price</span>
                   </label>
                   <label class="label pt-0">
-                    <span class="label-text-alt text-base-content/60">
+                    <span class="fieldset-label text-base-content/60">
                       Enable to add price modifiers for each option
                     </span>
                   </label>
@@ -507,9 +507,9 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                 <%!-- Modifier Type and Price Modifiers (when affects_price is true) --%>
                 <%= if @form_data.affects_price and @form_data.options != [] do %>
                   <%!-- Modifier Type Selector --%>
-                  <div class="form-control">
+                  <div class="fieldset">
                     <label class="label">
-                      <span class="label-text">Modifier Type</span>
+                      <span class="fieldset-legend">Modifier Type</span>
                     </label>
                     <div class="flex flex-wrap gap-4">
                       <label class="label cursor-pointer gap-2">
@@ -522,7 +522,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           phx-value-type="fixed"
                           class="radio radio-primary"
                         />
-                        <span class="label-text">Fixed (+10)</span>
+                        <span class="fieldset-legend">Fixed (+10)</span>
                       </label>
                       <label class="label cursor-pointer gap-2">
                         <input
@@ -534,15 +534,15 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           phx-value-type="percent"
                           class="radio radio-primary"
                         />
-                        <span class="label-text">Percent (+20%)</span>
+                        <span class="fieldset-legend">Percent (+20%)</span>
                       </label>
                     </div>
                   </div>
 
                   <%!-- Price Modifiers --%>
-                  <div class="form-control">
+                  <div class="fieldset">
                     <label class="label">
-                      <span class="label-text">Price Modifiers (Default Values)</span>
+                      <span class="fieldset-legend">Price Modifiers (Default Values)</span>
                     </label>
                     <div class="p-4 bg-base-200 rounded-lg space-y-3">
                       <p class="text-sm text-base-content/70 mb-3">
@@ -563,7 +563,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                               min="0"
                               name={"option[price_modifiers][#{opt}]"}
                               value={Map.get(@form_data.price_modifiers, opt, "0")}
-                              class="input input-sm input-bordered join-item w-24"
+                              class="input input-sm join-item w-24"
                               placeholder="0"
                             />
                             <%= if @form_data.modifier_type == "percent" do %>
@@ -576,7 +576,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                   </div>
 
                   <%!-- Allow Override Toggle --%>
-                  <div class="form-control mt-4">
+                  <div class="fieldset mt-4">
                     <label class="label cursor-pointer justify-start gap-3">
                       <input type="hidden" name="option[allow_override]" value="false" />
                       <input
@@ -588,7 +588,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                         class="checkbox checkbox-primary"
                       />
                       <div>
-                        <span class="label-text font-medium">Allow Override Per-Product</span>
+                        <span class="fieldset-legend font-medium">Allow Override Per-Product</span>
                         <p class="text-xs text-base-content/60">
                           Enable editing price modifiers for each individual product
                         </p>
@@ -607,19 +607,19 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
               <% end %>
 
               <%!-- Unit --%>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Unit (optional)</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">Unit (optional)</span></label>
                 <input
                   type="text"
                   name="option[unit]"
                   value={@form_data.unit}
-                  class="input input-bordered input-sm w-32"
+                  class="input input-sm w-32"
                   placeholder="e.g., cm, kg"
                 />
               </div>
 
               <%!-- Required --%>
-              <div class="form-control">
+              <div class="fieldset">
                 <label class="label cursor-pointer justify-start gap-3">
                   <input
                     type="checkbox"
@@ -628,7 +628,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                     checked={@form_data.required}
                     class="checkbox checkbox-primary"
                   />
-                  <span class="label-text">Required field</span>
+                  <span class="fieldset-legend">Required field</span>
                 </label>
               </div>
 
