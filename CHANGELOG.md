@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.2.2 - 2026-08-14
+
+PR #21 plus the post-merge review in
+`dev_docs/pull_requests/2026/21-stop-empty-slugs/GROK_REVIEW.md`.
+
+**⚠️ Requires `phoenix_kit ~> 2.6`.** Shipping-method slugs call
+`Slug.put_slug/3` (core 2.4.0) and product/category unique constraints name
+V171's projection primary keys (core 2.6.0). A host still on 2.0–2.5 will not
+resolve this release.
+
+### Fixed
+
+- **Empty slugs no longer lock a shop out of its own unique index.**
+  `Slug.slugify/2` returns `""` for scripts it cannot romanize (CJK, Arabic,
+  emoji). The old `extract_primary_slug` index was partial only on
+  `IS NOT NULL`, so the first unromanizable title took the `""` key and the
+  second could not be inserted. The generator never writes an empty result.
+- **Unromanizable titles now get a storefront URL.** Skipping the empty key
+  fixed the lockout but left CJK-only products as `/shop/product/` — a
+  catalog card with nowhere to go. They now receive a stable `item-<hash>`
+  fallback, shared by Product and Category via
+  `PhoenixKitEcommerce.LocalizedSlug`. A leftover `{"en": ""}` row self-heals
+  into that fallback on its next save.
+- **Slug resolution skips stored empty strings.** `""` is truthy, so
+  `SlugResolver.product_slug/2` used to emit it into `product_url/2` for a
+  legacy CJK row and produce `/shop/product/` even when another language had
+  a real slug.
+- **Renaming a shipping method no longer moves its slug**, and a Cyrillic
+  name no longer writes `""` (which locked every later Cyrillic-named method
+  out via `phoenix_kit_shop_shipping_methods_slug_unique`). Shipping methods
+  now use core's `Slug.put_slug/3`.
+- **A CJK/Arabic/emoji shipping-method name can be saved.** `slug` is
+  `NOT NULL`, and `put_slug/3` leaves it blank when slugify returns `""`,
+  which was a failed insert. The same `item-<hash>` fallback now fills it,
+  suffixing `-2` on collision.
+- **Product and category slug collisions are changeset errors** on `:slug`,
+  not raw `Postgrex.Error`. The `unique_constraint` names follow V171's
+  projection primary keys.
+- **Admin form labels were rendering at 60% opacity under daisyUI 5.**
+  `form-control` / `label-text` / `*-bordered` / `tabs-bordered` match
+  nothing in v5; the leftover `.label` rule is `color-mix(..., 60%)`.
+  Class remaps only.
+
+### Changed
+
+- **`:phoenix_kit` floor raised `~> 2.0` → `~> 2.6`** (two-segment, so later
+  2.x still resolve). The previous floor admitted cores without `put_slug/3`
+  and without V171.
+
 ## 0.2.1 - 2026-08-11
 
 ### Changed
