@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.Category do
   import Ecto.Changeset
 
   alias PhoenixKit.Modules.Storage.URLSigner
-  alias PhoenixKit.Utils.Slug
+  alias PhoenixKitEcommerce.LocalizedSlug
 
   @type t :: %__MODULE__{}
 
@@ -93,9 +93,9 @@ defmodule PhoenixKitEcommerce.Category do
     |> validate_localized_required(:name)
     |> validate_number(:position, greater_than_or_equal_to: 0)
     |> validate_inclusion(:status, @statuses)
-    |> maybe_generate_slug()
+    |> LocalizedSlug.maybe_generate(:name)
     |> validate_no_circular_parent()
-    # Same shape as Product: V171's projection pkey is the constraint now.
+    # V171's projection pkey — same shape as Product.
     |> unique_constraint(:slug, name: "phoenix_kit_shop_category_slugs_pkey")
   end
 
@@ -281,40 +281,6 @@ defmodule PhoenixKitEcommerce.Category do
     end
   end
 
-  # Generate slug from name for each language
-  defp put_generated_slug(acc, {lang, name}) do
-    with true <- Map.get(acc, lang) in [nil, ""],
-         true <- name not in [nil, ""],
-         slug when slug != "" <- slugify(name, lang) do
-      Map.put(acc, lang, slug)
-    else
-      _ -> acc
-    end
-  end
-
-  defp maybe_generate_slug(changeset) do
-    name_map = get_field(changeset, :name) || %{}
-    slug_map = get_field(changeset, :slug) || %{}
-
-    # For each language with a name but no slug, generate one — keeping only
-    # non-empty RESULTS, and scrubbing empties already in the map. Same fix as
-    # `Product.maybe_generate_slug/1`, same reason: `Slug.slugify/2` yields ""
-    # for unromanizable scripts, the unique index on
-    # `extract_primary_slug(slug)` is partial only on IS NOT NULL, and a
-    # written "" therefore blocked every later category in the same position.
-    updated_slugs =
-      name_map
-      |> Enum.reduce(slug_map, &put_generated_slug(&2, &1))
-      |> Enum.reject(fn {_lang, slug} -> slug in [nil, ""] end)
-      |> Map.new()
-
-    if updated_slugs != slug_map do
-      put_change(changeset, :slug, updated_slugs)
-    else
-      changeset
-    end
-  end
-
   # Prevent category from being its own parent or creating circular references
   defp validate_no_circular_parent(changeset) do
     parent_uuid = get_change(changeset, :parent_uuid)
@@ -362,12 +328,4 @@ defmodule PhoenixKitEcommerce.Category do
       end
     end
   end
-
-  # Core's rule, not a local copy. This drifted between Product and Category twice
-  # — Cyrillic, then German — and each time the fix reached only one of them. There
-  # is now one implementation for the whole ecosystem, in `locale_slug`.
-  #
-  # `lang` is the language the name is IN, and it changes the answer: German ö -> oe,
-  # Estonian ö -> o. The reduce above had it bound and was throwing it away.
-  defp slugify(text, lang), do: Slug.slugify(text, locale: lang, transliterate: true)
 end

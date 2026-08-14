@@ -26,6 +26,7 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   import Ecto.Changeset
 
   alias PhoenixKit.Utils.Slug
+  alias PhoenixKitEcommerce.LocalizedSlug
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
 
@@ -103,15 +104,13 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
     |> validate_number(:position, greater_than_or_equal_to: 0)
     |> validate_number(:estimated_days_min, greater_than_or_equal_to: 0)
     |> validate_number(:estimated_days_max, greater_than: 0)
-    # Core's changeset glue. The local generator keyed on get_change(:name),
-    # so RENAMING a method regenerated the slug and moved it; its slugify was
-    # ASCII-only ([^\w\s-] without /u), so a Cyrillic name wrote "" — and the
-    # unique index then locked every later Cyrillic-named method out, the same
-    # shape as the product empty-slug bug fixed alongside this. put_slug keeps
-    # an existing slug, romanizes, and suffixes -2, -3 … until free. The
-    # length cap moved below generation so it also sees a generated slug,
-    # which at its old position it never did.
+    # Keeps an existing slug on rename, romanizes, suffixes -2/-3 until free.
+    # max_length applies to the generated value — the old validate_length sat
+    # above generation and never saw it.
     |> Slug.put_slug(:name, max_length: 100)
+    # slug is NOT NULL. put_slug leaves CJK/Arabic/emoji names blank
+    # (slugify returns ""), which is a failed insert, not a missing URL.
+    |> LocalizedSlug.put_plain_fallback(:name, max_length: 100)
     |> validate_length(:slug, max: 100)
     |> unique_constraint(:slug, name: :phoenix_kit_shop_shipping_methods_slug_unique)
   end

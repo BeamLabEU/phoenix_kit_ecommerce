@@ -49,4 +49,25 @@ defmodule PhoenixKitEcommerce.ShippingMethodSlugTest do
     assert String.ends_with?(second.slug, "-2")
     assert String.length(second.slug) <= 100
   end
+
+  test "a CJK-only name gets a fallback slug — the column is NOT NULL" do
+    # put_slug leaves the field alone when slugify returns "". Without a
+    # fallback the insert raises not_null_violation. Two different names
+    # must both insert, with distinct hashes, never "".
+    {:ok, first} = %{"name" => "店舗受取"} |> changeset() |> Repo.insert()
+    {:ok, second} = %{"name" => "宅配便"} |> changeset() |> Repo.insert()
+
+    assert first.slug =~ ~r/^item-[0-9a-f]{10}$/
+    assert second.slug =~ ~r/^item-[0-9a-f]{10}$/
+    refute first.slug == second.slug
+  end
+
+  test "two identical CJK names suffix rather than colliding" do
+    {:ok, first} = %{"name" => "店舗受取"} |> changeset() |> Repo.insert()
+    {:ok, second} = %{"name" => "店舗受取"} |> changeset() |> Repo.insert()
+
+    assert String.ends_with?(second.slug, "-2")
+    assert String.length(second.slug) <= 100
+    refute first.slug == second.slug
+  end
 end

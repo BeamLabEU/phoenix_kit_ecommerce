@@ -2,25 +2,24 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
   @moduledoc """
   An unromanizable title must not write an empty slug.
 
-  `Slug.slugify/2` falls back to `""` for scripts it cannot romanize (CJK,
-  Arabic, emoji), and the unique index on `extract_primary_slug(slug)` is
-  partial only on `IS NOT NULL` — so a written `""` was *enforced*, and a
-  shop's SECOND product with a CJK-only title could not be inserted at all:
+  `Slug.slugify/2` returns `""` for scripts it cannot romanize (CJK,
+  Arabic, emoji). Writing that `""` used to lock the shop out via the
+  old `extract_primary_slug` index; after V171 empty values are simply
+  not a URL. Either way a CJK-only product with no slug is unreachable
+  from the catalog (`product_url/2` interpolates nil into
+  `/shop/product/`).
 
-      ERROR: duplicate key value violates unique constraint
-             "idx_shop_products_slug_primary"
-      DETAIL: Key (extract_primary_slug(slug))=() already exists.
-
-  The generator now keeps only non-empty results and scrubs empties already
-  in the map, so legacy rows self-heal on their next save —
-  `extract_primary_slug('{}')` is NULL, which drops the row out of the
-  partial index instead of squatting on the `""` key.
+  The generator now writes a stable `item-<hash>` fallback instead, and
+  scrubs leftover `""` values so a legacy row self-heals on its next
+  save — and gains a URL.
   """
   use PhoenixKitEcommerce.DataCase, async: true
 
   alias Ecto.Changeset
   alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.LocalizedSlug
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.SlugResolver
 
   defp product_slugs(title_map, base \\ %Product{}) do
     base
@@ -28,15 +27,26 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
     |> Changeset.get_field(:slug)
   end
 
+  defp cjk_slug(text), do: LocalizedSlug.fallback(text)
+
   describe "the generator" do
-    test "writes no key for an unromanizable title instead of an empty slug" do
+    test "writes a stable fallback for an unromanizable title, never an empty slug" do
       # The map key is the store's language, not the script of the text — an
       # English-keyed shop entering CJK text is the everyday route here.
-      assert product_slugs(%{"en" => "日本語"}) == %{}
+      assert product_slugs(%{"en" => "日本語"}) == %{"en" => cjk_slug("日本語")}
     end
 
-    test "keeps only the romanizable languages of a mixed title" do
-      assert product_slugs(%{"en" => "Nihongo", "ja" => "日本語"}) == %{"en" => "nihongo"}
+    test "the fallback is stable across saves and distinct per title" do
+      assert cjk_slug("日本語") == cjk_slug("日本語")
+      refute cjk_slug("日本語") == cjk_slug("別の話")
+      assert cjk_slug("日本語") =~ ~r/^item-[0-9a-f]{10}$/
+    end
+
+    test "keeps the romanizable languages of a mixed title and falls back for the rest" do
+      assert product_slugs(%{"en" => "Nihongo", "ja" => "日本語"}) == %{
+               "en" => "nihongo",
+               "ja" => cjk_slug("日本語")
+             }
     end
 
     test "categories behave the same" do
@@ -45,18 +55,34 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
         |> Category.changeset(%{name: %{"en" => "日本語"}})
         |> Changeset.get_field(:slug)
 
-      assert slugs == %{}
+      assert slugs == %{"en" => cjk_slug("日本語")}
     end
   end
 
   describe "against the real index" do
-    test "a second CJK-only product inserts — the bug this fixes" do
+    test "a second CJK-only product inserts — the lockout this fixes" do
       for title <- ["日本語", "別の話"] do
-        {:ok, _} =
+        {:ok, product} =
           %Product{}
           |> Product.changeset(%{title: %{"en" => title}, price: 100})
           |> Repo.insert()
+
+        assert product.slug == %{"en" => cjk_slug(title)}
       end
+    end
+
+    test "two products with the same unromanizable title collide as a changeset error" do
+      {:ok, _} =
+        %Product{}
+        |> Product.changeset(%{title: %{"en" => "日本語"}, price: 100})
+        |> Repo.insert()
+
+      {:error, changeset} =
+        %Product{}
+        |> Product.changeset(%{title: %{"en" => "日本語"}, price: 100})
+        |> Repo.insert()
+
+      assert {"has already been taken", _} = changeset.errors[:slug]
     end
 
     test "a legacy row holding an empty slug self-heals on its next save" do
@@ -70,9 +96,9 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
 
       {:ok, healed} = legacy |> Product.changeset(%{}) |> Repo.update()
 
-      assert healed.slug == %{}
+      assert healed.slug == %{"en" => cjk_slug("日本語")}
 
-      # And with the "" key vacated, a CJK-only product can insert again.
+      # And with the "" key vacated, a different CJK-only product can insert.
       {:ok, _} =
         %Product{}
         |> Product.changeset(%{title: %{"en" => "別の話"}, price: 100})
@@ -115,6 +141,29 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
           price: 100
         })
         |> Repo.insert()
+    end
+  end
+
+  describe "URL resolution of blank slugs" do
+    test "product_slug skips a stored empty string rather than emitting it" do
+      product = %Product{slug: %{"en" => ""}, title: %{"en" => "日本語"}}
+      assert SlugResolver.product_slug(product, "en") == nil
+    end
+
+    test "product_slug falls through a blank to another language's value" do
+      product = %Product{slug: %{"en" => "", "de" => "hut"}}
+      assert SlugResolver.product_slug(product, "en") == "hut"
+    end
+
+    test "a generated CJK slug is what product_url interpolates" do
+      product = %Product{
+        title: %{"en" => "日本語"},
+        slug: %{"en" => cjk_slug("日本語")}
+      }
+
+      url = PhoenixKitEcommerce.product_url(product, "en")
+      assert url =~ cjk_slug("日本語")
+      refute url =~ ~r{/shop/product/?$}
     end
   end
 end

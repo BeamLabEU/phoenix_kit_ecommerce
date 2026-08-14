@@ -37,6 +37,7 @@ defmodule PhoenixKitEcommerce.Product do
   import Ecto.Changeset
 
   alias PhoenixKit.Utils.Slug
+  alias PhoenixKitEcommerce.LocalizedSlug
 
   @type t :: %__MODULE__{}
 
@@ -157,17 +158,10 @@ defmodule PhoenixKitEcommerce.Product do
     |> validate_number(:download_limit, greater_than: 0)
     |> validate_number(:download_expiry_days, greater_than: 0)
     |> validate_length(:currency, is: 3)
-    |> maybe_generate_slug()
-    # Products carry the same functional unique index as categories
-    # (`extract_primary_slug(slug)`) but never declared it, so two titles that
-    # slugify the same — easy once titles are transliterated, "Ель" and "Эль"
-    # both give "el" — raised a raw ConstraintError out of the form and out of
-    # the import worker instead of a field error the operator can act on.
-    # V171 replaced the primary-slug expression index with the
-    # phoenix_kit_shop_product_slugs projection, whose PRIMARY KEY enforces
-    # uniqueness per (base language, value). The trigger's insert is what
-    # raises, and Ecto matches the constraint by this name — so a collision
-    # is a changeset error on :slug for the first time on this table.
+    |> LocalizedSlug.maybe_generate(:title)
+    # V171's projection pkey (base language, value). The trigger insert is
+    # what raises; Ecto matches this name so a collision is a :slug error
+    # rather than a raw Postgrex.Error.
     |> unique_constraint(:slug, name: "phoenix_kit_shop_product_slugs_pkey")
   end
 
@@ -265,58 +259,17 @@ defmodule PhoenixKitEcommerce.Product do
     end
   end
 
-  # Generate slug from title for each language
-  defp put_generated_slug(acc, {lang, title}) do
-    with true <- Map.get(acc, lang) in [nil, ""],
-         true <- title not in [nil, ""],
-         slug when slug != "" <- slugify(title, lang) do
-      Map.put(acc, lang, slug)
-    else
-      _ -> acc
-    end
-  end
-
-  defp maybe_generate_slug(changeset) do
-    title_map = get_field(changeset, :title) || %{}
-    slug_map = get_field(changeset, :slug) || %{}
-
-    # For each language with a title but no slug, generate one — IN that
-    # language — keeping only non-empty RESULTS. The old guard checked the
-    # title and never the outcome, but `Slug.slugify/2` falls back to "" for
-    # scripts it cannot romanize (CJK, Arabic, emoji), and the unique index on
-    # `extract_primary_slug(slug)` is partial only on IS NOT NULL — so a
-    # written "" was enforced, and a shop's SECOND product with a CJK-only
-    # title could not be inserted at all
-    # (`Key (extract_primary_slug(slug))=() already exists`).
-    #
-    # The final reject also scrubs empties already sitting in the map from
-    # before this fix, so a legacy row self-heals on its next save:
-    # `extract_primary_slug('{}')` is NULL, which drops the row out of the
-    # partial index instead of squatting on the "" key.
-    updated_slugs =
-      title_map
-      |> Enum.reduce(slug_map, &put_generated_slug(&2, &1))
-      |> Enum.reject(fn {_lang, slug} -> slug in [nil, ""] end)
-      |> Map.new()
-
-    if updated_slugs != slug_map do
-      put_change(changeset, :slug, updated_slugs)
-    else
-      changeset
-    end
-  end
-
   @doc """
   Slug generation for per-language slugs. Public because the AI translation adapter
   (`AITranslatable.slug_base/3`) derives a slug from a translated title.
 
   `lang` is the language the text is IN, and it changes the answer: German `ö`
   expands to `oe` while Estonian `ö` folds to `o`, and Ukrainian Cyrillic follows
-  Ukraine's own romanization rather than Russian's. The reduce above had `lang`
-  bound and was discarding it, so every language got the neutral rule — a German
-  title slugged `grosse` where German orthography wants `groesse`.
+  Ukraine's own romanization rather than Russian's.
 
   Passing `nil` still produces a correct slug, just not locale-tuned.
+  Unromanizable scripts (CJK, Arabic, emoji) return `""`; callers that need a
+  URL must apply `LocalizedSlug.fallback/1` (the changeset already does).
   """
   def slugify(text, lang \\ nil),
     do: Slug.slugify(text, locale: lang, transliterate: true)
