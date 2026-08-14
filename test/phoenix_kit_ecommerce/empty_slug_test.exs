@@ -79,4 +79,42 @@ defmodule PhoenixKitEcommerce.EmptySlugTest do
         |> Repo.insert()
     end
   end
+
+  describe "V171's projection bucket, from the changeset's side" do
+    test "a same-language collision is a changeset error, not a raw Postgrex error" do
+      {:ok, _} =
+        %Product{}
+        |> Product.changeset(%{title: %{"en" => "Same Hat"}, price: 100})
+        |> Repo.insert()
+
+      {:error, changeset} =
+        %Product{}
+        |> Product.changeset(%{
+          title: %{"en" => "Other"},
+          slug: %{"en" => "same-hat"},
+          price: 100
+        })
+        |> Repo.insert()
+
+      assert {"has already been taken", _} = changeset.errors[:slug]
+    end
+
+    test "the same value under a different language inserts fine" do
+      # The old expression index rejected this pair; the projection does not —
+      # a URL request always carries a language.
+      {:ok, _} =
+        %Product{}
+        |> Product.changeset(%{title: %{"en" => "Hat"}, price: 100})
+        |> Repo.insert()
+
+      {:ok, _} =
+        %Product{}
+        |> Product.changeset(%{
+          title: %{"en" => "Other Hat", "de" => "Hut"},
+          slug: %{"en" => "other-hat", "de" => "hat"},
+          price: 100
+        })
+        |> Repo.insert()
+    end
+  end
 end

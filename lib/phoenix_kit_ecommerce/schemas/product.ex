@@ -163,7 +163,12 @@ defmodule PhoenixKitEcommerce.Product do
     # slugify the same — easy once titles are transliterated, "Ель" and "Эль"
     # both give "el" — raised a raw ConstraintError out of the form and out of
     # the import worker instead of a field error the operator can act on.
-    |> unique_constraint(:slug, name: "idx_shop_products_slug_primary")
+    # V171 replaced the primary-slug expression index with the
+    # phoenix_kit_shop_product_slugs projection, whose PRIMARY KEY enforces
+    # uniqueness per (base language, value). The trigger's insert is what
+    # raises, and Ecto matches the constraint by this name — so a collision
+    # is a changeset error on :slug for the first time on this table.
+    |> unique_constraint(:slug, name: "phoenix_kit_shop_product_slugs_pkey")
   end
 
   @doc """

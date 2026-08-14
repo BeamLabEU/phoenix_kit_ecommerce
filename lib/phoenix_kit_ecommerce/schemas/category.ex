@@ -95,7 +95,8 @@ defmodule PhoenixKitEcommerce.Category do
     |> validate_inclusion(:status, @statuses)
     |> maybe_generate_slug()
     |> validate_no_circular_parent()
-    |> unique_constraint(:slug, name: "idx_shop_categories_slug_primary")
+    # Same shape as Product: V171's projection pkey is the constraint now.
+    |> unique_constraint(:slug, name: "phoenix_kit_shop_category_slugs_pkey")
   end
 
   @doc """
