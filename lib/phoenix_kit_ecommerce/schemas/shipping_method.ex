@@ -25,6 +25,8 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKit.Utils.Slug
+
   @primary_key {:uuid, UUIDv7, autogenerate: true}
 
   schema "phoenix_kit_shop_shipping_methods" do
@@ -91,7 +93,6 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
     |> cast(attrs, @required_fields ++ @optional_fields)
     |> validate_required(@required_fields)
     |> validate_length(:name, max: 255)
-    |> validate_length(:slug, max: 100)
     |> validate_length(:currency, is: 3)
     |> validate_number(:price, greater_than_or_equal_to: 0)
     |> validate_number(:free_above_amount, greater_than: 0)
@@ -102,7 +103,16 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
     |> validate_number(:position, greater_than_or_equal_to: 0)
     |> validate_number(:estimated_days_min, greater_than_or_equal_to: 0)
     |> validate_number(:estimated_days_max, greater_than: 0)
-    |> maybe_generate_slug()
+    # Core's changeset glue. The local generator keyed on get_change(:name),
+    # so RENAMING a method regenerated the slug and moved it; its slugify was
+    # ASCII-only ([^\w\s-] without /u), so a Cyrillic name wrote "" — and the
+    # unique index then locked every later Cyrillic-named method out, the same
+    # shape as the product empty-slug bug fixed alongside this. put_slug keeps
+    # an existing slug, romanizes, and suffixes -2, -3 … until free. The
+    # length cap moved below generation so it also sees a generated slug,
+    # which at its old position it never did.
+    |> Slug.put_slug(:name, max_length: 100)
+    |> validate_length(:slug, max: 100)
     |> unique_constraint(:slug, name: :phoenix_kit_shop_shipping_methods_slug_unique)
   end
 
@@ -218,28 +228,6 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   defp country_ok?(%{countries: allowed, excluded_countries: excluded}, country) do
     (is_nil(country) or country in allowed) and
       (is_nil(country) or country not in excluded)
-  end
-
-  defp maybe_generate_slug(changeset) do
-    case get_change(changeset, :slug) do
-      nil ->
-        case get_change(changeset, :name) do
-          nil -> changeset
-          name -> put_change(changeset, :slug, slugify(name))
-        end
-
-      _ ->
-        changeset
-    end
-  end
-
-  defp slugify(text) do
-    text
-    |> String.downcase()
-    |> String.replace(~r/[^\w\s-]/, "")
-    |> String.replace(~r/\s+/, "-")
-    |> String.replace(~r/-+/, "-")
-    |> String.trim("-")
   end
 
   defp normalize_booleans(attrs, fields) when is_map(attrs) do
