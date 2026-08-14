@@ -261,19 +261,38 @@ defmodule PhoenixKitEcommerce.Product do
   end
 
   # Generate slug from title for each language
+  defp put_generated_slug(acc, {lang, title}) do
+    with true <- Map.get(acc, lang) in [nil, ""],
+         true <- title not in [nil, ""],
+         slug when slug != "" <- slugify(title, lang) do
+      Map.put(acc, lang, slug)
+    else
+      _ -> acc
+    end
+  end
+
   defp maybe_generate_slug(changeset) do
     title_map = get_field(changeset, :title) || %{}
     slug_map = get_field(changeset, :slug) || %{}
 
-    # For each language with a title but no slug, generate one — IN that language.
+    # For each language with a title but no slug, generate one — IN that
+    # language — keeping only non-empty RESULTS. The old guard checked the
+    # title and never the outcome, but `Slug.slugify/2` falls back to "" for
+    # scripts it cannot romanize (CJK, Arabic, emoji), and the unique index on
+    # `extract_primary_slug(slug)` is partial only on IS NOT NULL — so a
+    # written "" was enforced, and a shop's SECOND product with a CJK-only
+    # title could not be inserted at all
+    # (`Key (extract_primary_slug(slug))=() already exists`).
+    #
+    # The final reject also scrubs empties already sitting in the map from
+    # before this fix, so a legacy row self-heals on its next save:
+    # `extract_primary_slug('{}')` is NULL, which drops the row out of the
+    # partial index instead of squatting on the "" key.
     updated_slugs =
-      Enum.reduce(title_map, slug_map, fn {lang, title}, acc ->
-        if Map.get(acc, lang) in [nil, ""] and title not in [nil, ""] do
-          Map.put(acc, lang, slugify(title, lang))
-        else
-          acc
-        end
-      end)
+      title_map
+      |> Enum.reduce(slug_map, &put_generated_slug(&2, &1))
+      |> Enum.reject(fn {_lang, slug} -> slug in [nil, ""] end)
+      |> Map.new()
 
     if updated_slugs != slug_map do
       put_change(changeset, :slug, updated_slugs)

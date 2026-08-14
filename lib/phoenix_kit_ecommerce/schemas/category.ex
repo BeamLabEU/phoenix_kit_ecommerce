@@ -281,19 +281,31 @@ defmodule PhoenixKitEcommerce.Category do
   end
 
   # Generate slug from name for each language
+  defp put_generated_slug(acc, {lang, name}) do
+    with true <- Map.get(acc, lang) in [nil, ""],
+         true <- name not in [nil, ""],
+         slug when slug != "" <- slugify(name, lang) do
+      Map.put(acc, lang, slug)
+    else
+      _ -> acc
+    end
+  end
+
   defp maybe_generate_slug(changeset) do
     name_map = get_field(changeset, :name) || %{}
     slug_map = get_field(changeset, :slug) || %{}
 
-    # For each language with a name but no slug, generate one
+    # For each language with a name but no slug, generate one — keeping only
+    # non-empty RESULTS, and scrubbing empties already in the map. Same fix as
+    # `Product.maybe_generate_slug/1`, same reason: `Slug.slugify/2` yields ""
+    # for unromanizable scripts, the unique index on
+    # `extract_primary_slug(slug)` is partial only on IS NOT NULL, and a
+    # written "" therefore blocked every later category in the same position.
     updated_slugs =
-      Enum.reduce(name_map, slug_map, fn {lang, name}, acc ->
-        if Map.get(acc, lang) in [nil, ""] and name not in [nil, ""] do
-          Map.put(acc, lang, slugify(name, lang))
-        else
-          acc
-        end
-      end)
+      name_map
+      |> Enum.reduce(slug_map, &put_generated_slug(&2, &1))
+      |> Enum.reject(fn {_lang, slug} -> slug in [nil, ""] end)
+      |> Map.new()
 
     if updated_slugs != slug_map do
       put_change(changeset, :slug, updated_slugs)
