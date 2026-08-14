@@ -390,13 +390,13 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
               class="space-y-4"
             >
               <%!-- Name --%>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Name *</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">Name *</span></label>
                 <input
                   type="text"
                   name="config[name]"
                   value={@form_data.name}
-                  class="input input-bordered"
+                  class="input"
                   placeholder="e.g., decor_3d_default"
                   required
                 />
@@ -404,7 +404,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
 
               <%!-- Status Toggles --%>
               <div class="grid grid-cols-2 gap-4">
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label cursor-pointer justify-start gap-3">
                     <input type="hidden" name="config[active]" value="false" />
                     <input
@@ -414,10 +414,10 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                       checked={@form_data.active}
                       class="checkbox checkbox-primary"
                     />
-                    <span class="label-text">Active</span>
+                    <span class="fieldset-legend">Active</span>
                   </label>
                 </div>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label cursor-pointer justify-start gap-3">
                     <input type="hidden" name="config[is_default]" value="false" />
                     <input
@@ -427,13 +427,13 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                       checked={@form_data.is_default}
                       class="checkbox checkbox-primary"
                     />
-                    <span class="label-text">Default</span>
+                    <span class="fieldset-legend">Default</span>
                   </label>
                 </div>
               </div>
 
               <%!-- Skip Filter --%>
-              <div class="form-control">
+              <div class="fieldset">
                 <label class="label cursor-pointer justify-start gap-3">
                   <input
                     type="checkbox"
@@ -442,7 +442,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                     phx-click="toggle_skip_filter"
                   />
                   <div>
-                    <span class="label-text font-medium">Skip Filter</span>
+                    <span class="fieldset-legend font-medium">Skip Filter</span>
                     <p class="text-xs text-base-content/60">
                       All products will be imported without keyword filtering
                     </p>
@@ -460,65 +460,65 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                 <div class="divider text-sm text-base-content/50">Keyword Filters</div>
 
                 <%!-- Include Keywords --%>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label">
-                    <span class="label-text">
+                    <span class="fieldset-legend">
                       <.icon name="hero-plus-circle" class="w-4 h-4 inline text-success" />
                       Include Keywords
                     </span>
                   </label>
                   <textarea
                     name="config[include_keywords_text]"
-                    class="textarea textarea-bordered h-20"
+                    class="textarea h-20"
                     placeholder="shelf, mask, vase, planter, holder, stand, lamp"
                   >{@form_data.include_keywords_text}</textarea>
                   <label class="label">
-                    <span class="label-text-alt text-base-content/60">
+                    <span class="fieldset-label text-base-content/60">
                       Comma-separated. Product must match at least one keyword.
                     </span>
-                    <span class="label-text-alt badge badge-sm badge-ghost">
+                    <span class="fieldset-label badge badge-sm badge-ghost">
                       {length(parse_comma_list(@form_data.include_keywords_text))} keywords
                     </span>
                   </label>
                 </div>
 
                 <%!-- Exclude Keywords --%>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label">
-                    <span class="label-text">
+                    <span class="fieldset-legend">
                       <.icon name="hero-minus-circle" class="w-4 h-4 inline text-error" />
                       Exclude Keywords
                     </span>
                   </label>
                   <textarea
                     name="config[exclude_keywords_text]"
-                    class="textarea textarea-bordered h-20"
+                    class="textarea h-20"
                     placeholder="decal, sticker, mural, wallpaper, poster"
                   >{@form_data.exclude_keywords_text}</textarea>
                   <label class="label">
-                    <span class="label-text-alt text-base-content/60">
+                    <span class="fieldset-label text-base-content/60">
                       Comma-separated. Products matching these are excluded.
                     </span>
-                    <span class="label-text-alt badge badge-sm badge-ghost">
+                    <span class="fieldset-label badge badge-sm badge-ghost">
                       {length(parse_comma_list(@form_data.exclude_keywords_text))} keywords
                     </span>
                   </label>
                 </div>
 
                 <%!-- Exclude Phrases --%>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label">
-                    <span class="label-text">
+                    <span class="fieldset-legend">
                       <.icon name="hero-x-circle" class="w-4 h-4 inline text-error" /> Exclude Phrases
                     </span>
                   </label>
                   <textarea
                     name="config[exclude_phrases_text]"
-                    class="textarea textarea-bordered h-16"
+                    class="textarea h-16"
                     placeholder="wall art, home decor stickers"
                   >{@form_data.exclude_phrases_text}</textarea>
                   <label class="label">
-                    <span class="label-text-alt text-base-content/60">
+                    <span class="fieldset-label text-base-content/60">
                       Comma-separated phrases. Exact phrase match causes exclusion.
                     </span>
                   </label>
@@ -541,7 +541,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                             Enum.join(Map.get(rule, "keywords", []), ", ")
                           )
                         }
-                        class="input input-bordered input-sm w-full"
+                        class="input input-sm w-full"
                         placeholder="Keywords (comma-separated)"
                         phx-blur="update_category_rule"
                         phx-value-index={idx}
@@ -552,7 +552,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                       <input
                         type="text"
                         value={Map.get(rule, "slug", "")}
-                        class="input input-bordered input-sm w-full"
+                        class="input input-sm w-full"
                         placeholder="Category slug"
                         phx-blur="update_category_rule"
                         phx-value-index={idx}
@@ -576,26 +576,26 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
               </div>
 
               <%!-- Default Category Slug --%>
-              <div class="form-control">
+              <div class="fieldset">
                 <label class="label">
-                  <span class="label-text">Default Category Slug</span>
+                  <span class="fieldset-legend">Default Category Slug</span>
                 </label>
                 <input
                   type="text"
                   name="config[default_category_slug]"
                   value={@form_data.default_category_slug}
-                  class="input input-bordered input-sm"
+                  class="input input-sm"
                   placeholder="e.g., other-3d"
                 />
                 <label class="label">
-                  <span class="label-text-alt text-base-content/60">
+                  <span class="fieldset-label text-base-content/60">
                     Used when no category rule matches
                   </span>
                 </label>
               </div>
 
               <%!-- Download Images --%>
-              <div class="form-control">
+              <div class="fieldset">
                 <label class="label cursor-pointer justify-start gap-3">
                   <input type="hidden" name="config[download_images]" value="false" />
                   <input
@@ -606,7 +606,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                     class="checkbox checkbox-primary"
                   />
                   <div>
-                    <span class="label-text">Download Images</span>
+                    <span class="fieldset-legend">Download Images</span>
                     <p class="text-xs text-base-content/60">
                       Download images from CDN URLs during import
                     </p>

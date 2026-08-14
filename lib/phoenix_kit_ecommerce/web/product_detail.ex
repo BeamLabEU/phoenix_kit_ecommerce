@@ -624,7 +624,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                 phx-click="toggle_delete_media"
                 checked={@delete_media_checked}
               />
-              <span class="label-text">{gettext("Delete associated media files (orphaned only)")}</span>
+              <span class="fieldset-legend">{gettext("Delete associated media files (orphaned only)")}</span>
             </label>
             <div class="modal-action">
               <button phx-click="cancel_delete" class="btn">{gettext("Cancel")}</button>

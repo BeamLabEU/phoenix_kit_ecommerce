@@ -1114,9 +1114,9 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
     <%!-- Language Selection --%>
     <%= if @show_language_selector do %>
-      <div class="form-control mb-4">
+      <div class="fieldset mb-4">
         <label class="label">
-          <span class="label-text font-medium">
+          <span class="fieldset-legend font-medium">
             <.icon name="hero-language" class="w-4 h-4 inline mr-1" /> {gettext("Import Language")}
           </span>
         </label>
@@ -1136,7 +1136,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
           <% end %>
         </div>
         <label class="label">
-          <span class="label-text-alt text-base-content/60">
+          <span class="fieldset-label text-base-content/60">
             {gettext("Text fields will be imported to this language")}
           </span>
         </label>
@@ -1150,14 +1150,14 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
     <%!-- Import Config Selector --%>
     <%= if @import_configs != [] do %>
-      <div class="form-control mb-4">
+      <div class="fieldset mb-4">
         <label class="label">
-          <span class="label-text font-medium">
+          <span class="fieldset-legend font-medium">
             <.icon name="hero-funnel" class="w-4 h-4 inline mr-1" /> {gettext("Import Filter")}
           </span>
         </label>
         <select
-          class="select select-bordered w-full"
+          class="select w-full"
           phx-change="select_config"
           name="config_uuid"
         >
@@ -1237,7 +1237,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
       <% end %>
 
       <%!-- Download Images Option --%>
-      <div class="form-control mt-4">
+      <div class="fieldset mt-4">
         <label class="label cursor-pointer justify-start gap-3">
           <input
             type="checkbox"
@@ -1245,7 +1245,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
             checked={@download_images}
             phx-click="toggle_download_images"
           />
-          <span class="label-text">
+          <span class="fieldset-legend">
             <span class="font-medium">{gettext("Download images to Storage")}</span>
             <span class="block text-xs text-base-content/60">
               {gettext("Images will be downloaded from CDN URLs and stored in the Storage module")}
@@ -1254,7 +1254,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
         </label>
       </div>
 
-      <div class="form-control mt-2">
+      <div class="fieldset mt-2">
         <label class="label cursor-pointer justify-start gap-3">
           <input
             type="checkbox"
@@ -1262,7 +1262,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
             checked={@skip_empty_categories}
             phx-click="toggle_skip_empty_categories"
           />
-          <span class="label-text">
+          <span class="fieldset-legend">
             <span class="font-medium">{gettext("Skip empty categories")}</span>
             <span class="block text-xs text-base-content/60">
               {gettext("Remove auto-created categories that have no products after import")}
@@ -1295,14 +1295,14 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
     <%!-- Import Config Selector (allows changing filter at configure step) --%>
     <%= if @import_configs != [] do %>
-      <div class="form-control mb-4">
+      <div class="fieldset mb-4">
         <label class="label">
-          <span class="label-text font-medium">
+          <span class="fieldset-legend font-medium">
             <.icon name="hero-funnel" class="w-4 h-4 inline mr-1" /> {gettext("Import Filter")}
           </span>
         </label>
         <select
-          class="select select-bordered w-full"
+          class="select w-full"
           phx-change="select_config"
           name="config_uuid"
         >
@@ -1404,12 +1404,12 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
           <%!-- Mapping Config --%>
           <div class="flex-1">
-            <label class="form-control">
+            <label class="fieldset">
               <div class="label py-1">
-                <span class="label-text text-xs">{gettext("Link to Global Option")}</span>
+                <span class="fieldset-legend text-xs">{gettext("Link to Global Option")}</span>
               </div>
               <select
-                class="select select-bordered select-sm w-full"
+                class="select select-sm w-full"
                 phx-change="update_mapping"
                 phx-value-index={@index}
                 name="source_key"
@@ -1424,13 +1424,13 @@ defmodule PhoenixKitEcommerce.Web.Imports do
             </label>
 
             <%= if @mapping.source_key do %>
-              <label class="form-control mt-2">
+              <label class="fieldset mt-2">
                 <div class="label py-1">
-                  <span class="label-text text-xs">{gettext("Slot Key")}</span>
+                  <span class="fieldset-legend text-xs">{gettext("Slot Key")}</span>
                 </div>
                 <input
                   type="text"
-                  class="input input-bordered input-sm w-full"
+                  class="input input-sm w-full"
                   value={@mapping.slot_key}
                   phx-blur="update_mapping"
                   phx-value-index={@index}
@@ -1461,7 +1461,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
               </div>
             </div>
             <label class="label cursor-pointer gap-2">
-              <span class="label-text text-sm">{gettext("Auto-add")}</span>
+              <span class="fieldset-legend text-sm">{gettext("Auto-add")}</span>
               <input
                 type="checkbox"
                 class="toggle toggle-primary toggle-sm"
@@ -1516,7 +1516,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
       </ul>
     </div>
 
-    <div class="form-control mb-4">
+    <div class="fieldset mb-4">
       <label class="label cursor-pointer justify-start gap-3">
         <input
           type="checkbox"
@@ -1524,7 +1524,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
           checked={@skip_empty_categories}
           phx-click="toggle_skip_empty_categories"
         />
-        <span class="label-text">
+        <span class="fieldset-legend">
           {gettext("Skip empty categories (remove categories with no products after import)")}
         </span>
       </label>

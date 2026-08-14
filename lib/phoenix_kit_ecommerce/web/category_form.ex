@@ -346,11 +346,11 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
               <h2 class="card-title text-xl mb-6">{gettext("Basic Information")}</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Name")} *</span>
+                    <span class="fieldset-legend font-medium">{gettext("Name")} *</span>
                     <%= if @show_translation_tabs do %>
-                      <span class="label-text-alt text-base-content/50">
+                      <span class="fieldset-label text-base-content/50">
                         {String.upcase(@default_language)}
                       </span>
                     <% end %>
@@ -360,7 +360,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                     name="category[name]"
                     value={TranslationTabs.get_localized_value(@changeset, :name, @default_language)}
                     class={[
-                      "input input-bordered w-full focus:input-primary",
+                      "input w-full focus:input-primary",
                       @changeset.errors[:name] && "input-error"
                     ]}
                     placeholder={gettext("Category name")}
@@ -368,18 +368,18 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                   />
                   <%= if @changeset.errors[:name] do %>
                     <label class="label">
-                      <span class="label-text-alt text-error">
+                      <span class="fieldset-label text-error">
                         {elem(@changeset.errors[:name], 0)}
                       </span>
                     </label>
                   <% end %>
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Slug")}</span>
+                    <span class="fieldset-legend font-medium">{gettext("Slug")}</span>
                     <%= if @show_translation_tabs do %>
-                      <span class="label-text-alt text-base-content/50">
+                      <span class="fieldset-label text-base-content/50">
                         {String.upcase(@default_language)}
                       </span>
                     <% end %>
@@ -388,12 +388,12 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                     type="text"
                     name="category[slug]"
                     value={TranslationTabs.get_localized_value(@changeset, :slug, @default_language)}
-                    class="input input-bordered w-full focus:input-primary"
+                    class="input w-full focus:input-primary"
                     placeholder={gettext("Auto-generated from name")}
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.select
                     field={@form[:parent_uuid]}
                     label={gettext("Parent Category")}
@@ -402,7 +402,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:position]}
                     type="number"
@@ -413,7 +413,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.select
                     field={@form[:status]}
                     label={gettext("Status")}
@@ -424,32 +424,32 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                     ]}
                   />
                   <label class="label">
-                    <span class="label-text-alt text-base-content/50">
+                    <span class="fieldset-label text-base-content/50">
                       {gettext("Unlisted: products appear in search/catalog but category not in menu")}
                     </span>
                   </label>
                 </div>
 
-                <div class="form-control w-full md:col-span-2">
+                <div class="fieldset w-full md:col-span-2">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Description")}</span>
+                    <span class="fieldset-legend font-medium">{gettext("Description")}</span>
                     <%= if @show_translation_tabs do %>
-                      <span class="label-text-alt text-base-content/50">
+                      <span class="fieldset-label text-base-content/50">
                         {String.upcase(@default_language)}
                       </span>
                     <% end %>
                   </label>
                   <textarea
                     name="category[description]"
-                    class="textarea textarea-bordered w-full focus:textarea-primary h-24"
+                    class="textarea w-full focus:textarea-primary h-24"
                     placeholder={gettext("Category description")}
                   >{TranslationTabs.get_localized_value(@changeset, :description, @default_language)}</textarea>
                 </div>
 
                 <%!-- Category Image Section --%>
-                <div class="form-control w-full md:col-span-2">
+                <div class="fieldset w-full md:col-span-2">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Category Image")}</span>
+                    <span class="fieldset-legend font-medium">{gettext("Category Image")}</span>
                   </label>
                   <div class="flex items-start gap-4">
                     <%!-- Image Preview --%>
@@ -490,11 +490,11 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
 
                 <%!-- Featured Product (fallback image source) --%>
                 <%= if @live_action == :edit do %>
-                  <div class="form-control w-full md:col-span-2">
+                  <div class="fieldset w-full md:col-span-2">
                     <label class="label">
-                      <span class="label-text font-medium">{gettext("Featured Product (image fallback)")}</span>
+                      <span class="fieldset-legend font-medium">{gettext("Featured Product (image fallback)")}</span>
                       <%= if @image_uuid do %>
-                        <span class="label-text-alt text-warning">{gettext("Storage image has priority")}</span>
+                        <span class="fieldset-label text-warning">{gettext("Storage image has priority")}</span>
                       <% end %>
                     </label>
                     <%= if @product_options != [] do %>
@@ -511,7 +511,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                       </div>
                     <% end %>
                     <label class="label">
-                      <span class="label-text-alt text-base-content/50">
+                      <span class="fieldset-label text-base-content/50">
                         {gettext("Used as category image when no Storage image is selected")}
                       </span>
                     </label>
@@ -700,33 +700,33 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
               phx-submit="save_category_option"
               class="space-y-4"
             >
-              <div class="form-control">
-                <label class="label"><span class="label-text">{gettext("Label")} *</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">{gettext("Label")} *</span></label>
                 <input
                   type="text"
                   name="option[label]"
                   value={@opt_form_data.label}
-                  class="input input-bordered"
+                  class="input"
                   placeholder={gettext("e.g., Mounting Type")}
                   required
                 />
               </div>
 
-              <div class="form-control">
-                <label class="label"><span class="label-text">{gettext("Key")}</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">{gettext("Key")}</span></label>
                 <input
                   type="text"
                   name="option[key]"
                   value={@opt_form_data.key}
-                  class="input input-bordered font-mono"
+                  class="input font-mono"
                   placeholder={gettext("Auto-generated")}
                   disabled={@editing_opt != nil}
                 />
               </div>
 
-              <div class="form-control">
-                <label class="label"><span class="label-text">{gettext("Type")} *</span></label>
-                <select name="option[type]" class="select select-bordered">
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">{gettext("Type")} *</span></label>
+                <select name="option[type]" class="select">
                   <%= for type <- @supported_types do %>
                     <option value={type} selected={@opt_form_data.type == type}>
                       {type}
@@ -736,9 +736,9 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
               </div>
 
               <%= if @opt_form_data.type in ["select", "multiselect"] do %>
-                <div class="form-control">
+                <div class="fieldset">
                   <label class="label">
-                    <span class="label-text">{gettext("Options")} *</span>
+                    <span class="fieldset-legend">{gettext("Options")} *</span>
                     <button type="button" phx-click="add_opt_option" class="btn btn-ghost btn-xs">
                       <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add")}
                     </button>
@@ -750,7 +750,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                           type="text"
                           name={"option[options][#{idx}]"}
                           value={opt}
-                          class="input input-bordered input-sm flex-1"
+                          class="input input-sm flex-1"
                           placeholder={gettext("Option value")}
                         />
                         <button
@@ -767,18 +767,18 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                 </div>
               <% end %>
 
-              <div class="form-control">
-                <label class="label"><span class="label-text">{gettext("Unit (optional)")}</span></label>
+              <div class="fieldset">
+                <label class="label"><span class="fieldset-legend">{gettext("Unit (optional)")}</span></label>
                 <input
                   type="text"
                   name="option[unit]"
                   value={@opt_form_data.unit}
-                  class="input input-bordered input-sm w-32"
+                  class="input input-sm w-32"
                   placeholder={gettext("e.g., cm")}
                 />
               </div>
 
-              <div class="form-control">
+              <div class="fieldset">
                 <.checkbox
                   name="option[required]"
                   checked={@opt_form_data.required}

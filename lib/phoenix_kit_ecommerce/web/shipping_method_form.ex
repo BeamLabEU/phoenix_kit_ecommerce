@@ -127,7 +127,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
               <h2 class="card-title text-xl mb-6">{gettext("Basic Information")}</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:name]}
                     type="text"
@@ -137,7 +137,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:slug]}
                     type="text"
@@ -146,7 +146,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full md:col-span-2">
+                <div class="fieldset w-full md:col-span-2">
                   <.textarea
                     field={@form[:description]}
                     label={gettext("Description")}
@@ -164,7 +164,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
               <h2 class="card-title text-xl mb-6">{gettext("Pricing")}</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:price]}
                     type="number"
@@ -175,12 +175,12 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Currency")}</span>
+                    <span class="fieldset-legend font-medium">{gettext("Currency")}</span>
                   </label>
                   <%= if @currencies == [] do %>
-                    <div class="input input-bordered flex items-center bg-base-200">
+                    <div class="input flex items-center bg-base-200">
                       {if @default_currency,
                         do: "#{@default_currency.code} - #{@default_currency.name}",
                         else: "USD"}
@@ -198,7 +198,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   <% end %>
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:free_above_amount]}
                     type="number"
@@ -218,7 +218,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
               <h2 class="card-title text-xl mb-6">{gettext("Constraints")}</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:min_weight_grams]}
                     type="number"
@@ -228,7 +228,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:max_weight_grams]}
                     type="number"
@@ -238,7 +238,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:min_order_amount]}
                     type="number"
@@ -249,7 +249,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:max_order_amount]}
                     type="number"
@@ -269,7 +269,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
               <h2 class="card-title text-xl mb-6">{gettext("Delivery & Status")}</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:estimated_days_min]}
                     type="number"
@@ -279,7 +279,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:estimated_days_max]}
                     type="number"
@@ -289,7 +289,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <.input
                     field={@form[:position]}
                     type="number"
@@ -298,9 +298,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
 
-                <div class="form-control w-full">
+                <div class="fieldset w-full">
                   <label class="label">
-                    <span class="label-text font-medium">{gettext("Status")}</span>
+                    <span class="fieldset-legend font-medium">{gettext("Status")}</span>
                   </label>
                   <label class="label cursor-pointer justify-start gap-3 h-12">
                     <input type="hidden" name="shipping_method[active]" value="false" />
@@ -311,14 +311,14 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                       checked={Ecto.Changeset.get_field(@changeset, :active)}
                       class="toggle toggle-success"
                     />
-                    <span class="label-text">{gettext("Active")}</span>
+                    <span class="fieldset-legend">{gettext("Active")}</span>
                   </label>
                 </div>
               </div>
 
               <div class="divider my-2"></div>
 
-              <div class="form-control">
+              <div class="fieldset">
                 <.checkbox
                   name="shipping_method[tracking_supported]"
                   checked={Ecto.Changeset.get_field(@changeset, :tracking_supported)}
