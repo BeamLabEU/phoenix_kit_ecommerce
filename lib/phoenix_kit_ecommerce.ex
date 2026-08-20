@@ -55,6 +55,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
+  alias PhoenixKitEcommerce.Shopify.Provider, as: ShopifyProvider
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
 
@@ -74,6 +75,12 @@ defmodule PhoenixKitEcommerce do
 
   @impl PhoenixKit.Module
   def required_modules, do: ["billing"]
+
+  @impl PhoenixKit.Module
+  def required_integrations, do: ["shopify"]
+
+  @impl PhoenixKit.Module
+  def integration_providers, do: [ShopifyProvider.definition()]
 
   @impl PhoenixKit.Module
   @doc """
