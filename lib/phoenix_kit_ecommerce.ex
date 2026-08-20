@@ -438,6 +438,17 @@ defmodule PhoenixKitEcommerce do
         permission: "shop.run_imports",
         parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
+      ),
+      Tab.new!(
+        id: :admin_shop_shopify_sync,
+        label: "Shopify Sync",
+        icon: "hero-arrow-path",
+        path: "shop/shopify-sync",
+        priority: 537,
+        level: :admin,
+        permission: "shop.run_imports",
+        parent: :admin_shop,
+        gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]
   end
