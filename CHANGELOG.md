@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.0 - 2026-08-20
+
+### Added
+
+- **Shopify sync** — one-way, human-confirmed catalog sync from a
+  connected Shopify store into this shop's products. Generalizes a
+  single-store integration (custom-app OAuth, plaintext env
+  credentials, price-only) into something any PhoenixKit app can turn
+  on: credentials live in core's encrypted `PhoenixKit.Integrations`
+  store (a Shopify custom-app Admin API access token, entered through
+  the existing Integrations admin UI — no OAuth handshake, no new
+  controller/router, and no per-app env vars), and the diff now covers
+  title, description, vendor, tags, status, and price rather than
+  price alone. Matches Shopify products to local ones by handle/slug;
+  a Shopify product with no local match is skipped — creating new
+  products is still the CSV importer's job. Nothing is written without
+  an explicit click: price-only, non-extreme changes get a bulk
+  "apply all" button (a >3x price swing still forces individual
+  confirmation, as before), every other field always does.
+  `PhoenixKitEcommerce.Shopify.{Provider, AdminClient, ProductDiff,
+  Sync}`; admin UI at Shop → Shopify Sync
+  (`shop.run_imports` permission, reused rather than adding a new
+  one). See the README for setup.
+- **`PhoenixKitEcommerce.HtmlText.extract_description/2`** — the
+  HTML-to-plain-text stripper `ProductTransformer` already had,
+  pulled out so the Shopify sync's diff engine can derive the same
+  `description` from `body_html` instead of duplicating the logic.
+
+### Fixed
+
+- **`test/test_helper.exs` was missing two support files** from its
+  explicit `Code.require_file` list (`notification_assertions.ex`,
+  `checkout_fixtures.ex`) — any `DataCase`/`LiveCase`-based test failed
+  to compile with "module ... is not loaded and could not be found".
+  Unrelated to the Shopify work above; found getting a test baseline
+  for it.
+
 ## 0.2.2 - 2026-08-14
 
 PR #21 plus the post-merge review in
