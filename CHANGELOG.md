@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 0.3.0 - 2026-08-20
+## 0.3.0 - 2026-08-21
 
 ### Added
 
@@ -40,6 +40,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   to compile with "module ... is not loaded and could not be found".
   Unrelated to the Shopify work above; found getting a test baseline
   for it.
+- **Post-merge review** (`dev_docs/pull_requests/2026/23-shopify-sync/CLAUDE_REVIEW.md`):
+  the new Shopify Sync LiveView's route was missing from the test
+  router, so its whole test file 404'd; the bulk "apply all price-only
+  updates" action discarded write failures and reported them as
+  applied — a product whose price update actually failed silently
+  vanished from the review list instead of staying visible for retry
+  (`Shopify.Sync.apply_changes/2` now partitions successes from
+  failures, and the LiveView keeps failed changes on screen with a
+  separate error flash); and an admin-client test simulated a network
+  failure with a bare `raise`, which doesn't produce the `{:error, _}`
+  tuple a real transport failure does and failed on its own.
 
 ## 0.2.2 - 2026-08-14
 

@@ -71,9 +71,9 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
     test "returns an error on a network failure" do
       uuid = connect_shopify()
 
-      Req.Test.stub(@stub, fn _conn -> raise "connection refused" end)
+      Req.Test.stub(@stub, fn conn -> Req.Test.transport_error(conn, :closed) end)
 
-      assert {:error, _reason} = AdminClient.fetch_products(uuid, req_options())
+      assert {:error, %Req.TransportError{}} = AdminClient.fetch_products(uuid, req_options())
     end
   end
 

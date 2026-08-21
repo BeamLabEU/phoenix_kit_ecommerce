@@ -54,6 +54,30 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
     Shop.update_product(product, attrs)
   end
 
+  @doc """
+  Applies `fields` to every change in `changes`, partitioning them by outcome.
+
+  A changeset failure on one product doesn't stop the rest from being
+  attempted. Returns `%{succeeded: [Change.t()], failed: [Change.t()]}`,
+  each preserving the input order — so a caller can drop `succeeded` and
+  keep offering `failed` for retry instead of reporting them as done.
+  """
+  @spec apply_changes([Change.t()], :all | [atom()]) :: %{
+          succeeded: [Change.t()],
+          failed: [Change.t()]
+        }
+  def apply_changes(changes, fields \\ :all) do
+    %{succeeded: succeeded, failed: failed} =
+      Enum.reduce(changes, %{succeeded: [], failed: []}, fn change, acc ->
+        case apply_change(change, fields) do
+          {:ok, _product} -> %{acc | succeeded: [change | acc.succeeded]}
+          {:error, _changeset} -> %{acc | failed: [change | acc.failed]}
+        end
+      end)
+
+    %{succeeded: Enum.reverse(succeeded), failed: Enum.reverse(failed)}
+  end
+
   defp resolve_fields(:all, changes), do: Map.keys(changes)
 
   defp resolve_fields(fields, changes) when is_list(fields) do

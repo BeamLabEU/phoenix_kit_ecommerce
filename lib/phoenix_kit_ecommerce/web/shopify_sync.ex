@@ -67,21 +67,44 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   def handle_event("apply_safe_prices", _params, socket) do
     Authz.authorize(socket, :run_imports, fn ->
       {safe, rest} = Enum.split_with(socket.assigns.diff || [], &price_only_safe?/1)
+      %{succeeded: succeeded, failed: failed} = Sync.apply_changes(safe, [:price])
 
-      Enum.each(safe, &Sync.apply_change(&1, [:price]))
-
-      if safe != [] do
+      if succeeded != [] do
         Activity.log("shop.shopify_sync_bulk_price_apply",
           actor_uuid: Activity.actor_uuid(socket),
           actor_role: Activity.actor_role(socket),
-          metadata: %{"count" => length(safe)}
+          metadata: %{"count" => length(succeeded)}
         )
       end
 
-      {:noreply,
-       socket
-       |> assign(:diff, rest)
-       |> put_flash(:info, gettext("Updated %{count} product price(s).", count: length(safe)))}
+      socket = assign(socket, :diff, failed ++ rest)
+
+      socket =
+        if succeeded != [] do
+          put_flash(
+            socket,
+            :info,
+            gettext("Updated %{count} product price(s).", count: length(succeeded))
+          )
+        else
+          socket
+        end
+
+      socket =
+        if failed != [] do
+          put_flash(
+            socket,
+            :error,
+            gettext(
+              "Could not update %{count} product price(s) — try again or apply individually.",
+              count: length(failed)
+            )
+          )
+        else
+          socket
+        end
+
+      {:noreply, socket}
     end)
   end
 
