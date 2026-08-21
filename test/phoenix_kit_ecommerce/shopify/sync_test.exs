@@ -100,4 +100,53 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
       assert updated.description["ru"] == "Старое описание"
     end
   end
+
+  describe "apply_changes/2" do
+    test "reports every change as succeeded when all writes succeed" do
+      p1 = create_product(%{"title" => %{"en" => "First Product"}})
+      p2 = create_product(%{"title" => %{"en" => "Second Product"}})
+
+      c1 =
+        build_change(p1, %{
+          price: %{current: Decimal.new("10.00"), incoming: Decimal.new("12.00")}
+        })
+
+      c2 =
+        build_change(p2, %{
+          price: %{current: Decimal.new("10.00"), incoming: Decimal.new("14.00")}
+        })
+
+      assert %{succeeded: succeeded, failed: []} = Sync.apply_changes([c1, c2], [:price])
+      assert Enum.map(succeeded, & &1.product_uuid) == [p1.uuid, p2.uuid]
+
+      assert Decimal.eq?(Shop.get_product!(p1.uuid).price, Decimal.new("12.00"))
+      assert Decimal.eq?(Shop.get_product!(p2.uuid).price, Decimal.new("14.00"))
+    end
+
+    test "a changeset failure on one change doesn't stop the rest, and is reported as failed" do
+      ok_product = create_product(%{"title" => %{"en" => "OK Product"}})
+      bad_product = create_product(%{"title" => %{"en" => "Bad Product"}})
+
+      ok_change =
+        build_change(ok_product, %{
+          price: %{current: Decimal.new("10.00"), incoming: Decimal.new("12.00")}
+        })
+
+      failing_change =
+        build_change(bad_product, %{
+          price: %{current: Decimal.new("10.00"), incoming: Decimal.new("-5.00")}
+        })
+
+      assert %{succeeded: [succeeded], failed: [failed]} =
+               Sync.apply_changes([failing_change, ok_change], [:price])
+
+      assert succeeded.product_uuid == ok_product.uuid
+      assert failed.product_uuid == bad_product.uuid
+
+      # The failed write must not have touched the product, and the caller
+      # must still be able to see it (never silently dropped).
+      assert Decimal.eq?(Shop.get_product!(bad_product.uuid).price, Decimal.new("10.00"))
+      assert Decimal.eq?(Shop.get_product!(ok_product.uuid).price, Decimal.new("12.00"))
+    end
+  end
 end
