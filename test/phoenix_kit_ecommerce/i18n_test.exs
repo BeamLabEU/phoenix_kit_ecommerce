@@ -85,7 +85,82 @@ defmodule PhoenixKitEcommerce.I18nTest do
     end
   end
 
+  describe "plural catalogue coverage (de, fr)" do
+    # German's plural rule sends n=0 to the *plural* index (msgstr[1]), so a
+    # hardcoded "1 ..." in msgstr[0] is only ever reached at n=1 and a bug
+    # there is harmless. French sends n=0 to the *singular* index
+    # (msgstr[0]) instead — a hardcoded "1 ..." there is reached at n=0 and
+    # renders "1 item" for an empty cart. These assertions cover n=0
+    # specifically because that is the case a plain smoke test at n=1 (or a
+    # substring check against the msgid) cannot distinguish from correct.
+    test "de resolves plural forms at n=0, 1, 2" do
+      Gettext.put_locale(EcommerceGettext, "de")
+
+      for {msgid, msgid_plural, expected} <- de_plural_fixtures(),
+          {n, want} <- expected do
+        got = Gettext.dngettext(EcommerceGettext, "default", msgid, msgid_plural, n, count: n)
+
+        assert got == want,
+               "de n=#{n} #{inspect(msgid)}: got #{inspect(got)}, want #{inspect(want)}"
+      end
+    end
+
+    test "fr resolves plural forms at n=0, 1, 2" do
+      Gettext.put_locale(EcommerceGettext, "fr")
+
+      for {msgid, msgid_plural, expected} <- fr_plural_fixtures(),
+          {n, want} <- expected do
+        got = Gettext.dngettext(EcommerceGettext, "default", msgid, msgid_plural, n, count: n)
+
+        assert got == want,
+               "fr n=#{n} #{inspect(msgid)}: got #{inspect(got)}, want #{inspect(want)}"
+      end
+    end
+  end
+
   defp admin_shop_tab do
     Enum.find(PhoenixKitEcommerce.admin_tabs(), &(&1.id == :admin_shop))
+  end
+
+  defp de_plural_fixtures do
+    [
+      {"1 category", "%{count} categories",
+       %{0 => "0 Kategorien", 1 => "1 Kategorie", 2 => "2 Kategorien"}},
+      {"1 product", "%{count} products",
+       %{0 => "0 Produkte", 1 => "1 Produkt", 2 => "2 Produkte"}},
+      {"1 item", "%{count} items", %{0 => "0 Artikel", 1 => "1 Artikel", 2 => "2 Artikel"}},
+      {"1 cart total", "%{count} carts total",
+       %{
+         0 => "0 Warenkörbe insgesamt",
+         1 => "1 Warenkorb insgesamt",
+         2 => "2 Warenkörbe insgesamt"
+       }},
+      {"1 method configured", "%{count} methods configured",
+       %{
+         0 => "0 Methoden konfiguriert",
+         1 => "1 Methode konfiguriert",
+         2 => "2 Methoden konfiguriert"
+       }},
+      {"1 day", "%{count} days", %{0 => "0 Tage", 1 => "1 Tag", 2 => "2 Tage"}}
+    ]
+  end
+
+  defp fr_plural_fixtures do
+    [
+      {"1 category", "%{count} categories",
+       %{0 => "0 catégorie", 1 => "1 catégorie", 2 => "2 catégories"}},
+      {"1 product", "%{count} products",
+       %{0 => "0 produit", 1 => "1 produit", 2 => "2 produits"}},
+      {"1 item", "%{count} items", %{0 => "0 article", 1 => "1 article", 2 => "2 articles"}},
+      {"1 cart total", "%{count} carts total",
+       %{0 => "0 panier au total", 1 => "1 panier au total", 2 => "2 paniers au total"}},
+      {"1 method configured", "%{count} methods configured",
+       %{
+         0 => "0 méthode configurée",
+         1 => "1 méthode configurée",
+         2 => "2 méthodes configurées"
+       }},
+      {"1 day", "%{count} days", %{0 => "0 jour", 1 => "1 jour", 2 => "2 jours"}}
+    ]
   end
 end
