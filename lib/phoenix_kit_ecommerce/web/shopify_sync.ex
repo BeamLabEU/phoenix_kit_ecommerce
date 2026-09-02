@@ -72,36 +72,16 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   alias PhoenixKitEcommerce.Shopify.TextDiff
   alias PhoenixKitEcommerce.Web.Authz
 
-  # Section order — price first, per spec. Each row's plural label; used
-  # for the section headers only (`field_label/1` below carries the
-  # singular per-field wording used in row/confirm text).
-  @sections [
-    {:price, "Prices"},
-    {:title, "Titles"},
-    {:description, "Descriptions"},
-    {:body_html, "HTML texts"},
-    {:tags, "Tags"},
-    {:status, "Statuses"},
-    {:vendor, "Vendors"}
-  ]
-  @section_labels Map.new(@sections)
-
-  # Singular wording for row/confirm text — kept in lockstep with
-  # `@sections`'s plural section headers above (drop the trailing "s").
-  # `:body_html` used to read "Description (HTML)" here while its own
-  # section header read "HTML texts" a few lines up — two different
-  # names for the same field on the same page, right next to the
-  # actually-different `:description` field's "Description"/"Descriptions".
-  # "HTML text(s)" now matches its section exactly.
-  @field_labels %{
-    title: "Title",
-    body_html: "HTML text",
-    description: "Description",
-    vendor: "Vendor",
-    tags: "Tags",
-    status: "Status",
-    price: "Price"
-  }
+  # Section order — price first, per spec. Order only: the plural section
+  # headers live in `section_label/1` and the singular per-field wording
+  # in `field_label/1`, both as one `gettext/1` call per field. They used
+  # to be string literals carried in this attribute and a `@field_labels`
+  # map, which is why every section header and every `%{field}` binding
+  # on this page rendered in English under a translated locale: a module
+  # attribute holds a compile-time literal that `mix gettext.extract`
+  # never sees, and `gettext/1` refuses a runtime variable as its key, so
+  # there was no way to translate them from where they were stored.
+  @sections [:price, :title, :description, :body_html, :tags, :status, :vendor]
 
   # Fields long enough to need a word-level diff instead of a plain
   # current → incoming line. `TextDiff.summary/2` and `TextDiff.words/2`
@@ -217,9 +197,15 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     Authz.authorize(socket, :run_imports, fn ->
       changes = socket.assigns.changes || []
 
+      # Through `visible_field_changes/3`, like the section/selection/
+      # everything paths — a row apply is the third way into a write and
+      # `Map.has_key?(&1.changes, field)` alone doesn't know `field` is
+      # hidden for the current `source`. See `visible_changes/2`'s doc.
       with field when not is_nil(field) <- to_field(field_str),
            true <-
-             Enum.any?(changes, &(&1.product_uuid == uuid and Map.has_key?(&1.changes, field))) do
+             changes
+             |> visible_field_changes(socket.assigns.source, field)
+             |> Enum.any?(&(&1.product_uuid == uuid)) do
         {:noreply, assign(socket, :pending, %{scope: :row, field: field, uuid: uuid})}
       else
         _ -> {:noreply, socket}
@@ -307,8 +293,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   defp confirm_row_apply(socket, field, uuid) do
     changes = socket.assigns.changes || []
+    visible = visible_field_changes(changes, socket.assigns.source, field)
 
-    case Enum.find(changes, &(&1.product_uuid == uuid and Map.has_key?(&1.changes, field))) do
+    case Enum.find(visible, &(&1.product_uuid == uuid)) do
       nil -> {:noreply, assign(socket, :pending, nil)}
       change -> socket |> apply_row_change(changes, change, field) |> clear_pending()
     end
@@ -716,7 +703,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # Groups `changes` by field, in `@sections` order, dropping fields with
   # no matching changes. A change appears once per field it differs on.
   defp group_by_field(changes) do
-    for {field, _label} <- @sections,
+    for field <- @sections,
         matching = Enum.filter(changes, &Map.has_key?(&1.changes, field)),
         matching != [],
         do: {field, matching}
@@ -811,8 +798,46 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     }
   end
 
-  defp section_label(field), do: Map.fetch!(@section_labels, field)
-  defp field_label(field), do: Map.get(@field_labels, field, Atom.to_string(field))
+  # Plural section headers, one `gettext/1` call per field so the literal
+  # is extractable. `Map.fetch!`'s old crash-on-unknown-field behaviour is
+  # kept deliberately: `build_section/2` only ever passes a `@sections`
+  # field, and a silent English fallback there would hide a section added
+  # to `@sections` without a header.
+  defp section_label(:price), do: gettext("Prices")
+  defp section_label(:title), do: gettext("Titles")
+  defp section_label(:description), do: gettext("Descriptions")
+  defp section_label(:body_html), do: gettext("HTML texts")
+  defp section_label(:tags), do: gettext("Tags")
+  defp section_label(:status), do: gettext("Statuses")
+  defp section_label(:vendor), do: gettext("Vendors")
+
+  # Singular wording for row/confirm text — kept in lockstep with
+  # `section_label/1`'s plural headers above (drop the trailing "s").
+  # `:body_html` used to read "Description (HTML)" here while its own
+  # section header read "HTML texts" a few lines up — two different
+  # names for the same field on the same page, right next to the
+  # actually-different `:description` field's "Description"/"Descriptions".
+  # "HTML text(s)" now matches its section exactly.
+  #
+  # ⚠️ These are interpolated into whole sentences as `%{field}`
+  # ("Apply %{count} %{field} changes from Shopify?"), so a translator
+  # only ever sees the noun in isolation and the sentence in isolation.
+  # That is the limitation `PhoenixKitEcommerce.Vocabulary` exists to
+  # avoid on the storefront, where the same shape would need a separate
+  # complete literal per noun. It is accepted here because this is the
+  # admin surface and the alternative is seven full sentence variants for
+  # each of the eight `%{field}` strings on this page; a locale that
+  # inflects will read the nominative noun in a slot the sentence may
+  # want in another case. Do not copy this shape to a customer-facing
+  # page.
+  defp field_label(:title), do: gettext("Title")
+  defp field_label(:body_html), do: gettext("HTML text")
+  defp field_label(:description), do: gettext("Description")
+  defp field_label(:vendor), do: gettext("Vendor")
+  defp field_label(:tags), do: gettext("Tags")
+  defp field_label(:status), do: gettext("Status")
+  defp field_label(:price), do: gettext("Price")
+  defp field_label(field), do: Atom.to_string(field)
 
   # `:body_html` never reaches here — it's in `@text_fields`, so its row
   # always takes the `row.text?` branch in the template, never the
@@ -982,6 +1007,17 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   defp format_error(:shop_not_found) do
     gettext("Shop domain not found — check the connection's shop domain.")
+  end
+
+  # `AdminClient` maps a 403 here. Without this clause `:forbidden` — the
+  # one error atom the unified-sync work introduced — fell through to the
+  # generic `inspect/1` clause below and printed "Could not reach Shopify:
+  # :forbidden", including as the leading half of `{:fallback_failed, ...}`
+  # which exists precisely to put the actionable credential failure first.
+  # `format_fallback_reason/1` has carried the right wording for this atom
+  # all along; the two lists just drifted.
+  defp format_error(:forbidden) do
+    gettext("Shopify rejected the access token's scope — the app needs read_products.")
   end
 
   defp format_error(:rate_limited) do
@@ -1492,8 +1528,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         </div>
       </div>
 
+      <%!-- `@modal`, not `@pending`: `pending_modal/1`'s `:row` clause
+           returns nil when the pending change is no longer in `@changes`.
+           Every path that mutates `@changes` clears `@pending` today, so
+           that is an invariant rather than a live bug — but reading
+           `@modal.title` off nil crashes the LiveView, and gating on the
+           value actually dereferenced costs nothing. --%>
       <.confirm_modal
-        :if={@pending}
+        :if={@modal}
         show={true}
         on_confirm="confirm_apply"
         on_cancel="cancel_apply"

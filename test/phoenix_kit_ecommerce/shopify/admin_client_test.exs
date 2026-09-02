@@ -141,5 +141,33 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert {:ok, [%{"handle" => "product"}]} = AdminClient.fetch_products(uuid, req_options())
       assert Agent.get(counter, & &1) == 2
     end
+
+    # `Retry-After` crosses the network, and `Process.sleep/1` accepts
+    # only a non-negative integer or `:infinity` — an unclamped negative
+    # raised `FunctionClauseError` straight out of a function whose spec
+    # promises `{:ok, _} | {:error, _}`. `StorefrontClient` clamps and
+    # pins this; the Admin path did neither. Asserted through a real
+    # fetch because the clamp is private here (the storefront's is
+    # `@doc false`-public for the same reason its 60s cap can't be
+    # proven through a real sleep).
+    test "survives a negative Retry-After instead of crashing Process.sleep/1" do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        count = Agent.get_and_update(counter, fn c -> {c, c + 1} end)
+
+        if count == 0 do
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "-1")
+          |> Plug.Conn.send_resp(429, "")
+        else
+          json_response(conn, 200, %{"products" => [%{"id" => 1, "handle" => "product"}]})
+        end
+      end)
+
+      assert {:ok, [%{"handle" => "product"}]} = AdminClient.fetch_products(uuid, req_options())
+      assert Agent.get(counter, & &1) == 2
+    end
   end
 end

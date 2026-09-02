@@ -4,17 +4,84 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.4.0 - 2026-09-02
 
 ### Added
 
+- **Unified Shopify sync.** The Shopify Sync admin page now groups pending
+  changes into field sections (Prices, Titles, Descriptions, HTML texts,
+  Tags, Statuses, Vendors — price first), 25 rows to a page, with a
+  request → confirm modal on every write path and a per-section bulk
+  selection scoped to the current page. Extreme price changes are excluded
+  from every bulk write and must be applied row by row.
+- **`Shopify.TextDiff`** — word-level diff over `List.myers_difference/2`
+  on whitespace-preserving tokens, so rejoining the fragments reproduces
+  both inputs exactly. No diff dependency added. `summary/2` returns the
+  small shape (changed-region count, signed length delta) for a collapsed
+  row; `words/2` the full diff, only for a row an operator expanded.
+- **Keyless price fallback (`Shopify.StorefrontClient`).** When the Admin
+  API rejects the connection's credentials, the sync reads prices from the
+  store's public `/products.json` instead of stalling. Deliberately narrow
+  — `"handle"` and `"variants"` only, never text — with its own 429 and
+  `Retry-After` handling, a page cap, and a wall-clock deadline.
+- **`Shopify.Source`** — a pure `decide/2` plus an I/O `fetch/2`. The
+  storefront fallback fires *only* on a credential failure
+  (`:unauthorized`, `:forbidden`, `:missing_credentials`); a rate limit,
+  5xx or timeout aborts instead, because falling back on those would report
+  "no text changes" when the truth is "we could not check".
+- **`ProductDiff.diff/4`'s `opts[:only]`** — restricts the comparison to a
+  field subset so a narrow source's absent fields are never reported (or
+  applied) as deletions. Both the option key and every field atom in it are
+  validated; a typo raises rather than silently comparing nothing.
+- **`ProductDiff.matched_count/3`** and a catalogue-coverage stat on the
+  sync page (Admin source only — the storefront serves a narrower,
+  not-comparable population).
 - **German and French storefront translations.** Complete `de` and `fr`
-  gettext catalogues for the storefront/cart/checkout UI (782 msgids each,
-  0 untranslated). Additive only — `en`/`et`/`ru` and all source msgids are
-  untouched. Formal register (Sie / vous), interpolation tokens preserved.
+  gettext catalogues for the storefront/cart/checkout UI, additive only —
+  `en`/`et`/`ru` and all source msgids are untouched. Formal register
+  (Sie / vous), interpolation tokens preserved.
+
+### Changed
+
+- **`Shopify.Sync.check/1` is now `check/2`** and returns a map
+  (`:changes`, `:source`, `:fallback_reason`, `:total_shopify_products`,
+  `:matched_local_products`) rather than a bare change list. A caller MUST
+  branch on `:source`: a `:storefront` result carries price changes only.
+- **`ProductDiff.Change` carries `base_locale`**, and
+  `Sync.apply_change/2` writes localized fields back into *that* locale
+  rather than re-reading the default at apply time — a change diffed
+  against one locale could otherwise be applied into another.
+- `AdminClient` maps a 403 to `{:error, :forbidden}`.
 
 ### Fixed
 
+- **The Shopify Sync page rendered entirely in English on every non-English
+  install.** 84 msgids added under `web/` were never run through
+  `mix gettext.extract && mix gettext.merge`, so the whole page — and the
+  Shopify provider's setup instructions — fell back to their msgids, which
+  *are* the English source strings. Extracted, merged, and translated into
+  `de`/`fr`/`ru`/`et`, which are back to 0 untranslated. `i18n_test.exs`
+  now asserts that property, so an un-run extraction fails the suite.
+- **Section headers and field names ignored the locale entirely.** Both
+  label sets lived as string literals in module attributes, where
+  `mix gettext.extract` cannot see them and `gettext/1` cannot read them
+  back — so `Prices`, `HTML texts` and the `%{field}` noun in every confirm
+  and flash message printed English under every locale. They are now one
+  `gettext/1` call per field.
+- **A 403 from the Admin API printed a raw atom.** `:forbidden` reached
+  `format_fallback_reason/1` but never `format_error/1`, so a rejected-scope
+  token whose storefront fallback also failed rendered `Could not reach
+  Shopify: :forbidden` — in the exact slot that is meant to carry the
+  operator's next action. It now names the missing `read_products` scope.
+- **`AdminClient` no longer trusts `Retry-After` unclamped.** A negative
+  value made `Process.sleep/1` raise out of a function whose spec promises
+  an error tuple; a huge one slept for real. Clamped to 0..60s, matching
+  `StorefrontClient`.
+- **The `ru` and `et` catalogues printed the count twice** on the
+  `item`/`items` plural (`"3 3 позиции"`, `"3 3 eset"`): the call site
+  renders the count itself, so the msgstr must carry the noun alone — as
+  the new `de`/`fr` entries correctly do. `et`'s `msgstr[0]` also had the
+  hardcoded `1` this release fixed in `fr`.
 - **Storefront filter labels no longer translate admin-entered text.**
   `CatalogSidebar` used to run every filter's stored `label` through
   Gettext by string alone, so any label an admin typed — or the
@@ -35,12 +102,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   read "1 article" ("1 item"). French's CLDR plural rule sends `n=0` to
   the *singular* index (`de`'s sends it to plural, which is why German was
   unaffected), and these six `msgstr[0]` entries had the digit `1`
-  hardcoded instead of `%{count}`, copied from the English msgid's shape.
-  All other plural entries in both catalogues were audited and are clean.
+  hardcoded instead of `%{count}`.
 - **`fr` "Vendor" facet translated as `Fournisseur`** (supply-chain
   "supplier"), not the customer-facing sense of the word. Now `Vendeur`,
   matching the same correction on the product-detail page's `Vendor:`
   label.
+- A pending confirmation modal is now gated on the value it dereferences,
+  and a single row's apply goes through the same source-visibility guard
+  as the section, selection and everything paths.
 
 ## 0.3.0 - 2026-08-21
 
