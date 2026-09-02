@@ -66,6 +66,9 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffTest do
       assert change.product_uuid == "fixed-uuid"
       assert change.handle == "planter"
       assert change.title == "Planter"
+      # Carried so `Shopify.Sync.apply_change/2` writes localized fields
+      # back into the same locale this change was diffed against.
+      assert change.base_locale == @base_locale
     end
   end
 

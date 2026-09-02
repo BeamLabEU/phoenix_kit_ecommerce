@@ -106,7 +106,18 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # Fields long enough to need a word-level diff instead of a plain
   # current → incoming line. `TextDiff.summary/2` and `TextDiff.words/2`
   # are only ever called for these.
-  @text_fields [:title, :description, :body_html]
+  #
+  # `:title` is deliberately NOT here, even though it's short prose like
+  # the other two: a title row is what an operator looks at most (title
+  # differences dominate a real sync's change set), and the word-level
+  # summary ("N changed regions (+5)") never shows the actual incoming
+  # text — only expanding the row's diff panel does. A row the operator
+  # applies without ever reading what they're applying is a worse
+  # trade-off for a short field than for `:description`/`:body_html`,
+  # where the summary view is what makes a paragraph-or-more diff
+  # tractable at all. `:title` gets the plain current → incoming line
+  # `row_change_summary/1` already renders for `:vendor`/`:tags`/etc.
+  @text_fields [:description, :body_html]
 
   # Rows rendered per page within an expanded section. Not a display
   # preference: `TextDiff`'s own moduledoc measures a wholly-rewritten
@@ -506,28 +517,26 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # change, so only a direct call with synthetic data can prove this
   # trims rather than merely filters — see the note below.
   #
-  # The changes `apply_everything` may touch — deduplicated (one `Change`
-  # struct can appear under more than one field) AND, critically, each
-  # one trimmed down to ONLY the fields `field_visible?/2` allows for
-  # `source`. Trimming, not just filtering which changes survive, is the
-  # part that actually matters: `confirm_everything_apply` hands the
-  # result straight to `Sync.apply_changes(eligible, :all)`, and `:all`
-  # writes every key still present in `change.changes` — a change kept
-  # here with its full, untrimmed field map would let `:all` write a
-  # field `visible_sections/2` hides from the very same `source`, even
-  # though the change itself "passed" the filter on some OTHER, visible
-  # field. (An earlier version of this function filtered changes but
-  # left each one's `changes` map untouched — passing 634 tests while
-  # doing exactly that, because no real check → render flow can ever
-  # produce a `:storefront` change carrying a second, hidden field to
-  # catch it with. Read `field_visible?/2`'s doc before trusting an
-  # end-to-end test to prove this kind of thing again.)
+  # The changes `apply_everything` may touch — each trimmed down to ONLY
+  # the fields `field_visible?/2` allows for `source`. Trimming, not just
+  # filtering which changes survive, is the part that actually matters:
+  # `confirm_everything_apply` hands the result straight to
+  # `Sync.apply_changes(eligible, :all)`, and `:all` writes every key
+  # still present in `change.changes` — a change kept here with its
+  # full, untrimmed field map would let `:all` write a field
+  # `visible_sections/2` hides from the very same `source`, even though
+  # the change itself "passed" the filter on some OTHER, visible field.
+  # (An earlier version of this function filtered changes but left each
+  # one's `changes` map untouched — passing 634 tests while doing
+  # exactly that, because no real check → render flow can ever produce a
+  # :storefront change carrying a second, hidden field to catch it with.
+  # Read `field_visible?/2`'s doc before trusting an end-to-end test to
+  # prove this kind of thing again.)
   @spec visible_changes([Change.t()], :admin | :storefront | nil) :: [Change.t()]
   def visible_changes(changes, source) do
     changes
     |> Enum.map(&trim_to_visible_fields(&1, source))
     |> Enum.reject(&(&1.changes == %{}))
-    |> Enum.uniq_by(& &1.product_uuid)
   end
 
   defp trim_to_visible_fields(change, source) do
@@ -981,6 +990,21 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   defp format_error(:missing_credentials) do
     gettext("The Shopify connection is missing its shop domain or access token.")
+  end
+
+  # `Source.fetch/2` reaches this when the Admin API failed on a
+  # credential error AND the storefront fallback it tried in response
+  # also failed (`Source`'s own moduledoc: token expired, shop not
+  # published — an ordinary pairing). Leads with the credential
+  # failure — the actionable half an operator needs to fix — rather than
+  # letting `storefront_reason` alone reach `format_error/1`'s generic
+  # clause below and read as "we could not reach Shopify" with no hint
+  # the real problem is the connection's own access token.
+  defp format_error({:fallback_failed, reason, storefront_reason}) do
+    gettext("%{credential_error} The storefront fallback also failed: %{storefront_error}",
+      credential_error: format_error(reason),
+      storefront_error: inspect(storefront_reason)
+    )
   end
 
   defp format_error(reason) do

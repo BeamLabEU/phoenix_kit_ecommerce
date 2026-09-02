@@ -102,14 +102,18 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   of field atoms — only fields present in BOTH `change.changes` and
   `fields` are written, everything else on the product is left untouched.
   Localized fields (`title`, `body_html`, `description`) are merged into
-  the base locale only; other languages already on the product are
-  preserved.
+  `change.base_locale` only (the locale `ProductDiff.diff/4` matched and
+  compared this change against) — other languages already on the product
+  are preserved. This is why `base_locale` lives on the `Change` struct
+  rather than being re-read here: a change diffed against one locale must
+  be applied into that same locale, not whatever the default happens to
+  be at apply time.
   """
   @spec apply_change(Change.t(), :all | [atom()]) ::
           {:ok, PhoenixKitEcommerce.Product.t()} | {:error, Ecto.Changeset.t()}
   def apply_change(%Change{} = change, fields \\ :all) do
     product = Shop.get_product!(change.product_uuid)
-    base_locale = Translations.default_language()
+    base_locale = change.base_locale
     fields_to_apply = resolve_fields(fields, change.changes)
 
     attrs =

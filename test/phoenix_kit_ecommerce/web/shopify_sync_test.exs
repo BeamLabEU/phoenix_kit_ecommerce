@@ -104,6 +104,87 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
     end
   end
 
+  describe "authz on the write path (confirm_apply is the only handler that writes)" do
+    alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
+    alias PhoenixKitEcommerce.Web.ShopifySync
+
+    # `request_apply_row`/`confirm_apply` can only be exercised for real
+    # through a mounted, connected LiveView — but a real `check` event is
+    # ITSELF `:run_imports`-gated (see the test above), so a
+    # permission-less scope can never legitimately populate `@changes`
+    # through the actual UI flow to begin with, making the two handlers'
+    # own guards unreachable from a wire-level test. Calling
+    # `handle_event/3` directly against a synthetic socket (same
+    # rationale `visible_changes/2`'s tests below use) is the only way to
+    # exercise a denied write with real pending state in play.
+    test "a permission-less scope can neither open nor confirm an apply, and nothing is written" do
+      {:ok, product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Widget"},
+          "slug" => %{"en" => "widget"},
+          "vendor" => "Old Co",
+          "status" => "draft",
+          "price" => "10.00"
+        })
+
+      change = %Change{
+        product_uuid: product.uuid,
+        handle: "widget",
+        title: "Widget",
+        base_locale: "en",
+        changes: %{vendor: %{current: "Old Co", incoming: "New Co"}}
+      }
+
+      denied_socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          phoenix_kit_current_scope: fake_scope(permissions: ["shop"]),
+          changes: [change],
+          source: :admin,
+          pending: nil
+        }
+      }
+
+      # `request_apply_row` denied outright: it must never reach far
+      # enough to open the confirm modal (`@pending` stays nil) — this is
+      # the guard that goes missing if its own `Authz.authorize/3`
+      # wrapper is deleted.
+      {:noreply, after_request} =
+        ShopifySync.handle_event(
+          "request_apply_row",
+          %{"field" => "vendor", "uuid" => product.uuid},
+          denied_socket
+        )
+
+      assert after_request.assigns.pending == nil
+
+      # `confirm_apply` has its OWN, independent guard — it must refuse
+      # to write even when `@pending` is already set (e.g. permission was
+      # revoked between a legitimately-opened confirmation and the
+      # confirm click; `clear_pending/1`'s own moduledoc note is exactly
+      # this kind of staleness). Constructing `@pending` directly, rather
+      # than via `request_apply_row` above (which correctly refused to
+      # set it), is what isolates this handler's guard from the other
+      # one's.
+      stale_pending_socket = %{
+        denied_socket
+        | assigns:
+            Map.put(denied_socket.assigns, :pending, %{
+              scope: :row,
+              field: :vendor,
+              uuid: product.uuid
+            })
+      }
+
+      assert {:noreply, _socket} =
+               ShopifySync.handle_event("confirm_apply", %{}, stale_pending_socket)
+
+      assert Shop.get_product!(product.uuid).vendor == "Old Co"
+      refute_activity_logged("shop.shopify_sync_apply", resource_uuid: product.uuid)
+    end
+  end
+
   describe "check — stubbed transport, full flow" do
     setup %{conn: conn} do
       uuid = connect_shopify()
@@ -217,6 +298,29 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       assert html =~ "the shop matches Shopify"
       refute html =~ ~s(id="storefront-fallback-notice")
       refute html =~ ~s(id="storefront-no-price-changes")
+    end
+
+    # `Source.fetch/2` returns `{:error, {:fallback_failed, reason,
+    # storefront_reason}}` when the credential failure that triggered the
+    # storefront fallback is followed by the storefront ALSO failing — a
+    # rejected token and an unpublished/unreachable storefront is an
+    # ordinary pairing. The error banner must lead with the credential
+    # failure (the actionable half), not just the storefront's own error.
+    test "an error banner leads with the credential failure when the storefront fallback also fails",
+         %{conn: conn} do
+      Req.Test.stub(@stub, fn conn ->
+        if admin_request?(conn) do
+          json_response(conn, 401, %{"errors" => "Invalid API key"})
+        else
+          json_response(conn, 500, %{})
+        end
+      end)
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      html = check_and_await(view)
+
+      assert html =~ "Shopify rejected the access token"
+      assert html =~ "storefront fallback also failed"
     end
 
     # Discriminates the numerator from two wrong-but-plausible ones: the
@@ -599,10 +703,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
 
     test "expanding a text-field row reveals the word-level diff; collapsed hides it",
          %{conn: conn} do
+      # `:description` (not `:title` — see `@text_fields`'s moduledoc note
+      # on why title deliberately doesn't get this treatment) is the
+      # text field under test here.
       {:ok, product} =
         Shop.create_product(%{
-          "title" => %{"en" => "Old Title Text"},
+          "title" => %{"en" => "Widget"},
           "slug" => %{"en" => "widget"},
+          "description" => %{"en" => "Old description text"},
           "status" => "draft",
           "price" => "10.00"
         })
@@ -612,7 +720,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
           "products" => [
             %{
               "handle" => "widget",
-              "title" => "New Title Text",
+              "title" => "Widget",
+              "body_html" => "<p>New description text</p>",
               "status" => "draft",
               "variants" => [%{"price" => "10.00"}]
             }
@@ -623,12 +732,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
       check_and_await(view)
 
-      html = view |> element("#toggle-section-title") |> render_click()
+      html = view |> element("#toggle-section-description") |> render_click()
       refute html =~ "diff-ins"
       refute html =~ "diff-del"
-      assert html =~ ~s(id="toggle-diff-title-#{product.uuid}")
+      assert html =~ ~s(id="toggle-diff-description-#{product.uuid}")
 
-      html = view |> element("#toggle-diff-title-#{product.uuid}") |> render_click()
+      html = view |> element("#toggle-diff-description-#{product.uuid}") |> render_click()
       assert html =~ "diff-ins"
       assert html =~ "diff-del"
     end
@@ -717,6 +826,51 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
         resource_uuid: product.uuid,
         metadata_has: %{"fields" => ["title"]}
       )
+    end
+
+    # `:title` used to be in `@text_fields`, so a title row rendered a
+    # word-count summary ("N changed regions (+delta)") and its confirm
+    # prompt read "Update X's Title from Shopify?" — an operator could
+    # apply a title without ever seeing the incoming value, unless they
+    # separately expanded the diff panel. Titles are most of what a real
+    # sync's change set is made of, so this is where that mattered most.
+    # `:title` now takes the same plain current → incoming treatment as
+    # `:vendor`/`:tags`/etc.
+    test "a title row shows its incoming value directly, not a word-diff summary",
+         %{conn: conn} do
+      {:ok, product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Old Widget"},
+          "slug" => %{"en" => "widget"},
+          "status" => "draft",
+          "price" => "10.00"
+        })
+
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [
+            %{
+              "handle" => "widget",
+              "title" => "New Widget",
+              "status" => "draft",
+              "variants" => [%{"price" => "10.00"}]
+            }
+          ]
+        })
+      end)
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      check_and_await(view)
+
+      html = view |> element("#toggle-section-title") |> render_click()
+
+      assert html =~ "Old Widget"
+      assert html =~ "New Widget"
+      refute html =~ "changed region"
+      refute html =~ ~s(id="toggle-diff-title-#{product.uuid}")
+
+      html = view |> element("#apply-row-title-#{product.uuid}") |> render_click()
+      assert html =~ "Update Old Widget: Title → New Widget?"
     end
 
     # `format_fallback_reason(:missing_credentials)` was believed
@@ -864,9 +1018,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
 
       assert html =~ ~s(id="apply-row-title-#{product.uuid}")
       html = view |> element("#apply-row-title-#{product.uuid}") |> render_click()
-      assert html =~ "Update #{product.title["en"]}&#39;s Title from Shopify?"
+      assert html =~ "Update #{product.title["en"]}: Title → New Widget?"
       html = cancel!(view)
-      refute html =~ "Update #{product.title["en"]}&#39;s Title from Shopify?"
+      refute html =~ "Update #{product.title["en"]}: Title → New Widget?"
 
       # Nothing above ever confirmed — every one of those requests must
       # have written exactly nothing.
@@ -889,12 +1043,15 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
     # reuse of the same Myers pass does not also fire the `:words` event).
     test "pagination computes summaries for the current page only, and word-diffs only for the expanded row",
          %{conn: conn} do
+      # `:description` (not `:title` — see `@text_fields`'s moduledoc note)
+      # is the text field exercised here.
       products =
         for i <- 1..30 do
           {:ok, product} =
             Shop.create_product(%{
-              "title" => %{"en" => "Old Title #{i}"},
+              "title" => %{"en" => "Widget #{i}"},
               "slug" => %{"en" => "product-#{i}"},
+              "description" => %{"en" => "Old Desc #{i}"},
               "status" => "draft",
               "price" => "10.00"
             })
@@ -906,7 +1063,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
         for i <- 1..30 do
           %{
             "handle" => "product-#{i}",
-            "title" => "New Title #{i}",
+            "title" => "Widget #{i}",
+            "body_html" => "<p>New Desc #{i}</p>",
             "status" => "draft",
             "variants" => [%{"price" => "10.00"}]
           }
@@ -936,7 +1094,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
-      view |> element("#toggle-section-title") |> render_click()
+      view |> element("#toggle-section-description") |> render_click()
       counts_after_section_expand = drain_text_diff_calls()
 
       assert Map.get(counts_after_section_expand, [
@@ -953,7 +1111,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
              ) == 0
 
       first = List.first(products)
-      view |> element("#toggle-diff-title-#{first.uuid}") |> render_click()
+      view |> element("#toggle-diff-description-#{first.uuid}") |> render_click()
       counts_after_row_expand = drain_text_diff_calls()
 
       assert Map.get(counts_after_row_expand, [
@@ -1492,10 +1650,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
     # click, since LiveViewTest cannot execute the hook's JS itself.
     test "checkboxes expose each row's uuid for the client-side selection hook, and 'apply selection' writes only the selected uuids' field",
          %{conn: conn} do
+      # `selected` differs on TWO fields (price AND vendor), not price
+      # alone — `Sync.apply_changes(eligible, [field])` at the call site
+      # must write only `field` (:price here) even though the underlying
+      # `Change` it's handed carries other differing fields too
+      # (`visible_field_changes/3` returns untrimmed `Change` structs —
+      # see that function's own doc). A fixture differing on price alone
+      # can't tell "wrote only :price" apart from "wrote every field
+      # (:all)" — both produce the same observable price update.
       {:ok, selected} =
         Shop.create_product(%{
           "title" => %{"en" => "Selected Widget"},
           "slug" => %{"en" => "selected-widget"},
+          "vendor" => "Old Co",
           "status" => "draft",
           "price" => "10.00"
         })
@@ -1514,6 +1681,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
             %{
               "handle" => "selected-widget",
               "title" => "Selected Widget",
+              "vendor" => "New Co",
               "status" => "draft",
               "variants" => [%{"price" => "15.00"}]
             },
@@ -1554,8 +1722,18 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       assert Decimal.eq?(Shop.get_product!(selected.uuid).price, Decimal.new("15.00"))
       assert Decimal.eq?(Shop.get_product!(unselected.uuid).price, Decimal.new("10.00"))
 
+      # The proof this pins: `selected` also has a pending vendor change
+      # (Old Co -> New Co), and applying its PRICE selection must leave
+      # that vendor field untouched — a regression that widened
+      # `[field]` to `:all` at the call site would write it too.
+      assert Shop.get_product!(selected.uuid).vendor == "Old Co"
+
       refute html =~ "id=\"change-row-price-#{selected.uuid}\""
       assert html =~ "id=\"change-row-price-#{unselected.uuid}\""
+
+      # The vendor change on `selected` survives — its own (unexpanded)
+      # section still lists it.
+      assert html =~ ~s(id="field-section-vendor")
 
       assert_activity_logged("shop.shopify_sync_bulk_selection_apply",
         metadata_has: %{"count" => 1, "field" => "price"}
@@ -1726,6 +1904,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
         product_uuid: Ecto.UUID.generate(),
         handle: "widget",
         title: "Widget",
+        base_locale: "en",
         changes: %{
           price: %{current: Decimal.new("10.00"), incoming: Decimal.new("12.00")},
           title: %{current: "Old", incoming: "New"},
@@ -1754,6 +1933,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
         product_uuid: Ecto.UUID.generate(),
         handle: "widget",
         title: "Widget",
+        base_locale: "en",
         changes: %{
           price: %{current: Decimal.new("10.00"), incoming: Decimal.new("12.00")},
           title: %{current: "Old", incoming: "New"},
@@ -1789,6 +1969,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
           product_uuid: Ecto.UUID.generate(),
           handle: "widget2",
           title: "Widget 2",
+          base_locale: "en",
           changes: %{vendor: %{current: "Old Co", incoming: "New Co"}}
         }
 
@@ -1809,6 +1990,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
         product_uuid: Ecto.UUID.generate(),
         handle: "widget",
         title: "Widget",
+        base_locale: "en",
         changes: %{
           price: %{current: Decimal.new("10.00"), incoming: Decimal.new("12.00")},
           vendor: %{current: "Old Co", incoming: "New Co"}

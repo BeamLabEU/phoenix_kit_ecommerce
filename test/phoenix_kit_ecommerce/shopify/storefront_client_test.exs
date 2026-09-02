@@ -369,6 +369,50 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClientTest do
     end
   end
 
+  describe "fetch_products/2 :deadline_ms option" do
+    # `@max_pages * @max_retries * @max_retry_after_seconds` is ~16.7
+    # hours of a `start_async` task sleeping with the spinner up (see the
+    # moduledoc) — the per-sleep clamp bounds any ONE sleep, not the
+    # fetch as a whole. A server that never returns an empty page would,
+    # without a deadline, page all the way to `{:error, :too_many_pages}`
+    # (the page-cap test above) — potentially real hours away. A short
+    # `:deadline_ms` here proves the aggregate budget cuts in first,
+    # before that cap is ever reached.
+    test "returns {:error, :deadline_exceeded} once the wall-clock budget is exhausted, instead of paging until :too_many_pages" do
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [%{"handle" => "loop", "variants" => [%{"price" => "1.00"}]}]
+        })
+      end)
+
+      assert {:error, :deadline_exceeded} =
+               StorefrontClient.fetch_products(
+                 "test-shop.myshopify.com",
+                 req_options(page_delay_ms: 100, deadline_ms: 50)
+               )
+    end
+
+    test "does not cut off a fetch that completes within the deadline" do
+      Req.Test.stub(@stub, fn conn ->
+        case page_param(conn) do
+          "1" ->
+            json_response(conn, 200, %{
+              "products" => [%{"handle" => "only", "variants" => [%{"price" => "1.00"}]}]
+            })
+
+          "2" ->
+            json_response(conn, 200, %{"products" => []})
+        end
+      end)
+
+      assert {:ok, [%{"handle" => "only"}]} =
+               StorefrontClient.fetch_products(
+                 "test-shop.myshopify.com",
+                 req_options(deadline_ms: 5_000)
+               )
+    end
+  end
+
   describe "fetch_products/2 :page_delay_ms option" do
     test "sleeps for the given :page_delay_ms between pages" do
       Req.Test.stub(@stub, fn conn ->

@@ -36,14 +36,22 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
     field atom, each holding `%{current:, incoming:}`. `price_extreme?` is
     true only when `:price` is in `changes` and the current/incoming ratio
     exceeds 3x.
+
+    `base_locale` is the locale `diff/4` matched/compared this product
+    against — carried on the struct (not re-derived later) so
+    `Shopify.Sync.apply_change/2` writes localized fields back into the
+    SAME locale they were diffed against. Reading a fresh default at
+    apply time would silently apply a change diffed in one locale into
+    another.
     """
-    @enforce_keys [:product_uuid, :handle, :title]
-    defstruct [:product_uuid, :handle, :title, changes: %{}, price_extreme?: false]
+    @enforce_keys [:product_uuid, :handle, :title, :base_locale]
+    defstruct [:product_uuid, :handle, :title, :base_locale, changes: %{}, price_extreme?: false]
 
     @type t :: %__MODULE__{
             product_uuid: String.t(),
             handle: String.t(),
             title: String.t() | nil,
+            base_locale: String.t(),
             changes: %{atom() => %{current: term(), incoming: term()}},
             price_extreme?: boolean()
           }
@@ -193,6 +201,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       product_uuid: product.uuid,
       handle: shopify_product["handle"],
       title: current_title || shopify_product["handle"],
+      base_locale: base_locale,
       changes: changes,
       price_extreme?: extreme_price?(changes)
     }

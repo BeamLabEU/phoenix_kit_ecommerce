@@ -46,10 +46,17 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   `0..60` seconds before it ever reaches
   `Process.sleep/1`: unclamped, a negative value crashes `Process.sleep/1`
   (which only accepts a non-negative integer or `:infinity`) instead of
-  returning the promised error tuple, and a huge one sleeps for real —
-  multiplied by up to `@max_retries` retries per page, with no timeout on
-  the `start_async` task that calls this, so the operator's only escape
-  from a hostile or misconfigured endpoint would be a page reload.
+  returning the promised error tuple, and a huge one sleeps for real.
+
+  That per-sleep clamp bounds any ONE sleep, but not the fetch as a
+  whole: `@max_pages` pages, each retried up to `@max_retries` times at
+  up to `@max_retry_after_seconds`, is `200 * 5 * 60` seconds — over 16
+  hours — of a `start_async` task sleeping with the spinner up, with no
+  escape but a page reload. `fetch_products/2`'s `:deadline_ms` option
+  (see its own doc) bounds the aggregate: a wall-clock deadline computed
+  once via `System.monotonic_time/1` and threaded through every
+  recursive `fetch_pages/6` call, checked before each page request (and
+  therefore before whatever sleep that iteration might otherwise start).
   """
 
   @page_limit 250
@@ -58,6 +65,7 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   @default_retry_after_seconds 5
   @max_retry_after_seconds 60
   @max_pages 200
+  @default_deadline_ms :timer.minutes(2)
 
   @doc """
   Fetches every priced product from `shop_domain`'s public storefront,
@@ -78,17 +86,27 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   products to hit this legitimately; in practice it means the endpoint
   is not honoring `?page=` at all.
 
+  The whole fetch also carries a wall-clock deadline, independent of the
+  per-page/per-retry budgets above (see the moduledoc): once it passes,
+  the NEXT page request (or retry) is skipped and `{:error,
+  :deadline_exceeded}` is returned instead — an in-flight sleep is not
+  interrupted, but no new one is started, so the fetch can never run
+  past `deadline_ms` by more than a single already-clamped sleep.
+
   ## Options
 
     * `:req_options` — keyword list merged into `Req.new/1` (e.g. `plug:`
       to stub the transport in tests).
     * `:page_delay_ms` — pause between page requests, to stay gentle with
       the storefront's rate limit. Defaults to 500ms; tests pass `0`.
+    * `:deadline_ms` — the wall-clock budget for the whole fetch (paging
+      and retries together), starting from the moment this function is
+      called. Defaults to #{@default_deadline_ms}ms (2 minutes).
   """
   @spec fetch_products(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def fetch_products(shop_domain, opts \\ []) do
     # `retry: false` — this module owns 429 handling itself (the 429
-    # clauses in `fetch_pages/5` below), because that requires resuming
+    # clauses in `fetch_pages/6` below), because that requires resuming
     # the *same* page with the accumulator intact and respecting
     # `Retry-After`. Req's own `:transient` retry can't do either: it
     # knows nothing about pages or accumulators, and it sleeps in real
@@ -101,21 +119,32 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
       |> Req.new()
 
     page_delay_ms = Keyword.get(opts, :page_delay_ms, @default_page_delay_ms)
-    fetch_pages(req, 1, [], page_delay_ms, @max_retries)
+    deadline_ms = Keyword.get(opts, :deadline_ms, @default_deadline_ms)
+    deadline = System.monotonic_time(:millisecond) + deadline_ms
+    fetch_pages(req, 1, [], page_delay_ms, @max_retries, deadline)
   end
 
-  defp fetch_pages(_req, page, _acc, _page_delay_ms, _retries_left) when page > @max_pages do
+  defp fetch_pages(_req, page, _acc, _page_delay_ms, _retries_left, _deadline)
+       when page > @max_pages do
     {:error, :too_many_pages}
   end
 
-  defp fetch_pages(req, page, acc, page_delay_ms, retries_left) do
+  defp fetch_pages(req, page, acc, page_delay_ms, retries_left, deadline) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      {:error, :deadline_exceeded}
+    else
+      do_fetch_page(req, page, acc, page_delay_ms, retries_left, deadline)
+    end
+  end
+
+  defp do_fetch_page(req, page, acc, page_delay_ms, retries_left, deadline) do
     case Req.get(req, url: "/products.json", params: [limit: @page_limit, page: page]) do
       {:ok, %{status: 200, body: %{"products" => products}}} when is_list(products) ->
-        handle_page(req, page, acc, page_delay_ms, products)
+        handle_page(req, page, acc, page_delay_ms, products, deadline)
 
       {:ok, %{status: 429} = response} when retries_left > 0 ->
         Process.sleep(:timer.seconds(retry_after_seconds(response)))
-        fetch_pages(req, page, acc, page_delay_ms, retries_left - 1)
+        fetch_pages(req, page, acc, page_delay_ms, retries_left - 1, deadline)
 
       {:ok, %{status: 429}} ->
         {:error, :rate_limited}
@@ -131,14 +160,14 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
     end
   end
 
-  defp handle_page(_req, _page, acc, _page_delay_ms, []), do: {:ok, Enum.reverse(acc)}
+  defp handle_page(_req, _page, acc, _page_delay_ms, [], _deadline), do: {:ok, Enum.reverse(acc)}
 
-  defp handle_page(req, page, acc, page_delay_ms, products) do
+  defp handle_page(req, page, acc, page_delay_ms, products, deadline) do
     acc = Enum.reduce(products, acc, &prepend_priced/2)
     if page_delay_ms > 0, do: Process.sleep(page_delay_ms)
     # Retry budget resets to @max_retries: it protects each page's own
-    # request, not the fetch as a whole.
-    fetch_pages(req, page + 1, acc, page_delay_ms, @max_retries)
+    # request, not the fetch as a whole (the deadline does that).
+    fetch_pages(req, page + 1, acc, page_delay_ms, @max_retries, deadline)
   end
 
   @doc false

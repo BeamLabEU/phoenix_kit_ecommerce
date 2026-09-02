@@ -14,11 +14,12 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
     product
   end
 
-  defp build_change(product, changes) do
+  defp build_change(product, changes, base_locale \\ "en") do
     %Change{
       product_uuid: product.uuid,
       handle: "handle",
       title: "Old Title",
+      base_locale: base_locale,
       changes: changes
     }
   end
@@ -351,6 +352,34 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
 
       assert updated.description["en"] == "New desc"
       assert updated.description["ru"] == "Старое описание"
+    end
+
+    # BLOCKER: a `Change` diffed against a non-default locale (via
+    # `Sync.check/2`'s own `:base_locale` opt, see the describe block
+    # above) must be APPLIED into that same locale — not silently
+    # re-read from `Translations.default_language/0` at apply time,
+    # which would leave the diffed locale untouched and instead overwrite
+    # a completely different one. `base_locale` living on the `Change`
+    # struct (set by `ProductDiff.diff/4`, read back here) is what makes
+    # that impossible to get wrong: there is no second place a caller has
+    # to remember to pass the locale.
+    test "applies into the locale the change was diffed against, not the default, leaving other locales untouched" do
+      product =
+        create_product(%{
+          "title" => %{"en" => "English Title", "ru" => "Старое название"}
+        })
+
+      c =
+        build_change(
+          product,
+          %{title: %{current: "Старое название", incoming: "Новое название"}},
+          "ru"
+        )
+
+      assert {:ok, updated} = Sync.apply_change(c, [:title])
+
+      assert updated.title["ru"] == "Новое название"
+      assert updated.title["en"] == "English Title"
     end
   end
 

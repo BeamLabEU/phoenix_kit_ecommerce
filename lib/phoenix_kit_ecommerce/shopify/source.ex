@@ -131,8 +131,17 @@ defmodule PhoenixKitEcommerce.Shopify.Source do
 
   defp resolve({:use_storefront, domain, reason, only}, storefront_options) do
     case StorefrontClient.fetch_products(domain, storefront_options) do
-      {:ok, products} -> {:ok, build_result(:storefront, products, only, reason)}
-      {:error, storefront_reason} -> {:error, storefront_reason}
+      {:ok, products} ->
+        {:ok, build_result(:storefront, products, only, reason)}
+
+      {:error, storefront_reason} ->
+        # `reason` (the Admin credential failure that triggered this
+        # fallback in the first place) must not be dropped just because
+        # the storefront ALSO failed — a rejected token and an
+        # unpublished/unreachable storefront is an ordinary pairing, and
+        # without `reason` here the caller only ever sees the storefront's
+        # error, never the actionable "your Admin token was rejected".
+        {:error, {:fallback_failed, reason, storefront_reason}}
     end
   end
 

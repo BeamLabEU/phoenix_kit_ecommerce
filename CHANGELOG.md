@@ -116,9 +116,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   once expanded — not a display preference: `TextDiff`'s cost and a
   live catalog's DOM size both scale with rows rendered at once (see
   `TextDiff`'s entry above), and an un-paginated ~500-product diff
-  measured at several seconds per render before this. Expanding a row
-  computes its word-level diff on demand; collapsing it does not
-  discard that computation eagerly for every row, only render it.
+  measured at several seconds per render before this. A row's word-level
+  diff is computed on demand, only while that row is expanded (and only
+  for rows on the page currently shown) — it is not memoized, so a
+  collapsed row never pays that cost at all, and re-expanding a
+  previously-expanded row recomputes it from scratch rather than reusing
+  anything kept from before.
 - **Shopify Sync's activity-log action names changed, including one
   reused under its old name with new meaning.** `shop.shopify_sync_apply`
   — the single-row "Apply" action — used to write and log **every**
@@ -135,6 +138,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   section), and `shop.shopify_sync_bulk_apply_all` (every pending
   change, all fields). Anyone reporting on the old name gets nothing
   from any of these three going forward.
+- **A title row now shows its incoming value directly, not a word-level
+  diff summary.** `:title` used to be in the LiveView's `@text_fields`
+  alongside `:description`/`:body_html`, so a title row rendered "N
+  changed regions (+delta)" and its confirm prompt read "Update X's
+  Title from Shopify?" — an operator could apply a title change without
+  ever seeing what they were applying unless they separately expanded
+  the diff panel. Titles dominate a real sync's change set, so this is
+  where that mattered most. Titles now take the same plain current →
+  incoming line (and "Update X: Title → Y?" confirm prompt) that
+  `:vendor`/`:tags`/`:status` already use; `:description` and
+  `:body_html` are unaffected.
+- **Three consumer-visible behaviors from this release were previously
+  undeclared here:**
+  - `check/2`'s error domain widened. Before this release, an error
+    reaching a caller was always an `AdminClient` term; now, with the
+    storefront fallback in play, it can also be a `StorefrontClient`
+    term (e.g. `:too_many_pages`, `{:unexpected_body, _}`) — or, since
+    this release also fixes the credential reason `Source.fetch/2` used
+    to drop on a double failure (see Fixed below), `{:fallback_failed,
+    admin_reason, storefront_reason}`. A caller pattern-matching on the
+    old, narrower error shape should fall back to a catch-all clause.
+  - `ProductDiff.diff/2,3` gained `when is_binary(base_locale)`. A
+    caller that used to pass `nil` (and silently got `[]` — everything
+    reported "in sync", never actually compared) now raises
+    `FunctionClauseError` instead. This is a stricter failure mode, not
+    a behavior most callers were relying on, but it is a raise where
+    there wasn't one before.
+  - `:total_shopify_products` excludes more than its own doc says.
+    `StorefrontClient`'s `prepend_priced/2` also drops a product with no
+    string-priced variant at all, not only ones excluded for being
+    unpublished — so on the `:storefront` path, `:total_shopify_products`
+    undercounts relative to "everything the storefront serves" by
+    however many published-but-unpriced products the store has.
+
+### Fixed
+
+- **`Sync.apply_change/2` could write a diffed localized field into the
+  wrong locale.** `Sync.check/2`'s `opts[:base_locale]` was threaded into
+  `ProductDiff.diff/4` for matching/diffing, but `apply_change/2`
+  independently re-read `Translations.default_language/0` at apply
+  time — so a change diffed against a non-default locale (`base_locale:
+  "ru"`, say) got its `title`/`body_html`/`description` merged into
+  whatever the DEFAULT locale was instead, leaving the diffed locale
+  untouched and silently overwriting an unrelated one. `Change` now
+  carries `base_locale` (set by `ProductDiff.diff/4`), and
+  `apply_change/2` reads it from there — the locale a change was diffed
+  against is the locale it gets applied into, with no second place a
+  caller has to remember to pass it.
+- **`Source.fetch/2` dropped the Admin credential failure that triggered
+  a storefront fallback, whenever the storefront ALSO failed.** A
+  rejected/expired Admin token and an unpublished or unreachable
+  storefront is an ordinary pairing — the caller used to see only the
+  storefront's own error (`{:error, storefront_reason}`), never the
+  actionable "your Admin token was rejected" underneath it. Now returns
+  `{:error, {:fallback_failed, admin_reason, storefront_reason}}`, and
+  the Shopify Sync page's error banner leads with the credential
+  failure.
+- **The storefront fallback fetch had no wall-clock budget.**
+  `StorefrontClient`'s per-sleep clamp (60s) bounded any ONE sleep, but
+  not the fetch as a whole: `@max_pages` (200) × `@max_retries` (5) ×
+  `@max_retry_after_seconds` (60s) is over 16 hours a `start_async` task
+  could spend sleeping against a hostile or misconfigured endpoint, with
+  the page's spinner up and no escape but a reload. `fetch_products/2`
+  now takes a `:deadline_ms` option (defaults to 2 minutes) — a
+  wall-clock deadline checked before every page request/retry, past
+  which the fetch stops with `{:error, :deadline_exceeded}` instead of
+  continuing toward `:too_many_pages`.
 
 ## 0.3.0 - 2026-08-21
 

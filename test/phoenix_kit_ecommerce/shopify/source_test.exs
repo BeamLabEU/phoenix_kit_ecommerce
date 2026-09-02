@@ -215,7 +215,7 @@ defmodule PhoenixKitEcommerce.Shopify.SourceFetchTest do
                Source.fetch(uuid, opts())
     end
 
-    test "surfaces the storefront's own error when the fallback also fails" do
+    test "surfaces both the credential failure that triggered the fallback and the storefront's own error" do
       uuid = connect_shopify()
 
       Req.Test.stub(@stub, fn conn ->
@@ -226,7 +226,12 @@ defmodule PhoenixKitEcommerce.Shopify.SourceFetchTest do
         end
       end)
 
-      assert {:error, {:unexpected_status, 500}} = Source.fetch(uuid, opts())
+      # A rejected Admin token AND an unreachable/misconfigured storefront
+      # is an ordinary pairing — dropping the credential reason here would
+      # leave the caller with only "the storefront failed", never the
+      # actionable "your Admin token was rejected" underneath it.
+      assert {:error, {:fallback_failed, :unauthorized, {:unexpected_status, 500}}} =
+               Source.fetch(uuid, opts())
     end
   end
 
