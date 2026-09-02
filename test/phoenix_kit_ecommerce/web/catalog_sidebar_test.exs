@@ -44,5 +44,47 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebarTest do
 
       assert html =~ ~s(value="wall mask")
     end
+
+    test "the built-in search label resolves to the active locale" do
+      Gettext.put_locale(PhoenixKitEcommerce.Gettext, "de")
+
+      html =
+        render_component(&CatalogSidebar.filter_section/1,
+          filter: @search_filter,
+          values: %{},
+          active: nil
+        )
+
+      assert html =~ ~s(placeholder="Suche")
+      refute html =~ ~s(placeholder="Search")
+    end
+
+    test "an admin-entered label is never translated, even when it collides with a msgid" do
+      Gettext.put_locale(PhoenixKitEcommerce.Gettext, "de")
+
+      html =
+        render_component(&CatalogSidebar.filter_section/1,
+          filter: %{"key" => "price", "type" => "price_range", "label" => "Cost"},
+          values: %{min: Decimal.new(1), max: Decimal.new(9)},
+          active: nil
+        )
+
+      assert html =~ "Cost"
+      refute html =~ "Kosten"
+    end
+
+    test "a custom filter renamed to match a built-in's label is never translated" do
+      Gettext.put_locale(PhoenixKitEcommerce.Gettext, "de")
+
+      html =
+        render_component(&CatalogSidebar.filter_section/1,
+          filter: %{"key" => "msrp", "type" => "metadata_option", "label" => "Price"},
+          values: [],
+          active: nil
+        )
+
+      assert html =~ "Price"
+      refute html =~ "Preis"
+    end
   end
 end

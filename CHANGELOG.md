@@ -8,203 +8,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`PhoenixKitEcommerce.Shopify.Source`** — picks where a sync reads
-  Shopify product data from: the Admin API (primary, full-fidelity) or
-  the public storefront JSON endpoint (fallback, price-only), when the
-  Admin API connection's credentials are rejected. `decide/2` is the
-  pure fallback/abort decision core; `fetch/2` is the I/O shell
-  `Sync.check/2` calls. Falling back is only correct for a credential
-  failure (`:unauthorized`, `:forbidden`, `:missing_credentials`) with a
-  usable shop domain available — a rate limit, a 5xx, or a timeout
-  aborts instead, so a transient Admin API problem never gets silently
-  narrowed to a price-only report.
-- **`PhoenixKitEcommerce.Shopify.StorefrontClient`** — reads prices from
-  a store's public storefront JSON endpoint (`/products.json`), no
-  Admin API token required. This is `Source`'s fallback transport;
-  deliberately narrow (`"handle"` and `"variants"`/`"price"` only, never
-  title/body_html) so a fallback can never be mistaken for the full
-  Admin diff. Handles its own 429 retry-after and page-based pagination
-  (`?page=N` until an empty page), since the storefront endpoint has no
-  `Link: rel="next"` header to follow.
-- **`PhoenixKitEcommerce.Shopify.ProductDiff.comparable_fields/0`** —
-  the full field set `diff/4` can compare
-  (`[:title, :body_html, :description, :vendor, :tags, :status,
-  :price]`); what a caller passes as `diff/4`'s `:only` for a
-  full-fidelity source such as the Admin API.
-- **`ProductDiff.diff/4`'s `:only` option** — restricts the comparison
-  to a chosen field subset, so a source that only ever carries some
-  fields (e.g. the storefront fallback's price-only data) doesn't get
-  its absent fields reported — and later applied — as deletions.
-- **`Sync.check/2`'s `:base_locale` option** — the locale read for
-  matching/diffing localized fields, defaulting to
-  `Translations.default_language/0`. Mainly useful for tests that want
-  to pin the locale without touching the host app's language settings.
-- **`PhoenixKitEcommerce.Shopify.TextDiff`** — word-level diff between two
-  versions of a text field, built on `List.myers_difference/2` over
-  whitespace-preserving tokens (rejoining the fragments reproduces the
-  inputs exactly). `words/2` returns the ordered `{:eq | :del | :ins,
-  text}` fragments; `summary/2` returns a small-payload shape (changed
-  region count, length delta) without the caller having to render the
-  full fragment list. Cost tracks how DIFFERENT the two texts are, not
-  how long they are (Myers is O(N*D)) — a wholly-rewritten 1.7 KB
-  `body_html` costs ~12ms, so a caller listing many rows must bound how
-  many it renders/diffs at once (see the Shopify Sync page entry below).
-  Both functions emit `:telemetry`
-  (`[:phoenix_kit_ecommerce, :shopify, :text_diff, :words | :summary]`,
-  empty measurements/metadata) — the only externally-observable way to
-  confirm a caller's "only for the page being shown" / "only for the
-  expanded row" claims actually hold, since correct rendered output
-  looks identical whether or not they do.
-- **Shopify Sync page: checkbox bulk selection, confirm modals, header
-  stats.** A checkbox column (`<.bulk_select_scope>`) per expanded
-  section lets an operator pick specific rows and apply just one field
-  to just those products via "Apply selection" — client-side selection,
-  scoped to the section's current page (25 rows), distinct from "Apply
-  section" (every row) and a single row's own "Apply". Every apply
-  affordance (row, section, selection, everything) is now request →
-  confirm through PhoenixKit's `<.confirm_modal>`, replacing every
-  `data-confirm` browser `confirm()` — the extreme-price bulk exclusion
-  is disclosed as a proper warning message instead of text glued onto a
-  native prompt. A header stat row shows pending changes, price changes,
-  and (admin source only) catalogue coverage: matched local products
-  against the Shopify total, via `ProductDiff.matched_count/3` (see
-  below). Row lists use `<.table_default>` for a free mobile card view;
-  `<.pagination_info>` and `<.empty_state>` replace the hand-rolled
-  page-info text and the two "no changes" alerts.
-- **`PhoenixKitEcommerce.Shopify.ProductDiff.matched_count/3`** — counts
-  local products matched by handle to a Shopify product list, independent
-  of whether the match has any field difference (unlike `diff/4`'s
-  result, which only carries products with an actual difference). What
-  "how much of the Shopify catalog this page can see" needs as its
-  numerator.
-
-### Changed
-
-- **⚠️ `Sync.check/2`'s success return changed shape (the arity did
-  not — `check/1` still resolves via the `opts \\ []` default; the
-  break is the return value).** It fetches through `Source.fetch/2`
-  now, which can serve a price-only diff from the public storefront when
-  the Admin API token is rejected instead of failing outright — a plain
-  `[Change.t()]` list can't say whether a result is a full diff or a
-  price-only fallback, so a caller could show a price-only report as if
-  it were complete. `check/2` returns
-  `{:ok, %{changes: [Change.t()], source: :admin | :storefront,
-  fallback_reason: term() | nil, total_shopify_products: non_neg_integer(),
-  matched_local_products: non_neg_integer()}}` instead. Migration: replace
-  `{:ok, changes}` with `{:ok, %{changes: changes}}` at the call site (or
-  branch on `:source`/`:fallback_reason` to surface the fallback, as
-  `PhoenixKitEcommerce.Web.ShopifySync` now does — including keeping its
-  "shop matches Shopify" success alert and its storefront-fallback
-  banner mutually exclusive, since a `:storefront` result with no price
-  differences is not the same claim as a clean `:admin` diff).
-  `:total_shopify_products` and `:matched_local_products` are additive —
-  together they're what a coverage figure needs (see the LiveView entry
-  above); `:total_shopify_products` alone is not comparable across
-  `:source` values, since the storefront fallback only ever sees products
-  published to the Online Store.
-- **`AdminClient.fetch_products/2` now returns `{:error, :forbidden}`
-  on a Shopify 403** (previously fell through to the generic
-  `{:error, {:unexpected_status, 403}}`). A 403 is what Shopify returns
-  for a token installed without the `read_products` scope — this is
-  what lets `Source` recognize it as a credential failure and fall back
-  to the storefront instead of aborting.
-- **Shopify Sync page rewritten from a flat, price-only needs-review
-  list into sections grouped by field** (Prices, Titles, Descriptions,
-  HTML texts, Tags, Statuses, Vendors — price first; one product can
-  appear in more than one section if it differs on more than one
-  field). Sections are collapsed by default and paginate at 25 rows
-  once expanded — not a display preference: `TextDiff`'s cost and a
-  live catalog's DOM size both scale with rows rendered at once (see
-  `TextDiff`'s entry above), and an un-paginated ~500-product diff
-  measured at several seconds per render before this. A row's word-level
-  diff is computed on demand, only while that row is expanded (and only
-  for rows on the page currently shown) — it is not memoized, so a
-  collapsed row never pays that cost at all, and re-expanding a
-  previously-expanded row recomputes it from scratch rather than reusing
-  anything kept from before.
-- **Shopify Sync's activity-log action names changed, including one
-  reused under its old name with new meaning.** `shop.shopify_sync_apply`
-  — the single-row "Apply" action — used to write and log **every**
-  differing field on the product; it now writes and logs **only the one
-  field that row is for** (a consequence of the field-grouped rewrite
-  above: a row belongs to one section, one field). Anyone reporting on
-  this action name by itself, without also checking `metadata.fields`,
-  will see a shape change with no name change to flag it.
-  `shop.shopify_sync_bulk_price_apply` (the old single "apply all
-  price-only changes" bulk action) no longer exists; the field-grouped
-  page has no single equivalent — it's replaced by three narrower
-  actions: `shop.shopify_sync_bulk_field_apply` (a whole section),
-  `shop.shopify_sync_bulk_selection_apply` (checked rows within a
-  section), and `shop.shopify_sync_bulk_apply_all` (every pending
-  change, all fields). Anyone reporting on the old name gets nothing
-  from any of these three going forward.
-- **A title row now shows its incoming value directly, not a word-level
-  diff summary.** `:title` used to be in the LiveView's `@text_fields`
-  alongside `:description`/`:body_html`, so a title row rendered "N
-  changed regions (+delta)" and its confirm prompt read "Update X's
-  Title from Shopify?" — an operator could apply a title change without
-  ever seeing what they were applying unless they separately expanded
-  the diff panel. Titles dominate a real sync's change set, so this is
-  where that mattered most. Titles now take the same plain current →
-  incoming line (and "Update X: Title → Y?" confirm prompt) that
-  `:vendor`/`:tags`/`:status` already use; `:description` and
-  `:body_html` are unaffected.
-- **Three consumer-visible behaviors from this release were previously
-  undeclared here:**
-  - `check/2`'s error domain widened. Before this release, an error
-    reaching a caller was always an `AdminClient` term; now, with the
-    storefront fallback in play, it can also be a `StorefrontClient`
-    term (e.g. `:too_many_pages`, `{:unexpected_body, _}`) — or, since
-    this release also fixes the credential reason `Source.fetch/2` used
-    to drop on a double failure (see Fixed below), `{:fallback_failed,
-    admin_reason, storefront_reason}`. A caller pattern-matching on the
-    old, narrower error shape should fall back to a catch-all clause.
-  - `ProductDiff.diff/2,3` gained `when is_binary(base_locale)`. A
-    caller that used to pass `nil` (and silently got `[]` — everything
-    reported "in sync", never actually compared) now raises
-    `FunctionClauseError` instead. This is a stricter failure mode, not
-    a behavior most callers were relying on, but it is a raise where
-    there wasn't one before.
-  - `:total_shopify_products` excludes more than its own doc says.
-    `StorefrontClient`'s `prepend_priced/2` also drops a product with no
-    string-priced variant at all, not only ones excluded for being
-    unpublished — so on the `:storefront` path, `:total_shopify_products`
-    undercounts relative to "everything the storefront serves" by
-    however many published-but-unpriced products the store has.
+- **German and French storefront translations.** Complete `de` and `fr`
+  gettext catalogues for the storefront/cart/checkout UI (782 msgids each,
+  0 untranslated). Additive only — `en`/`et`/`ru` and all source msgids are
+  untouched. Formal register (Sie / vous), interpolation tokens preserved.
 
 ### Fixed
 
-- **`Sync.apply_change/2` could write a diffed localized field into the
-  wrong locale.** `Sync.check/2`'s `opts[:base_locale]` was threaded into
-  `ProductDiff.diff/4` for matching/diffing, but `apply_change/2`
-  independently re-read `Translations.default_language/0` at apply
-  time — so a change diffed against a non-default locale (`base_locale:
-  "ru"`, say) got its `title`/`body_html`/`description` merged into
-  whatever the DEFAULT locale was instead, leaving the diffed locale
-  untouched and silently overwriting an unrelated one. `Change` now
-  carries `base_locale` (set by `ProductDiff.diff/4`), and
-  `apply_change/2` reads it from there — the locale a change was diffed
-  against is the locale it gets applied into, with no second place a
-  caller has to remember to pass it.
-- **`Source.fetch/2` dropped the Admin credential failure that triggered
-  a storefront fallback, whenever the storefront ALSO failed.** A
-  rejected/expired Admin token and an unpublished or unreachable
-  storefront is an ordinary pairing — the caller used to see only the
-  storefront's own error (`{:error, storefront_reason}`), never the
-  actionable "your Admin token was rejected" underneath it. Now returns
-  `{:error, {:fallback_failed, admin_reason, storefront_reason}}`, and
-  the Shopify Sync page's error banner leads with the credential
-  failure.
-- **The storefront fallback fetch had no wall-clock budget.**
-  `StorefrontClient`'s per-sleep clamp (60s) bounded any ONE sleep, but
-  not the fetch as a whole: `@max_pages` (200) × `@max_retries` (5) ×
-  `@max_retry_after_seconds` (60s) is over 16 hours a `start_async` task
-  could spend sleeping against a hostile or misconfigured endpoint, with
-  the page's spinner up and no escape but a reload. `fetch_products/2`
-  now takes a `:deadline_ms` option (defaults to 2 minutes) — a
-  wall-clock deadline checked before every page request/retry, past
-  which the fetch stops with `{:error, :deadline_exceeded}` instead of
-  continuing toward `:too_many_pages`.
+- **Storefront filter labels no longer translate admin-entered text.**
+  `CatalogSidebar` used to run every filter's stored `label` through
+  Gettext by string alone, so any label an admin typed — or the
+  auto-capitalized label `add_metadata_filter` generates from an option
+  key — that happened to collide with an unrelated catalogue msgid (e.g.
+  `"Cost"` → `"Kosten"`) silently rewrote the shopkeeper's own copy on the
+  storefront, with no warning and no migration; new msgids added in later
+  releases could widen the collision set at any time. `translate_label/1`
+  now only translates a label that still matches the `{key, label}` pair
+  shipped by `default_storefront_filters/0` — a renamed built-in or any
+  custom label renders verbatim. Also stops labels containing `%{...}`
+  from hitting Gettext's interpolation and logging `missing Gettext
+  bindings` on every render.
+- **`fr` rendered "1" for an empty count on 6 plural msgids** (`1
+  category`/`1 product`/`1 item`/`1 cart total`/`1 method configured`/`1
+  day`), reachable from `carts.ex`, `categories.ex`, `products.ex`,
+  `shipping_methods.ex` and `product_detail.ex` — an empty French cart
+  read "1 article" ("1 item"). French's CLDR plural rule sends `n=0` to
+  the *singular* index (`de`'s sends it to plural, which is why German was
+  unaffected), and these six `msgstr[0]` entries had the digit `1`
+  hardcoded instead of `%{count}`, copied from the English msgid's shape.
+  All other plural entries in both catalogues were audited and are clean.
+- **`fr` "Vendor" facet translated as `Fournisseur`** (supply-chain
+  "supplier"), not the customer-facing sense of the word. Now `Vendeur`,
+  matching the same correction on the product-detail page's `Vendor:`
+  label.
 
 ## 0.3.0 - 2026-08-21
 
