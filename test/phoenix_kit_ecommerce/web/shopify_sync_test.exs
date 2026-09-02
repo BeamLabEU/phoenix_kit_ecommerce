@@ -323,6 +323,32 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       assert html =~ "storefront fallback also failed"
     end
 
+    # Same path, but with the 403 the unified-sync work introduced.
+    # `:forbidden` had a `format_fallback_reason/1` clause and no
+    # `format_error/1` one, so the credential half of `{:fallback_failed,
+    # ...}` — the half that whole tuple exists to put first — printed the
+    # raw atom through the generic `inspect/1` clause. Asserting the
+    # atom's ABSENCE is the load-bearing half: the sentence alone would
+    # still pass if a later change reverted to inspecting it alongside
+    # some other prose.
+    test "a 403 credential failure names the missing scope instead of inspecting :forbidden",
+         %{conn: conn} do
+      Req.Test.stub(@stub, fn conn ->
+        if admin_request?(conn) do
+          json_response(conn, 403, %{"errors" => "This action requires merchant approval"})
+        else
+          json_response(conn, 500, %{})
+        end
+      end)
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      html = check_and_await(view)
+
+      assert html =~ "read_products"
+      assert html =~ "storefront fallback also failed"
+      refute html =~ "Could not reach Shopify: :forbidden"
+    end
+
     # Discriminates the numerator from two wrong-but-plausible ones: the
     # local catalog's total size (overcounts — a local-only product was
     # never in this check's reach) and `length(@changes)` (undercounts —

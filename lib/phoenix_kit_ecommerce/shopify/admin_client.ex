@@ -21,6 +21,8 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   @page_limit 250
   @product_fields ~w(id handle title body_html vendor product_type tags status images variants)
   @max_retries 5
+  @default_retry_after_seconds 1
+  @max_retry_after_seconds 60
 
   @doc """
   Fetches every product from the Shopify store connected via
@@ -107,12 +109,21 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     end
   end
 
+  # Clamped to 0..60s, matching
+  # `PhoenixKitEcommerce.Shopify.StorefrontClient.retry_after_seconds/1`
+  # (whose moduledoc carries the full rationale). Shopify's own
+  # `Retry-After` is well-behaved, so this is not a live bug — but the
+  # header still crosses the network, an unclamped negative makes
+  # `Process.sleep/1` raise `FunctionClauseError` out of a function whose
+  # spec promises `{:ok, _} | {:error, _}`, and an unclamped large one
+  # sleeps for real up to @max_retries times per page, with no deadline on
+  # this path to bound it. The two clients had no reason to differ.
   defp retry_after_seconds(response) do
     with value when is_binary(value) <- response_header(response, "retry-after"),
          {seconds, _} <- Integer.parse(value) do
-      seconds
+      seconds |> max(0) |> min(@max_retry_after_seconds)
     else
-      _ -> 1
+      _ -> @default_retry_after_seconds
     end
   end
 
