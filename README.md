@@ -27,7 +27,7 @@ Add `phoenix_kit_ecommerce` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:phoenix_kit_ecommerce, "~> 0.2"}
+    {:phoenix_kit_ecommerce, "~> 0.3.0"}
   ]
 end
 ```
@@ -229,21 +229,52 @@ Setup (all through the UI, no environment variables):
    > built-in validation strategies) — the "Check for changes" button
    > below is the real connectivity test.
 3. **In the shop admin**: Shop → Shopify Sync → "Check for changes".
-   Review the diff, then apply. Price-only changes under a 3x swing
-   can be applied in bulk; every other change — any non-price field,
-   or a >3x price swing — is applied one product at a time with an
-   explicit confirmation showing exactly what will change.
+   Differences are grouped into one collapsed section per field —
+   Prices, Titles, Descriptions, HTML texts, Tags, Statuses, Vendors —
+   each showing how many products differ on it. Expand a section to
+   list them, 25 rows to a page; expand a row for a word-level diff of
+   what actually changed inside the text.
 
-Fields compared: title, description (from Shopify's `Body (HTML)`),
-vendor, tags, status, and price (the lowest current variant price).
-Not synced: new products, categories/collections, images,
-variants/options, and inventory quantity.
+   Apply at whichever scope fits: a single field of one product, every
+   product in one section, a checkbox selection within the current
+   page, or everything at once. Each is confirmed in a dialog that
+   states the count and the field before anything is written.
+
+   **Extreme price changes (a swing beyond 3x) are excluded from every
+   bulk scope** and must be applied per row, where the product and its
+   badge are in front of you. Nothing is written without an explicit
+   confirmation.
+
+Fields compared: title, description (derived from Shopify's `Body
+(HTML)`), the HTML body itself, vendor, tags, status, and price (the
+lowest current variant price). Not synced: new products,
+categories/collections, images, variants/options, and inventory
+quantity.
 
 ```elixir
 alias PhoenixKitEcommerce.Shopify.Sync
 
 # integration_uuid comes from PhoenixKit.Integrations.list_connections("shopify")
-{:ok, changes} = Sync.check(integration_uuid)
+{:ok,
+ %{
+   changes: changes,
+   source: source,
+   fallback_reason: reason,
+   total_shopify_products: total_shopify_products,
+   matched_local_products: matched_local_products
+ }} = Sync.check(integration_uuid)
+
+# `source` is :admin (the full diff above) or :storefront — a price-only
+# fallback used when the Admin API token was rejected, with `reason`
+# saying why (e.g. :unauthorized). Always check `source` before treating
+# `changes` as a complete diff.
+#
+# `total_shopify_products` (every product Source.fetch/2 returned) and
+# `matched_local_products` (how many of those matched a local product by
+# handle, via ProductDiff.matched_count/3) are what "how much of the
+# Shopify catalog can this sync even see" needs — only comparable to
+# each other when `source == :admin`; the storefront fallback only ever
+# sees products published to the Online Store, a narrower population.
 
 # Apply everything that changed for one product...
 {:ok, product} = Sync.apply_change(change)
@@ -407,6 +438,14 @@ lib/
     ├── services/
     │   ├── image_downloader.ex    # Download images from URLs
     │   └── image_migration.ex     # Batch image storage
+    ├── shopify/
+    │   ├── provider.ex            # PhoenixKit.Integrations provider definition
+    │   ├── admin_client.ex        # Shopify Admin API client
+    │   ├── storefront_client.ex   # Public storefront JSON client (price-only fallback)
+    │   ├── source.ex              # Admin-primary / storefront-fallback picker
+    │   ├── product_diff.ex        # Local-vs-Shopify field diff, by handle
+    │   ├── text_diff.ex           # Word-level diff for text fields
+    │   └── sync.ex                # Orchestrates fetch, diff, and apply
     ├── workers/
     │   ├── csv_import_worker.ex   # Oban: async CSV import
     │   └── image_migration_worker.ex # Oban: batch image processing
@@ -436,6 +475,7 @@ lib/
         ├── imports.ex             # Admin: import list
         ├── import_configs.ex      # Admin: import profiles
         ├── import_show.ex         # Admin: import details
+        ├── shopify_sync.ex      # Admin: Shopify catalog sync
         ├── test_shop.ex           # Admin: testing UI
         ├── option_state.ex        # Client option state
         ├── components/
