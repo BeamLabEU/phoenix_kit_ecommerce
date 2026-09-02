@@ -18,12 +18,6 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebarTest do
     "position" => 0
   }
 
-  setup do
-    original = Gettext.get_locale(PhoenixKitEcommerce.Gettext)
-    on_exit(fn -> Gettext.put_locale(PhoenixKitEcommerce.Gettext, original) end)
-    :ok
-  end
-
   describe "filter_section/1 for the search type" do
     test "renders a submit form with a text input named after the filter key" do
       html =
@@ -77,6 +71,20 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebarTest do
 
       assert html =~ "Cost"
       refute html =~ "Kosten"
+    end
+
+    test "a custom filter renamed to match a built-in's label is never translated" do
+      Gettext.put_locale(PhoenixKitEcommerce.Gettext, "de")
+
+      html =
+        render_component(&CatalogSidebar.filter_section/1,
+          filter: %{"key" => "msrp", "type" => "metadata_option", "label" => "Price"},
+          values: [],
+          active: nil
+        )
+
+      assert html =~ "Price"
+      refute html =~ "Preis"
     end
   end
 end

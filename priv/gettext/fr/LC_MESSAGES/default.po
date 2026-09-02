@@ -121,21 +121,21 @@ msgstr "%{count} sélectionné(s)"
 #, elixir-autogen, elixir-format
 msgid "1 category"
 msgid_plural "%{count} categories"
-msgstr[0] "1 catégorie"
+msgstr[0] "%{count} catégorie"
 msgstr[1] "%{count} catégories"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:557
 #, elixir-autogen, elixir-format
 msgid "1 day"
 msgid_plural "%{count} days"
-msgstr[0] "1 jour"
+msgstr[0] "%{count} jour"
 msgstr[1] "%{count} jours"
 
 #: lib/phoenix_kit_ecommerce/web/products.ex:290
 #, elixir-autogen, elixir-format
 msgid "1 product"
 msgid_plural "%{count} products"
-msgstr[0] "1 produit"
+msgstr[0] "%{count} produit"
 msgstr[1] "%{count} produits"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:668
@@ -2469,12 +2469,12 @@ msgstr "Images des variantes"
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:899
 #, elixir-autogen, elixir-format
 msgid "Vendor"
-msgstr "Fournisseur"
+msgstr "Vendeur"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:354
 #, elixir-autogen, elixir-format
 msgid "Vendor:"
-msgstr "Fournisseur :"
+msgstr "Vendeur :"
 
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1047
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1051
@@ -2790,21 +2790,21 @@ msgstr "sélectionné(s)"
 #, elixir-autogen, elixir-format
 msgid "1 item"
 msgid_plural "%{count} items"
-msgstr[0] "1 article"
+msgstr[0] "%{count} article"
 msgstr[1] "%{count} articles"
 
 #: lib/phoenix_kit_ecommerce/web/carts.ex:121
 #, elixir-autogen, elixir-format
 msgid "1 cart total"
 msgid_plural "%{count} carts total"
-msgstr[0] "1 panier au total"
+msgstr[0] "%{count} panier au total"
 msgstr[1] "%{count} paniers au total"
 
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:49
 #, elixir-autogen, elixir-format
 msgid "1 method configured"
 msgid_plural "%{count} methods configured"
-msgstr[0] "1 méthode configurée"
+msgstr[0] "%{count} méthode configurée"
 msgstr[1] "%{count} méthodes configurées"
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1109
