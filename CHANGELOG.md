@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- **German and French storefront translations.** Complete `de` and `fr`
+  gettext catalogues for the storefront/cart/checkout UI (782 msgids each,
+  0 untranslated). Additive only — `en`/`et`/`ru` and all source msgids are
+  untouched. Formal register (Sie / vous), interpolation tokens preserved.
+
+### Fixed
+
+- **Storefront filter labels no longer translate admin-entered text.**
+  `CatalogSidebar` used to run every filter's stored `label` through
+  Gettext by string alone, so any label an admin typed — or the
+  auto-capitalized label `add_metadata_filter` generates from an option
+  key — that happened to collide with an unrelated catalogue msgid (e.g.
+  `"Cost"` → `"Kosten"`) silently rewrote the shopkeeper's own copy on the
+  storefront, with no warning and no migration; new msgids added in later
+  releases could widen the collision set at any time. `translate_label/1`
+  now only translates a label that still matches the `{key, label}` pair
+  shipped by `default_storefront_filters/0` — a renamed built-in or any
+  custom label renders verbatim. Also stops labels containing `%{...}`
+  from hitting Gettext's interpolation and logging `missing Gettext
+  bindings` on every render.
+- **`fr` rendered "1" for an empty count on 6 plural msgids** (`1
+  category`/`1 product`/`1 item`/`1 cart total`/`1 method configured`/`1
+  day`), reachable from `carts.ex`, `categories.ex`, `products.ex`,
+  `shipping_methods.ex` and `product_detail.ex` — an empty French cart
+  read "1 article" ("1 item"). French's CLDR plural rule sends `n=0` to
+  the *singular* index (`de`'s sends it to plural, which is why German was
+  unaffected), and these six `msgstr[0]` entries had the digit `1`
+  hardcoded instead of `%{count}`, copied from the English msgid's shape.
+  All other plural entries in both catalogues were audited and are clean.
+- **`fr` "Vendor" facet translated as `Fournisseur`** (supply-chain
+  "supplier"), not the customer-facing sense of the word. Now `Vendeur`,
+  matching the same correction on the product-detail page's `Vendor:`
+  label.
+
 ## 0.3.0 - 2026-08-21
 
 ### Added
