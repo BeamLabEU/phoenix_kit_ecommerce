@@ -311,10 +311,16 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   # slug instead of silently serving the default-language URL.
   defp full_title_base(translated_title, slug_map, target_lang) do
     case translated_title |> Product.slugify(target_lang) |> cap_word_boundary(@slug_max_len) do
-      "" -> "#{default_lang_slug(slug_map)}-#{target_lang}"
+      "" -> "#{strip_identity_tail(default_lang_slug(slug_map))}-#{target_lang}"
       slug -> slug
     end
   end
+
+  # The fallback borrows the default-language slug, which usually already
+  # carries the numeric identity tail. Strip it here so `with_identity_tail/2`
+  # stays the ONE place that appends it — otherwise the tail lands twice
+  # ("wooden-vase-22153-fr-22153").
+  defp strip_identity_tail(slug), do: String.replace(slug, @slug_tail_digits, "")
 
   # Cuts to `max_len` at a word boundary: hard-cut to `max_len`, then drop
   # the trailing partial word (back to the last `-`) and any trailing `-`.

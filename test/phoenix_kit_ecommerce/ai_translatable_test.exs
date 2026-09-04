@@ -257,6 +257,20 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     assert updated.slug["fr"] == "vase-en-bois"
   end
 
+  test "a title that slugifies to nothing borrows the default slug with the tail exactly once" do
+    product =
+      create_product(%{
+        title: %{"en" => "Wooden Vase"},
+        slug: %{"en" => "wooden-vase-22153"}
+      })
+
+    # Head AND full title slugify to "" (CJK only), so the fallback borrows the
+    # default-language slug; its numeric identity tail must not be duplicated.
+    {:ok, updated} = AITranslatable.put_translation(product, "fr", %{"title" => "測試"}, [])
+
+    assert updated.slug["fr"] == "wooden-vase-fr-22153"
+  end
+
   describe "regenerate_slug/2" do
     test "recomputes the slug from the current title, even when one already exists" do
       product =
