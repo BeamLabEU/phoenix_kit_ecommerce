@@ -123,8 +123,9 @@ defmodule PhoenixKitEcommerce.Migrations do
   @doc """
   The SQL `up/1` executes, as data — the testable single source. The test
   suite scans this for: table/function/trigger names matching core's
-  exact names, a representative sample of index and constraint names, no
-  statement that can drop or truncate a table (except the scoped,
+  exact names (including the five `*_uuid_idx` core embeds the schema name
+  into under a non-public prefix), a representative sample of index and
+  constraint names, no statement that can drop or truncate a table (except the scoped,
   pre-existing `DELETE` inside the two adopted slug-projection function
   bodies — core-authored runtime logic, unchanged, not migration-time
   destruction), and that every index/constraint is guarded.
@@ -138,7 +139,7 @@ defmodule PhoenixKitEcommerce.Migrations do
       functions(p) ++
       constraints(prefix, p) ++
       triggers(p) ++
-      indexes(p) ++
+      indexes(prefix, p) ++
       [marker_statement(p, @current_version)]
   end
 
@@ -616,7 +617,18 @@ defmodule PhoenixKitEcommerce.Migrations do
     """
   end
 
-  defp indexes(p) do
+  # Core embeds the schema name in exactly five of these index names under a
+  # non-public prefix (`pn` in core's V135, `__PK_NAME_EXEMPT__` in its
+  # expected-schema manifest): the five `*_uuid_idx` on the core-created shop
+  # tables. Mirroring that is the whole point of an adoptive chain — a bare
+  # name there does NOT find core's `<prefix>_..._uuid_idx`, so
+  # `CREATE UNIQUE INDEX IF NOT EXISTS` builds a SECOND, redundant unique
+  # index on every prefixed install and leaves the schema drifted from the
+  # manifest. Every other index core creates on these tables is named the
+  # same in every schema.
+  defp indexes(prefix, p) do
+    pn = if prefix == "public", do: "", else: "#{prefix}_"
+
     [
       idx(
         p,
@@ -708,7 +720,8 @@ defmodule PhoenixKitEcommerce.Migrations do
         "phoenix_kit_shop_cart_items",
         "btree (product_uuid)"
       ),
-      unique_idx(
+      exempt_unique_idx(
+        pn,
         p,
         "phoenix_kit_shop_cart_items_uuid_idx",
         "phoenix_kit_shop_cart_items",
@@ -744,7 +757,13 @@ defmodule PhoenixKitEcommerce.Migrations do
         "phoenix_kit_shop_carts",
         "btree (user_uuid)"
       ),
-      unique_idx(p, "phoenix_kit_shop_carts_uuid_idx", "phoenix_kit_shop_carts", "btree (uuid)"),
+      exempt_unique_idx(
+        pn,
+        p,
+        "phoenix_kit_shop_carts_uuid_idx",
+        "phoenix_kit_shop_carts",
+        "btree (uuid)"
+      ),
       idx(
         p,
         "phoenix_kit_shop_categories_featured_product_uuid_idx",
@@ -763,7 +782,8 @@ defmodule PhoenixKitEcommerce.Migrations do
         "phoenix_kit_shop_categories",
         "gin (slug)"
       ),
-      unique_idx(
+      exempt_unique_idx(
+        pn,
         p,
         "phoenix_kit_shop_categories_uuid_idx",
         "phoenix_kit_shop_categories",
@@ -805,13 +825,15 @@ defmodule PhoenixKitEcommerce.Migrations do
         "phoenix_kit_shop_products",
         "gin (slug)"
       ),
-      unique_idx(
+      exempt_unique_idx(
+        pn,
         p,
         "phoenix_kit_shop_products_uuid_idx",
         "phoenix_kit_shop_products",
         "btree (uuid)"
       ),
-      unique_idx(
+      exempt_unique_idx(
+        pn,
         p,
         "phoenix_kit_shop_shipping_methods_uuid_idx",
         "phoenix_kit_shop_shipping_methods",
@@ -823,6 +845,9 @@ defmodule PhoenixKitEcommerce.Migrations do
   defp idx(p, name, table, using), do: build_index(p, "", name, table, using)
 
   defp unique_idx(p, name, table, using), do: build_index(p, "UNIQUE ", name, table, using)
+
+  defp exempt_unique_idx(pn, p, name, table, using),
+    do: build_index(p, "UNIQUE ", pn <> name, table, using)
 
   defp build_index(p, unique, name, table, using),
     do: "CREATE #{unique}INDEX IF NOT EXISTS #{name} ON #{p}#{table} USING #{using}"
