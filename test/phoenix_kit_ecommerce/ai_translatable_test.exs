@@ -271,6 +271,22 @@ defmodule PhoenixKitEcommerce.AITranslatableTest do
     assert updated.slug["fr"] == "wooden-vase-fr-22153"
   end
 
+  test "a projected slug collision comes back as a changeset error, not a raise" do
+    # V171 buckets slugs by BASE language (`en-US` folds to `en`) while
+    # `unique_slug/3` checks the exact jsonb key, so a differently-spelled
+    # language slips past the pre-check and the projection trigger raises on
+    # insert. Both AI write paths use `Ecto.Changeset.change/2`, which skips
+    # `Product.changeset/2` and its `unique_constraint` — the pkey is named on
+    # them directly so this stays a handled error.
+    create_product(%{title: %{"en" => "Taken"}, slug: %{"en" => "vase-collision"}})
+    other = create_product(%{title: %{"en" => "Other"}})
+
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             AITranslatable.put_translation(other, "en-US", %{"title" => "Vase Collision"}, [])
+
+    assert %{slug: _} = errors_on(changeset)
+  end
+
   describe "regenerate_slug/2" do
     test "recomputes the slug from the current title, even when one already exists" do
       product =

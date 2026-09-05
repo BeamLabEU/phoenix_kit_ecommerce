@@ -4,6 +4,65 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.1 - 2026-09-05
+
+PRs #28 and #29 plus the post-merge reviews in
+`dev_docs/pull_requests/2026/28-default-language-snapshot-overwrite/CLAUDE_REVIEW.md`
+and `dev_docs/pull_requests/2026/29-slug-head-and-regenerate/CLAUDE_REVIEW.md`.
+
+### Fixed
+
+- **Editing a default-language field in the admin product or category form no
+  longer discards the edit.** `merge_translations_to_attrs/5` reduced over the
+  mount-time snapshot `build_translations_map/2` took — which carries the
+  default language — *after* writing the value the main form submitted, so the
+  old text was put straight back. The save reported success and the previous
+  content returned. A field that was empty at mount had no snapshot entry and
+  saved correctly, which is why the defect read as "creating works, correcting
+  does not". The reduce now skips the default language; the main form is its
+  only source. (#27, #28)
+- **Saving a product no longer wipes the default language's `body_html`,
+  `seo_title` and `seo_description`.** The product form has main-field inputs
+  for `title`, `slug` and `description` only — the other three are
+  translation-tab-only — so `build_localized_params/4` passed them as `nil`,
+  which `merge_field_value/4` read as "the user cleared it" and deleted. That
+  deletion used to be undone by the same snapshot re-merge #28 removed. `nil`
+  now means "not submitted" (a rendered input always posts a string, `""` when
+  emptied), and both forms build the default-language values with `Map.take/2`
+  so only fields the submission actually carried take part.
+- **An AI-translation slug collision is a changeset error again, not a crash.**
+  Both write paths in `AITranslatable` build their changeset with
+  `Ecto.Changeset.change/2`, which skips `Product.changeset/2` and its
+  `unique_constraint`, so V171's projection pkey raised out of the transaction.
+  `unique_slug/3`'s pre-check cannot prevent it: it matches the exact jsonb key
+  while the projection buckets by base language (`en-US` folds to `en`), and it
+  is a check-then-write across products. The pkey is now named on both paths.
+
+### Added
+
+- **`AITranslatable.regenerate_slug/3`** — an explicit, one-off repair path that
+  recomputes a language's slug from its current title even when a slug exists,
+  bypassing the write-once rule `put_translation/4` enforces for the translation
+  pipeline. Returns `{:error, :no_title}` when the language has no title and
+  `{:ok, %{old: slug, new: slug}}` unchanged when the recomputed slug matches.
+  `dry_run: true` returns the same result without writing or broadcasting, for
+  previewing a bulk repair. Callers own their own redirect bookkeeping — this
+  module has none.
+
+### Changed
+
+- **AI-translated product slugs are shaped from the title head.** `slug_base/3`
+  used to slugify the whole translated title (SEO segments included) and
+  hard-cut it at 80 characters, landing mid-word and making near-identical
+  prefixes collide. It now takes the first segment before a `|` or a spaced dash
+  (` - `, ` – `, ` — `), falls back to the full title when that head slugifies
+  to `""` (CJK, Arabic, emoji), caps at 60 on a word boundary, and carries the
+  default-language slug's numeric identity tail (`-<4+ digits>`, e.g. an
+  imported Shopify id) so a translated slug keeps the id its default-language
+  sibling has. Four-or-more digits, so `unique_slug/3`'s own `-2`/`-3` collision
+  suffixes are never promoted to an identity tail. Existing slugs are untouched
+  — generation is still write-once. (#29)
+
 ## 0.4.0 - 2026-09-02
 
 ### Added

@@ -211,10 +211,24 @@ defmodule PhoenixKitEcommerce.AITranslatable do
       end)
       |> maybe_put_slug(fresh, target_lang, translated[:title])
 
-    case fresh |> Ecto.Changeset.change(changes) |> repo().update() do
+    case fresh |> slug_changeset(changes) |> repo().update() do
       {:ok, updated} -> updated
       {:error, reason} -> repo().rollback(reason)
     end
+  end
+
+  # `Ecto.Changeset.change/2` skips `Product.changeset/2`, so the projection
+  # pkey has to be registered here too. `unique_slug/3` checks the exact jsonb
+  # key while V171's bucket is the BASE language (`en-US` folds to `en`), and
+  # the check-then-write is not atomic across products anyway — both leave a
+  # window where the trigger insert raises. Naming the constraint turns that
+  # into `{:error, changeset}` instead of a Postgrex.Error escaping the job.
+  defp slug_changeset(%Product{} = fresh, changes) do
+    fresh
+    |> Ecto.Changeset.change(changes)
+    |> Ecto.Changeset.unique_constraint(:slug,
+      name: "phoenix_kit_shop_product_slugs_pkey"
+    )
   end
 
   defp do_regenerate_slug(%Product{} = fresh, lang, dry_run?) do
@@ -238,7 +252,7 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   defp write_regenerated_slug(%Product{} = fresh, slug_map, lang, old_slug, new_slug) do
     changes = %{slug: Map.put(slug_map, lang, new_slug)}
 
-    case fresh |> Ecto.Changeset.change(changes) |> repo().update() do
+    case fresh |> slug_changeset(changes) |> repo().update() do
       {:ok, updated} ->
         Events.broadcast_product_updated(updated)
         %{old: old_slug, new: new_slug}
