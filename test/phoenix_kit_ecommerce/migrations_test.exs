@@ -86,6 +86,47 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
            "statement leaks the public schema under a foreign prefix"
   end
 
+  # Core names these five with its `pn` prefix embedding (`__PK_NAME_EXEMPT__`
+  # in its expected-schema manifest): bare under "public", `<prefix>_`-prefixed
+  # otherwise. A bare name under a foreign prefix misses core's index entirely
+  # and builds a second, redundant unique index on every prefixed install.
+  @exempt_uuid_indexes ~w(
+    phoenix_kit_shop_cart_items_uuid_idx
+    phoenix_kit_shop_carts_uuid_idx
+    phoenix_kit_shop_categories_uuid_idx
+    phoenix_kit_shop_products_uuid_idx
+    phoenix_kit_shop_shipping_methods_uuid_idx
+  )
+
+  test "the uuid indexes core embeds the schema name into are named the same way" do
+    public = Migrations.up_statements("public")
+    tenant = Migrations.up_statements("tenant_x")
+
+    for name <- @exempt_uuid_indexes do
+      assert Enum.any?(public, &String.contains?(&1, "INDEX IF NOT EXISTS #{name} ON")),
+             "missing #{name} under the public schema"
+
+      assert Enum.any?(tenant, &String.contains?(&1, "INDEX IF NOT EXISTS tenant_x_#{name} ON")),
+             "#{name} does not carry the prefix embedding core gives it"
+    end
+  end
+
+  test "no other index carries the prefix embedding" do
+    names =
+      Migrations.up_statements("tenant_x")
+      |> Enum.flat_map(fn stmt ->
+        case Regex.run(~r/INDEX IF NOT EXISTS (\S+) ON/, stmt) do
+          [_, name] -> [name]
+          nil -> []
+        end
+      end)
+
+    assert length(names) == 39
+
+    assert names |> Enum.filter(&String.starts_with?(&1, "tenant_x_")) |> Enum.sort() ==
+             @exempt_uuid_indexes |> Enum.map(&("tenant_x_" <> &1)) |> Enum.sort()
+  end
+
   test "every CREATE INDEX and constraint is guarded" do
     for s <- Migrations.up_statements("public"), s =~ ~r/CREATE (UNIQUE )?INDEX/ do
       assert s =~ ~r/CREATE (UNIQUE )?INDEX IF NOT EXISTS/

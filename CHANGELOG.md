@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.2 - 2026-09-05
+
+PR #30 plus the post-merge review in
+`dev_docs/pull_requests/2026/30-module-owned-v1-migration-chain/CLAUDE_REVIEW.md`.
+Ships 0.4.1 as well, which was never tagged or published to Hex.
+
+### Added
+
+- **The module owns its migration chain.** `PhoenixKitEcommerce.Migrations` is
+  an adoptive V1 over the ten shop tables core still creates in its V135
+  baseline (`phoenix_kit_shop_config`, `…_shipping_methods`, `…_categories`,
+  `…_products`, `…_product_slugs`, `…_category_slugs`, `…_carts`,
+  `…_cart_items`, `…_import_configs`, `…_import_logs`) plus the two
+  slug-projection functions and their triggers, registered via
+  `migration_module/0` so `mix phoenix_kit.status` and `mix phoenix_kit.update`
+  see it. V1 changes no shape — every statement is `CREATE … IF NOT EXISTS`,
+  `CREATE OR REPLACE` or a `DO $$ … IF NOT EXISTS … $$` guard — and the only
+  new object on an existing install is the `pke_schema:1` marker COMMENT on
+  `phoenix_kit_shop_config`. `down/1` unstamps that marker and drops nothing:
+  the tables are core-created and rolling this chain back must not destroy
+  data. (#30)
+
+### Fixed
+
+- **Prefixed (non-`public` schema) installs no longer get five duplicate unique
+  indexes.** Core names exactly five of the shop indexes with the schema name
+  embedded — the `*_uuid_idx` on `phoenix_kit_shop_cart_items`, `…_carts`,
+  `…_categories`, `…_products` and `…_shipping_methods` (`pn` in core's V135,
+  `__PK_NAME_EXEMPT__` in its expected-schema manifest) — and every other one
+  identically in every schema. The chain emitted all 39 bare, which is correct
+  under `public` (where the tests run) but under a prefix matches none of
+  core's five, so `CREATE UNIQUE INDEX IF NOT EXISTS` created a second
+  redundant unique index on each of those tables and drifted the schema from
+  core's manifest. The five now carry core's embedding, and tests pin both
+  sides of the rule. (#30)
+
 ## 0.4.1 - 2026-09-05
 
 PRs #28 and #29 plus the post-merge reviews in
