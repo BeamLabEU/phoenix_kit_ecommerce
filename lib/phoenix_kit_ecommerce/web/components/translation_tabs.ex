@@ -413,9 +413,27 @@ defmodule PhoenixKitEcommerce.Web.Components.TranslationTabs do
 
       updated = merge_field_value(existing, default_lang, default_values, field_str)
 
-      # Merge translations from other languages
+      # Merge translations from the OTHER languages only.
+      #
+      # `translations_map` is the snapshot `build_translations_map/2` took at
+      # mount, and it carries every language the entity had a value in —
+      # including the default one. Reducing over it unfiltered wrote that
+      # mount-time default-language value straight back over the value the
+      # main form just submitted above, so editing a default-language field
+      # that was non-empty when the page loaded was silently discarded: the
+      # save reported success and the old text came back. A field that was
+      # EMPTY at mount has no snapshot entry, `merge_field_value/4` returns
+      # the accumulator untouched, and the edit landed — which is why the
+      # defect looked like "creating works, correcting does not" (issue #27).
+      #
+      # The default language never has inputs in the translations UI (its tab
+      # renders an informational alert instead), so the snapshot entry can
+      # never be refreshed and has no value to contribute. The main form is
+      # the only source for it, and now wins.
       updated =
-        Enum.reduce(translations_map, updated, fn {lang, field_values}, field_acc ->
+        translations_map
+        |> Enum.reject(fn {lang, _field_values} -> lang == default_lang end)
+        |> Enum.reduce(updated, fn {lang, field_values}, field_acc ->
           merge_field_value(field_acc, lang, field_values, field_str)
         end)
 
