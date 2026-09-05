@@ -227,6 +227,9 @@ defmodule PhoenixKitEcommerce do
   def module_key, do: "shop"
 
   @impl PhoenixKit.Module
+  def migration_module, do: PhoenixKitEcommerce.Migrations
+
+  @impl PhoenixKit.Module
   def module_name, do: "E-Commerce"
 
   @doc """
