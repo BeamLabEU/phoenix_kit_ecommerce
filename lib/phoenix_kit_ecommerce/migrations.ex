@@ -32,10 +32,23 @@ defmodule PhoenixKitEcommerce.Migrations do
   `COMMENT ON TABLE … 'deprecated …'` — never a DROP, and not part of
   this chain.
 
+  ## V2 — `DROP DEFAULT` on the four `currency` columns
+
+  V1 adopts core's shape verbatim; V2 is the chain's first deliberate
+  divergence from it. Core's baseline declares `"currency" character
+  varying(3) DEFAULT 'USD'` on `phoenix_kit_shop_carts`,
+  `…_cart_items`, `…_products` and `…_shipping_methods`. Dropping the
+  Elixir-side `default: "USD"` (PR #31) did not remove that literal — it
+  only stopped Ecto from sending a value, which let Postgres substitute
+  `'USD'` itself. V2 drops the column defaults so an insert that names no
+  currency stores NULL. Existing rows are untouched; `down/1` restores the
+  defaults.
+
   ## What `down/1` is NOT
 
-  `down/1` unstamps the version marker; it NEVER drops any of the ten
-  tables, the two functions, or the two triggers. The tables are
+  `down/1` unstamps the version marker and restores the V2 column
+  defaults; it NEVER drops any of the ten tables, the two functions, or
+  the two triggers. The tables are
   core-created, and rolling back this module's chain must not destroy
   data — only core's own baseline rollback does that.
 
@@ -55,7 +68,7 @@ defmodule PhoenixKitEcommerce.Migrations do
 
   use Ecto.Migration
 
-  @current_version 1
+  @current_version 2
   @marker_prefix "pke_schema:"
   @version_table "phoenix_kit_shop_config"
 
@@ -140,20 +153,57 @@ defmodule PhoenixKitEcommerce.Migrations do
       constraints(prefix, p) ++
       triggers(p) ++
       indexes(prefix, p) ++
+      v2_drop_currency_defaults(p) ++
       [marker_statement(p, @current_version)]
   end
 
-  @doc "The SQL `down/1` executes, as data (marker bookkeeping only)."
+  @doc "The SQL `down/1` executes, as data (marker bookkeeping plus the V2 default restore)."
   @spec down_statements(String.t(), non_neg_integer()) :: [String.t()]
   def down_statements(prefix \\ "public", target \\ 0)
       when is_integer(target) and target >= 0 do
     prefix = validated_prefix(prefix: prefix)
     p = "#{prefix}."
 
+    restore = if target < 2, do: v2_restore_currency_defaults(p), else: []
+
     if target > 0 do
-      [marker_statement(p, target)]
+      restore ++ [marker_statement(p, target)]
     else
-      ["COMMENT ON TABLE #{p}#{@version_table} IS NULL"]
+      restore ++ ["COMMENT ON TABLE #{p}#{@version_table} IS NULL"]
+    end
+  end
+
+  # V2 — the last "USD" literal in the module.
+  #
+  # PR #31 dropped `default: "USD"` from the four `:currency` fields, but
+  # only from the ELIXIR schemas; core's baseline still declares
+  # `"currency" character varying(3) DEFAULT 'USD'` on all four columns.
+  # Ecto omits an unchanged field from the INSERT, so a `create_product/1`
+  # or `create_shipping_method/1` that resolved no default currency wrote
+  # `currency = NULL` in the struct it handed back and `'USD'` in the row —
+  # the silent literal the PR set out to delete, one layer down, plus a
+  # struct that disagreed with its own row.
+  #
+  # `DROP DEFAULT` touches no existing row: a shop that already stores
+  # "USD" keeps storing it (that IS its history), and only inserts that
+  # name no currency now land as NULL, which is what "no default currency
+  # is configured" honestly means.
+  @currency_default_tables ~w(
+    phoenix_kit_shop_carts
+    phoenix_kit_shop_cart_items
+    phoenix_kit_shop_products
+    phoenix_kit_shop_shipping_methods
+  )
+
+  defp v2_drop_currency_defaults(p) do
+    for t <- @currency_default_tables do
+      ~s(ALTER TABLE #{p}#{t} ALTER COLUMN "currency" DROP DEFAULT)
+    end
+  end
+
+  defp v2_restore_currency_defaults(p) do
+    for t <- @currency_default_tables do
+      ~s(ALTER TABLE #{p}#{t} ALTER COLUMN "currency" SET DEFAULT 'USD'::character varying)
     end
   end
 
