@@ -514,6 +514,19 @@ defmodule PhoenixKitEcommerce do
     [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
   end
 
+  @doc """
+  Catalogue item/category form "extension slot" modules this package
+  contributes (duck-typed discovery — see
+  `PhoenixKitEcommerce.Catalogue.Extension` and its moduledoc). Unconditional,
+  like `ai_translatables/0`: catalogue's own discovery is responsible for
+  checking the module is actually usable (loaded, `enabled?/0`) before
+  calling it — `phoenix_kit_catalogue` is an optional dependency and this
+  function must not fail to compile without it.
+  """
+  def catalogue_extensions do
+    [PhoenixKitEcommerce.Catalogue.Extension]
+  end
+
   # ============================================
   # PRODUCTS
   # ============================================
