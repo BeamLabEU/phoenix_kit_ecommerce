@@ -13,8 +13,13 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   to the schema's `body_html` (the shared prompt vocabulary uses `body`).
   The slug is NEVER sourced from or trusted to the AI — it is regenerated
   locally from the translated title, and only when the target language has
-  no slug yet, so re-translations can't change published URLs (which is why
-  no slug-history/redirect machinery is needed).
+  no slug yet, so re-translations can't change published URLs. This is a
+  write-once rule for the translation pipeline only: `regenerate_slug/2` is
+  the explicit, one-off repair path for a slug already shaped by an older
+  version of this adapter, and it always recomputes from the current title
+  regardless of whether a slug exists. Callers doing a bulk repair are
+  responsible for their own redirect/history bookkeeping — this module has
+  none.
 
   ## Concurrency
 
@@ -55,6 +60,7 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.Translations
 
   @resource_type "shop_product"
   @prompt_name "PhoenixKit Shop Product Translation"
@@ -125,6 +131,35 @@ defmodule PhoenixKitEcommerce.AITranslatable do
   end
 
   @doc """
+  Recomputes and stores `lang`'s slug from its CURRENT title, even when a
+  slug already exists. Explicit, one-off repair path — bypasses the
+  write-once rule `put_translation/4` enforces for the translation
+  pipeline. Returns `{:error, :no_title}` when `lang` has no title, and
+  `{:ok, %{old: slug, new: slug}}` (unchanged) when the recomputed slug
+  equals the stored one. Broadcasts `Events.broadcast_product_updated/1`
+  only when the slug actually changes.
+
+  `opts[:dry_run]` (default `false`): when `true`, computes and returns the
+  same `{:ok, %{old: old, new: new}}` result WITHOUT writing anything — no
+  update, no broadcast. Lets a bulk repair task preview what would change.
+  """
+  @spec regenerate_slug(String.t(), String.t(), keyword()) ::
+          {:ok, %{old: String.t() | nil, new: String.t()}} | {:error, term()}
+  def regenerate_slug(product_uuid, lang, opts \\ [])
+      when is_binary(product_uuid) and is_binary(lang) do
+    dry_run? = Keyword.get(opts, :dry_run, false)
+
+    repo().transaction(fn ->
+      query = Product |> where([p], p.uuid == ^product_uuid) |> lock("FOR UPDATE")
+
+      case repo().one(query) do
+        nil -> repo().rollback(:resource_not_found)
+        %Product{} = fresh -> do_regenerate_slug(fresh, lang, dry_run?)
+      end
+    end)
+  end
+
+  @doc """
   Idempotently creates this adapter's translation prompt and returns its
   uuid — host forms pass it per job instead of the shared default prompt.
   """
@@ -182,6 +217,37 @@ defmodule PhoenixKitEcommerce.AITranslatable do
     end
   end
 
+  defp do_regenerate_slug(%Product{} = fresh, lang, dry_run?) do
+    case Map.get(fresh.title || %{}, lang) do
+      title when is_binary(title) and title != "" ->
+        slug_map = fresh.slug || %{}
+        old_slug = Map.get(slug_map, lang)
+        new_slug = title |> slug_base(slug_map, lang) |> unique_slug(lang, fresh.uuid)
+
+        if dry_run? or new_slug == old_slug do
+          %{old: old_slug, new: new_slug}
+        else
+          write_regenerated_slug(fresh, slug_map, lang, old_slug, new_slug)
+        end
+
+      _ ->
+        repo().rollback(:no_title)
+    end
+  end
+
+  defp write_regenerated_slug(%Product{} = fresh, slug_map, lang, old_slug, new_slug) do
+    changes = %{slug: Map.put(slug_map, lang, new_slug)}
+
+    case fresh |> Ecto.Changeset.change(changes) |> repo().update() do
+      {:ok, updated} ->
+        Events.broadcast_product_updated(updated)
+        %{old: old_slug, new: new_slug}
+
+      {:error, reason} ->
+        repo().rollback(reason)
+    end
+  end
+
   # A locally-generated slug from the translated title, ONLY when the target
   # language has none yet — re-translations never rewrite an existing slug.
   defp maybe_put_slug(changes, %Product{} = fresh, target_lang, translated_title) do
@@ -201,29 +267,122 @@ defmodule PhoenixKitEcommerce.AITranslatable do
     end
   end
 
-  @slug_max_len 80
+  @slug_max_len 60
+  @slug_head_split ~r/\s+[-–—]\s+|\|/u
+  @slug_tail_digits ~r/-(\d{4,})$/
 
-  # A URL slug from the translated title, capped to a sane length. Scripts
-  # with no romanizer (CJK, Arabic, emoji) still slugify to "" — Cyrillic
-  # does not, now that transliteration is the default — and fall back to
-  # the default-language slug + a language suffix so the language always
-  # gets a non-empty per-language slug instead of silently serving the
-  # default-language URL.
+  # A URL slug from the translated title, capped to a sane length. Long SEO
+  # titles pack multiple `|`- or spaced-dash-separated segments (title,
+  # category breadcrumb, marketing tail); only the first (head) segment is
+  # slug-worthy, mirroring the short en-US Shopify handle. Scripts with no
+  # romanizer (CJK, Arabic, emoji) still slugify to "" — Cyrillic does not,
+  # now that transliteration is the default.
   defp slug_base(translated_title, slug_map, target_lang) do
     # target_lang is the language the TRANSLATED title is in, so the slug must be
     # generated in it — a German translation wants ö -> oe, an Estonian one ö -> o.
-    case translated_title |> Product.slugify(target_lang) |> String.slice(0, @slug_max_len) do
-      "" -> "#{default_lang_slug(slug_map)}-#{target_lang}"
-      base -> base
+    head = head_segment(translated_title)
+
+    base =
+      case head |> Product.slugify(target_lang) |> cap_word_boundary(@slug_max_len) do
+        "" -> full_title_base(translated_title, slug_map, target_lang)
+        slug -> slug
+      end
+
+    with_identity_tail(base, slug_map)
+  end
+
+  # The first non-blank segment before a `|` or a spaced dash (` - `, ` – `,
+  # ` — `). Falls back to the whole (trimmed) title when every segment is
+  # blank (a title made only of separators).
+  defp head_segment(title) do
+    title
+    |> String.split(@slug_head_split)
+    |> Enum.map(&String.trim/1)
+    |> Enum.find(&(&1 != ""))
+    |> case do
+      nil -> String.trim(title)
+      segment -> segment
     end
   end
 
-  defp default_lang_slug(slug_map) do
-    case slug_map |> Map.values() |> Enum.find(&(is_binary(&1) and &1 != "")) do
-      nil -> "product"
+  # The head segment slugified to "" (e.g. CJK/Arabic-only head) falls back
+  # to slugifying the FULL title, then to the default-language slug + a
+  # language suffix, so the language always gets a non-empty per-language
+  # slug instead of silently serving the default-language URL.
+  defp full_title_base(translated_title, slug_map, target_lang) do
+    case translated_title |> Product.slugify(target_lang) |> cap_word_boundary(@slug_max_len) do
+      "" -> "#{strip_identity_tail(default_lang_slug(slug_map))}-#{target_lang}"
       slug -> slug
     end
   end
+
+  # The fallback borrows the default-language slug, which usually already
+  # carries the numeric identity tail. Strip it here so `with_identity_tail/2`
+  # stays the ONE place that appends it — otherwise the tail lands twice
+  # ("wooden-vase-22153-fr-22153").
+  defp strip_identity_tail(slug), do: String.replace(slug, @slug_tail_digits, "")
+
+  # Cuts to `max_len` at a word boundary: hard-cut to `max_len`, then drop
+  # the trailing partial word (back to the last `-`) and any trailing `-`.
+  # No `-` inside the cut string -> hard cut, unchanged. When the cut lands
+  # exactly on a boundary (the character right after it is `-`), the sliced
+  # string is already whole words — kept as is, nothing to drop.
+  defp cap_word_boundary(slug, max_len) do
+    if String.length(slug) <= max_len do
+      slug
+    else
+      sliced = String.slice(slug, 0, max_len)
+
+      cond do
+        String.at(slug, max_len) == "-" ->
+          sliced
+
+        String.split(sliced, "-") == [sliced] ->
+          sliced
+
+        true ->
+          sliced
+          |> String.split("-")
+          |> Enum.drop(-1)
+          |> Enum.join("-")
+          |> String.trim_trailing("-")
+      end
+    end
+  end
+
+  # Appends the default-language slug's numeric identity tail (`-<4+
+  # digits>`, e.g. the Shopify-imported `-22153`) unless `base` already ends
+  # with it. 4+ digits so `unique_slug/3`'s own `-2`/`-3` collision suffixes
+  # are never mistaken for (and carried as) an identity tail.
+  defp with_identity_tail(base, slug_map) do
+    case identity_tail(slug_map) do
+      nil -> base
+      tail -> if String.ends_with?(base, tail), do: base, else: base <> tail
+    end
+  end
+
+  defp identity_tail(slug_map) do
+    with slug when is_binary(slug) <- default_lang_slug_value(slug_map),
+         [_, digits] <- Regex.run(@slug_tail_digits, slug) do
+      "-" <> digits
+    else
+      _ -> nil
+    end
+  end
+
+  # The default-language slug (`Translations.default_language/0`'s key in
+  # the slug map), else the first non-empty slug present.
+  defp default_lang_slug_value(slug_map) do
+    case Map.get(slug_map, Translations.default_language()) do
+      slug when is_binary(slug) and slug != "" ->
+        slug
+
+      _ ->
+        slug_map |> Map.values() |> Enum.find(&(is_binary(&1) and &1 != ""))
+    end
+  end
+
+  defp default_lang_slug(slug_map), do: default_lang_slug_value(slug_map) || "product"
 
   # Best-effort per-language uniqueness (no DB constraint on the JSONB map).
   defp unique_slug(base, lang, own_uuid), do: unique_slug(base, lang, own_uuid, 0)
