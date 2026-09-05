@@ -52,5 +52,14 @@ defmodule PhoenixKitEcommerce.Catalogue.CategoryCommerceTest do
       assert {:ok, map} = CategoryCommerce.cast(%{"image_uuid" => nil}, current)
       assert map["shop_status"] == "hidden"
     end
+
+    test "a submitted value wins over the same key already in the namespace" do
+      current = %{"shop_status" => "hidden", "storefront_filters" => %{"a" => 1}}
+
+      assert {:ok, map} = CategoryCommerce.cast(%{"shop_status" => "unlisted"}, current)
+
+      assert map["shop_status"] == "unlisted"
+      assert map["storefront_filters"] == %{"a" => 1}
+    end
   end
 end

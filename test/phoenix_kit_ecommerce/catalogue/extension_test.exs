@@ -17,6 +17,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
     assert Extension.key() == "ecommerce"
   end
 
+  test "enabled?/0 mirrors PhoenixKitEcommerce.enabled?/0" do
+    assert Extension.enabled?() == PhoenixKitEcommerce.enabled?()
+  end
+
   test "cast_item/2 delegates to ItemCommerce.cast/2" do
     assert {:ok, map} = Extension.cast_item(%{"vendor" => "Acme"}, %{})
     assert map["vendor"] == "Acme"
@@ -55,6 +59,27 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
 
       assert html =~ "Acme Co"
     end
+
+    test "carries every other language's price_unit forward as a hidden input" do
+      html =
+        render_component(&Extension.item_section/1,
+          form: nil,
+          item: nil,
+          data: %{
+            "ecommerce" => %{
+              "price_unit" => %{"en-US" => "per hour", "fr-FR" => "par heure"}
+            }
+          },
+          current_language: "en-US"
+        )
+
+      assert html =~
+               ~s(<input type="hidden" name="item[ecommerce][price_unit][fr-FR]" value="par heure">)
+
+      # The current language's price_unit has no hidden carry-forward
+      # input of its own — only the visible one.
+      refute html =~ ~s(<input type="hidden" name="item[ecommerce][price_unit][en-US]")
+    end
   end
 
   describe "category_section/1" do
@@ -70,5 +95,60 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
       assert html =~ ~s(id="ext-ecommerce-section")
       assert html =~ ~s(name="category[ecommerce][shop_status]")
     end
+  end
+
+  describe "extension cast errors surface in the section" do
+    test "item_section/1 renders a compare_at_price error tagged for this extension" do
+      form = form_with_extension_error(:compare_at_price, "must be greater than or equal to 0")
+
+      html =
+        render_component(&Extension.item_section/1,
+          form: form,
+          item: nil,
+          data: %{},
+          current_language: "en-US"
+        )
+
+      assert html =~ ~s(id="ext-ecommerce-section")
+      assert html =~ "must be greater than or equal to 0"
+    end
+
+    test "item_section/1 does not render another extension's error" do
+      form = form_with_extension_error(:compare_at_price, "wrong extension", extension: "other")
+
+      html =
+        render_component(&Extension.item_section/1,
+          form: form,
+          item: nil,
+          data: %{},
+          current_language: "en-US"
+        )
+
+      refute html =~ "wrong extension"
+    end
+
+    test "category_section/1 renders a shop_status error tagged for this extension" do
+      form = form_with_extension_error(:shop_status, "is invalid")
+
+      html =
+        render_component(&Extension.category_section/1,
+          form: form,
+          category: nil,
+          data: %{},
+          current_language: "en-US"
+        )
+
+      assert html =~ ~s(id="ext-ecommerce-section")
+      assert html =~ "is invalid"
+    end
+  end
+
+  defp form_with_extension_error(field, message, opts \\ []) do
+    extension = Keyword.get(opts, :extension, "ecommerce")
+
+    {%{}, %{}}
+    |> Ecto.Changeset.cast(%{}, [])
+    |> Ecto.Changeset.add_error(:data, message, extension: extension, field: field)
+    |> Phoenix.Component.to_form(as: :item, action: :validate)
   end
 end

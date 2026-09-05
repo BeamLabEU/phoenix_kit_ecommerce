@@ -15,20 +15,26 @@ defmodule PhoenixKitEcommerce.Catalogue.Extension do
   alias PhoenixKitEcommerce.Catalogue.ShopSections
 
   @doc "Namespace under `data` this extension owns."
+  @spec key() :: String.t()
   def key, do: "ecommerce"
 
   @doc "Whether the Shop section should be shown / absorbed."
+  @spec enabled?() :: boolean()
   def enabled?, do: PhoenixKitEcommerce.enabled?()
 
   @doc "Renders the Shop section inside the catalogue item form."
+  @spec item_section(map()) :: Phoenix.LiveView.Rendered.t()
   def item_section(assigns), do: ShopSections.item(assigns)
 
   @doc "Renders the Shop section inside the catalogue category form."
+  @spec category_section(map()) :: Phoenix.LiveView.Rendered.t()
   def category_section(assigns), do: ShopSections.category(assigns)
 
   @doc "Validates and shapes `item[\"ecommerce\"]` — see `ItemCommerce.cast/2`."
+  @spec cast_item(map(), map()) :: {:ok, map()} | {:error, [{atom(), String.t()}]}
   def cast_item(params, current), do: ItemCommerce.cast(params, current)
 
   @doc "Validates and shapes `category[\"ecommerce\"]` — see `CategoryCommerce.cast/2`."
+  @spec cast_category(map(), map()) :: {:ok, map()} | {:error, [{atom(), String.t()}]}
   def cast_category(params, current), do: CategoryCommerce.cast(params, current)
 end

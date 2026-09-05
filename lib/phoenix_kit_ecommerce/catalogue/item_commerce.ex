@@ -85,9 +85,12 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
   """
   @spec cast(map() | nil, map() | nil) :: {:ok, map()} | {:error, [{atom(), String.t()}]}
   def cast(params, current) do
-    merged =
-      (current || %{})
-      |> Map.merge(normalize_tags(params || %{}))
+    normalized =
+      (params || %{})
+      |> normalize_tags()
+      |> normalize_price_unit()
+
+    merged = Map.merge(current || %{}, normalized)
 
     %__MODULE__{}
     |> changeset(merged)
@@ -116,6 +119,23 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
   end
 
   defp normalize_tags(params), do: params
+
+  # A blank current-language price_unit input would otherwise store
+  # `%{"<lang>" => ""}` and, because the map is merged in whole (the Shop
+  # section carries every other language forward as a hidden input, so the
+  # submitted map already covers the full set — see `ShopSections.item/1`),
+  # blank strings would accumulate under every language a save ever
+  # touched. Drop blank entries the same way `normalize_tags/1` does.
+  defp normalize_price_unit(%{"price_unit" => price_unit} = params) when is_map(price_unit) do
+    cleaned =
+      price_unit
+      |> Enum.reject(fn {_lang, value} -> value in [nil, ""] end)
+      |> Map.new()
+
+    Map.put(params, "price_unit", cleaned)
+  end
+
+  defp normalize_price_unit(params), do: params
 
   defp to_storage_map(%__MODULE__{} = struct) do
     struct

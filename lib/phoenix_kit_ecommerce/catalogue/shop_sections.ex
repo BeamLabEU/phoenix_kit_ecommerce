@@ -20,6 +20,11 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   import PhoenixKitWeb.Components.Core.Input
   import PhoenixKitWeb.Components.Core.Select
 
+  attr :form, :any, default: nil
+  attr :item, :any, default: nil
+  attr :data, :map, default: %{}
+  attr :current_language, :string, default: nil
+
   @doc """
   Shop section for the item form. `assigns` carries `:form`, `:item`,
   `:data` (the item's `data`, so `data["ecommerce"]` is the current
@@ -30,6 +35,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     current_language = assigns[:current_language] || "en"
     price_unit = Map.get(ecommerce, "price_unit", %{})
     other_price_units = Enum.reject(price_unit, fn {lang, _} -> lang == current_language end)
+    form = assigns[:form]
 
     assigns =
       assigns
@@ -37,6 +43,22 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
       |> assign(:current_language, current_language)
       |> assign(:price_unit, price_unit)
       |> assign(:other_price_units, other_price_units)
+      |> assign(:shop_status_errors, field_errors(form, :shop_status))
+      |> assign(:product_type_errors, field_errors(form, :product_type))
+      |> assign(:vendor_errors, field_errors(form, :vendor))
+      |> assign(:tags_errors, field_errors(form, :tags))
+      |> assign(:compare_at_price_errors, field_errors(form, :compare_at_price))
+      |> assign(:cost_per_item_errors, field_errors(form, :cost_per_item))
+      |> assign(:currency_errors, field_errors(form, :currency))
+      |> assign(:weight_grams_errors, field_errors(form, :weight_grams))
+      |> assign(:taxable_errors, field_errors(form, :taxable))
+      |> assign(:requires_shipping_errors, field_errors(form, :requires_shipping))
+      |> assign(:made_to_order_errors, field_errors(form, :made_to_order))
+      |> assign(:price_from_errors, field_errors(form, :price_from))
+      |> assign(:price_on_request_errors, field_errors(form, :price_on_request))
+      |> assign(:file_uuid_errors, field_errors(form, :file_uuid))
+      |> assign(:download_limit_errors, field_errors(form, :download_limit))
+      |> assign(:download_expiry_days_errors, field_errors(form, :download_expiry_days))
 
     ~H"""
     <div id="ext-ecommerce-section" class="card bg-base-100 shadow-xl">
@@ -49,6 +71,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][shop_status]"
               value={Map.get(@ecommerce, "shop_status", "draft")}
               label={gettext("Shop status")}
+              errors={@shop_status_errors}
               options={[
                 {gettext("Draft"), "draft"},
                 {gettext("Active"), "active"},
@@ -62,6 +85,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][product_type]"
               value={Map.get(@ecommerce, "product_type", "physical")}
               label={gettext("Product Type")}
+              errors={@product_type_errors}
               options={[{gettext("Physical"), "physical"}, {gettext("Digital"), "digital"}]}
             />
           </div>
@@ -73,6 +97,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="text"
               label={gettext("Vendor")}
               placeholder={gettext("Brand or manufacturer")}
+              errors={@vendor_errors}
             />
           </div>
 
@@ -83,6 +108,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="text"
               label={gettext("Tags")}
               placeholder={gettext("comma, separated, tags")}
+              errors={@tags_errors}
             />
           </div>
 
@@ -95,6 +121,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               min="0"
               label={gettext("Compare at Price")}
               placeholder={gettext("Original price")}
+              errors={@compare_at_price_errors}
             />
           </div>
 
@@ -106,6 +133,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               step="0.01"
               min="0"
               label={gettext("Cost per Item")}
+              errors={@cost_per_item_errors}
             />
           </div>
 
@@ -116,6 +144,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="text"
               maxlength="3"
               label={gettext("Currency")}
+              errors={@currency_errors}
             />
           </div>
 
@@ -126,6 +155,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="number"
               min="0"
               label={gettext("Weight (grams)")}
+              errors={@weight_grams_errors}
             />
           </div>
 
@@ -134,6 +164,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][taxable]"
               checked={Map.get(@ecommerce, "taxable", true)}
               label={gettext("Charge tax on this item")}
+              errors={@taxable_errors}
             />
           </div>
 
@@ -142,6 +173,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][requires_shipping]"
               checked={Map.get(@ecommerce, "requires_shipping", true)}
               label={gettext("Requires shipping")}
+              errors={@requires_shipping_errors}
             />
           </div>
 
@@ -150,6 +182,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][made_to_order]"
               checked={Map.get(@ecommerce, "made_to_order", false)}
               label={gettext("Made to order (always available)")}
+              errors={@made_to_order_errors}
             />
           </div>
 
@@ -158,6 +191,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][price_from]"
               checked={Map.get(@ecommerce, "price_from", false)}
               label={gettext("Show \"From\" before the price")}
+              errors={@price_from_errors}
             />
           </div>
 
@@ -166,6 +200,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="item[ecommerce][price_on_request]"
               checked={Map.get(@ecommerce, "price_on_request", false)}
               label={gettext("Price on request (hide the amount)")}
+              errors={@price_on_request_errors}
             />
           </div>
 
@@ -176,7 +211,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="text"
               maxlength="32"
               label={gettext("Price unit")}
-              placeholder={gettext("e.g. per hour, per m2, per litre")}
+              placeholder={gettext("e.g. per hour, per m², per litre")}
             />
             <%!-- Other languages' units must survive a save made while a
                  different tab is active. --%>
@@ -194,6 +229,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               value={Map.get(@ecommerce, "file_uuid")}
               type="text"
               label={gettext("Digital file (Storage uuid)")}
+              errors={@file_uuid_errors}
             />
           </div>
 
@@ -204,6 +240,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="number"
               min="1"
               label={gettext("Download limit")}
+              errors={@download_limit_errors}
             />
           </div>
 
@@ -214,6 +251,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               type="number"
               min="1"
               label={gettext("Download expiry (days)")}
+              errors={@download_expiry_days_errors}
             />
           </div>
         </div>
@@ -222,13 +260,22 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     """
   end
 
+  attr :category, :any, default: nil
+
   @doc """
   Shop section for the category form. `assigns` carries `:form`,
   `:category`, `:data` (the category's `data`) and `:current_language`.
   """
   def category(assigns) do
     ecommerce = Map.get(assigns[:data] || %{}, "ecommerce", %{})
-    assigns = assign(assigns, :ecommerce, ecommerce)
+    form = assigns[:form]
+
+    assigns =
+      assigns
+      |> assign(:ecommerce, ecommerce)
+      |> assign(:shop_status_errors, field_errors(form, :shop_status))
+      |> assign(:image_uuid_errors, field_errors(form, :image_uuid))
+      |> assign(:featured_item_uuid_errors, field_errors(form, :featured_item_uuid))
 
     ~H"""
     <div id="ext-ecommerce-section" class="card bg-base-100 shadow-xl">
@@ -241,6 +288,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               name="category[ecommerce][shop_status]"
               value={Map.get(@ecommerce, "shop_status", "active")}
               label={gettext("Shop status")}
+              errors={@shop_status_errors}
               options={[
                 {gettext("Active — Category and items visible"), "active"},
                 {gettext("Unlisted — Category hidden, items still visible"), "unlisted"},
@@ -255,6 +303,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               value={Map.get(@ecommerce, "image_uuid")}
               type="text"
               label={gettext("Category image (Storage uuid)")}
+              errors={@image_uuid_errors}
             />
           </div>
 
@@ -264,6 +313,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               value={Map.get(@ecommerce, "featured_item_uuid")}
               type="text"
               label={gettext("Featured item (image fallback)")}
+              errors={@featured_item_uuid_errors}
             />
           </div>
         </div>
@@ -271,4 +321,19 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     </div>
     """
   end
+
+  # Reads errors `Ecto.Changeset.add_error/4`-tagged with
+  # `extension: "ecommerce", field: field` off the `:data` field's errors
+  # on a `to_form/2`-built form, so a `cast_item/2`/`cast_category/2`
+  # failure is visible on Save instead of a silent no-op (see
+  # `PhoenixKitCatalogue.Extensions.absorb/3`).
+  defp field_errors(%{errors: errors}, field) when is_list(errors) do
+    for {:data, {msg, opts}} <- errors,
+        Keyword.get(opts, :extension) == "ecommerce",
+        Keyword.get(opts, :field) == field do
+      msg
+    end
+  end
+
+  defp field_errors(_form, _field), do: []
 end

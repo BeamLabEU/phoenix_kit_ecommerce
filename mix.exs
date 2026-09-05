@@ -127,12 +127,13 @@ defmodule PhoenixKitEcommerce.MixProject do
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).
       pk_dep(:phoenix_kit_ai, "~> 0.18", optional: true),
-      # Optional: only the catalogue "extension slot" integration
-      # (`PhoenixKitEcommerce.Catalogue.Extension`) targets it, and that
-      # integration is fully duck-typed — nothing here calls into
-      # `PhoenixKitCatalogue` directly, so this package still compiles
-      # without it. Declared to pin a floor for hosts that install both.
-      pk_dep(:phoenix_kit_catalogue, "~> 0.26", optional: true),
+      # No declared dependency on `phoenix_kit_catalogue`: the catalogue
+      # "extension slot" integration (`PhoenixKitEcommerce.Catalogue.Extension`)
+      # is fully duck-typed — nothing here calls into `PhoenixKitCatalogue`
+      # directly. No released version yet ships the extension slot
+      # (`PhoenixKitCatalogue.Extension`) this integration targets, so a
+      # `~>` floor here could only be inaccurate; add one once a real
+      # release ships it.
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},

@@ -66,23 +66,10 @@ defmodule PhoenixKitEcommerce.Catalogue.CategoryCommerce do
     end
   end
 
-  # The Shop section renders option_schema as a JSON textarea, so a
-  # submitted string has to be decoded into the list the `{:array, :map}`
-  # field expects. A caller passing an already-decoded list is untouched;
-  # invalid JSON is left as-is for cast/3 to reject with a type error.
-  defp normalize_option_schema(%{"option_schema" => v} = params) when is_binary(v) do
-    case String.trim(v) do
-      "" ->
-        Map.put(params, "option_schema", [])
-
-      json ->
-        case Jason.decode(json) do
-          {:ok, decoded} when is_list(decoded) -> Map.put(params, "option_schema", decoded)
-          _ -> params
-        end
-    end
-  end
-
+  # `option_schema` has no input in `ShopSections.category/1` (Block 1
+  # ships it written programmatically only — e.g. by a future admin tool
+  # or a data migration) so a submitted value always already has the
+  # list shape the `{:array, :map}` field expects; nothing to normalize.
   defp normalize_option_schema(params), do: params
 
   defp to_storage_map(%__MODULE__{} = struct) do

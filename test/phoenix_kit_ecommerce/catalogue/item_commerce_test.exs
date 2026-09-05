@@ -99,5 +99,15 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerceTest do
       assert {:ok, map} = ItemCommerce.cast(%{"tags" => ""}, %{})
       assert map["tags"] == []
     end
+
+    test "a blank price_unit language entry is dropped instead of stored empty" do
+      assert {:ok, map} =
+               ItemCommerce.cast(
+                 %{"price_unit" => %{"en-US" => "", "fr-FR" => "par heure"}},
+                 %{}
+               )
+
+      assert map["price_unit"] == %{"fr-FR" => "par heure"}
+    end
   end
 end
