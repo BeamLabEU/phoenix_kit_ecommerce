@@ -447,6 +447,16 @@ defmodule PhoenixKitEcommerce.Web.Components.TranslationTabs do
       {:ok, value} when is_binary(value) and value != "" ->
         Map.put(field_acc, lang, value)
 
+      # `nil` means the form never submitted the field, NOT that the user
+      # cleared it — a rendered input always posts a string, `""` when
+      # emptied. The product form has no main field for `body_html`,
+      # `seo_title` or `seo_description` (they live in the translation tabs
+      # only), so their default-language entry arrives here as nil; deleting
+      # on it wiped imported content on every save once the default language
+      # stopped being restored from the snapshot below.
+      {:ok, nil} ->
+        field_acc
+
       {:ok, _empty_value} ->
         Map.delete(field_acc, lang)
 

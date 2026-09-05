@@ -73,6 +73,34 @@ defmodule PhoenixKitEcommerce.TranslationTabsTest do
 
       assert attrs.title == %{@default => "Old title"}
     end
+
+    test "a field submitted as nil keeps its stored value instead of being wiped" do
+      # The product form has no main-field input for body_html / seo_title /
+      # seo_description — they exist only in the translation tabs — so those
+      # keys reach the merge with a nil value. nil is "not submitted", not
+      # "cleared": once the default language stopped being restored from the
+      # snapshot, treating it as cleared wiped imported content on every save.
+      entity = %Product{
+        title: %{@default => "Old title"},
+        body_html: %{@default => "<p>Imported body</p>"},
+        seo_title: %{@default => "Buy it"}
+      }
+
+      snapshot = TT.build_translations_map(entity, [:title, :body_html, :seo_title])
+
+      attrs =
+        TT.merge_translations_to_attrs(
+          entity,
+          snapshot,
+          %{"title" => "New title", "body_html" => nil, "seo_title" => nil},
+          @default,
+          [:title, :body_html, :seo_title]
+        )
+
+      assert attrs.title == %{@default => "New title"}
+      assert attrs.body_html == %{@default => "<p>Imported body</p>"}
+      assert attrs.seo_title == %{@default => "Buy it"}
+    end
   end
 
   describe "merge_translations_to_attrs/5 — the other languages" do

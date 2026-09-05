@@ -961,12 +961,10 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   defp build_localized_params(entity, params, translations_map, default_language) do
     translatable_fields = Translations.category_fields()
 
-    # Extract main form values for default language
-    default_values = %{
-      "name" => params["name"],
-      "slug" => params["slug"],
-      "description" => params["description"]
-    }
+    # Extract main form values for default language — only the fields this
+    # submission actually carried, so a field with no main-form input keeps
+    # its stored default-language value instead of reading as "cleared".
+    default_values = Map.take(params, Enum.map(translatable_fields, &to_string/1))
 
     # Merge translations into localized field maps
     localized_attrs =

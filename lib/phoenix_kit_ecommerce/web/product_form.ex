@@ -2349,15 +2349,13 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp build_localized_params(entity, params, translations_map, default_language) do
     translatable_fields = Translations.product_fields()
 
-    # Extract main form values for default language
-    default_values = %{
-      "title" => params["title"],
-      "slug" => params["slug"],
-      "description" => params["description"],
-      "body_html" => params["body_html"],
-      "seo_title" => params["seo_title"],
-      "seo_description" => params["seo_description"]
-    }
+    # Extract main form values for default language.
+    #
+    # Only the fields this submission actually carried: the main form renders
+    # inputs for title/slug/description, while body_html and the SEO fields
+    # are translation-tab-only. Listing them here with a `nil` value read as
+    # "the user cleared it" and wiped the default language's stored content.
+    default_values = Map.take(params, Enum.map(translatable_fields, &to_string/1))
 
     # Merge translations into localized field maps
     localized_attrs =
