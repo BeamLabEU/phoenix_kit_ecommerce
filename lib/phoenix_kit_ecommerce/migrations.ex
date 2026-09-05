@@ -47,6 +47,10 @@ defmodule PhoenixKitEcommerce.Migrations do
 
   Protocol: `phoenix_kit_hello_world` README, "Adopting a table core
   already creates (extraction)".
+
+  Every column name below is double-quoted, unlike the `pg_dump` source
+  (which only quotes `"position"`, a reserved word). This is a
+  normalization, not drift — the two forms are semantically identical.
   """
 
   use Ecto.Migration
@@ -66,6 +70,7 @@ defmodule PhoenixKitEcommerce.Migrations do
   The chain version applied in the database, read INSIDE a running
   migration (via `repo()`, same as `up/1`/`down/1`).
   """
+  @spec migrated_version(keyword() | map()) :: non_neg_integer()
   def migrated_version(opts \\ []) do
     prefix = validated_prefix(opts)
 
@@ -116,12 +121,13 @@ defmodule PhoenixKitEcommerce.Migrations do
   end
 
   @doc """
-  The SQL `up/1` executes, as data — the testable single source. Proves
-  every object name is core's exact name, that no statement can drop or
-  truncate a table (except the scoped, pre-existing `DELETE` inside the
-  two adopted slug-projection function bodies — core-authored runtime
-  logic, unchanged, not migration-time destruction), and that indexes,
-  constraints and triggers are all guarded.
+  The SQL `up/1` executes, as data — the testable single source. The test
+  suite scans this for: table/function/trigger names matching core's
+  exact names, a representative sample of index and constraint names, no
+  statement that can drop or truncate a table (except the scoped,
+  pre-existing `DELETE` inside the two adopted slug-projection function
+  bodies — core-authored runtime logic, unchanged, not migration-time
+  destruction), and that every index/constraint is guarded.
   """
   @spec up_statements(String.t()) :: [String.t()]
   def up_statements(prefix \\ "public") do
@@ -129,7 +135,7 @@ defmodule PhoenixKitEcommerce.Migrations do
     p = "#{prefix}."
 
     tables(p) ++
-      functions() ++
+      functions(p) ++
       constraints(prefix, p) ++
       triggers(p) ++
       indexes(p) ++
@@ -356,17 +362,17 @@ defmodule PhoenixKitEcommerce.Migrations do
   # unchanged) — `CREATE OR REPLACE FUNCTION` is idempotent by definition.
   # The legacy `extract_primary_slug()` function is NOT adopted (core
   # keeps it for its own `down/1`).
-  defp functions do
+  defp functions(p) do
     [
       """
-      CREATE OR REPLACE FUNCTION public.sync_shop_category_slugs()
+      CREATE OR REPLACE FUNCTION #{p}sync_shop_category_slugs()
        RETURNS trigger
        LANGUAGE plpgsql
       AS $function$
       BEGIN
-        DELETE FROM public.phoenix_kit_shop_category_slugs WHERE category_uuid = NEW.uuid;
+        DELETE FROM #{p}phoenix_kit_shop_category_slugs WHERE category_uuid = NEW.uuid;
 
-        INSERT INTO public.phoenix_kit_shop_category_slugs (lang, value, category_uuid)
+        INSERT INTO #{p}phoenix_kit_shop_category_slugs (lang, value, category_uuid)
         SELECT DISTINCT lower(split_part(e.key, '-', 1)), e.value, NEW.uuid
           FROM jsonb_each_text(COALESCE(NEW.slug, '{}'::jsonb)) e
          WHERE e.value <> '';
@@ -375,14 +381,14 @@ defmodule PhoenixKitEcommerce.Migrations do
       END $function$
       """,
       """
-      CREATE OR REPLACE FUNCTION public.sync_shop_product_slugs()
+      CREATE OR REPLACE FUNCTION #{p}sync_shop_product_slugs()
        RETURNS trigger
        LANGUAGE plpgsql
       AS $function$
       BEGIN
-        DELETE FROM public.phoenix_kit_shop_product_slugs WHERE product_uuid = NEW.uuid;
+        DELETE FROM #{p}phoenix_kit_shop_product_slugs WHERE product_uuid = NEW.uuid;
 
-        INSERT INTO public.phoenix_kit_shop_product_slugs (lang, value, product_uuid)
+        INSERT INTO #{p}phoenix_kit_shop_product_slugs (lang, value, product_uuid)
         SELECT DISTINCT lower(split_part(e.key, '-', 1)), e.value, NEW.uuid
           FROM jsonb_each_text(COALESCE(NEW.slug, '{}'::jsonb)) e
          WHERE e.value <> '';
@@ -614,231 +620,199 @@ defmodule PhoenixKitEcommerce.Migrations do
     [
       idx(
         p,
-        false,
         "idx_shop_cart_items_selected_specs",
         "phoenix_kit_shop_cart_items",
         "gin (selected_specs)"
       ),
       idx(
         p,
-        false,
         "idx_shop_carts_session",
         "phoenix_kit_shop_carts",
         "btree (session_id) WHERE (session_id IS NOT NULL)"
       ),
-      idx(p, false, "idx_shop_carts_status", "phoenix_kit_shop_carts", "btree (status)"),
+      idx(p, "idx_shop_carts_status", "phoenix_kit_shop_carts", "btree (status)"),
       idx(
         p,
-        false,
         "idx_shop_categories_position",
         "phoenix_kit_shop_categories",
         "btree (\"position\")"
       ),
       idx(
         p,
-        false,
         "idx_shop_categories_status",
         "phoenix_kit_shop_categories",
         "btree (status)"
       ),
-      idx(p, true, "idx_shop_config_key", "phoenix_kit_shop_config", "btree (key)"),
-      idx(p, true, "idx_shop_config_uuid", "phoenix_kit_shop_config", "btree (uuid)"),
+      unique_idx(p, "idx_shop_config_key", "phoenix_kit_shop_config", "btree (key)"),
+      unique_idx(p, "idx_shop_config_uuid", "phoenix_kit_shop_config", "btree (uuid)"),
       idx(
         p,
-        false,
         "idx_shop_import_configs_is_default",
         "phoenix_kit_shop_import_configs",
         "btree (is_default) WHERE (is_default = true)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "idx_shop_import_configs_name",
         "phoenix_kit_shop_import_configs",
         "btree (name)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "idx_shop_import_configs_uuid",
         "phoenix_kit_shop_import_configs",
         "btree (uuid)"
       ),
       idx(
         p,
-        false,
         "idx_shop_import_logs_inserted_at",
         "phoenix_kit_shop_import_logs",
         "btree (inserted_at DESC)"
       ),
       idx(
         p,
-        false,
         "idx_shop_import_logs_status",
         "phoenix_kit_shop_import_logs",
         "btree (status)"
       ),
-      idx(p, true, "idx_shop_import_logs_uuid", "phoenix_kit_shop_import_logs", "btree (uuid)"),
-      idx(p, false, "idx_shop_products_status", "phoenix_kit_shop_products", "btree (status)"),
-      idx(p, false, "idx_shop_products_tags", "phoenix_kit_shop_products", "gin (tags)"),
+      unique_idx(p, "idx_shop_import_logs_uuid", "phoenix_kit_shop_import_logs", "btree (uuid)"),
+      idx(p, "idx_shop_products_status", "phoenix_kit_shop_products", "btree (status)"),
+      idx(p, "idx_shop_products_tags", "phoenix_kit_shop_products", "gin (tags)"),
       idx(
         p,
-        false,
         "idx_shop_products_type",
         "phoenix_kit_shop_products",
         "btree (product_type)"
       ),
       idx(
         p,
-        false,
         "idx_shop_shipping_active",
         "phoenix_kit_shop_shipping_methods",
         "btree (active)"
       ),
       idx(
         p,
-        false,
         "idx_shop_shipping_position",
         "phoenix_kit_shop_shipping_methods",
         "btree (\"position\")"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_cart_items_cart_uuid_idx",
         "phoenix_kit_shop_cart_items",
         "btree (cart_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_cart_items_product_uuid_idx",
         "phoenix_kit_shop_cart_items",
         "btree (product_uuid)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "phoenix_kit_shop_cart_items_uuid_idx",
         "phoenix_kit_shop_cart_items",
         "btree (uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_cart_items_variant_uuid_idx",
         "phoenix_kit_shop_cart_items",
         "btree (variant_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_carts_merged_into_cart_uuid_idx",
         "phoenix_kit_shop_carts",
         "btree (merged_into_cart_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_carts_payment_option_uuid_idx",
         "phoenix_kit_shop_carts",
         "btree (payment_option_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_carts_shipping_method_uuid_idx",
         "phoenix_kit_shop_carts",
         "btree (shipping_method_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_carts_user_uuid_idx",
         "phoenix_kit_shop_carts",
         "btree (user_uuid)"
       ),
-      idx(p, true, "phoenix_kit_shop_carts_uuid_idx", "phoenix_kit_shop_carts", "btree (uuid)"),
+      unique_idx(p, "phoenix_kit_shop_carts_uuid_idx", "phoenix_kit_shop_carts", "btree (uuid)"),
       idx(
         p,
-        false,
         "phoenix_kit_shop_categories_featured_product_uuid_idx",
         "phoenix_kit_shop_categories",
         "btree (featured_product_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_categories_parent_uuid_idx",
         "phoenix_kit_shop_categories",
         "btree (parent_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_categories_slug_gin_idx",
         "phoenix_kit_shop_categories",
         "gin (slug)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "phoenix_kit_shop_categories_uuid_idx",
         "phoenix_kit_shop_categories",
         "btree (uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_category_slugs_category_uuid_idx",
         "phoenix_kit_shop_category_slugs",
         "btree (category_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_import_logs_user_uuid_idx",
         "phoenix_kit_shop_import_logs",
         "btree (user_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_product_slugs_product_uuid_idx",
         "phoenix_kit_shop_product_slugs",
         "btree (product_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_products_category_uuid_idx",
         "phoenix_kit_shop_products",
         "btree (category_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_products_created_by_uuid_idx",
         "phoenix_kit_shop_products",
         "btree (created_by_uuid)"
       ),
       idx(
         p,
-        false,
         "phoenix_kit_shop_products_slug_gin_idx",
         "phoenix_kit_shop_products",
         "gin (slug)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "phoenix_kit_shop_products_uuid_idx",
         "phoenix_kit_shop_products",
         "btree (uuid)"
       ),
-      idx(
+      unique_idx(
         p,
-        true,
         "phoenix_kit_shop_shipping_methods_uuid_idx",
         "phoenix_kit_shop_shipping_methods",
         "btree (uuid)"
@@ -846,10 +820,12 @@ defmodule PhoenixKitEcommerce.Migrations do
     ]
   end
 
-  defp idx(p, unique?, name, table, using) do
-    unique = if unique?, do: "UNIQUE ", else: ""
-    "CREATE #{unique}INDEX IF NOT EXISTS #{name} ON #{p}#{table} USING #{using}"
-  end
+  defp idx(p, name, table, using), do: build_index(p, "", name, table, using)
+
+  defp unique_idx(p, name, table, using), do: build_index(p, "UNIQUE ", name, table, using)
+
+  defp build_index(p, unique, name, table, using),
+    do: "CREATE #{unique}INDEX IF NOT EXISTS #{name} ON #{p}#{table} USING #{using}"
 
   defp marker_query do
     """

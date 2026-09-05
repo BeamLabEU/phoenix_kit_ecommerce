@@ -227,9 +227,6 @@ defmodule PhoenixKitEcommerce do
   def module_key, do: "shop"
 
   @impl PhoenixKit.Module
-  def migration_module, do: PhoenixKitEcommerce.Migrations
-
-  @impl PhoenixKit.Module
   def module_name, do: "E-Commerce"
 
   @doc """
@@ -501,6 +498,13 @@ defmodule PhoenixKitEcommerce do
 
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitEcommerce.Web.Routes
+
+  # All ten shop tables are core-created (V135+); this chain's V1 only
+  # ADOPTS them (stamps the `pke_schema:` marker, changes no shape) and
+  # owns their future evolution — see the moduledoc in
+  # PhoenixKitEcommerce.Migrations.
+  @impl PhoenixKit.Module
+  def migration_module, do: PhoenixKitEcommerce.Migrations
 
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see

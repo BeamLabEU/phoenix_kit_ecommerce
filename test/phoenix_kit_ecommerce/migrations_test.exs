@@ -39,18 +39,51 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     # <fk>_uuid = NEW.uuid` as their own pre-existing, core-authored
     # upsert-by-replace body (unchanged here) — that is runtime trigger
     # logic being adopted verbatim, not a migration-time destructive
-    # statement against the chain's tables, so function bodies are exempt
-    # from this scan.
+    # statement against the chain's tables. Only the `$function$...
+    # $function$` body is stripped before scanning — a DROP/TRUNCATE
+    # added to the function's own DDL wrapper, or appended after one,
+    # still fails this test.
     #
     # The destructive-statement scan targets DELETE as a *statement*
     # (`DELETE FROM ...`), not the referential-action keyword `ON DELETE
     # CASCADE|SET NULL|...` that every adopted foreign key carries
     # verbatim from core's dump — those never delete a row on their own.
-    for s <- all, not (s =~ ~r/CREATE OR REPLACE FUNCTION/) do
-      refute s =~ ~r/\b(DROP|TRUNCATE)\b/i, "destructive statement: #{s}"
-      refute s =~ ~r/\bDELETE\s+FROM\b/i, "destructive statement: #{s}"
-      refute s =~ ~r/ALTER TABLE .* DROP/i, "destructive statement: #{s}"
+    for s <- all do
+      scanned = Regex.replace(~r/\$function\$.*?\$function\$/s, s, "")
+
+      refute scanned =~ ~r/\b(DROP|TRUNCATE)\b/i, "destructive statement: #{s}"
+      refute scanned =~ ~r/\bDELETE\s+FROM\b/i, "destructive statement: #{s}"
+      refute scanned =~ ~r/ALTER TABLE .* DROP/i, "destructive statement: #{s}"
     end
+  end
+
+  test "the chain has exactly the objects the block 0 plan enumerates" do
+    stmts = Migrations.up_statements("public")
+
+    # 10 tables + 2 functions + 23 constraints + 2 triggers + 39 indexes + 1 marker
+    assert length(stmts) == 77
+
+    for name <- ~w(
+          idx_shop_config_key
+          phoenix_kit_shop_categories_slug_gin_idx
+        ) do
+      assert Enum.any?(stmts, &String.contains?(&1, "INDEX IF NOT EXISTS #{name} ON")),
+             "missing index #{name}"
+    end
+
+    for name <- ~w(
+          phoenix_kit_shop_product_slugs_pkey
+          fk_shop_cart_items_cart_uuid
+          fk_shop_carts_payment_option_uuid
+        ) do
+      assert Enum.any?(stmts, &String.contains?(&1, "ADD CONSTRAINT #{name} ")),
+             "missing constraint #{name}"
+    end
+  end
+
+  test "no statement leaks the public schema under a foreign prefix" do
+    refute Enum.any?(Migrations.up_statements("tenant_x"), &String.contains?(&1, "public.")),
+           "statement leaks the public schema under a foreign prefix"
   end
 
   test "every CREATE INDEX and constraint is guarded" do
