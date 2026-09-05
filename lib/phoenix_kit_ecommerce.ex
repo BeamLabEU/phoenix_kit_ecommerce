@@ -2075,10 +2075,10 @@ defmodule PhoenixKitEcommerce do
 
   # Cart totals sum line decimals in the CART's currency frame, so every
   # line must be snapshotted in that frame. A product whose own currency
-  # differs (usually the schema's "USD" default on a non-USD shop — the
-  # importers never set the field) is logged, not rejected: prices are
-  # entered thinking in the shop currency, and rejecting would brick every
-  # existing catalog that carries the stale default.
+  # differs (a legacy row carrying the "USD" the schema and the column both
+  # used to default to on a non-USD shop) is logged, not rejected: prices
+  # are entered thinking in the shop currency, and rejecting would brick
+  # every existing catalog that carries the stale default.
   defp validate_cart_currency(%Cart{currency: cart_currency}, %Product{} = product) do
     if is_binary(product.currency) and is_binary(cart_currency) and
          product.currency != cart_currency do

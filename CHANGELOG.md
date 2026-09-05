@@ -4,6 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.3 - 2026-09-05
+
+PR #31 plus the post-merge review in
+`dev_docs/pull_requests/2026/31-currency-hygiene/CLAUDE_REVIEW.md`.
+
+### Added
+
+- **Carts and cart lines require a currency.** `Cart.changeset/2` and
+  `CartItem.changeset/2` validate `:currency` as required, and `Cart`,
+  `CartItem`, `Product` and `ShippingMethod` drop their `default: "USD"`
+  field default. `get_default_currency_code/0` returns `nil`, not `"USD"`,
+  when Billing has no default currency configured, so an empty currency
+  table produces a loud changeset error out of `create_cart/1` instead of a
+  cart silently denominated in dollars. (#31)
+- **The shop's base currency is substituted once, at creation.** A new
+  context-level fallback in `create_product/1` and
+  `create_shipping_method/1` fills in the default currency for callers that
+  omit it — the admin forms and the CSV/Shopify importer alike — matching
+  the incoming attrs map's key style (atom vs string) first, because
+  `Ecto.Changeset.cast/3` raises on a mixed-key map and the callers
+  disagree. A caller that passes `:currency` is never overridden. (#31)
+- **Migration chain V2: `DROP DEFAULT` on the four `currency` columns.**
+  Dropping the Elixir-side `default: "USD"` did not remove the literal —
+  core's baseline declares `DEFAULT 'USD'` on `phoenix_kit_shop_carts`,
+  `…_cart_items`, `…_products` and `…_shipping_methods`, and Ecto omits an
+  unchanged field from the `INSERT`, so Postgres substituted it: the struct
+  came back with `currency: nil` and the row said `"USD"`. V2 drops those
+  column defaults, so an insert that names no currency stores NULL.
+  Existing rows are untouched and `down/1` restores the defaults. This is
+  the chain's first deliberate divergence from core's shape. (#31)
+
+### Fixed
+
+- **The cart page no longer crashes when no default currency is
+  configured.** `create_cart/1` gained a failure mode with the new
+  `validate_required`, but its two storefront callers still hard-matched
+  `{:ok, cart}` — so a shop in that state answered every cart-page request,
+  and every add-to-cart, with a `MatchError`. Both now take the same "The
+  shop is currently unavailable" exit the disabled-shop gate takes. (#31)
+- **The shipping-method form's `"USD"` literals are gone**, in the hidden
+  input and in the text beside it; an unconfigured default currency now
+  reads "No default currency configured" and submits no currency. The
+  comment claiming `validate_length(:currency, is: 3)` would reject that is
+  corrected — `validate_length` skips `nil` and the hidden input's `""` is
+  an Ecto empty value, so the method is simply stored without a currency.
+  (#31)
+
+### Changed
+
+- The test harness applies the module-owned migration chain on top of
+  core's migrations. V1 was purely adoptive so skipping it changed nothing;
+  V2 is not, and a test database that never ran it would still hand out
+  `"USD"` behind the schemas' backs. `migrations_test.exs`'s
+  destructive-statement scan now matches `DROP` by the object kind that
+  follows it, so `DROP DEFAULT` passes while every DROP that can lose data
+  or structure is still refused. (#31)
+
 ## 0.4.2 - 2026-09-05
 
 PR #30 plus the post-merge review in
