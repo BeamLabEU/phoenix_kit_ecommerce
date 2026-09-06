@@ -2,9 +2,12 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   @moduledoc """
   Writes Shopify sync changes into `phoenix_kit_catalogue` items — the
   write side of Block 3's "sync 6a" (`docs/superpowers/specs/2026-09-05-
-  catalogue-as-shop-product-list-design.md` §5 Блок 3), active only when
-  `ProductSource.current/0` is `Catalogue`. `PhoenixKitEcommerce.Shopify.Sync`
-  is the only intended caller; nothing here touches
+  catalogue-as-shop-product-list-design.md` §5 Блок 3) and Block 7's 6b
+  (same doc, same §, "Блок 7"), active only when `ProductSource.
+  current/0` is `Catalogue`. `update_from_shopify/3`/`create_from_shopify/2`
+  are called by `PhoenixKitEcommerce.Shopify.Sync`; `sync_variants/2` (and
+  the images/collections writers Block 7 adds alongside it) is called
+  directly by the sync worker instead — nothing here touches
   `phoenix_kit_shop_products` (the legacy writer, `Shop.update_product/2`,
   stays the write path for the legacy source).
 
@@ -25,12 +28,18 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.Slugs}
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
+  @compile {:no_warn_undefined, PhoenixKitEntities}
 
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
+  alias PhoenixKitEcommerce.Catalogue.ValueResolver
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+  alias PhoenixKitEcommerce.Shopify.VariantMapper
   alias PhoenixKitEcommerce.Translations
 
   @max_slug_attempts 3
@@ -137,6 +146,141 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
       create_with_slug(attrs, base_slug, base_locale, 1)
     end
+  end
+
+  @doc """
+  Turns `shopify_product`'s options/variants
+  (`PhoenixKitEcommerce.Shopify.VariantMapper.build/1`) into catalogue
+  attribute-set attachments on `item`: one set per real Shopify option
+  (found by blueprint name `"catalogue_set_" <> slug`, created `kind:
+  "fixed"` when missing), values resolved to slugs via `ValueResolver.
+  resolve_many/3` (unknown labels become `draft` values), attached in
+  Shopify's option order and selected in label order, with a
+  slug-keyed price-modifier map written to `data["ecommerce"]
+  ["price_modifiers"][set_slug]`.
+
+  A no-op — `{:error, :catalogue_source_inactive}` — when
+  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  new Block 7 writer is legacy-source-safe on its own, not only via
+  whatever caller happens to gate it).
+
+  Idempotent: a second call against the same `shopify_product` resolves
+  every label to its already-created slug (`values_created: 0`), leaves
+  already-selected/attached sets untouched (no write, no activity row —
+  `AttributeSets.attach_set/3` and `set_attachment_selection/4` are both
+  no-ops on an unchanged state), and rewrites the same `price_modifiers`/
+  `set_slugs`. Any set previously written by a Shopify sync (tracked in
+  `data["ecommerce"]["shopify"]["set_slugs"]`) that this product no
+  longer has options for is detached and dropped from both that list and
+  `price_modifiers`.
+  """
+  @spec sync_variants(Item.t(), map()) ::
+          {:ok, %{sets: non_neg_integer(), values_created: non_neg_integer()}}
+          | {:error, :catalogue_source_inactive | term()}
+  def sync_variants(item, shopify_product) when is_map(item) and is_map(shopify_product) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      do_sync_variants(item, shopify_product)
+    else
+      {:error, :catalogue_source_inactive}
+    end
+  end
+
+  defp do_sync_variants(item, shopify_product) do
+    %{sets: mapped_sets, modifiers: modifiers} = VariantMapper.build(shopify_product)
+
+    mapped_sets
+    |> Enum.reduce_while({:ok, [], 0}, fn set, {:ok, acc, created_total} ->
+      case sync_one_set(item, set, Map.get(modifiers, set.slug, %{})) do
+        {:ok, result} -> {:cont, {:ok, [result | acc], created_total + result.created}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, results, values_created} ->
+        finalize_variant_sync(item, Enum.reverse(results), values_created)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp sync_one_set(item, %{name: name, slug: slug, values: values}, modifiers_by_label) do
+    with {:ok, set} <- find_or_create_set(name, slug),
+         {:ok, value_slugs, created} <- resolve_values(slug, values),
+         {:ok, _attachment} <- AttributeSets.attach_set(item.uuid, set.uuid),
+         :ok <- AttributeSets.set_attachment_selection(item.uuid, set.uuid, value_slugs) do
+      {:ok,
+       %{
+         slug: slug,
+         created: created,
+         value_amounts: amounts_by_slug(values, value_slugs, modifiers_by_label)
+       }}
+    end
+  end
+
+  defp find_or_create_set(name, slug) do
+    case PhoenixKitEntities.get_entity_by_name("catalogue_set_" <> slug) do
+      nil -> AttributeSets.create_set(%{name: name, slug: slug, kind: "fixed"})
+      entity -> {:ok, entity}
+    end
+  end
+
+  defp resolve_values(slug, values) do
+    resolved = ValueResolver.resolve_many(slug, values)
+
+    Enum.reduce_while(values, {:ok, [], 0}, fn label, {:ok, slugs, created} ->
+      case Map.fetch!(resolved, label) do
+        {:ok, value_slug} -> {:cont, {:ok, [value_slug | slugs], created}}
+        {:created, value_slug} -> {:cont, {:ok, [value_slug | slugs], created + 1}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, slugs, created} -> {:ok, Enum.reverse(slugs), created}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp amounts_by_slug(values, value_slugs, modifiers_by_label) do
+    values
+    |> Enum.zip(value_slugs)
+    |> Map.new(fn {label, value_slug} ->
+      amount = Map.get(modifiers_by_label, label, Decimal.new("0.00"))
+      {value_slug, Decimal.to_string(amount)}
+    end)
+  end
+
+  defp finalize_variant_sync(item, results, values_created) do
+    new_slugs = Enum.map(results, & &1.slug)
+    price_modifiers = Map.new(results, &{&1.slug, &1.value_amounts})
+
+    ecommerce = get_in(item.data || %{}, ["ecommerce"]) || %{}
+    previous_slugs = get_in(ecommerce, ["shopify", "set_slugs"]) || []
+
+    detach_stale_sets(item.uuid, previous_slugs -- new_slugs)
+
+    shopify = Map.put(ecommerce["shopify"] || %{}, "set_slugs", new_slugs)
+
+    ecommerce =
+      ecommerce
+      |> Map.put("shopify", shopify)
+      |> Map.put("price_modifiers", price_modifiers)
+
+    data = Map.put(item.data || %{}, "ecommerce", ecommerce)
+
+    case Catalogue.update_item(item, %{data: data}) do
+      {:ok, _updated} -> {:ok, %{sets: length(results), values_created: values_created}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp detach_stale_sets(item_uuid, stale_slugs) do
+    Enum.each(stale_slugs, fn slug ->
+      case PhoenixKitEntities.get_entity_by_name("catalogue_set_" <> slug) do
+        nil -> :ok
+        entity -> AttributeSets.detach_set(item_uuid, entity.uuid)
+      end
+    end)
   end
 
   # ============================================================
