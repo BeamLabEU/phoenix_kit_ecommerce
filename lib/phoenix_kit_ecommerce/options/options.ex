@@ -743,7 +743,7 @@ defmodule PhoenixKitEcommerce.Options do
 
       base_spec = %{
         "key" => key,
-        "label" => humanize_key(key),
+        "label" => option_label(metadata, key),
         "type" => "select",
         "options" => values,
         "_discovered" => true
@@ -869,7 +869,7 @@ defmodule PhoenixKitEcommerce.Options do
     |> Enum.map(fn {key, values} ->
       %{
         "key" => key,
-        "label" => humanize_key(key),
+        "label" => option_label(metadata, key),
         "type" => "select",
         "options" => values,
         "affects_price" => true,
@@ -879,6 +879,21 @@ defmodule PhoenixKitEcommerce.Options do
         "_discovered" => true
       }
     end)
+  end
+
+  # A DISCOVERED option (no admin-configured schema entry — the
+  # catalogue source's attribute sets, or any imported product with
+  # custom options) has no admin-typed label to show either, only the
+  # raw metadata key. `metadata["_option_labels"]` — the attribute
+  # set's own (per-language) display name, `View.product_view/2`'s
+  # `:language` opt — is the real name when the source populated it;
+  # `humanize_key/1`'s snake_case guess is the fallback every discovered
+  # option used before that key existed.
+  defp option_label(metadata, key) do
+    case get_in(metadata, ["_option_labels", key]) do
+      label when is_binary(label) and label != "" -> label
+      _ -> humanize_key(key)
+    end
   end
 
   # Checks if a price modifiers map has at least one non-zero value.

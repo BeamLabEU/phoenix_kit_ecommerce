@@ -627,13 +627,45 @@ defmodule PhoenixKitEcommerce do
 
   `category` (a `%Category{}`, or `nil` for the global list unmodified)
   applies its `storefront_filters` overrides on top of the global config
-  first — see `merge_storefront_filters/2`.
+  first — see `merge_storefront_filters/2`. `language` (default `nil`)
+  additionally translates each `attribute_set`/`metadata_option`
+  filter's `"label"` to that language's attribute-set display name —
+  see `maybe_translate_filter_labels/2`.
   """
-  def get_enabled_storefront_filters(category \\ nil) do
+  def get_enabled_storefront_filters(category \\ nil, language \\ nil) do
     get_storefront_filters()
     |> merge_storefront_filters(category_filter_overrides(category))
     |> Enum.filter(& &1["enabled"])
     |> Enum.sort_by(& &1["position"])
+    |> maybe_translate_filter_labels(language)
+  end
+
+  # `attribute_set`/`metadata_option` filter labels are otherwise a
+  # single flat string an admin typed once (`update_storefront_filters/1`)
+  # — the underlying attribute set has its OWN per-language name, which
+  # only `ProductSource.Catalogue` (via `phoenix_kit_catalogue`) can
+  # resolve. `translate_filter_label/2` isn't a `ProductSource`
+  # `@behaviour` callback (this facade must stay adapter-agnostic, and
+  # `Legacy` has no attribute sets to translate) — duck-typed via
+  # `function_exported?/3`, same pattern `View.base_currency_code/0`
+  # uses for the reverse direction.
+  defp maybe_translate_filter_labels(filters, nil), do: filters
+
+  defp maybe_translate_filter_labels(filters, language) do
+    current = ProductSource.current()
+
+    if function_exported?(current, :translate_filter_label, 2) do
+      # `apply/3`, not a direct `current.translate_filter_label(...)` call:
+      # the latter trips the compiler's cross-reference check the moment
+      # `current` is provably `Legacy` in some branch, which has no
+      # matching function by design (see the moduledoc above) — same
+      # workaround `View.base_currency_code/0` uses for the reverse
+      # direction.
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      Enum.map(filters, &apply(current, :translate_filter_label, [&1, language]))
+    else
+      filters
+    end
   end
 
   defp category_filter_overrides(%Category{storefront_filters: overrides})

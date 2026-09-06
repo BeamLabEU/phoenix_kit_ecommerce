@@ -78,7 +78,10 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate validate_selected_specs(product, selected), to: PhoenixKitEcommerce
   defdelegate default_storefront_filters(), to: PhoenixKitEcommerce
   defdelegate get_storefront_filters(), to: PhoenixKitEcommerce
-  defdelegate get_enabled_storefront_filters(category \\ nil), to: PhoenixKitEcommerce
+
+  defdelegate get_enabled_storefront_filters(category \\ nil, language \\ nil),
+    to: PhoenixKitEcommerce
+
   defdelegate merge_storefront_filters(global_filters, category_filters), to: PhoenixKitEcommerce
   defdelegate update_storefront_filters(filters), to: PhoenixKitEcommerce
   defdelegate aggregate_filter_values(products), to: PhoenixKitEcommerce

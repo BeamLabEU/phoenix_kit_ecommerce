@@ -16,8 +16,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategoryFiltersTest do
   @moduletag :catalogue
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Test.Repo
 
@@ -68,5 +70,55 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategoryFiltersTest do
     {:ok, _view, html} = live(conn, path)
 
     assert html =~ "Brand Spotlight"
+  end
+
+  describe "per-language attribute-set filter label (2026-09-06 plan, Task 3)" do
+    setup %{catalogue: catalogue} do
+      # Entities gates on a settings toggle (default false) — same setup
+      # `Catalogue.FiltersTest` uses.
+      AttributeSets.register_deletion_guard()
+      PhoenixKit.Settings.update_setting("entities_enabled", "true")
+      on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
+
+      {:ok, set} = AttributeSets.create_set(%{name: "Size"}, actor_uuid: Ecto.UUID.generate())
+
+      {:ok, _} =
+        PhoenixKitEntities.set_entity_translation(set, "fr-FR", %{"display_name" => "Taille"})
+
+      {:ok, category} =
+        Catalogue.create_category(%{
+          name: "Sized goods",
+          catalogue_uuid: catalogue.uuid,
+          slug: %{"en-US" => "sized-goods", "fr-FR" => "articles-tailles"},
+          data: %{
+            "ecommerce" => %{
+              "storefront_filters" => %{
+                "size" => %{
+                  "type" => "attribute_set",
+                  "set_slug" => "size",
+                  "label" => "Size",
+                  "enabled" => true,
+                  "position" => 6
+                }
+              }
+            }
+          }
+        })
+
+      %{set: set, category: category}
+    end
+
+    test "the sidebar shows the set's own display name, translated for the current locale",
+         %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/shop/category/sized-goods")
+      assert html =~ "Size"
+
+      # The category's OWN fr-FR slug — visiting the en-US slug under
+      # `/fr/...` would hit the cross-language redirect path instead of
+      # rendering directly (`CatalogCategory.handle_cross_language_redirect/3`).
+      {:ok, _view, fr_html} = live(conn, "/fr/shop/category/articles-tailles")
+      assert fr_html =~ "Taille"
+      refute fr_html =~ ">Size<"
+    end
   end
 end

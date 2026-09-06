@@ -135,11 +135,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     # key that only exists on the category (Task 2, 2026-09-06 plan)
     # must still get its facet counted here, not just appear in the
     # sidebar's filter list with an empty "No options available".
-    filters = PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category))
+    language = Keyword.get(opts, :language)
+
+    filters =
+      PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category), language)
+
     category_uuid = Keyword.get(opts, :category_uuid)
 
     Enum.reduce(filters, %{}, fn filter, acc ->
-      Map.put(acc, filter["key"], aggregate_single_filter(filter, category_uuid))
+      Map.put(acc, filter["key"], aggregate_single_filter(filter, category_uuid, language))
     end)
   end
 
@@ -148,12 +152,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     Query.price_range(opts)
   end
 
-  defp aggregate_single_filter(%{"type" => "price_range"}, category_uuid) do
+  defp aggregate_single_filter(%{"type" => "price_range"}, category_uuid, _language) do
     {min_price, max_price} = get_price_range_for(category_uuid: category_uuid)
     %{min: min_price, max: max_price}
   end
 
-  defp aggregate_single_filter(%{"type" => "vendor"}, category_uuid) do
+  defp aggregate_single_filter(%{"type" => "vendor"}, category_uuid, _language) do
     Query.vendor_counts(category_uuid: category_uuid)
   end
 
@@ -162,48 +166,126 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   # (`set_slug`) so a filter config saved before this block — the live
   # "size" filter — keeps working unchanged (2026-09-06 design doc §5
   # "Блок 5").
-  defp aggregate_single_filter(%{"type" => "attribute_set"} = filter, category_uuid) do
+  defp aggregate_single_filter(%{"type" => "attribute_set"} = filter, category_uuid, language) do
     case filter["set_slug"] || filter["key"] do
-      slug when is_binary(slug) -> Query.attribute_set_counts(slug, category_uuid: category_uuid)
-      _ -> []
+      slug when is_binary(slug) ->
+        Query.attribute_set_counts(slug, category_uuid: category_uuid, language: language)
+
+      _ ->
+        []
     end
   end
 
-  defp aggregate_single_filter(%{"type" => "metadata_option"} = filter, category_uuid) do
+  defp aggregate_single_filter(%{"type" => "metadata_option"} = filter, category_uuid, language) do
     case filter["option_key"] || filter["key"] do
-      slug when is_binary(slug) -> Query.attribute_set_counts(slug, category_uuid: category_uuid)
-      _ -> []
+      slug when is_binary(slug) ->
+        Query.attribute_set_counts(slug, category_uuid: category_uuid, language: language)
+
+      _ ->
+        []
     end
   end
 
-  defp aggregate_single_filter(_filter, _category_uuid), do: []
+  defp aggregate_single_filter(_filter, _category_uuid, _language), do: []
+
+  @doc """
+  For `attribute_set`/`metadata_option` filters, swaps `"label"` for the
+  underlying attribute set's translated display name (falling back to
+  whatever the filter config already had when the set can't be
+  resolved, or there's no translation) — the sidebar's section header
+  should read the SET's own (per-language) name, not the single flat
+  string an admin typed once into `update_storefront_filters/1`. Every
+  other filter type is returned unchanged.
+
+  NOT a `ProductSource` `@behaviour` callback: `PhoenixKitEcommerce.
+  get_enabled_storefront_filters/2` reaches this via `function_exported?/3`
+  (mirroring `View.base_currency_code/0`'s pattern for the reverse
+  direction), so `Legacy` — which has no attribute sets to translate —
+  needs no matching no-op.
+  """
+  @spec translate_filter_label(map(), String.t()) :: map()
+  def translate_filter_label(%{"type" => type} = filter, language)
+      when type in ["attribute_set", "metadata_option"] and is_binary(language) do
+    slug = filter["set_slug"] || filter["option_key"] || filter["key"]
+
+    with slug when is_binary(slug) <- slug,
+         label when is_binary(label) <- Query.set_label(slug, language) do
+      Map.put(filter, "label", label)
+    else
+      _ -> filter
+    end
+  end
+
+  def translate_filter_label(filter, _language), do: filter
 
   # ============================================================
   # Helpers
   # ============================================================
 
   defp build_products(items, opts) do
-    sets_by_item = resolve_sets(items)
+    language = Keyword.get(opts, :language)
+    sets_by_item = items |> resolve_sets() |> translate_set_names_by_item(language)
     categories_by_uuid = maybe_categories_by_uuid(items, opts)
 
     Enum.map(items, fn item ->
       View.product_view(item,
         sets: Map.get(sets_by_item, item.uuid, []),
-        category: category_for(item, categories_by_uuid)
+        category: category_for(item, categories_by_uuid),
+        language: language
       )
     end)
   end
 
   defp build_product(item, opts) do
-    sets = AttributeSets.resolve_for_item(item.uuid)
+    language = Keyword.get(opts, :language)
+    sets = item.uuid |> AttributeSets.resolve_for_item() |> translate_set_names(language)
     category = single_category(item, opts)
-    View.product_view(item, sets: sets, category: category)
+    View.product_view(item, sets: sets, category: category, language: language)
   end
 
   defp resolve_sets([]), do: %{}
 
   defp resolve_sets(items) do
     items |> Enum.map(& &1.uuid) |> AttributeSets.resolve_for_items()
+  end
+
+  # Swaps every set's `:name` for its translated display name (`Query.
+  # set_display_names/2`, one lookup per DISTINCT set across the WHOLE
+  # batch — never per item) before `sets` reaches `View.product_view/2`,
+  # which is pure and has no way to read `settings["translations"]`
+  # itself (see the moduledoc note on `View.product_view/2`'s
+  # `:language`). `language: nil` is a no-op — every call site before
+  # this option existed keeps building the exact same `sets_by_item`.
+  defp translate_set_names_by_item(sets_by_item, nil), do: sets_by_item
+
+  defp translate_set_names_by_item(sets_by_item, language) do
+    set_uuids =
+      sets_by_item
+      |> Map.values()
+      |> Enum.flat_map(fn %{sets: sets} -> Enum.map(sets, & &1.uuid) end)
+      |> Enum.uniq()
+
+    labels = Query.set_display_names(set_uuids, language)
+
+    Map.new(sets_by_item, fn {item_uuid, resolved} ->
+      {item_uuid, apply_set_labels(resolved, labels)}
+    end)
+  end
+
+  # Single-item counterpart of `translate_set_names_by_item/2`, for
+  # `build_product/2`'s one `AttributeSets.resolve_for_item/1` result.
+  defp translate_set_names(resolved, nil), do: resolved
+
+  defp translate_set_names(%{sets: sets} = resolved, language) do
+    set_uuids = sets |> Enum.map(& &1.uuid) |> Enum.uniq()
+    apply_set_labels(resolved, Query.set_display_names(set_uuids, language))
+  end
+
+  defp apply_set_labels(%{sets: sets} = resolved, labels) do
+    translated =
+      Enum.map(sets, fn set -> Map.put(set, :name, Map.get(labels, set.uuid, set.name)) end)
+
+    %{resolved | sets: translated}
   end
 
   defp maybe_categories_by_uuid(items, opts) do

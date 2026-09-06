@@ -309,6 +309,66 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
       []
   end
 
+  @doc """
+  Translated display names for a batch of attribute-set BLUEPRINTS,
+  keyed by set uuid (`AttributeSets.resolve_for_item/2`'s per-set `:uuid`
+  field) — `ProductSource.Catalogue` swaps a resolved set's `:name` for
+  this before handing `sets` to `View.product_view/2` (which is pure and
+  has no way to read `settings["translations"]` itself). One
+  `AttributeSets.get_set/2` call per DISTINCT set, never per item — a
+  product page has a handful of attached sets, and a listing page's many
+  items still share that same handful, so the count stays small; there
+  is no batched-by-uuid-list entities read to reach for instead. A set
+  that can't be resolved (deleted, or gated by `get_set/2`'s own owner
+  check) is simply absent from the result — callers keep the
+  untranslated `:name` already on the resolved set for it.
+  """
+  @spec set_display_names([Ecto.UUID.t()], String.t()) :: %{Ecto.UUID.t() => String.t()}
+  def set_display_names([], _language), do: %{}
+
+  def set_display_names(set_uuids, language) when is_list(set_uuids) and is_binary(language) do
+    set_uuids
+    |> Enum.uniq()
+    |> Map.new(&{&1, set_display_name(&1, language)})
+    |> Enum.reject(fn {_uuid, name} -> is_nil(name) end)
+    |> Map.new()
+  end
+
+  @doc """
+  Translated display name of one attribute set by its FILTER-CONFIG slug
+  (`set_slug` — with or without the `catalogue_set_` prefix, same lookup
+  `filter_by_metadata/2` uses), `nil` when the slug doesn't resolve to a
+  set. The sidebar's `attribute_set`/`metadata_option` filter section
+  reads this — a filter config only ever carries the slug, never the
+  set's uuid.
+  """
+  @spec set_label(String.t(), String.t()) :: String.t() | nil
+  def set_label(set_slug, language) when is_binary(set_slug) and is_binary(language) do
+    case set_uuid_for_key(set_slug) do
+      nil -> nil
+      set_uuid -> set_display_name(set_uuid, language)
+    end
+  end
+
+  # The one place this module reaches for `AttributeSets.get_set/2`
+  # rather than a plain query of its own: `get_set/2`'s `:lang` option
+  # already applies the exact translation-with-fallback
+  # (`settings["translations"][language]["display_name"]`, else the bare
+  # `display_name`) a hand-rolled fragment would have to duplicate —
+  # base/dialect matching (`"es"` finding an `"es-ES"` translation)
+  # included. Writing that logic a second time here would drift from
+  # `PhoenixKitEntities.resolve_language/2`'s the moment either changes.
+  defp set_display_name(set_uuid, language) do
+    case Catalogue.AttributeSets.get_set(set_uuid, lang: language) do
+      %{display_name: name} when is_binary(name) and name != "" -> name
+      _ -> nil
+    end
+  rescue
+    e ->
+      Logger.warning("Failed to resolve set display name for #{inspect(set_uuid)}: #{inspect(e)}")
+      nil
+  end
+
   defp value_label(%{title: title}, nil), do: title
 
   defp value_label(%{title: title, data: data}, language) do

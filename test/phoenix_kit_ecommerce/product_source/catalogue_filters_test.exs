@@ -199,6 +199,100 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.FiltersTest do
     end
   end
 
+  describe "Query.set_display_names/2 and Query.set_label/2 (2026-09-06 plan, Task 3)" do
+    test "resolves a set's translated display name, falling back to the bare name", %{set: set} do
+      {:ok, _} =
+        PhoenixKitEntities.set_entity_translation(set, "fr-FR", %{"display_name" => "Taille"})
+
+      assert Query.set_display_names([set.uuid], "fr-FR") == %{set.uuid => "Taille"}
+      # No fr-FR-specific data for a language with no translation saved —
+      # falls back to the untranslated blueprint name.
+      assert Query.set_display_names([set.uuid], "de-DE") == %{set.uuid => "Size"}
+    end
+
+    test "an unresolvable set uuid is simply absent from the result" do
+      assert Query.set_display_names([Ecto.UUID.generate()], "fr-FR") == %{}
+    end
+
+    test "set_label/2 resolves by the filter config's slug (with or without the set prefix)", %{
+      set: set
+    } do
+      {:ok, _} =
+        PhoenixKitEntities.set_entity_translation(set, "fr-FR", %{"display_name" => "Taille"})
+
+      assert Query.set_label("size", "fr-FR") == "Taille"
+      assert Query.set_label("catalogue_set_size", "fr-FR") == "Taille"
+    end
+
+    test "set_label/2 is nil for a slug that resolves to no set" do
+      assert Query.set_label("no-such-set", "fr-FR") == nil
+    end
+  end
+
+  describe "ProductSource.Catalogue.translate_filter_label/2" do
+    test "swaps an attribute_set filter's label for the set's translated display name", %{
+      set: set
+    } do
+      {:ok, _} =
+        PhoenixKitEntities.set_entity_translation(set, "fr-FR", %{"display_name" => "Taille"})
+
+      filter = %{
+        "key" => "size",
+        "type" => "attribute_set",
+        "set_slug" => "size",
+        "label" => "Size"
+      }
+
+      assert CatalogueSource.translate_filter_label(filter, "fr-FR") ==
+               Map.put(filter, "label", "Taille")
+    end
+
+    test "an unresolvable set falls back to the filter's own label unchanged" do
+      filter = %{
+        "key" => "x",
+        "type" => "attribute_set",
+        "set_slug" => "no-such-set",
+        "label" => "X"
+      }
+
+      assert CatalogueSource.translate_filter_label(filter, "fr-FR") == filter
+    end
+
+    test "a non-attribute-set filter is returned unchanged" do
+      filter = %{"key" => "vendor", "type" => "vendor", "label" => "Vendor"}
+      assert CatalogueSource.translate_filter_label(filter, "fr-FR") == filter
+    end
+  end
+
+  describe "aggregate_filter_values/1 threads :language into attribute_set_counts" do
+    test "facet value labels are translated for the requested language", %{
+      category_x: category_x,
+      values: %{small: small}
+    } do
+      {:ok, _} = PhoenixKitEntities.EntityData.set_title_translation(small, "fr-FR", "Petit")
+
+      {:ok, _} =
+        Shop.update_storefront_filters([
+          %{
+            "key" => "size",
+            "type" => "attribute_set",
+            "set_slug" => "size",
+            "label" => "Size",
+            "enabled" => true,
+            "position" => 0
+          }
+        ])
+
+      values =
+        CatalogueSource.aggregate_filter_values(category_uuid: category_x.uuid, language: "fr-FR")
+
+      assert values["size"] == [
+               %{slug: "s", label: "Petit", count: 1},
+               %{slug: "m", label: "Medium", count: 2}
+             ]
+    end
+  end
+
   describe "category-aware aggregate_filter_values/1 (Task 2 storefront_filters overrides)" do
     test "a category-only attribute_set filter gets its facet counted, not just listed empty",
          %{category_x: category_x} do

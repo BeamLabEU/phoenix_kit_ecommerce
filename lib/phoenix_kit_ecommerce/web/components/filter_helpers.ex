@@ -21,10 +21,16 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   - `:category` - The `%Category{}` being viewed (its `storefront_filters`
     overrides the global filter config for `:filters` - see
     `Shop.merge_storefront_filters/2`); `nil` for the global catalog page
+  - `:language` - Translates an `attribute_set`/`metadata_option`
+    filter's label to that language's attribute-set display name (see
+    `Shop.get_enabled_storefront_filters/2`), and picks the same
+    language's facet-value labels in `:filter_values` (forwarded to
+    `Shop.aggregate_filter_values/1` as part of `opts`)
   """
   def load_filter_data(opts \\ []) do
     category = Keyword.get(opts, :category)
-    filters = Shop.get_enabled_storefront_filters(category)
+    language = Keyword.get(opts, :language)
+    filters = Shop.get_enabled_storefront_filters(category, language)
     filter_values = Shop.aggregate_filter_values(opts)
     {filters, filter_values}
   end

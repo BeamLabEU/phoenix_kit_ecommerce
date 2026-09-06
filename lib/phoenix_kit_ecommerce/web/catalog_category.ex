@@ -62,7 +62,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         # Load storefront filters (category-aware: applies this category's
         # `storefront_filters` overrides on top of the global config)
         {enabled_filters, filter_values} =
-          FilterHelpers.load_filter_data(category_uuid: category.uuid, category: category)
+          FilterHelpers.load_filter_data(
+            category_uuid: category.uuid,
+            category: category,
+            language: current_language
+          )
 
         active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
         filter_opts = FilterHelpers.build_query_opts(active_filters, enabled_filters)
@@ -74,7 +78,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               category_uuid: category.uuid,
               page: 1,
               per_page: page * per_page,
-              preload: [:category]
+              preload: [:category],
+              language: current_language
             ] ++ filter_opts
           )
 
@@ -159,7 +164,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             category_uuid: socket.assigns.category.uuid,
             page: 1,
             per_page: effective_page * socket.assigns.per_page,
-            preload: [:category]
+            preload: [:category],
+            language: socket.assigns.current_language
           ] ++ filter_opts
         )
 
