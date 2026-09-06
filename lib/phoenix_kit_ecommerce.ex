@@ -1864,12 +1864,27 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Creates a new cart.
+
+  The cart's currency is the request's display currency (§4.1, §4.4 of
+  the per-domain-currency spec) — the host app maps the request's domain
+  to it via `PhoenixKitBilling.Currency.put_request_currency/1`, resolved
+  fail-safe by `get_display_currency/0` (§6.3). With no mapping in play
+  this is the base currency, same as before this feature existed
+  (§2.12). `base_currency`/`exchange_rate` freeze the base and the rate
+  at THIS moment (§12.2) — no code anywhere may re-read them from the
+  currency table for this cart after creation; only emptying the cart
+  refreshes them (`recalculate_cart_totals!/1`).
   """
   def create_cart(opts) do
+    base = Billing.get_base_currency()
+    display = Billing.get_display_currency()
+
     attrs = %{
       user_uuid: Keyword.get(opts, :user_uuid),
       session_id: Keyword.get(opts, :session_id),
-      currency: get_default_currency_code()
+      currency: display && display.code,
+      base_currency: base && base.code,
+      exchange_rate: display && base && Currency.effective_rate(display, base)
     }
 
     case %Cart{} |> Cart.changeset(attrs) |> repo().insert() do
@@ -2135,12 +2150,16 @@ defmodule PhoenixKitEcommerce do
                   currency: cart.currency
                 )
                 |> Map.put(:cart_uuid, cart.uuid)
-                |> Map.put(:unit_price, calculated_price)
+                |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
+                |> Map.put(:base_unit_price, calculated_price)
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
 
             item ->
-              # Update quantity
+              # Update quantity — unit_price/base_unit_price are NOT
+              # recomputed here: the line is already frozen from its
+              # first add (§4.4), and a re-add must never change what a
+              # returning line already agreed to.
               new_qty = item.quantity + quantity
               item |> CartItem.changeset(%{quantity: new_qty}) |> repo().update!()
           end
@@ -2159,6 +2178,30 @@ defmodule PhoenixKitEcommerce do
       error ->
         error
     end
+  end
+
+  # §12.2: the ONLY rate a line snapshot may use is the cart's OWN frozen
+  # rate — never a fresh table lookup, and never `Currency.effective_rate/2`
+  # recomputed here (that would silently un-freeze the cart on every add).
+  # A cart already in its own base currency needs no conversion at all.
+  # A cart with an unknown rate (NULL — the V185 backfill's honest
+  # "unknown" for a foreign currency, or a currency the table no longer
+  # knows) snapshots the base amount unchanged and says so once, rather
+  # than inventing a number.
+  defp snapshot_unit_price(%Cart{currency: same, base_currency: same}, amount), do: amount
+
+  defp snapshot_unit_price(%Cart{exchange_rate: nil} = cart, amount) do
+    require Logger
+
+    Logger.warning(
+      "[Shop] cart #{cart.uuid} in #{cart.currency} has no frozen rate; line snapshotted in base"
+    )
+
+    amount
+  end
+
+  defp snapshot_unit_price(%Cart{} = cart, amount) do
+    Currency.present(amount, cart.currency, rate: cart.exchange_rate)
   end
 
   defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language) do
@@ -2189,7 +2232,8 @@ defmodule PhoenixKitEcommerce do
                   currency: cart.currency
                 )
                 |> Map.put(:cart_uuid, cart.uuid)
-                |> Map.put(:unit_price, calculated_price)
+                |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
+                |> Map.put(:base_unit_price, calculated_price)
                 |> Map.put(:selected_specs, selected_specs)
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
@@ -3943,17 +3987,45 @@ defmodule PhoenixKitEcommerce do
       |> Decimal.add(tax_amount)
       |> Decimal.sub(cart.discount_amount || Decimal.new("0"))
 
+    fx_refresh = fx_refresh_if_emptied(cart, items)
+
     cart
-    |> Cart.totals_changeset(%{
-      subtotal: subtotal,
-      shipping_amount: shipping_amount,
-      tax_amount: tax_amount,
-      total: total,
-      total_weight_grams: total_weight,
-      items_count: items_count
-    })
+    |> Cart.totals_changeset(
+      Map.merge(
+        %{
+          subtotal: subtotal,
+          shipping_amount: shipping_amount,
+          tax_amount: tax_amount,
+          total: total,
+          total_weight_grams: total_weight,
+          items_count: items_count
+        },
+        fx_refresh
+      )
+    )
     |> repo().update!()
     |> repo().preload([:items, :shipping_method], force: true)
+  end
+
+  # §4.4: a cart's currency/base/rate are frozen at creation and NEVER
+  # re-read from the currency table while it holds items — a shopper
+  # must not have their cart's prices moved under them. Emptying it is
+  # the one safe moment: nothing left to reprice, so this is where a
+  # stale mapping/rate catches up before the next item freezes it again.
+  # The request-scoped code wins over the cart's own stale currency when
+  # both are available, since a shopper on a still-open tab may have
+  # since navigated to a different domain.
+  defp fx_refresh_if_emptied(_cart, items) when items != [], do: %{}
+
+  defp fx_refresh_if_emptied(cart, []) do
+    base = Billing.get_base_currency()
+    display = Billing.resolve_display_currency(Currency.get_request_currency() || cart.currency)
+
+    %{
+      currency: display.code,
+      base_currency: base.code,
+      exchange_rate: Currency.effective_rate(display, base)
+    }
   end
 
   # The portion of the cart tax actually applies to.
