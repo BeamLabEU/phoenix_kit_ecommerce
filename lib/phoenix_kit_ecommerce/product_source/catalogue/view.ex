@@ -62,7 +62,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
       price: item.base_price,
       compare_at_price: to_decimal(Map.get(ecommerce, "compare_at_price")),
       cost_per_item: to_decimal(Map.get(ecommerce, "cost_per_item")),
-      currency: Map.get(ecommerce, "currency") || "USD",
+      currency: Map.get(ecommerce, "currency") || base_currency_code(),
       taxable: Map.get(ecommerce, "taxable", true),
       weight_grams: Map.get(ecommerce, "weight_grams") || 0,
       requires_shipping: Map.get(ecommerce, "requires_shipping", true),
@@ -362,4 +362,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
 
   defp to_decimal(value) when is_number(value), do: Decimal.new(to_string(value))
   defp to_decimal(_), do: nil
+
+  # The shop's base currency code when the facade exposes it (currency
+  # work, `get_base_currency/0`); "USD" only as the last resort so a
+  # catalogue item without an explicit currency never disagrees with the
+  # shop's configured base.
+  defp base_currency_code do
+    if function_exported?(PhoenixKitEcommerce, :get_base_currency, 0),
+      do: currency_code(apply(PhoenixKitEcommerce, :get_base_currency, [])),
+      else: "USD"
+  end
+
+  defp currency_code(%{code: code}) when is_binary(code), do: code
+  defp currency_code(code) when is_binary(code), do: code
+  defp currency_code(_), do: "USD"
 end
