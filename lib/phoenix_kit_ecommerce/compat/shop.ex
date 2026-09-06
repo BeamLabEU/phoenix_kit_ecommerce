@@ -35,7 +35,7 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate get_default_currency(), to: PhoenixKitEcommerce
   defdelegate get_default_currency_code(), to: PhoenixKitEcommerce
   defdelegate get_display_currency_code(), to: PhoenixKitEcommerce
-  defdelegate get_base_currency, to: PhoenixKitBilling
+  defdelegate get_base_currency, to: PhoenixKitEcommerce
   defdelegate get_default_language(), to: PhoenixKitEcommerce
 
   # URLs
