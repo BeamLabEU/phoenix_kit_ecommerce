@@ -1700,6 +1700,12 @@ defmodule PhoenixKitEcommerce do
   def get_available_shipping_methods(%Cart{} = cart) do
     shippable_weight = cart |> cart_items_loaded() |> shippable_weight_grams()
 
+    # `min_order_amount`/`max_order_amount`/`free_above_amount` are all
+    # base-currency thresholds (§4.7, §2.11); comparing them against the
+    # cart's DISPLAY subtotal denied or offered methods by the wrong
+    # number on a non-base cart.
+    base_subtotal = to_base(cart, cart.subtotal || Decimal.new("0"))
+
     ShippingMethod
     |> where([s], s.active == true)
     |> order_by([s], [s.position, s.name])
@@ -1707,7 +1713,7 @@ defmodule PhoenixKitEcommerce do
     |> Enum.filter(fn method ->
       ShippingMethod.available_for?(method, %{
         weight_grams: shippable_weight,
-        subtotal: cart.subtotal || Decimal.new("0"),
+        subtotal: base_subtotal,
         country: cart.shipping_country
       })
     end)
@@ -2538,7 +2544,13 @@ defmodule PhoenixKitEcommerce do
   Sets shipping method for cart.
   """
   def set_cart_shipping(%Cart{} = cart, %ShippingMethod{} = method, country) do
-    shipping_cost = ShippingMethod.calculate_cost(method, cart.subtotal || Decimal.new("0"))
+    # This initial value is immediately overwritten by `recalculate_cart_totals!/1`
+    # below (which does the real, from_base-converted calculation via
+    # `calculate_shipping/3`) — converting the subtotal here is for
+    # consistency with every other threshold comparison, not because this
+    # particular number survives.
+    shipping_cost =
+      ShippingMethod.calculate_cost(method, to_base(cart, cart.subtotal || Decimal.new("0")))
 
     result =
       repo().transaction(fn ->
@@ -2666,7 +2678,11 @@ defmodule PhoenixKitEcommerce do
 
       # One or more methods available - select cheapest
       true ->
-        cheapest = find_cheapest_shipping_method(shipping_methods, cart.subtotal)
+        # `find_cheapest_shipping_method/2` ranks by `free_above_amount`/
+        # `price`, both base-currency (§4.7) — rank on the cart's subtotal
+        # converted to base, same as every other threshold comparison.
+        base_subtotal = to_base(cart, cart.subtotal || Decimal.new("0"))
+        cheapest = find_cheapest_shipping_method(shipping_methods, base_subtotal)
         set_cart_shipping(cart, cheapest, nil)
     end
   end

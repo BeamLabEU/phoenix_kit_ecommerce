@@ -111,6 +111,37 @@ defmodule PhoenixKitEcommerce.ShippingFxTest do
     assert Decimal.equal?(cart.shipping_amount, Decimal.new("9.09"))
   end
 
+  test "eligibility: a $130 min_order_amount OFFERS and auto-selects for a EUR cart holding the $138 product" do
+    cart = eur_cart_with_product!()
+
+    {:ok, method} =
+      Shop.create_shipping_method(method_attrs(%{"min_order_amount" => Decimal.new("130.00")}))
+
+    # 125.45 (the EUR display subtotal) is BELOW 130 — comparing on the
+    # display amount would wrongly deny this method; 138.00 base clears it.
+    available = Shop.get_available_shipping_methods(cart)
+    assert Enum.any?(available, &(&1.uuid == method.uuid))
+
+    {:ok, cart} = Shop.auto_select_shipping_method(cart, available)
+    assert cart.shipping_method_uuid == method.uuid
+  end
+
+  test "eligibility: a $130 max_order_amount EXCLUDES a EUR cart holding the $138 product" do
+    cart = eur_cart_with_product!()
+
+    {:ok, method} =
+      Shop.create_shipping_method(method_attrs(%{"max_order_amount" => Decimal.new("130.00")}))
+
+    # 125.45 (display) is still under 130 and would wrongly pass; 138.00
+    # base is over it and must be excluded — from the offered list, and
+    # therefore from auto-selection too (which only ranks what it's given).
+    available = Shop.get_available_shipping_methods(cart)
+    refute Enum.any?(available, &(&1.uuid == method.uuid))
+
+    {:ok, cart} = Shop.auto_select_shipping_method(cart, available)
+    refute cart.shipping_method_uuid == method.uuid
+  end
+
   test "§12.3: all four addends non-zero on a EUR cart agree with the total identity" do
     cart = eur_cart_with_product!()
 
