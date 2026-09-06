@@ -151,12 +151,25 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     Query.vendor_counts(category_uuid: category_uuid)
   end
 
-  # `metadata_option` facets are disabled until Block 5 wires the
-  # storefront filter UI against catalogue attribute sets (self-review,
-  # 2026-09-05 design doc §5 "Блок 3"): `Query.list_items/1`'s
-  # `:metadata_filters` option already accepts value-slug filters for
-  # that later wiring, but no facet-with-counts surface exists yet.
-  defp aggregate_single_filter(%{"type" => "metadata_option"}, _category_uuid), do: []
+  # `attribute_set` facets, backed by `Query.attribute_set_counts/2`.
+  # `metadata_option` (`option_key`) is an alias of `attribute_set`
+  # (`set_slug`) so a filter config saved before this block — the live
+  # "size" filter — keeps working unchanged (2026-09-06 design doc §5
+  # "Блок 5").
+  defp aggregate_single_filter(%{"type" => "attribute_set"} = filter, category_uuid) do
+    case filter["set_slug"] || filter["key"] do
+      slug when is_binary(slug) -> Query.attribute_set_counts(slug, category_uuid: category_uuid)
+      _ -> []
+    end
+  end
+
+  defp aggregate_single_filter(%{"type" => "metadata_option"} = filter, category_uuid) do
+    case filter["option_key"] || filter["key"] do
+      slug when is_binary(slug) -> Query.attribute_set_counts(slug, category_uuid: category_uuid)
+      _ -> []
+    end
+  end
+
   defp aggregate_single_filter(_filter, _category_uuid), do: []
 
   # ============================================================

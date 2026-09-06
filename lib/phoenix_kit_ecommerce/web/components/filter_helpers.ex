@@ -51,7 +51,7 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   end
 
   defp parse_single_filter(%{"type" => type, "key" => key}, params)
-       when type in ["vendor", "metadata_option"] do
+       when type in ["vendor", "metadata_option", "attribute_set"] do
     case params[key] do
       nil -> nil
       "" -> nil
@@ -112,6 +112,15 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   defp apply_list_filter("metadata_option", filter, values, opts) do
     existing = Keyword.get(opts, :metadata_filters, [])
     meta = %{key: filter["option_key"] || filter["key"], values: values}
+    Keyword.put(opts, :metadata_filters, existing ++ [meta])
+  end
+
+  # Same shape as `metadata_option` (values are the attribute set's value
+  # SLUGS, not labels — see `Query.filter_by_metadata/2`), keyed by
+  # `set_slug` instead of `option_key`.
+  defp apply_list_filter("attribute_set", filter, values, opts) do
+    existing = Keyword.get(opts, :metadata_filters, [])
+    meta = %{key: filter["set_slug"] || filter["key"], values: values}
     Keyword.put(opts, :metadata_filters, existing ++ [meta])
   end
 
