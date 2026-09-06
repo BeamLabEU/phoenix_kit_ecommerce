@@ -84,16 +84,16 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def list_categories(opts \\ []) do
-    opts |> Query.list_categories() |> Enum.map(&View.category_view/1)
+    opts |> Query.list_categories() |> Enum.map(&build_category(&1, opts))
   end
 
   @impl PhoenixKitEcommerce.ProductSource
   def get_category(id, opts \\ [])
 
-  def get_category(id, _opts) when is_binary(id) do
+  def get_category(id, opts) when is_binary(id) do
     case Query.get_category(id) do
       nil -> nil
-      category -> View.category_view(category)
+      category -> build_category(category, opts)
     end
   end
 
@@ -103,7 +103,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   def get_category_by_slug_localized(slug, language, opts \\ []) do
     with {:ok, category} <-
            fetch_scoped(Catalogue.get_category_by_slug(slug, language, catalogue_opts(opts))) do
-      {:ok, View.category_view(category)}
+      {:ok, build_category(category, opts)}
     end
   end
 
@@ -113,7 +113,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     catalogue_opts = catalogue_opts(opts) |> Keyword.put(:any_lang, true)
 
     case fetch_scoped(Catalogue.get_category_by_slug(slug, lang, catalogue_opts)) do
-      {:ok, category, matched_lang} -> {:ok, View.category_view(category), matched_lang}
+      {:ok, category, matched_lang} -> {:ok, build_category(category, opts), matched_lang}
       {:error, :not_found} -> {:error, :not_found}
     end
   end
@@ -211,6 +211,31 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   defp preload_category?(opts) do
     :category in List.wrap(Keyword.get(opts, :preload))
+  end
+
+  # `build_category/2` is the category counterpart of `build_product/2` +
+  # `single_category/2`: `View.category_view/2` never leaves the
+  # `:parent` field as the struct's own `Ecto.Association.NotLoaded`
+  # default (a view-struct can never actually be `Repo.preload/2`'d), so
+  # every category-returning callback routes through here instead of
+  # calling `View.category_view/1` directly.
+  defp build_category(category, opts) do
+    View.category_view(category, parent: resolve_parent(category, opts))
+  end
+
+  defp resolve_parent(%{parent_uuid: nil}, _opts), do: nil
+
+  defp resolve_parent(category, opts) do
+    if preload_parent?(opts) do
+      case Query.get_category(category.parent_uuid) do
+        nil -> nil
+        parent -> View.category_view(parent)
+      end
+    end
+  end
+
+  defp preload_parent?(opts) do
+    :parent in List.wrap(Keyword.get(opts, :preload))
   end
 
   # `:preload` here names an ecommerce VIEW-STRUCT association

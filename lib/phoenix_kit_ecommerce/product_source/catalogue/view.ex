@@ -90,9 +90,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
 
   @doc """
   Builds a `%Category{}` view-struct from a catalogue category.
+
+  `opts[:parent]` sets the `:parent` association field (a `%Category{}`
+  view-struct, or `nil` for a root category / when the caller didn't ask
+  for it) — a view-struct can never be `Repo.preload/2`'d, so leaving the
+  default `Ecto.Association.NotLoaded` in place (as every OTHER unset
+  `belongs_to`/`has_many` field on this struct still does) would crash
+  the first template that does a plain `if category.parent do` truthy
+  check, same as `PhoenixKitEcommerce.ProductSource.Catalogue`'s
+  `single_category/2` already resolves `:category` for products.
   """
   @spec category_view(map(), keyword()) :: Category.t()
-  def category_view(category, _opts \\ []) do
+  def category_view(category, opts \\ []) do
     data = category.data || %{}
     ecommerce = Map.get(data, "ecommerce", %{})
     langs = language_keys(data)
@@ -105,6 +114,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
       status: Map.get(ecommerce, "shop_status") || "active",
       position: category.position,
       parent_uuid: category.parent_uuid,
+      parent: Keyword.get(opts, :parent),
       option_schema: Map.get(ecommerce, "option_schema") || [],
       image_uuid: Map.get(ecommerce, "image_uuid"),
       featured_product_uuid: Map.get(ecommerce, "featured_item_uuid"),
