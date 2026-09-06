@@ -132,10 +132,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       })
       |> Repo.insert!()
 
-      {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
 
-      assert html =~ "3d-printed-"
-      assert html =~ "3d-printed-items"
+      filter_html = view |> element("#media-sync-collections-filter") |> render()
+
+      assert filter_html =~ "prefix 3d-printed-,"
+      assert filter_html =~ "excluding 3d-printed-items"
     end
 
     test "clicking a button enqueues a job with that kind and the current user", %{conn: conn} do

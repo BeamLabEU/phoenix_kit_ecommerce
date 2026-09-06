@@ -278,38 +278,74 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
       assert updated.data["featured_image_uuid"] == file1.uuid
     end
 
-    # A download failure must never shrink the attached list below what
-    # the item already had — the live bug this fixes (see the plan's
-    # Global Constraints) overwrote `media_order` with only the images
-    # that happened to resolve, losing the rest.
-    test "a failing download keeps the item's previous media_order entry for that image", %{
-      item: item,
-      user_uuid: user_uuid
-    } do
-      {:ok, uuid_a} = store_fixture_file("https://cdn.example/old-a.jpg", user_uuid)
-      {:ok, uuid_b} = store_fixture_file("https://cdn.example/old-b.jpg", user_uuid)
-      {:ok, uuid_c} = store_fixture_file("https://cdn.example/old-c.jpg", user_uuid)
+    # Review fix (Block 7b): a reverted version of this fallback bound a
+    # failed image's Shopify id to whatever uuid happened to sit at the
+    # SAME LIST POSITION in the item's previous `media_order` — wrong the
+    # moment a new image is inserted ahead of an existing one, and the
+    # bad binding then stuck forever (a later successful download of
+    # that image was never attempted again, since the id already
+    # "resolved"). The only bindings that may ever be trusted are keyed
+    # by Shopify image id (`image_ids`) or by download source URL
+    # (`source_url`) — never by position. An id with neither is skipped,
+    # not bound to anything, so a later run retries it for real.
+    test "a failing download for a genuinely new image is skipped (not bound by position) and retries next run",
+         %{item: item, user_uuid: user_uuid} do
+      {:ok, image_a} = store_fixture_file("https://cdn.example/first.jpg", user_uuid)
+      {:ok, image_b} = store_fixture_file("https://cdn.example/second.jpg", user_uuid)
 
       {:ok, item} =
-        Attachments.attach_files(item, [uuid_a, uuid_b, uuid_c], order: [uuid_a, uuid_b, uuid_c])
+        Attachments.attach_files(item, [image_a, image_b], order: [image_a, image_b])
 
-      {downloader, _counter} =
-        counting_downloader(user_uuid, ["https://cdn.example/second.jpg"])
+      {:ok, item} =
+        Catalogue.update_item(item, %{
+          data:
+            put_in(item.data, ["ecommerce", "shopify", "image_ids"], %{
+              "101" => image_a,
+              "201" => image_b
+            })
+        })
 
-      assert {:ok, %{downloaded: 2, reused: 1, attached: 3, errors: [error]}} =
-               Writer.sync_images(item, three_image_product(),
-                 downloader: downloader,
+      # 301 is a new image, inserted ahead of 201 in Shopify's own
+      # order — the exact shape that made the position-based fallback
+      # bind it to `image_b` (301's index used to land on 201's slot).
+      product = %{
+        "id" => 888,
+        "images" => [
+          %{"id" => 101, "src" => "https://cdn.example/first.jpg", "position" => 1},
+          %{"id" => 301, "src" => "https://cdn.example/new.jpg", "position" => 2},
+          %{"id" => 201, "src" => "https://cdn.example/second.jpg", "position" => 3}
+        ]
+      }
+
+      {failing_downloader, _counter} =
+        counting_downloader(user_uuid, ["https://cdn.example/new.jpg"])
+
+      assert {:ok, %{downloaded: 0, reused: 2, attached: 2, errors: [{"301", :not_found}]}} =
+               Writer.sync_images(item, product,
+                 downloader: failing_downloader,
                  user_uuid: user_uuid
                )
 
-      assert {"201", :not_found} = error
-
       updated = Catalogue.get_item!(item.uuid)
-      first_uuid = updated.data["ecommerce"]["shopify"]["image_ids"]["101"]
-      third_uuid = updated.data["ecommerce"]["shopify"]["image_ids"]["301"]
+      refute Map.has_key?(updated.data["ecommerce"]["shopify"]["image_ids"], "301")
+      assert updated.data["media_order"] == [image_a, image_b]
 
-      assert updated.data["ecommerce"]["shopify"]["image_ids"]["201"] == uuid_b
-      assert updated.data["media_order"] == [first_uuid, uuid_b, third_uuid]
+      # A later run, once the image can actually be downloaded, binds
+      # 301 for real — it was never poisoned with a fake binding.
+      {healthy_downloader, counter} = counting_downloader(user_uuid)
+
+      assert {:ok, %{downloaded: 1, reused: 2, attached: 3, errors: []}} =
+               Writer.sync_images(updated, product,
+                 downloader: healthy_downloader,
+                 user_uuid: user_uuid
+               )
+
+      assert Agent.get(counter, & &1) == 1
+
+      final = Catalogue.get_item!(item.uuid)
+      new_uuid = final.data["ecommerce"]["shopify"]["image_ids"]["301"]
+      assert new_uuid
+      assert final.data["media_order"] == [image_a, new_uuid, image_b]
     end
 
     test "no user_uuid given inserts files under the default (first-admin) actor", %{

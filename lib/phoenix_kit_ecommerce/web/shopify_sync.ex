@@ -803,7 +803,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # `%{}` when never configured) — shown here so an operator clicking
   # "Sync collections" sees which of the store's collections will
   # actually become categories, without opening the config.
-  defp collections_filter_summary(filter) do
+  defp collections_filter_summary(filter) when is_map(filter) do
     prefix = filter["prefix"]
     exclude = filter["exclude"] || []
 
@@ -816,6 +816,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       )
     end
   end
+
+  # A `shop_config` value stored as something other than a map (e.g. an
+  # operator hand-edited it, or it predates this key's map shape)
+  # degrades to "no filter" instead of raising on mount.
+  defp collections_filter_summary(_filter),
+    do: gettext("Collections filter: none — every Shopify collection becomes a category.")
 
   # Groups `changes` by field, in `@sections` order, dropping fields with
   # no matching changes. A change appears once per field it differs on.
