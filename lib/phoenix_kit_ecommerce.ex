@@ -4223,11 +4223,48 @@ defmodule PhoenixKitEcommerce do
   # "already base" - a `nil` rate here means the frozen figure genuinely
   # cannot be computed, so this returns `nil` rather than the display
   # total mislabeled as base.
+  #
+  # The PRODUCT portion is summed from each line's own EXACT base
+  # components (`base_unit_price × quantity`) rather than dividing the
+  # cart's already-twice-rounded display `total` back by the rate: 138.00
+  # base -> 125.45 display -> naive total/rate gives 137.99, a cent under
+  # the real 138.00, purely from rounding the SAME number twice in
+  # opposite directions. Summing the base amounts that were never rounded
+  # away avoids that entirely. `unit_price / rate` is the fallback ONLY
+  # for a line that predates the `base_unit_price` column.
+  #
+  # Shipping/tax/discount have no per-line base figure to sum (a shipping
+  # method's cost and a tax rate are computed once over the whole cart,
+  # not per line) - that non-product remainder IS divided back through
+  # the rate, same as before. This is therefore an approximation, not an
+  # exact frozen figure the way the product subtotal is: good enough for
+  # a REPORTING total (§4.5), not a value anything charges against.
   defp base_total(%Cart{currency: same, base_currency: same} = cart), do: cart.total
   defp base_total(%Cart{exchange_rate: nil}), do: nil
 
   defp base_total(%Cart{} = cart) do
-    cart.total |> Decimal.div(cart.exchange_rate) |> Decimal.round(2)
+    items = cart.items || []
+
+    product_base =
+      Enum.reduce(items, Decimal.new("0"), fn item, acc ->
+        Decimal.add(acc, base_line_amount(item, cart.exchange_rate))
+      end)
+
+    non_product =
+      (cart.shipping_amount || Decimal.new("0"))
+      |> Decimal.add(cart.tax_amount || Decimal.new("0"))
+      |> Decimal.sub(cart.discount_amount || Decimal.new("0"))
+      |> Decimal.div(cart.exchange_rate)
+
+    product_base |> Decimal.add(non_product) |> Decimal.round(2)
+  end
+
+  defp base_line_amount(%CartItem{base_unit_price: %Decimal{}} = item, _rate) do
+    Decimal.mult(item.base_unit_price, item.quantity)
+  end
+
+  defp base_line_amount(%CartItem{} = item, rate) do
+    item.unit_price |> Decimal.mult(item.quantity) |> Decimal.div(rate)
   end
 
   defp calculate_method_shipping(nil, _subtotal, _weight, _country), do: Decimal.new("0")
