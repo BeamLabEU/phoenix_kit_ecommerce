@@ -4811,3 +4811,13 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:773
+#, elixir-autogen, elixir-format
+msgid "A sync of this kind is already running."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:777
+#, elixir-autogen, elixir-format
+msgid "Could not queue the sync — try again."
+msgstr ""

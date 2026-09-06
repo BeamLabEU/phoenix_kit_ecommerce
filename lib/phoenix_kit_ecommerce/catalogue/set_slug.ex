@@ -4,11 +4,17 @@ defmodule PhoenixKitEcommerce.Catalogue.SetSlug do
   bare attribute-set slug `Writer.sync_variants/2` looks the catalogue set
   up by (`"catalogue_set_" <> slug` is the blueprint's own `:name`).
 
-  Pure, ASCII-folding-free — identical algorithm to the app's
-  `Decor3dprint.CatalogueMigration.Mapping.set_slug/1`, generalized to
-  start from an arbitrary raw label instead of an already-underscored
-  key: downcase, collapse every run of non `[a-z0-9]` characters to a
-  single `_`, trim leading/trailing `_`.
+  Pure, ASCII-folding-free — a SUPERSET of the app's
+  `Decor3dprint.CatalogueMigration.Mapping.set_slug/1` algorithm
+  (downcase, collapse `_+`, trim `_`), generalized to start from an
+  arbitrary raw label instead of an already-underscored key: this
+  version ALSO collapses every run of non `[a-z0-9]` characters (not
+  only `_`) to a single `_` — the app's own migrated keys
+  (`main_color`, `cup_color`, `basket_main_color`) never contain any
+  other punctuation, so both algorithms agree on them, but they diverge
+  on option names with hyphens or accents (`"Größe"` mangles to
+  `"gr_e"` here — see `set_slug_test.exs`), which the app's version
+  never has to handle at all.
   """
 
   @doc """
@@ -27,6 +33,5 @@ defmodule PhoenixKitEcommerce.Catalogue.SetSlug do
     |> String.downcase()
     |> String.replace(~r/[^a-z0-9]+/, "_")
     |> String.trim("_")
-    |> String.replace(~r/_+/, "_")
   end
 end

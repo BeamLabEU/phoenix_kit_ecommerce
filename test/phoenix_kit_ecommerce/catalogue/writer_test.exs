@@ -88,4 +88,29 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
       assert updated.data["ecommerce"]["shopify"] == %{"handle" => "backfill-mug"}
     end
   end
+
+  describe "create_from_shopify/2 — Shopify identity" do
+    setup do
+      # `create_from_shopify/2` resolves ITS catalogue internally
+      # (`Query.catalogue_uuid/0`, default name "decor3dprint") rather
+      # than taking one as an argument — unlike this file's other
+      # `setup`, which only needs SOME catalogue for `update_from_shopify/3`
+      # (it never re-resolves one for an existing item).
+      {:ok, _catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+      :ok
+    end
+
+    test "stringifies product_id, matching update_from_shopify/3's own backfill shape" do
+      shopify_product = %{
+        "handle" => "new-widget",
+        "title" => "New Widget",
+        "id" => 555_123,
+        "variants" => [%{"price" => "9.99"}]
+      }
+
+      assert {:ok, item} = Writer.create_from_shopify(shopify_product, "en")
+
+      assert item.data["ecommerce"]["shopify"]["product_id"] == "555123"
+    end
+  end
 end

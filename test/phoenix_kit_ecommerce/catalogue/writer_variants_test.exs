@@ -209,6 +209,28 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
       refute Map.has_key?(updated.data["ecommerce"]["price_modifiers"], "material")
     end
 
+    test "preserves a price modifier for a set this sync run never touched", %{item: item} do
+      # An operator-authored modifier for a set Shopify has never driven
+      # (not in `set_slugs`, so `sync_variants/2` never attaches or
+      # detaches it) — `finalize_variant_sync/3` must write only the
+      # `size`/`color` keys this run computed, not replace the whole
+      # `price_modifiers` map.
+      {:ok, item} =
+        Catalogue.update_item(item, %{
+          data:
+            put_in(item.data, ["ecommerce", "price_modifiers"], %{
+              "brand" => %{"acme" => "1.50"}
+            })
+        })
+
+      assert {:ok, %{sets: 2}} = Writer.sync_variants(item, two_option_product())
+
+      updated = Catalogue.get_item!(item.uuid)
+      assert updated.data["ecommerce"]["price_modifiers"]["brand"] == %{"acme" => "1.50"}
+      assert Map.has_key?(updated.data["ecommerce"]["price_modifiers"], "size")
+      assert Map.has_key?(updated.data["ecommerce"]["price_modifiers"], "color")
+    end
+
     test "a product with only Shopify's default option attaches no sets", %{item: item} do
       product = %{
         "options" => [%{"name" => "Title", "position" => 1, "values" => ["Default Title"]}],

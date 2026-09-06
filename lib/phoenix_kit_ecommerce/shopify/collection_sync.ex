@@ -18,19 +18,22 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   `custom_collections` then `smart_collections`, in API order) plus
   `category.data["ecommerce"]["shopify"]["collection_id"]`.
 
-  Then, walking collections in that same order, each collection's
-  product ids (`fetch_collection_product_ids/2` — already in the
-  collection's own sort order) are matched to catalogue items by
-  `data["ecommerce"]["shopify"]["product_id"]`. An item already sitting
-  in ANY collection-derived category (its own or another's, from this
-  run or a previous one) is left there — a product listed in two
-  collections keeps whichever one it was placed in first; only a
-  same-category revisit updates `item.position`. An item with no
-  collection-derived category yet (nil, or some unrelated/legacy
-  category) is assigned to the collection currently being walked, with
-  `item.position` = its index in that collection's product list. A
-  product id with no matching item is collected into
-  `:unmatched_products` instead.
+  Then every resolved collection's product ids
+  (`fetch_collection_product_ids/2` — already in the collection's own
+  sort order) are fetched, and each distinct product id is matched to a
+  catalogue item by `data["ecommerce"]["shopify"]["product_id"]` and
+  reconciled against the FULL set of collections that list IT (not
+  every collection-derived category in the catalogue): if the item's
+  CURRENT category is one of ITS OWN collections, it keeps that one
+  (updating `item.position` when the list position changed since a
+  previous run); otherwise it is assigned to the first of its own
+  collections in API order, at that collection's list position. A
+  product moved in Shopify from one collection to another therefore
+  does get repositioned — an item's current category only survives when
+  Shopify itself still lists it there. A product id with no matching
+  item is collected into `:unmatched_products` instead (deduplicated —
+  the same missing id is never reported twice even if more than one
+  collection lists it).
 
   A no-op — `{:error, :catalogue_source_inactive}` — when
   `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
@@ -84,25 +87,19 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
     client = Keyword.get(opts, :client, AdminClient)
 
     with {:ok, catalogue_uuid} <- resolve_catalogue_uuid(Keyword.get(opts, :catalogue_uuid)),
-         {:ok, collections} <- client.fetch_collections(opts) do
-      {resolved, created, matched} = resolve_categories(collections, catalogue_uuid)
-      collection_category_uuids = MapSet.new(resolved, & &1.category_uuid)
-      item_index = items_by_product_id(catalogue_uuid)
-
-      case assign_products(resolved, client, opts, item_index, collection_category_uuids) do
-        {:ok, _item_index, assigned, repositioned, unmatched} ->
-          {:ok,
-           %{
-             categories_created: created,
-             categories_matched: matched,
-             items_assigned: assigned,
-             items_repositioned: repositioned,
-             unmatched_products: Enum.reverse(unmatched)
-           }}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+         {:ok, collections} <- client.fetch_collections(opts),
+         {:ok, resolved, created, matched} <- resolve_categories(collections, catalogue_uuid),
+         {:ok, per_collection} <- fetch_collection_products(resolved, client, opts),
+         {:ok, assigned, repositioned, unmatched} <-
+           assign_products(per_collection, items_by_product_id(catalogue_uuid)) do
+      {:ok,
+       %{
+         categories_created: created,
+         categories_matched: matched,
+         items_assigned: assigned,
+         items_repositioned: repositioned,
+         unmatched_products: unmatched
+       }}
     end
   end
 
@@ -117,21 +114,32 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
     primary = Translations.default_language()
     existing = Catalogue.list_categories_metadata_for_catalogue(catalogue_uuid)
 
-    {resolved, _categories, created, matched} =
-      Enum.reduce(collections, {[], existing, 0, 0}, fn collection,
-                                                        {resolved, categories, created, matched} ->
-        case resolve_one_category(collection, categories, catalogue_uuid, primary) do
-          {:matched, category} ->
-            entry = %{id: collection["id"], category_uuid: category.uuid}
-            {[entry | resolved], replace_category(categories, category), created, matched + 1}
+    collections
+    |> Enum.reduce_while({:ok, [], existing, 0, 0}, fn collection,
+                                                       {:ok, resolved, categories, created,
+                                                        matched} ->
+      case resolve_one_category(collection, categories, catalogue_uuid, primary) do
+        {:ok, {:matched, category}} ->
+          entry = %{id: collection["id"], category_uuid: category.uuid}
 
-          {:created, category} ->
-            entry = %{id: collection["id"], category_uuid: category.uuid}
-            {[entry | resolved], [category | categories], created + 1, matched}
-        end
-      end)
+          {:cont,
+           {:ok, [entry | resolved], replace_category(categories, category), created, matched + 1}}
 
-    {Enum.reverse(resolved), created, matched}
+        {:ok, {:created, category}} ->
+          entry = %{id: collection["id"], category_uuid: category.uuid}
+          {:cont, {:ok, [entry | resolved], [category | categories], created + 1, matched}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, resolved, _categories, created, matched} ->
+        {:ok, Enum.reverse(resolved), created, matched}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp resolve_one_category(collection, categories, catalogue_uuid, primary) do
@@ -142,14 +150,23 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
 
     case find_category(categories, handle, title, primary) do
       {:ok, category} ->
-        {:ok, updated} = update_matched_category(category, position, collection_id)
-        {:matched, updated}
+        case update_matched_category(category, position, collection_id) do
+          {:ok, updated} -> {:ok, {:matched, updated}}
+          {:error, reason} -> {:error, reason}
+        end
 
       :not_found ->
-        {:ok, category} =
-          create_matched_category(catalogue_uuid, title, handle, position, collection_id, primary)
-
-        {:created, category}
+        case create_matched_category(
+               catalogue_uuid,
+               title,
+               handle,
+               position,
+               collection_id,
+               primary
+             ) do
+          {:ok, category} -> {:ok, {:created, category}}
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
 
@@ -217,106 +234,110 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
     get_in(item.data || %{}, ["ecommerce", "shopify", "product_id"])
   end
 
-  defp assign_products(resolved, client, opts, item_index, collection_category_uuids) do
-    Enum.reduce_while(resolved, {:ok, item_index, 0, 0, []}, fn collection, acc ->
-      handle_collection(collection, client, opts, collection_category_uuids, acc)
+  # One `fetch_collection_product_ids/2` call per resolved collection —
+  # same calls the old, per-collection walk already made, just gathered
+  # up front so `assign_products/2` can reconcile each product against
+  # the FULL set of collections that list it, not only the one being
+  # walked when it happens to be seen first.
+  defp fetch_collection_products(resolved, client, opts) do
+    resolved
+    |> Enum.reduce_while({:ok, []}, fn collection, {:ok, acc} ->
+      case client.fetch_collection_product_ids(collection.id, opts) do
+        {:ok, product_ids} -> {:cont, {:ok, [{collection.category_uuid, product_ids} | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
     end)
-  end
-
-  defp handle_collection(
-         collection,
-         client,
-         opts,
-         collection_category_uuids,
-         {:ok, index, assigned, repositioned, unmatched}
-       ) do
-    with {:ok, product_ids} <- client.fetch_collection_product_ids(collection.id, opts),
-         {:ok, _index, _assigned, _repositioned, _unmatched} = ok <-
-           assign_collection_products(
-             product_ids,
-             collection.category_uuid,
-             collection_category_uuids,
-             index,
-             assigned,
-             repositioned,
-             unmatched
-           ) do
-      {:cont, ok}
-    else
-      {:error, reason} -> {:halt, {:error, reason}}
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
     end
   end
 
-  defp assign_collection_products(
-         product_ids,
-         category_uuid,
-         collection_category_uuids,
-         index,
-         assigned,
-         repositioned,
-         unmatched
-       ) do
-    product_ids
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, index, assigned, repositioned, unmatched}, fn {product_id,
-                                                                              position},
-                                                                             {:ok, index,
-                                                                              assigned,
-                                                                              repositioned,
-                                                                              unmatched} ->
+  defp assign_products(per_collection, item_index) do
+    product_categories = build_product_categories(per_collection)
+
+    per_collection
+    |> Enum.flat_map(fn {_category_uuid, product_ids} -> product_ids end)
+    |> Enum.uniq()
+    |> Enum.reduce_while({:ok, item_index, 0, 0, []}, fn product_id,
+                                                         {:ok, index, assigned, repositioned,
+                                                          unmatched} ->
       case Map.fetch(index, to_string(product_id)) do
         :error ->
           {:cont, {:ok, index, assigned, repositioned, [product_id | unmatched]}}
 
         {:ok, item} ->
-          reconcile_item(
-            item,
-            category_uuid,
-            position,
-            collection_category_uuids,
-            index,
-            assigned,
-            repositioned,
-            unmatched
-          )
+          categories = Map.fetch!(product_categories, to_string(product_id))
+          reconcile_item(item, categories, index, assigned, repositioned, unmatched)
       end
+    end)
+    |> case do
+      {:ok, _index, assigned, repositioned, unmatched} ->
+        {:ok, assigned, repositioned, Enum.reverse(unmatched)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # `product_id_string => [{category_uuid, position}, ...]` — one entry
+  # per collection that lists this product, in the SAME order
+  # `per_collection` itself is in (i.e. API/collection order), position
+  # = the product's own index within THAT collection's list.
+  defp build_product_categories(per_collection) do
+    Enum.reduce(per_collection, %{}, fn {category_uuid, product_ids}, acc ->
+      product_ids
+      |> Enum.with_index()
+      |> Enum.reduce(acc, fn {product_id, position}, acc ->
+        key = to_string(product_id)
+        Map.update(acc, key, [{category_uuid, position}], &(&1 ++ [{category_uuid, position}]))
+      end)
     end)
   end
 
-  defp reconcile_item(
-         item,
-         category_uuid,
-         position,
-         collection_category_uuids,
-         index,
-         assigned,
-         repositioned,
-         unmatched
-       ) do
-    cond do
-      item.category_uuid == category_uuid ->
-        with_reposition(item, position, index, assigned, repositioned, unmatched)
+  defp reconcile_item(item, categories, index, assigned, repositioned, unmatched) do
+    {target_category, target_position} = target_category_and_position(item, categories)
 
-      MapSet.member?(collection_category_uuids, item.category_uuid) ->
+    cond do
+      item.category_uuid == target_category and item.position == target_position ->
         {:cont, {:ok, index, assigned, repositioned, unmatched}}
 
+      item.category_uuid == target_category ->
+        with_reposition(item, target_position, index, assigned, repositioned, unmatched)
+
       true ->
-        with_assignment(item, category_uuid, position, index, assigned, repositioned, unmatched)
+        with_assignment(
+          item,
+          target_category,
+          target_position,
+          index,
+          assigned,
+          repositioned,
+          unmatched
+        )
+    end
+  end
+
+  # Keep the item's current category when Shopify itself still lists the
+  # product there (one of `categories`'s own entries); otherwise fall
+  # back to the first collection in API order.
+  defp target_category_and_position(item, categories) do
+    case Enum.find(categories, fn {category_uuid, _position} ->
+           category_uuid == item.category_uuid
+         end) do
+      nil -> List.first(categories)
+      match -> match
     end
   end
 
   defp with_reposition(item, position, index, assigned, repositioned, unmatched) do
-    if item.position == position do
-      {:cont, {:ok, index, assigned, repositioned, unmatched}}
-    else
-      case Catalogue.update_item(item, %{position: position}) do
-        {:ok, updated} ->
-          index = Map.put(index, shopify_product_id(updated), updated)
-          {:cont, {:ok, index, assigned, repositioned + 1, unmatched}}
+    case Catalogue.update_item(item, %{position: position}) do
+      {:ok, updated} ->
+        index = Map.put(index, shopify_product_id(updated), updated)
+        {:cont, {:ok, index, assigned, repositioned + 1, unmatched}}
 
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
+      {:error, reason} ->
+        {:halt, {:error, reason}}
     end
   end
 
@@ -324,7 +345,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
     case Catalogue.update_item(item, %{category_uuid: category_uuid, position: position}) do
       {:ok, updated} ->
         index = Map.put(index, shopify_product_id(updated), updated)
-        {:cont, {:ok, index, assigned + 1, repositioned + 1, unmatched}}
+        {:cont, {:ok, index, assigned + 1, repositioned, unmatched}}
 
       {:error, reason} ->
         {:halt, {:error, reason}}

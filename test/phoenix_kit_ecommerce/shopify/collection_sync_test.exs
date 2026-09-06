@@ -105,6 +105,36 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
     def fetch_collection_product_ids(2, _opts), do: {:ok, [111, 222]}
   end
 
+  # Same two collections as `Stub`, except product 111 has moved out of
+  # "frames" entirely and now lives only in "gifts" — used by the
+  # moved-product test below.
+  defmodule MovedStub do
+    @moduledoc false
+
+    def fetch_collections(_opts) do
+      {:ok,
+       [
+         %{"id" => 1, "handle" => "frames", "title" => "Frames", "position" => 0},
+         %{"id" => 2, "handle" => "gifts", "title" => "Gifts", "position" => 1}
+       ]}
+    end
+
+    def fetch_collection_product_ids(1, _opts), do: {:ok, []}
+    def fetch_collection_product_ids(2, _opts), do: {:ok, [111]}
+  end
+
+  # A single collection whose handle collides, cross-catalogue, with an
+  # already-taken slug — used by the create-path error-propagation test.
+  defmodule CollisionStub do
+    @moduledoc false
+
+    def fetch_collections(_opts) do
+      {:ok, [%{"id" => 1, "handle" => "gifts", "title" => "Gifts", "position" => 0}]}
+    end
+
+    def fetch_collection_product_ids(1, _opts), do: {:ok, []}
+  end
+
   describe "run/1 — legacy source" do
     test "is a no-op returning :catalogue_source_inactive" do
       assert CollectionSync.run(client: Stub, catalogue_uuid: Ecto.UUID.generate()) ==
@@ -170,7 +200,11 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
 
       assert {:ok, result} = CollectionSync.run(client: Stub, catalogue_uuid: catalogue.uuid)
       assert result.items_assigned == 1
-      assert result.items_repositioned == 1
+      # A brand-new category assignment is counted only under
+      # `items_assigned` — counting it under `items_repositioned` too
+      # would overstate the number of items whose position changed
+      # WITHIN an already-correct category.
+      assert result.items_repositioned == 0
 
       [gifts] =
         catalogue.uuid
@@ -206,6 +240,38 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
       assert result.items_assigned == 0
     end
 
+    test "a product moved to a different collection in Shopify is reassigned, not left in its old category",
+         %{catalogue: catalogue} do
+      {:ok, frames} =
+        Catalogue.create_category(%{
+          name: "Frames",
+          catalogue_uuid: catalogue.uuid,
+          slug: %{"en" => "frames"},
+          position: 0
+        })
+
+      # Product 111 currently sits in Frames locally, but THIS stub's
+      # frames list is empty and its gifts list carries 111 — Shopify
+      # itself moved it. The old (buggy) rule kept any item already in a
+      # collection-derived category regardless of which one; the fixed
+      # rule only keeps it when the item's OWN collections still list it
+      # there.
+      item =
+        create_item(catalogue.uuid, "Frame A", 111, %{category_uuid: frames.uuid, position: 3})
+
+      assert {:ok, result} = CollectionSync.run(client: MovedStub, catalogue_uuid: catalogue.uuid)
+      assert result.items_assigned == 1
+
+      [gifts] =
+        catalogue.uuid
+        |> Catalogue.list_categories_metadata_for_catalogue()
+        |> Enum.filter(&(&1.name == "Gifts"))
+
+      updated = Catalogue.get_item!(item.uuid)
+      assert updated.category_uuid == gifts.uuid
+      assert updated.position == 0
+    end
+
     test "a product id with no matching local item is reported unmatched", %{catalogue: catalogue} do
       create_item(catalogue.uuid, "Frame A", 111)
       create_item(catalogue.uuid, "Gift A", 222)
@@ -226,6 +292,27 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
       assert second.items_assigned == 0
       assert second.items_repositioned == 0
       assert second.unmatched_products == [999]
+    end
+
+    test "a create-path slug collision returns an error tuple instead of crashing", %{
+      catalogue: catalogue
+    } do
+      # `phoenix_kit_cat_category_slugs`'s PK is `(lang, value)` — global
+      # across every catalogue, not scoped to this one — so a category in
+      # a completely unrelated catalogue can already own the slug
+      # `create_matched_category/6` is about to write for a collection
+      # with no LOCAL match by handle or name.
+      {:ok, other_catalogue} = Catalogue.create_catalogue(%{name: "unrelated-catalogue"})
+
+      {:ok, _colliding} =
+        Catalogue.create_category(%{
+          name: "Unrelated Category",
+          catalogue_uuid: other_catalogue.uuid,
+          slug: %{"en" => "gifts"}
+        })
+
+      assert {:error, %Ecto.Changeset{}} =
+               CollectionSync.run(client: CollisionStub, catalogue_uuid: catalogue.uuid)
     end
 
     test "a category with no matching collection is left untouched", %{catalogue: catalogue} do

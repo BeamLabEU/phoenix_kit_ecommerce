@@ -60,8 +60,8 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
 
     {sets, modifiers} =
       options
-      |> Enum.reject(&default_option?/1)
       |> Enum.with_index(1)
+      |> Enum.reject(fn {option, _fallback_position} -> default_option?(option) end)
       |> Enum.reduce({[], %{}}, fn {option, fallback_position}, {sets_acc, modifiers_acc} ->
         position = option["position"] || fallback_position
         name = option["name"]

@@ -183,11 +183,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       else
         actor_uuid = socket.assigns.phoenix_kit_current_scope.user.uuid
 
-        %{"kind" => kind, "actor_uuid" => actor_uuid}
-        |> ShopifyMediaSyncWorker.new()
-        |> Oban.insert()
+        result =
+          %{"kind" => kind, "actor_uuid" => actor_uuid}
+          |> ShopifyMediaSyncWorker.new()
+          |> Oban.insert()
 
-        {:noreply, put_flash(socket, :info, gettext("Sync queued — running in the background."))}
+        {:noreply, flash_media_sync_enqueue(socket, result)}
       end
     end)
   end
@@ -759,6 +760,22 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   defp media_sync_in_flight?(%{"kind" => kind, "finished_at" => nil}, kind), do: true
   defp media_sync_in_flight?(_progress, _kind), do: false
+
+  # `Oban.insert/1`'s result, not just its call, decides the flash: on a
+  # unique-constraint hit it returns `{:ok, %Job{conflict?: true}}` —
+  # nothing was actually queued — and on a DB error `{:error, changeset}`;
+  # only a genuine fresh insert gets the "running in the background" copy.
+  defp flash_media_sync_enqueue(socket, {:ok, %Oban.Job{conflict?: false}}) do
+    put_flash(socket, :info, gettext("Sync queued — running in the background."))
+  end
+
+  defp flash_media_sync_enqueue(socket, {:ok, %Oban.Job{conflict?: true}}) do
+    put_flash(socket, :info, gettext("A sync of this kind is already running."))
+  end
+
+  defp flash_media_sync_enqueue(socket, {:error, _changeset}) do
+    put_flash(socket, :error, gettext("Could not queue the sync — try again."))
+  end
 
   defp media_sync_summary(%{
          "kind" => kind,

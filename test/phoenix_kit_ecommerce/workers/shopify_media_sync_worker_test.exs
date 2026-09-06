@@ -42,10 +42,14 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
   setup do
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} =
-      Catalogue.create_catalogue(%{
-        name: "media-sync-worker-#{System.unique_integer([:positive])}"
-      })
+    # Named "decor3dprint" (the adapter's own default, `Query.
+    # catalogue_uuid/0`'s `@default_catalogue_name`) — not a unique
+    # per-test name: the worker resolves ITS catalogue by looking up the
+    # catalogue named `get_config("shop_catalogue") || "decor3dprint"`,
+    # so a differently-named catalogue here is invisible to it (each test
+    # still runs in its own rolled-back sandbox transaction, so reusing
+    # this name across tests in this file is safe).
+    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
 
     %{catalogue: catalogue}
   end

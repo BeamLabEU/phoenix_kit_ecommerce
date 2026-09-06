@@ -71,7 +71,15 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
     queue: :shop_imports,
     max_attempts: 3,
     unique: [
-      period: 300,
+      # `:infinity`, not a fixed window: uniqueness must depend on job
+      # STATE, not age — a real "images" run over ~665 products with HTTP
+      # downloads can run well past any fixed window, after which a
+      # second enqueue of the same kind would be accepted while the
+      # first is still `:executing`, racing two read-modify-write passes
+      # over the same items. `states:` already excludes `:completed`/
+      # `:cancelled`/`:discarded`, so a FINISHED run never blocks the
+      # next one.
+      period: :infinity,
       keys: [:kind],
       states: [:available, :scheduled, :executing, :retryable]
     ]

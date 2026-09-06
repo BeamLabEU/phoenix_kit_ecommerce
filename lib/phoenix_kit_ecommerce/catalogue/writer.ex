@@ -121,8 +121,11 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   `unit "piece"`; `status "active"`; `category_uuid nil` (uncategorized,
   same as a legacy-sync-created product used to be — sorting into a
   category is a manual follow-up either way); `data["ecommerce"]` carries
-  `shopify: %{"handle" => ..., "product_id" => ...}` and `shop_status`
-  derived from the Shopify product's own `status`.
+  `shopify: %{"handle" => ..., "product_id" => ...}` (`product_id`
+  stringified, same as `update_from_shopify/3`'s own backfill — every
+  reader, `CollectionSync` and the Task 5 worker's item index included,
+  matches it as a string) and `shop_status` derived from the Shopify
+  product's own `status`.
   """
   @spec create_from_shopify(map(), String.t()) ::
           {:ok, Item.t()}
@@ -255,14 +258,26 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
   defp finalize_variant_sync(item, results, values_created) do
     new_slugs = Enum.map(results, & &1.slug)
-    price_modifiers = Map.new(results, &{&1.slug, &1.value_amounts})
+    new_modifiers = Map.new(results, &{&1.slug, &1.value_amounts})
 
     ecommerce = get_in(item.data || %{}, ["ecommerce"]) || %{}
     previous_slugs = get_in(ecommerce, ["shopify", "set_slugs"]) || []
+    stale_slugs = previous_slugs -- new_slugs
 
-    detach_stale_sets(item.uuid, previous_slugs -- new_slugs)
+    detach_stale_sets(item.uuid, stale_slugs)
 
     shopify = Map.put(ecommerce["shopify"] || %{}, "set_slugs", new_slugs)
+
+    # Write per set, never replace the whole map: `price_modifiers` can
+    # also carry a set THIS sync never drove (a set never listed in
+    # `set_slugs` — an operator-authored modifier, or a legacy-migration
+    # key whose Shopify option name normalises to a different slug) —
+    # only the stale, previously-Shopify-owned slugs (already detached
+    # above) are dropped; every set in `new_modifiers` is (re)written.
+    price_modifiers =
+      (ecommerce["price_modifiers"] || %{})
+      |> Map.drop(stale_slugs)
+      |> Map.merge(new_modifiers)
 
     ecommerce =
       ecommerce
@@ -519,7 +534,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "shop_status" => shopify_shop_status(shopify_product["status"]),
       "shopify" => %{
         "handle" => shopify_product["handle"],
-        "product_id" => shopify_product["id"]
+        "product_id" => shopify_product["id"] && to_string(shopify_product["id"])
       }
     }
   end

@@ -125,6 +125,27 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       assert_enqueued(worker: ShopifyMediaSyncWorker, args: %{"kind" => "images"})
     end
 
+    test "a second click before the first job starts hits Oban's own uniqueness — no second job, an info flash instead of the success wording",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+
+      html1 = render_click(element(view, "#sync-media-images"))
+      assert html1 =~ "Sync queued"
+
+      # `media_sync_in_flight?/2` reads the PROGRESS record, which the
+      # worker only writes once it actually starts running — nothing
+      # updates it just from enqueueing, so the button itself stays
+      # enabled and a second click reaches `Oban.insert/1` for real. It
+      # is Oban's own `unique:` (still `:available`, per Global
+      # Constraints — no job is ever processed here) that must catch it.
+      html2 = render_click(element(view, "#sync-media-images"))
+      refute html2 =~ "Sync queued"
+      assert html2 =~ "already running"
+
+      assert [_one_job] =
+               all_enqueued(worker: ShopifyMediaSyncWorker, args: %{"kind" => "images"})
+    end
+
     test "denied without shop.run_imports — no flash success, nothing enqueued", %{conn: conn} do
       conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
       {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
@@ -145,7 +166,13 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       refute has_element?(view, "#sync-media-variants[disabled]")
       assert html =~ "images"
 
-      render_click(element(view, "#sync-media-images"))
+      # Not `render_click(element(view, "#sync-media-images"))` —
+      # `Phoenix.LiveViewTest` refuses to click a disabled element, which
+      # would never reach `handle_event("run_media_sync", ...)` at all
+      # and leave its own in-flight guard (`media_sync_in_flight?/2`)
+      # completely untested. Drive the event directly, the way a
+      # tampered/stale client request would.
+      render_click(view, "run_media_sync", %{"kind" => "images"})
       refute_enqueued(worker: ShopifyMediaSyncWorker, args: %{"kind" => "images"})
     end
 

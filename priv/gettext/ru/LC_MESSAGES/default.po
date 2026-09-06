@@ -4834,3 +4834,13 @@ msgstr "Медиа и коллекции"
 #, elixir-autogen, elixir-format
 msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
 msgstr "Выполняется в фоновом режиме: изображения товаров загружаются в хранилище, опции становятся наборами атрибутов и модификаторами цены, а коллекции Shopify становятся категориями каталога."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:773
+#, elixir-autogen, elixir-format
+msgid "A sync of this kind is already running."
+msgstr "Синхронизация этого вида уже выполняется."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:777
+#, elixir-autogen, elixir-format
+msgid "Could not queue the sync — try again."
+msgstr "Не удалось поставить синхронизацию в очередь — попробуйте снова."
