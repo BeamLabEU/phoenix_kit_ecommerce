@@ -4766,3 +4766,48 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "comma, separated, tags"
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:190
+#, elixir-autogen, elixir-format
+msgid "Sync queued — running in the background."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:754
+#, elixir-autogen, elixir-format
+msgid "Sync variants & prices"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:755
+#, elixir-autogen, elixir-format
+msgid "Sync images"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:756
+#, elixir-autogen, elixir-format
+msgid "Sync collections"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:770
+#, elixir-autogen, elixir-format
+msgid "finished"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:770
+#, elixir-autogen, elixir-format
+msgid "running"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:772
+#, elixir-autogen, elixir-format
+msgid "%{kind}: %{status} (%{done}/%{total}, %{error_count} errors)"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1369
+#, elixir-autogen, elixir-format
+msgid "Media & collections"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1372
+#, elixir-autogen, elixir-format
+msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
+msgstr ""

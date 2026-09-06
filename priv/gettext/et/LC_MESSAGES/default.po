@@ -4765,3 +4765,48 @@ msgstr "Kaal (grammides)"
 #, elixir-autogen, elixir-format
 msgid "comma, separated, tags"
 msgstr "komadega, eraldatud, sildid"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:190
+#, elixir-autogen, elixir-format
+msgid "Sync queued — running in the background."
+msgstr "Sünkroonimine on järjekorras — töötab taustal."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:754
+#, elixir-autogen, elixir-format
+msgid "Sync variants & prices"
+msgstr "Sünkrooni variandid ja hinnad"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:755
+#, elixir-autogen, elixir-format
+msgid "Sync images"
+msgstr "Sünkrooni pildid"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:756
+#, elixir-autogen, elixir-format
+msgid "Sync collections"
+msgstr "Sünkrooni kollektsioonid"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:770
+#, elixir-autogen, elixir-format
+msgid "finished"
+msgstr "lõpetatud"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:770
+#, elixir-autogen, elixir-format
+msgid "running"
+msgstr "töötab"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:772
+#, elixir-autogen, elixir-format
+msgid "%{kind}: %{status} (%{done}/%{total}, %{error_count} errors)"
+msgstr "%{kind}: %{status} (%{done}/%{total}, %{error_count} viga)"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1369
+#, elixir-autogen, elixir-format
+msgid "Media & collections"
+msgstr "Meedia ja kollektsioonid"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1372
+#, elixir-autogen, elixir-format
+msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
+msgstr "Töötab taustal: tootepildid laaditakse hoiuruumi, valikutest saavad atribuutide komplektid ja hinnamodifikaatorid, Shopify kollektsioonid muutuvad kataloogi kategooriateks."
