@@ -6,9 +6,27 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   This is the domain layer only — no LiveView/UI wiring here (see
   `PhoenixKitEcommerce.Shopify.Provider` moduledoc for why "Test Connection"
   doesn't exercise this; that's this module's job instead, via `check/2`).
+
+  ## Catalogue source (Block 3, "sync 6a")
+
+  When `ProductSource.current/0` is `Catalogue`, `apply_change/2` writes
+  through `PhoenixKitEcommerce.Catalogue.Writer` into the matched
+  catalogue item instead of `Shop.update_product/2` (which refuses a
+  view-struct outright — see `Product`/`update_product/2`'s own
+  moduledoc), and `check/2` additionally surfaces unmatched Shopify
+  handles as create-`Change`s (`ProductDiff.new_product_changes/3`) under
+  `:new_products`, which `apply_change/2`/`apply_changes/2` dispatch to
+  `Writer.create_from_shopify/2`. Under the legacy source `:new_products`
+  is always `[]` — creating products there stays the CSV importer's job.
   """
 
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+
+  alias PhoenixKitCatalogue.Catalogue, as: CatalogueApi
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Catalogue.Writer
+  alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View, as: CatalogueView
   alias PhoenixKitEcommerce.Shopify.ProductDiff
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Source
@@ -68,6 +86,7 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
           {:ok,
            %{
              changes: [Change.t()],
+             new_products: [Change.t()],
              source: :admin | :storefront,
              fallback_reason: term() | nil,
              total_shopify_products: non_neg_integer(),
@@ -83,10 +102,12 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
       local_products = Shop.list_products()
       changes = ProductDiff.diff(local_products, products, base_locale, only: only)
       matched = ProductDiff.matched_count(local_products, products, base_locale)
+      new_products = new_product_changes(local_products, products, base_locale, source)
 
       {:ok,
        %{
          changes: changes,
+         new_products: new_products,
          source: source,
          fallback_reason: reason,
          total_shopify_products: length(products),
@@ -94,6 +115,22 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
        }}
     end
   end
+
+  # New-handle creation is a catalogue-source-only path (see this module's
+  # moduledoc) and only meaningful against a complete Admin API listing —
+  # the `:storefront` fallback only ever carries price data for products it
+  # ALREADY matched by handle (see `check/2`'s own moduledoc), so treating
+  # its unmatched remainder as "new in Shopify" would be wrong for a
+  # completely different reason than the legacy source's.
+  defp new_product_changes(local_products, products, base_locale, :admin) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      ProductDiff.new_product_changes(local_products, products, base_locale)
+    else
+      []
+    end
+  end
+
+  defp new_product_changes(_local_products, _products, _base_locale, :storefront), do: []
 
   @doc """
   Applies fields from `change` to its product.
@@ -108,10 +145,42 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   rather than being re-read here: a change diffed against one locale must
   be applied into that same locale, not whatever the default happens to
   be at apply time.
+
+  A create-`Change` (`create?: true`, from `check/2`'s `:new_products` —
+  catalogue source only) ignores `fields` entirely: there is no existing
+  product to apply a subset of fields onto, so the whole
+  `change.shopify_product` payload goes to `Writer.create_from_shopify/2`.
+
+  Under the legacy source, a regular `Change` still writes through
+  `Shop.update_product/2`, unchanged from before. Under the catalogue
+  source, it writes through `PhoenixKitEcommerce.Catalogue.Writer.
+  update_from_shopify/3` into the matched item instead — `change.
+  product_uuid` is the item's own uuid (see `ProductSource.Catalogue.
+  View.product_view/2`: a catalogue view-struct's `:uuid` IS the item's),
+  so it's fetched with `PhoenixKitCatalogue.Catalogue.get_item!/1`, not
+  `Shop.get_product!/1` (which would hand back a read-only view-struct
+  `Shop.update_product/2` refuses).
   """
   @spec apply_change(Change.t(), :all | [atom()]) ::
-          {:ok, PhoenixKitEcommerce.Product.t()} | {:error, Ecto.Changeset.t()}
-  def apply_change(%Change{} = change, fields \\ :all) do
+          {:ok, PhoenixKitEcommerce.Product.t()} | {:error, Ecto.Changeset.t() | term()}
+  def apply_change(change, fields \\ :all)
+
+  def apply_change(%Change{create?: true} = change, _fields) do
+    case Writer.create_from_shopify(change.shopify_product, change.base_locale) do
+      {:ok, item} -> {:ok, CatalogueView.product_view(item)}
+      error -> error
+    end
+  end
+
+  def apply_change(%Change{} = change, fields) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      apply_catalogue_change(change, fields)
+    else
+      apply_legacy_change(change, fields)
+    end
+  end
+
+  defp apply_legacy_change(%Change{} = change, fields) do
     product = Shop.get_product!(change.product_uuid)
     base_locale = change.base_locale
     fields_to_apply = resolve_fields(fields, change.changes)
@@ -123,6 +192,23 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
       end)
 
     Shop.update_product(product, attrs)
+  end
+
+  defp apply_catalogue_change(%Change{} = change, fields) do
+    item = CatalogueApi.get_item!(change.product_uuid)
+    base_locale = change.base_locale
+    fields_to_apply = resolve_fields(fields, change.changes)
+
+    change_fields =
+      Enum.reduce(fields_to_apply, %{}, fn field, acc ->
+        %{incoming: incoming} = Map.fetch!(change.changes, field)
+        Map.put(acc, field, incoming)
+      end)
+
+    case Writer.update_from_shopify(item, change_fields, base_locale) do
+      {:ok, item} -> {:ok, CatalogueView.product_view(item)}
+      error -> error
+    end
   end
 
   @doc """

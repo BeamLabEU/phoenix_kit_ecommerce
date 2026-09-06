@@ -162,6 +162,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   defp metadata(item, ecommerce, sets) do
     legacy_metadata(item, sets)
     |> maybe_put_price_display(ecommerce)
+    |> maybe_put("_shopify", Map.get(ecommerce, "shopify"))
   end
 
   defp maybe_put_price_display(metadata, ecommerce) do

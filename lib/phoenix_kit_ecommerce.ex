@@ -534,9 +534,19 @@ defmodule PhoenixKitEcommerce do
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see
   `PhoenixKitAI.Translatables`).
+
+  Empty under the catalogue product source: `PhoenixKitEcommerce.AITranslatable`
+  translates `phoenix_kit_shop_products` rows, which the catalogue source
+  never writes to — translation moves to catalogue's own item/category AI
+  adapters there (design spec §5 Блок 3 / Блок 6), so this package must stop
+  advertising a translatable resource nothing reads through it anymore.
   """
   def ai_translatables do
-    [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+    if ProductSource.current() == ProductSource.Catalogue do
+      []
+    else
+      [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+    end
   end
 
   @doc """

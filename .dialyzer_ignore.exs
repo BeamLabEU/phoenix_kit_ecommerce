@@ -24,5 +24,13 @@
   {"lib/phoenix_kit_ecommerce/product_source/catalogue.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/product_source/catalogue/query.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/product_source/catalogue/query.ex", :unknown_type},
-  {"lib/phoenix_kit_ecommerce/product_source/catalogue/view.ex", :unknown_function}
+  {"lib/phoenix_kit_ecommerce/product_source/catalogue/view.ex", :unknown_function},
+  # Same reasoning, Block 3 "sync 6a": `Writer` and `Shopify.Sync`'s
+  # catalogue-dispatch branch call into `PhoenixKitCatalogue.Catalogue`
+  # (`update_item/2`, `create_item/2`, `get_item!/1`, `Slugs.from_title/2`)
+  # and reference `Item.t()` in specs — same undeclared-optional-dependency
+  # shape as the adapter files above.
+  {"lib/phoenix_kit_ecommerce/catalogue/writer.ex", :unknown_function},
+  {"lib/phoenix_kit_ecommerce/catalogue/writer.ex", :unknown_type},
+  {"lib/phoenix_kit_ecommerce/shopify/sync.ex", :unknown_function}
 ]
