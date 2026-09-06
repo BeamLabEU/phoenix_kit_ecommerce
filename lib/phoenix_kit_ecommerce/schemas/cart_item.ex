@@ -132,7 +132,13 @@ defmodule PhoenixKitEcommerce.CartItem do
     lang = Keyword.get(opts, :language) || default_language()
 
     %{
-      product_uuid: product.uuid,
+      # A catalogue-backed product is a hand-built view-struct
+      # (`__meta__.state == :built`) — there is no row in
+      # `phoenix_kit_shop_products` for `product_uuid` to reference, so the
+      # column stays nil (it is `ON DELETE SET NULL`, already nullable) and
+      # the catalogue item's own uuid is carried in `metadata` instead, the
+      # only place left to reach it from a cart row.
+      product_uuid: if(catalogue_backed?(product), do: nil, else: product.uuid),
       product_title: get_localized_string(product.title, lang),
       product_slug: get_localized_string(product.slug, lang),
       product_image: get_product_image_url(product),
@@ -159,11 +165,27 @@ defmodule PhoenixKitEcommerce.CartItem do
       metadata:
         %{"requires_shipping" => product.requires_shipping}
         |> put_price_unit(product, lang)
+        |> put_catalogue_item_uuid(product)
     }
   end
 
   def from_product(%Product{} = product, quantity, language) do
     from_product(product, quantity, language: language)
+  end
+
+  # A view-struct built by `ProductSource.Catalogue` (see the module doc for
+  # `PhoenixKitEcommerce.ProductSource`) — never a row from
+  # `phoenix_kit_shop_products`. Same test the facade already uses to refuse
+  # `Repo` writes on one (`update_product/2`/`delete_product/2`).
+  defp catalogue_backed?(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}), do: true
+  defp catalogue_backed?(%Product{}), do: false
+
+  defp put_catalogue_item_uuid(metadata, product) do
+    if catalogue_backed?(product) do
+      Map.put(metadata, "catalogue_item_uuid", product.uuid)
+    else
+      metadata
+    end
   end
 
   # The unit is snapshotted with the line, not read live at render time:

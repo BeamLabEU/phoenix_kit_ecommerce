@@ -660,10 +660,25 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   defp find_cart_item_after_add(items, product_uuid, selected_specs, _price_affecting_specs) do
     if map_size(selected_specs) > 0 do
-      Enum.find(items, &(&1.product_uuid == product_uuid && &1.selected_specs == selected_specs))
+      Enum.find(
+        items,
+        &(cart_item_matches_product?(&1, product_uuid) && &1.selected_specs == selected_specs)
+      )
     else
-      Enum.find(items, &(&1.product_uuid == product_uuid))
+      Enum.find(items, &cart_item_matches_product?(&1, product_uuid))
     end
+  end
+
+  # `product_uuid` here is always the product's real identifying uuid — for
+  # a catalogue-backed product that's the catalogue item's own uuid, which
+  # `CartItem.from_product/3` snapshots into `metadata["catalogue_item_uuid"]`
+  # rather than the row's `product_uuid` column (nil for those rows). Without
+  # this fallback, every post-add lookup for a catalogue product (the "added
+  # to cart" flash, the existing-item check before a repeat add) would come
+  # back nil even though the row is right there in `items`.
+  defp cart_item_matches_product?(item, product_uuid) do
+    item.product_uuid == product_uuid or
+      (item.metadata || %{})["catalogue_item_uuid"] == product_uuid
   end
 
   @impl true
@@ -1364,7 +1379,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       %{items: items} when is_list(items) ->
         Enum.find(items, fn item ->
-          item.product_uuid == product_uuid &&
+          cart_item_matches_product?(item, product_uuid) &&
             specs_match?(item.selected_specs, selected_specs)
         end)
 

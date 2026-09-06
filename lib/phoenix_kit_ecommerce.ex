@@ -2010,16 +2010,59 @@ defmodule PhoenixKitEcommerce do
     :ok
   end
 
+  # Row-locks the product before pricing/inserting the cart line, so a
+  # concurrent price/status edit cannot race the add.
+  #
+  # A catalogue-backed product is a view-struct (`__meta__.state == :built`)
+  # with no row in `phoenix_kit_shop_products` — the plain
+  # `Product |> where(uuid: ...) |> lock(...) |> repo().one!()` below would
+  # raise `Ecto.NoResultsError` for every one of them, and there is no
+  # FOR-UPDATE-capable read of a catalogue item exposed to this module to
+  # lock instead. The struct already in hand was built moments earlier by
+  # the very read path the product page used, so it is used as-is;
+  # `validate_locked_product_purchasable!/2` right after this still refuses
+  # one that is no longer active.
+  defp lock_or_reload_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}} = product) do
+    product
+  end
+
+  defp lock_or_reload_product(%Product{} = product) do
+    Product
+    |> where([p], p.uuid == ^product.uuid)
+    |> lock("FOR UPDATE")
+    |> repo().one!()
+  end
+
+  # The identity a cart line is matched/deduplicated on: the real
+  # `product_uuid` for a legacy product, or the catalogue item's uuid
+  # (carried in `metadata["catalogue_item_uuid"]`, never in the nil
+  # `product_uuid` column) for a view-struct one.
+  defp product_lookup_key(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}, uuid: uuid}) do
+    {:catalogue_item_uuid, uuid}
+  end
+
+  defp product_lookup_key(%Product{uuid: uuid}), do: {:product_uuid, uuid}
+
+  # Same identity, read off an EXISTING cart row (guest-cart merge on
+  # login) instead of a live `%Product{}` — a catalogue-backed row has no
+  # `product_uuid` to fall back to, only the metadata snapshot.
+  defp cart_item_lookup_key(%CartItem{product_uuid: uuid}) when is_binary(uuid) do
+    {:product_uuid, uuid}
+  end
+
+  defp cart_item_lookup_key(%CartItem{metadata: metadata}) do
+    case metadata do
+      %{"catalogue_item_uuid" => uuid} when is_binary(uuid) -> {:catalogue_item_uuid, uuid}
+      _ -> {:product_uuid, nil}
+    end
+  end
+
   defp add_simple_product_to_cart(cart, product, quantity, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
         # This ensures price snapshot is consistent with current product state
-        locked_product =
-          Product
-          |> where([p], p.uuid == ^product.uuid)
-          |> lock("FOR UPDATE")
-          |> repo().one!()
+        locked_product = lock_or_reload_product(product)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
@@ -2028,7 +2071,7 @@ defmodule PhoenixKitEcommerce do
         calculated_price = calculate_product_price(locked_product, %{})
 
         # Check if product already in cart (without specs)
-        existing = find_cart_item_by_specs(cart.uuid, product.uuid, %{})
+        existing = find_cart_item_by_specs(cart.uuid, product_lookup_key(locked_product), %{})
 
         item =
           case existing do
@@ -2070,11 +2113,7 @@ defmodule PhoenixKitEcommerce do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price/metadata changes during cart update
-        locked_product =
-          Product
-          |> where([p], p.uuid == ^product.uuid)
-          |> lock("FOR UPDATE")
-          |> repo().one!()
+        locked_product = lock_or_reload_product(product)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
@@ -2082,7 +2121,8 @@ defmodule PhoenixKitEcommerce do
         calculated_price = calculate_product_price(locked_product, selected_specs)
 
         # Check if same product with same specs already in cart
-        existing = find_cart_item_by_specs(cart.uuid, product.uuid, selected_specs)
+        existing =
+          find_cart_item_by_specs(cart.uuid, product_lookup_key(locked_product), selected_specs)
 
         item =
           case existing do
@@ -2562,7 +2602,11 @@ defmodule PhoenixKitEcommerce do
 
   defp merge_cart_item(user_cart, item) do
     existing =
-      find_cart_item_by_specs(user_cart.uuid, item.product_uuid, item.selected_specs || %{})
+      find_cart_item_by_specs(
+        user_cart.uuid,
+        cart_item_lookup_key(item),
+        item.selected_specs || %{}
+      )
 
     case existing do
       nil ->
@@ -2933,25 +2977,67 @@ defmodule PhoenixKitEcommerce do
   # races a concurrent archive between validation and order creation. A line
   # whose product row is gone (or was detached by ON DELETE SET NULL) is not
   # sellable either.
+  #
+  # A catalogue-backed line has `product_uuid: nil` by design (see
+  # `CartItem.from_product/3`), so it is resolved by
+  # `metadata["catalogue_item_uuid"]` through the current `ProductSource`
+  # instead of the `phoenix_kit_shop_products` row lock — there is no
+  # FOR-UPDATE-capable read of a catalogue item exposed to this module, so
+  # this half of the check is a plain (unlocked) re-read, not a lock. A line
+  # with neither a `product_uuid` nor a resolvable `catalogue_item_uuid` is
+  # treated the same as before: not available.
   defp validate_line_products_active(%Cart{items: items}) do
-    uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+    {legacy_uuids, catalogue_uuids, unresolved} = partition_cart_item_products(items)
 
-    if length(uuids) < length(items) do
-      {:error, :product_not_available}
-    else
-      active =
-        Product
-        |> where([p], p.uuid in ^uuids and p.status == "active")
-        |> lock("FOR UPDATE")
-        |> select([p], p.uuid)
-        |> repo().all()
-
-      if length(active) == length(Enum.uniq(uuids)) do
-        :ok
-      else
-        {:error, :product_not_available}
-      end
+    with :ok <- validate_legacy_products_active(legacy_uuids),
+         :ok <- validate_catalogue_products_active(catalogue_uuids) do
+      if unresolved == [], do: :ok, else: {:error, :product_not_available}
     end
+  end
+
+  defp partition_cart_item_products(items) do
+    Enum.reduce(items, {[], [], []}, fn item, {legacy, catalogue, unresolved} ->
+      cond do
+        is_binary(item.product_uuid) ->
+          {[item.product_uuid | legacy], catalogue, unresolved}
+
+        is_binary((item.metadata || %{})["catalogue_item_uuid"]) ->
+          {legacy, [item.metadata["catalogue_item_uuid"] | catalogue], unresolved}
+
+        true ->
+          {legacy, catalogue, [item | unresolved]}
+      end
+    end)
+  end
+
+  defp validate_legacy_products_active([]), do: :ok
+
+  defp validate_legacy_products_active(uuids) do
+    active =
+      Product
+      |> where([p], p.uuid in ^uuids and p.status == "active")
+      |> lock("FOR UPDATE")
+      |> select([p], p.uuid)
+      |> repo().all()
+
+    if length(active) == length(Enum.uniq(uuids)) do
+      :ok
+    else
+      {:error, :product_not_available}
+    end
+  end
+
+  defp validate_catalogue_products_active([]), do: :ok
+
+  defp validate_catalogue_products_active(uuids) do
+    all_active? =
+      uuids
+      |> Enum.uniq()
+      |> Enum.all?(fn uuid ->
+        match?(%Product{status: "active"}, get_product(uuid, []))
+      end)
+
+    if all_active?, do: :ok, else: {:error, :product_not_available}
   end
 
   # The selected payment option must still exist, be active, and have its
@@ -3117,6 +3203,8 @@ defmodule PhoenixKitEcommerce do
   defp build_order_line_items(%Cart{} = cart) do
     product_items =
       Enum.map(cart.items, fn item ->
+        metadata = item.metadata || %{}
+
         %{
           "name" => item.product_title,
           "description" => format_item_description(item),
@@ -3126,17 +3214,24 @@ defmodule PhoenixKitEcommerce do
           "total" => Decimal.to_string(item.line_total),
           "sku" => item.product_sku,
           "type" => "product",
+          # Carries the catalogue item identity forward past the cart row
+          # (whose own `product_uuid` is nil for a catalogue-backed line —
+          # see `CartItem.from_product/3`) so the order snapshot can still
+          # be traced back to the item it was sold from. nil for a legacy
+          # line, matching the absent key on rows created before this
+          # shipped.
+          "catalogue_item_uuid" => metadata["catalogue_item_uuid"],
           # Carried so invoices and the confirmation page can render the
           # unit the customer saw. Rides billing's existing line-item JSONB;
           # first-class linkage is a billing-side change.
-          "price_unit" => (item.metadata || %{})["price_unit"],
+          "price_unit" => metadata["price_unit"],
           # Carried for the same reason and with more at stake: without it the
           # order confirmation and order-details pages fall back to formatting
           # `total`, which for an on-request service is 0 — so a line the
           # customer agreed as "Price on request" reads "0.00" on a COMMITTED
           # order. The cart line snapshots this; the conversion has to forward it
           # or the snapshot dies at the cart/order boundary.
-          "price_on_request" => (item.metadata || %{})["price_on_request"] == true
+          "price_on_request" => metadata["price_on_request"] == true
         }
       end)
 
@@ -3610,19 +3705,49 @@ defmodule PhoenixKitEcommerce do
 
   # Cart helpers
 
-  # Find cart item by product and selected_specs
-  defp find_cart_item_by_specs(cart_uuid, product_uuid, specs) when map_size(specs) == 0 do
-    # No specs - find item without specs
+  # Find cart item by product identity (see `product_lookup_key/1` and
+  # `cart_item_lookup_key/1`) and selected_specs. A legacy product matches
+  # on the row's own `product_uuid`; a catalogue-backed one has that column
+  # nil, so it matches on `metadata["catalogue_item_uuid"]` instead - without
+  # this, re-adding the same catalogue product would never find the line it
+  # just inserted and would duplicate the row on every add instead of
+  # bumping quantity.
+  defp find_cart_item_by_specs(cart_uuid, {:product_uuid, product_uuid}, specs)
+       when map_size(specs) == 0 do
     CartItem
     |> where([i], i.cart_uuid == ^cart_uuid and i.product_uuid == ^product_uuid)
     |> where([i], i.selected_specs == ^%{})
     |> repo().one()
   end
 
-  defp find_cart_item_by_specs(cart_uuid, product_uuid, specs) when is_map(specs) do
-    # With specs - find item with matching specs
+  defp find_cart_item_by_specs(cart_uuid, {:product_uuid, product_uuid}, specs)
+       when is_map(specs) do
     CartItem
     |> where([i], i.cart_uuid == ^cart_uuid and i.product_uuid == ^product_uuid)
+    |> where([i], i.selected_specs == ^specs)
+    |> repo().one()
+  end
+
+  defp find_cart_item_by_specs(cart_uuid, {:catalogue_item_uuid, item_uuid}, specs)
+       when map_size(specs) == 0 do
+    CartItem
+    |> where(
+      [i],
+      i.cart_uuid == ^cart_uuid and
+        fragment("?->>'catalogue_item_uuid' = ?", i.metadata, ^item_uuid)
+    )
+    |> where([i], i.selected_specs == ^%{})
+    |> repo().one()
+  end
+
+  defp find_cart_item_by_specs(cart_uuid, {:catalogue_item_uuid, item_uuid}, specs)
+       when is_map(specs) do
+    CartItem
+    |> where(
+      [i],
+      i.cart_uuid == ^cart_uuid and
+        fragment("?->>'catalogue_item_uuid' = ?", i.metadata, ^item_uuid)
+    )
     |> where([i], i.selected_specs == ^specs)
     |> repo().one()
   end
