@@ -1,0 +1,325 @@
+defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
+  @moduledoc """
+  Builds hand-built `%PhoenixKitEcommerce.Product{}` / `%PhoenixKitEcommerce.Category{}`
+  view-structs from a `phoenix_kit_catalogue` item/category, so the facade,
+  `Options`, `PriceDisplay`, `CartItem` and the storefront templates read
+  exactly the field names they read today from `phoenix_kit_shop_products`/
+  `phoenix_kit_shop_categories` — no behavior change on their side.
+
+  Every function here is pure: no `Repo` call, no write. `product_view/2`
+  and `category_view/2` build the struct with `struct(Product|Category,
+  fields)` — `__meta__` stays `:built`, which is exactly what
+  `PhoenixKitEcommerce.update_product/2`/`delete_product/2` refuse.
+
+  Accepts duck-typed records (a real `%PhoenixKitCatalogue.Schemas.Item{}`/
+  `%PhoenixKitCatalogue.Schemas.Category{}`, or a plain map with the same
+  keys) — nothing here pattern-matches on the catalogue structs, so tests
+  can feed plain maps without the optional `phoenix_kit_catalogue`
+  dependency loaded.
+  """
+
+  # `Catalogue.translated_name/2` etc. read `data["ecommerce"]` at line
+  # granularity but never touch the namespace directly — this module (not
+  # catalogue) owns interpreting `data["ecommerce"]`. The calls below are
+  # only ever reached once `ProductSource.current/0` has already picked
+  # this adapter, which requires `phoenix_kit_catalogue` to be loaded; the
+  # tag only quietens the compiler's static xref check for hosts that
+  # don't declare the optional dependency.
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+
+  alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.Translations
+
+  @doc """
+  Builds a `%Product{}` view-struct from a catalogue item.
+
+  `opts[:sets]` is a `PhoenixKitCatalogue.Catalogue.AttributeSets.resolve_for_item/2`
+  result (`%{schema_version: _, sets: [...]}`) — or, for tests and other
+  callers that already have the per-item list, the bare `sets` list
+  itself. `opts[:category]` is a `category_view/2` result, attached as
+  `:category` when the caller preloaded one.
+  """
+  @spec product_view(map(), keyword()) :: Product.t()
+  def product_view(item, opts \\ []) do
+    sets = Keyword.get(opts, :sets, [])
+    category = Keyword.get(opts, :category)
+
+    data = item.data || %{}
+    ecommerce = Map.get(data, "ecommerce", %{})
+    langs = language_keys(data)
+
+    fields = %{
+      uuid: item.uuid,
+      title: localized_map(item, langs, &Catalogue.translated_name/2),
+      body_html: localized_map(item, langs, &Catalogue.translated_description/2),
+      description: summary_map(item, langs),
+      seo_title: localized_map(item, langs, &Catalogue.translated_seo_title/2),
+      seo_description: localized_map(item, langs, &Catalogue.translated_seo_description/2),
+      slug: item.slug || %{},
+      price: item.base_price,
+      compare_at_price: to_decimal(Map.get(ecommerce, "compare_at_price")),
+      cost_per_item: to_decimal(Map.get(ecommerce, "cost_per_item")),
+      currency: Map.get(ecommerce, "currency") || "USD",
+      taxable: Map.get(ecommerce, "taxable", true),
+      weight_grams: Map.get(ecommerce, "weight_grams") || 0,
+      requires_shipping: Map.get(ecommerce, "requires_shipping", true),
+      made_to_order: Map.get(ecommerce, "made_to_order", false),
+      product_type: Map.get(ecommerce, "product_type") || "physical",
+      vendor: Map.get(ecommerce, "vendor"),
+      tags: Map.get(ecommerce, "tags") || [],
+      file_uuid: Map.get(ecommerce, "file_uuid"),
+      download_limit: Map.get(ecommerce, "download_limit"),
+      download_expiry_days: Map.get(ecommerce, "download_expiry_days"),
+      status: product_status(item, ecommerce),
+      featured_image_uuid: Map.get(data, "featured_image_uuid"),
+      image_uuids: Map.get(data, "media_order") || [],
+      images: [],
+      featured_image: nil,
+      metadata: metadata(item, ecommerce, sets),
+      category_uuid: item.category_uuid,
+      category: category,
+      inserted_at: Map.get(item, :inserted_at),
+      updated_at: Map.get(item, :updated_at)
+    }
+
+    struct(Product, fields)
+  end
+
+  @doc """
+  Builds a `%Category{}` view-struct from a catalogue category.
+  """
+  @spec category_view(map(), keyword()) :: Category.t()
+  def category_view(category, _opts \\ []) do
+    data = category.data || %{}
+    ecommerce = Map.get(data, "ecommerce", %{})
+    langs = language_keys(data)
+
+    fields = %{
+      uuid: category.uuid,
+      name: localized_map(category, langs, &Catalogue.translated_name/2),
+      description: localized_map(category, langs, &Catalogue.translated_description/2),
+      slug: category.slug || %{},
+      status: Map.get(ecommerce, "shop_status") || "active",
+      position: category.position,
+      parent_uuid: category.parent_uuid,
+      option_schema: Map.get(ecommerce, "option_schema") || [],
+      image_uuid: Map.get(ecommerce, "image_uuid"),
+      featured_product_uuid: Map.get(ecommerce, "featured_item_uuid"),
+      metadata: %{},
+      inserted_at: Map.get(category, :inserted_at),
+      updated_at: Map.get(category, :updated_at)
+    }
+
+    struct(Category, fields)
+  end
+
+  @doc """
+  Synthesizes the legacy `metadata` sub-map every option/price-display
+  reader (`Options`, variant picker, `CartItem.from_product/3`) expects:
+  `_option_values` (labels in the item's stored selection order) and
+  `_price_modifiers` (slug-keyed `ecommerce.price_modifiers` swapped to
+  the label keys those readers match on), computed fresh from `sets` on
+  every call, merged over whatever else `data["ecommerce"]["legacy_metadata"]`
+  snapshotted (`_option_slots`, `_image_mappings`, `_price_display`, …) —
+  minus those same two keys, so a stale snapshot never shadows the live
+  attachment state.
+
+  `sets` accepts the same shapes `product_view/2`'s `:sets` option does.
+  """
+  @spec legacy_metadata(map(), list() | map()) :: map()
+  def legacy_metadata(item, sets) do
+    snapshot =
+      get_in(item.data || %{}, ["ecommerce", "legacy_metadata"]) || %{}
+
+    base = Map.drop(snapshot, ["_option_values", "_price_modifiers"])
+
+    base
+    |> maybe_put("_option_values", option_values_from_sets(sets))
+    |> maybe_put("_price_modifiers", price_modifiers_from_sets(sets, item))
+  end
+
+  # ============================================================
+  # Status
+  # ============================================================
+
+  defp product_status(item, ecommerce) do
+    case Map.get(ecommerce, "shop_status") do
+      status when status in ["draft", "active", "archived"] ->
+        status
+
+      _ ->
+        if Map.get(item, :status) == "active", do: "active", else: "archived"
+    end
+  end
+
+  # ============================================================
+  # Metadata
+  # ============================================================
+
+  defp metadata(item, ecommerce, sets) do
+    legacy_metadata(item, sets)
+    |> maybe_put_price_display(ecommerce)
+  end
+
+  defp maybe_put_price_display(metadata, ecommerce) do
+    price_display =
+      PriceDisplay.build(
+        Map.get(ecommerce, "price_unit") || %{},
+        Map.get(ecommerce, "price_from", false) == true,
+        Map.get(ecommerce, "price_on_request", false) == true
+      )
+
+    maybe_put(metadata, PriceDisplay.metadata_key(), price_display)
+  end
+
+  defp maybe_put(map, _key, value) when value in [%{}, nil], do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # `sets` is `resolve_for_item/2`'s `%{schema_version: _, sets: [...]}`
+  # result, or (tests, and any caller that already has the per-item list)
+  # the bare `[...]` itself.
+  defp sets_list(%{sets: sets}) when is_list(sets), do: sets
+  defp sets_list(sets) when is_list(sets), do: sets
+  defp sets_list(_), do: []
+
+  defp option_values_from_sets(sets) do
+    sets
+    |> sets_list()
+    |> Enum.reduce(%{}, fn set, acc ->
+      key = Map.get(set, :key)
+      selected = Map.get(set, :selected) || []
+      labels_by_value = value_labels(set)
+
+      labels =
+        selected
+        |> Enum.map(&Map.get(labels_by_value, &1))
+        |> Enum.reject(&is_nil/1)
+
+      if labels == [] or is_nil(key), do: acc, else: Map.put(acc, key, labels)
+    end)
+  end
+
+  defp price_modifiers_from_sets(sets, item) do
+    raw_modifiers = get_in(item.data || %{}, ["ecommerce", "price_modifiers"]) || %{}
+    sets_by_key = sets |> sets_list() |> Map.new(&{Map.get(&1, :key), &1})
+
+    Enum.reduce(raw_modifiers, %{}, fn {key, slug_amounts}, acc ->
+      case Map.get(sets_by_key, key) do
+        nil -> acc
+        set -> put_labeled_modifiers(acc, key, slug_amounts, value_labels(set))
+      end
+    end)
+  end
+
+  defp put_labeled_modifiers(acc, key, slug_amounts, labels_by_value) do
+    by_label = labels_for_amounts(slug_amounts, labels_by_value)
+    if by_label == %{}, do: acc, else: Map.put(acc, key, by_label)
+  end
+
+  defp labels_for_amounts(slug_amounts, labels_by_value) do
+    Enum.reduce(slug_amounts || %{}, %{}, fn {slug, amount}, acc ->
+      case Map.get(labels_by_value, slug) do
+        nil -> acc
+        label -> Map.put(acc, label, amount)
+      end
+    end)
+  end
+
+  defp value_labels(set) do
+    set
+    |> Map.get(:values, [])
+    |> Map.new(&{Map.get(&1, :key), Map.get(&1, :label)})
+  end
+
+  # ============================================================
+  # Localized fields
+  # ============================================================
+
+  # Every enabled language that has its own entry in `data`, plus the
+  # record's primary language — matches `data["_primary_language"]`'s
+  # convention (`PhoenixKit.Utils.Multilang`): a language with no entry
+  # at all carries no override for ANY field, so every localized map on
+  # this record omits it uniformly.
+  # Non-language namespaces that live alongside the per-language entries
+  # at the top level of `item.data`/`category.data` (the multilang
+  # marker, the shop's own namespace, and the two item-only media keys —
+  # harmless to list here for categories too, since they're simply never
+  # present on a category's `data`).
+  @non_language_data_keys ["_primary_language", "ecommerce", "featured_image_uuid", "media_order"]
+
+  defp language_keys(data) do
+    primary = Map.get(data, "_primary_language") || Translations.default_language()
+    langs = data |> Map.keys() |> Enum.reject(&(&1 in @non_language_data_keys))
+
+    if primary in langs, do: Enum.uniq(langs), else: Enum.uniq([primary | langs])
+  end
+
+  defp localized_map(record, langs, translate_fn) do
+    Enum.reduce(langs, %{}, fn lang, acc ->
+      case translate_fn.(record, lang) do
+        value when is_binary(value) and value != "" -> Map.put(acc, lang, value)
+        _ -> acc
+      end
+    end)
+  end
+
+  # `_summary` per language, falling back to the first 300 characters of
+  # the (HTML-stripped) translated description — never omitted for an
+  # included language, unlike `localized_map/3`'s siblings: a product
+  # page needs *some* description text once the language is in scope.
+  defp summary_map(item, langs) do
+    Enum.reduce(langs, %{}, fn lang, acc ->
+      case summary_for(item, lang) do
+        value when is_binary(value) and value != "" -> Map.put(acc, lang, value)
+        _ -> acc
+      end
+    end)
+  end
+
+  defp summary_for(item, lang) do
+    translation = Catalogue.get_translation(item, lang)
+
+    case Map.get(translation, "_summary") do
+      value when is_binary(value) and value != "" ->
+        value
+
+      _ ->
+        item
+        |> Catalogue.translated_description(lang)
+        |> strip_and_truncate(300)
+    end
+  end
+
+  defp strip_and_truncate(nil, _limit), do: nil
+
+  defp strip_and_truncate(html, limit) do
+    text =
+      html
+      |> String.replace(~r/<[^>]*>/, "")
+      |> String.trim()
+      |> String.slice(0, limit)
+
+    if text == "", do: nil, else: text
+  end
+
+  # ============================================================
+  # Decimal
+  # ============================================================
+
+  defp to_decimal(nil), do: nil
+  defp to_decimal(""), do: nil
+  defp to_decimal(%Decimal{} = decimal), do: decimal
+
+  defp to_decimal(value) when is_binary(value) do
+    case Decimal.parse(value) do
+      {decimal, _rest} -> decimal
+      :error -> nil
+    end
+  end
+
+  defp to_decimal(value) when is_number(value), do: Decimal.new(to_string(value))
+  defp to_decimal(_), do: nil
+end

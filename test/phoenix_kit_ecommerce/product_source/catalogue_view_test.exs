@@ -1,0 +1,283 @@
+defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
+  use ExUnit.Case, async: true
+
+  # Pure logic — no DB, no live catalogue data. Still requires
+  # `phoenix_kit_catalogue` to be loaded so `struct(PhoenixKitCatalogue.
+  # Schemas.Item, ...)` below can build a real `Item`-shaped fixture;
+  # excluded (via `test_helper.exs`'s `ExUnit.configure(exclude: ...)`)
+  # whenever the optional dependency isn't present.
+  @moduletag :catalogue
+
+  alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View
+
+  @item_uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  @image_uuid "11111111-1111-1111-1111-111111111111"
+  @second_image_uuid "22222222-2222-2222-2222-222222222222"
+
+  defp build_item(data_overrides \\ %{}, field_overrides \\ %{}) do
+    data =
+      %{
+        "_primary_language" => "en-US",
+        "en-US" => %{
+          "_name" => "Geometric Planter",
+          "_description" => "<p>A <strong>lovely</strong> planter</p>",
+          "_summary" => "A lovely planter.",
+          "_seo_title" => "Buy Geometric Planter",
+          "_seo_description" => "The best planter, geometric."
+        },
+        "fr-FR" => %{
+          "_name" => "Cache-pot géométrique",
+          "_description" => "<p>Un joli cache-pot</p>",
+          "_summary" => "Un joli cache-pot."
+        },
+        "ecommerce" => %{
+          "shop_status" => "active",
+          "vendor" => "Acme",
+          "tags" => ["planter", "geometric"],
+          "price_modifiers" => %{"size" => %{"5-inches-13-cm" => "9.00"}},
+          "legacy_metadata" => %{
+            "_option_slots" => [%{"key" => "size", "type" => "select"}],
+            "_image_mappings" => %{"size" => %{"5-inches-13-cm" => @image_uuid}}
+          }
+        },
+        "featured_image_uuid" => @image_uuid,
+        "media_order" => [@image_uuid, @second_image_uuid]
+      }
+      |> deep_merge(data_overrides)
+
+    struct(
+      PhoenixKitCatalogue.Schemas.Item,
+      Map.merge(
+        %{
+          uuid: @item_uuid,
+          name: "Geometric Planter",
+          description: "A lovely planter",
+          base_price: Decimal.new("23.76"),
+          status: "active",
+          category_uuid: nil,
+          slug: %{"en-US" => "geometric-planter", "fr-FR" => "cache-pot-geometrique"},
+          data: data,
+          inserted_at: ~U[2026-01-01 00:00:00Z],
+          updated_at: ~U[2026-01-01 00:00:00Z]
+        },
+        field_overrides
+      )
+    )
+  end
+
+  defp deep_merge(a, b),
+    do:
+      Map.merge(a, b, fn _k, v1, v2 ->
+        if is_map(v1) and is_map(v2), do: deep_merge(v1, v2), else: v2
+      end)
+
+  @sets [
+    %{
+      key: "size",
+      values: [
+        %{key: "5-inches-13-cm", label: "5 inches (13 cm)"},
+        %{key: "4-inches-10-cm", label: "4 inches (10 cm)"}
+      ],
+      selected: ["5-inches-13-cm", "4-inches-10-cm"]
+    }
+  ]
+
+  describe "product_view/2" do
+    test "builds a read-only view-struct with translated fields, price, status and metadata" do
+      item = build_item()
+
+      product = View.product_view(item, sets: @sets)
+
+      assert %PhoenixKitEcommerce.Product{} = product
+      assert product.__meta__.state == :built
+
+      assert product.title["en-US"] == "Geometric Planter"
+      assert product.title["fr-FR"] == "Cache-pot géométrique"
+      assert product.body_html["fr-FR"] == "<p>Un joli cache-pot</p>"
+      assert product.description["en-US"] == "A lovely planter."
+      assert product.seo_title["en-US"] == "Buy Geometric Planter"
+      # fr-FR has no _seo_title override — omitted, not inherited.
+      refute Map.has_key?(product.seo_title, "fr-FR")
+
+      assert product.price == Decimal.new("23.76")
+      assert product.status == "active"
+      assert product.uuid == @item_uuid
+      assert product.image_uuids == [@image_uuid, @second_image_uuid]
+      assert product.featured_image_uuid == @image_uuid
+      assert product.images == []
+      assert product.featured_image == nil
+
+      assert product.metadata["_option_values"] == %{
+               "size" => ["5 inches (13 cm)", "4 inches (10 cm)"]
+             }
+
+      assert product.metadata["_price_modifiers"] == %{
+               "size" => %{"5 inches (13 cm)" => "9.00"}
+             }
+
+      assert product.metadata["_option_slots"] == [%{"key" => "size", "type" => "select"}]
+
+      assert product.metadata["_image_mappings"] == %{
+               "size" => %{"5-inches-13-cm" => @image_uuid}
+             }
+    end
+
+    test "status falls back to item.status when shop_status is absent" do
+      item =
+        build_item(%{"ecommerce" => %{"shop_status" => nil, "price_modifiers" => %{}}})
+
+      assert View.product_view(item, sets: []).status == "active"
+
+      inactive = build_item(%{"ecommerce" => %{"shop_status" => nil}}, %{status: "inactive"})
+      assert View.product_view(inactive, sets: []).status == "archived"
+    end
+
+    test "description falls back to the first 300 chars of stripped body_html when _summary is absent" do
+      item =
+        build_item(%{
+          "en-US" => %{"_summary" => nil, "_description" => "<p>Only body, no summary</p>"}
+        })
+
+      assert View.product_view(item, sets: []).description["en-US"] == "Only body, no summary"
+    end
+
+    test "accepts sets as either a bare list or a resolve_for_item/2-shaped map" do
+      item = build_item()
+
+      from_list = View.product_view(item, sets: @sets)
+      from_wrapped = View.product_view(item, sets: %{schema_version: 2, sets: @sets})
+
+      assert from_list.metadata["_option_values"] == from_wrapped.metadata["_option_values"]
+    end
+
+    test "omits _option_values/_price_modifiers when there are no attachments" do
+      item = build_item()
+
+      metadata = View.product_view(item, sets: []).metadata
+
+      refute Map.has_key?(metadata, "_option_values")
+      refute Map.has_key?(metadata, "_price_modifiers")
+      # The rest of the snapshot survives untouched.
+      assert metadata["_option_slots"] == [%{"key" => "size", "type" => "select"}]
+    end
+
+    test "carries price_unit/price_from/price_on_request under the _price_display key PriceDisplay reads" do
+      item =
+        build_item(%{
+          "ecommerce" => %{
+            "price_unit" => %{"en-US" => "per hour"},
+            "price_from" => true
+          }
+        })
+
+      metadata = View.product_view(item, sets: []).metadata
+
+      assert metadata[PriceDisplay.metadata_key()] == %{
+               "unit" => %{"en-US" => "per hour"},
+               "from" => true
+             }
+    end
+
+    test "omits _price_display entirely when nothing is set (matches build/3's empty-map contract)" do
+      item = build_item()
+
+      refute Map.has_key?(View.product_view(item, sets: []).metadata, PriceDisplay.metadata_key())
+    end
+
+    test "attaches a preloaded category view-struct when given" do
+      category = struct(PhoenixKitCatalogue.Schemas.Category, uuid: "cat-uuid", name: "Planters")
+      item = build_item()
+
+      product = View.product_view(item, sets: [], category: category)
+
+      assert product.category == category
+    end
+  end
+
+  describe "category_view/2" do
+    defp build_category(data_overrides \\ %{}) do
+      data =
+        %{
+          "_primary_language" => "en-US",
+          "en-US" => %{"_name" => "Planters", "_description" => "Pots and planters"},
+          "fr-FR" => %{"_name" => "Cache-pots"},
+          "ecommerce" => %{
+            "shop_status" => "active",
+            "option_schema" => [%{"key" => "size"}],
+            "image_uuid" => "cat-img-uuid",
+            "featured_item_uuid" => "feat-item-uuid"
+          }
+        }
+        |> deep_merge(data_overrides)
+
+      struct(PhoenixKitCatalogue.Schemas.Category,
+        uuid: "cat-uuid",
+        name: "Planters",
+        description: "Pots and planters",
+        position: 2,
+        status: "active",
+        parent_uuid: nil,
+        slug: %{"en-US" => "planters"},
+        data: data,
+        inserted_at: ~U[2026-01-01 00:00:00Z],
+        updated_at: ~U[2026-01-01 00:00:00Z]
+      )
+    end
+
+    test "builds a read-only view-struct from a catalogue category" do
+      category = build_category()
+
+      view = View.category_view(category)
+
+      assert %PhoenixKitEcommerce.Category{} = view
+      assert view.__meta__.state == :built
+      assert view.name["en-US"] == "Planters"
+      assert view.name["fr-FR"] == "Cache-pots"
+      assert view.description["en-US"] == "Pots and planters"
+      assert view.status == "active"
+      assert view.position == 2
+      assert view.option_schema == [%{"key" => "size"}]
+      assert view.image_uuid == "cat-img-uuid"
+      assert view.featured_product_uuid == "feat-item-uuid"
+      assert view.metadata == %{}
+    end
+
+    test "status defaults to active when shop_status is absent" do
+      category = build_category(%{"ecommerce" => %{"shop_status" => nil}})
+      assert View.category_view(category).status == "active"
+    end
+  end
+
+  describe "legacy_metadata/2" do
+    test "computes _option_values/_price_modifiers fresh and merges the rest of the snapshot" do
+      item = build_item()
+
+      metadata = View.legacy_metadata(item, @sets)
+
+      assert metadata == %{
+               "_option_slots" => [%{"key" => "size", "type" => "select"}],
+               "_image_mappings" => %{"size" => %{"5-inches-13-cm" => @image_uuid}},
+               "_option_values" => %{"size" => ["5 inches (13 cm)", "4 inches (10 cm)"]},
+               "_price_modifiers" => %{"size" => %{"5 inches (13 cm)" => "9.00"}}
+             }
+    end
+
+    test "a stale snapshot copy of _option_values/_price_modifiers never survives the merge" do
+      item =
+        build_item(%{
+          "ecommerce" => %{
+            "legacy_metadata" => %{
+              "_option_values" => %{"stale_key" => ["stale label"]},
+              "_price_modifiers" => %{"stale_key" => %{"stale label" => "0.00"}}
+            }
+          }
+        })
+
+      metadata = View.legacy_metadata(item, @sets)
+
+      assert metadata["_option_values"] == %{"size" => ["5 inches (13 cm)", "4 inches (10 cm)"]}
+      assert metadata["_price_modifiers"] == %{"size" => %{"5 inches (13 cm)" => "9.00"}}
+    end
+  end
+end

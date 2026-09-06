@@ -179,4 +179,25 @@ transliteration_exclude =
     []
   end
 
-ExUnit.start(exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude)
+# `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
+# by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
+# `ProductSource.Catalogue` adapter's own tests need it loaded (a real
+# `PhoenixKitCatalogue.Schemas.Item`/`Category` struct for the pure view
+# tests, a live catalogue DB for the query tests) and are tagged
+# `:catalogue` so they run automatically once a host declares the dep.
+catalogue_exclude =
+  if Code.ensure_loaded?(PhoenixKitCatalogue) do
+    []
+  else
+    Logger.info(
+      "[test_helper] phoenix_kit_catalogue not loaded — ProductSource.Catalogue " <>
+        "tests excluded. They will run automatically once a host declares the " <>
+        "optional dependency."
+    )
+
+    [:catalogue]
+  end
+
+ExUnit.start(
+  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+)
