@@ -2088,24 +2088,44 @@ defmodule PhoenixKitEcommerce do
     if enabled?(), do: :ok, else: {:error, :shop_disabled}
   end
 
-  # Cart totals sum line decimals in the CART's currency frame, so every
-  # line must be snapshotted in that frame. A product whose own currency
-  # differs (a legacy row carrying the "USD" the schema and the column both
-  # used to default to on a non-USD shop) is logged, not rejected: prices
-  # are entered thinking in the shop currency, and rejecting would brick
-  # every existing catalog that carries the stale default.
-  defp validate_cart_currency(%Cart{currency: cart_currency}, %Product{} = product) do
-    if is_binary(product.currency) and is_binary(cart_currency) and
-         product.currency != cart_currency do
-      require Logger
+  # §4.6/§7.2 of the per-domain-currency spec: `product.currency` means
+  # "the currency `price` is stored in", which is always meant to be the
+  # BASE — never the cart's (display) currency, which is a per-request
+  # thing a product has no opinion on. Comparing against the cart here
+  # (as this used to) would warn on every EUR-cart line for an ordinary
+  # USD-based catalog, which is not a currency problem at all.
+  #
+  # A `nil` or unknown code is treated as "assume base" rather than
+  # flagged — a legacy row with no currency recorded, or one naming a
+  # currency this shop's table has never heard of, gives no actionable
+  # signal either way. Only a KNOWN, foreign code is a real mismatch, and
+  # even then the default is to log and continue: prices are entered
+  # thinking in the shop currency, and refusing by default would brick
+  # every existing catalog that carries a stale default. An operator who
+  # wants a hard stop opts in via `shop_enforce_product_currency`.
+  defp validate_cart_currency(%Cart{}, %Product{currency: product_currency}) do
+    base = Billing.get_base_currency()
+    base_code = base && base.code
 
-      Logger.warning(
-        "[Shop] product #{product.uuid} carries currency #{product.currency} " <>
-          "but the cart is #{cart_currency}; the amount is charged in #{cart_currency}"
-      )
+    known? =
+      is_binary(product_currency) and not is_nil(Billing.get_currency_by_code(product_currency))
+
+    cond do
+      is_nil(base_code) or not known? or product_currency == base_code ->
+        :ok
+
+      Settings.get_boolean_setting("shop_enforce_product_currency", false) ->
+        {:error, :currency_mismatch}
+
+      true ->
+        Logger.warning(
+          "[Shop] product carries currency #{product_currency} but the base is " <>
+            "#{base_code}; the amount is treated as base " <>
+            "(set shop_enforce_product_currency to refuse)"
+        )
+
+        :ok
     end
-
-    :ok
   end
 
   # A product must still be purchasable AT THE LOCKED READ - the page the
