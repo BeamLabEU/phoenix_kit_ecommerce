@@ -198,6 +198,23 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  The CODE of the currency to show and charge the current shopper (§4.2,
+  §12.4) — the request-scoped display currency resolved through Billing's
+  own fail-safe (§6.3: disabled/unknown/non-positive-rate falls back to
+  base), or `nil` when no currency is configured at all.
+
+  Storefront LiveViews assign this (not `get_default_currency/0`, which is
+  always the BASE currency) so `PriceDisplay`/`format_price` convert live
+  base amounts to what the visitor's domain is mapped to.
+  """
+  def get_display_currency_code do
+    case Billing.get_display_currency() do
+      %{code: code} -> code
+      nil -> nil
+    end
+  end
+
+  @doc """
   Gets the default currency struct from Billing module.
   """
   def get_default_currency do

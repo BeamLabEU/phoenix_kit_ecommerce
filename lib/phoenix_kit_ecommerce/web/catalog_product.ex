@@ -116,7 +116,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
-      |> assign(:currency, Shop.get_default_currency())
+      |> assign(:currency, Shop.get_display_currency_code())
       |> assign(:quantity, 1)
       |> assign(:session_id, session_id)
       |> assign(:user_uuid, user_uuid)
@@ -274,7 +274,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     user = Helpers.get_current_user(socket)
     user_uuid = if user, do: user.uuid, else: nil
 
-    currency = Shop.get_default_currency()
+    currency = Shop.get_display_currency_code()
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
     # Build specifications
@@ -664,10 +664,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   defp build_cart_message(display_name, quantity, unit_price, cart_total, currency) do
-    line_total = Decimal.mult(unit_price, quantity)
+    # `unit_price` is a LIVE base-currency number (product.price or
+    # calculated_price); `currency` is now the shopper's DISPLAY currency
+    # (Э1-E4), which need not be base. Convert once here — `cart_total` is
+    # already a stored snapshot in `currency` and must not be converted
+    # again (N1).
+    converted_unit_price = Currency.present(unit_price, currency)
+    line_total = Decimal.mult(converted_unit_price, quantity)
     line_str = format_price(line_total, currency)
     cart_total_str = format_price(cart_total, currency)
-    unit_price_str = format_price(unit_price, currency)
+    unit_price_str = format_price(converted_unit_price, currency)
 
     "#{display_name} (#{quantity} × #{unit_price_str} = #{line_str}) added to cart.\nCart total: #{cart_total_str}"
   end
