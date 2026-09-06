@@ -86,6 +86,29 @@ defmodule PhoenixKitEcommerce.StorefrontFiltersMergeTest do
              }
     end
 
+    test "multiple category-only filters are appended sorted by {position, key}, not map order (review fix)" do
+      overrides = %{
+        "zzz" => %{
+          "type" => "attribute_set",
+          "set_slug" => "zzz",
+          "label" => "Zzz",
+          "position" => 2
+        },
+        "aaa" => %{
+          "type" => "attribute_set",
+          "set_slug" => "aaa",
+          "label" => "Aaa",
+          "position" => 2
+        },
+        "no_position" => %{"type" => "attribute_set", "set_slug" => "np", "label" => "NP"}
+      }
+
+      merged = Shop.merge_storefront_filters(@global, overrides)
+      category_only_keys = merged |> Enum.drop(length(@global)) |> Enum.map(& &1["key"])
+
+      assert category_only_keys == ["no_position", "aaa", "zzz"]
+    end
+
     test "global filters absent from the override map are untouched, in original order" do
       overrides = %{"size" => %{"enabled" => false}}
 

@@ -197,6 +197,34 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.FiltersTest do
                %{slug: "m", label: "Medium", count: 2}
              ]
     end
+
+    test "forwards :exclude_hidden_categories to attribute_set_counts (review fix)", %{
+      items: %{c: item_c}
+    } do
+      # Isolate the category-hidden exclusion from item C's own
+      # shop_status (setup archives it) — only category_y being hidden
+      # should decide whether "l" appears here.
+      {:ok, _} =
+        Catalogue.update_item(item_c, %{data: %{"ecommerce" => %{"shop_status" => "active"}}})
+
+      {:ok, _} =
+        Shop.update_storefront_filters([
+          %{
+            "key" => "size",
+            "type" => "attribute_set",
+            "set_slug" => "size",
+            "label" => "Size",
+            "enabled" => true,
+            "position" => 0
+          }
+        ])
+
+      without_exclusion = CatalogueSource.aggregate_filter_values([])
+      assert Enum.find(without_exclusion["size"], &(&1.slug == "l"))
+
+      with_exclusion = CatalogueSource.aggregate_filter_values(exclude_hidden_categories: true)
+      refute Enum.find(with_exclusion["size"], &(&1.slug == "l"))
+    end
   end
 
   describe "Query.set_display_names/2 and Query.set_label/2 (2026-09-06 plan, Task 3)" do

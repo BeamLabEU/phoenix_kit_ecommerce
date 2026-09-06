@@ -140,10 +140,14 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     filters =
       PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category), language)
 
-    category_uuid = Keyword.get(opts, :category_uuid)
+    scope = [
+      category_uuid: Keyword.get(opts, :category_uuid),
+      language: language,
+      exclude_hidden_categories: Keyword.get(opts, :exclude_hidden_categories, false)
+    ]
 
     Enum.reduce(filters, %{}, fn filter, acc ->
-      Map.put(acc, filter["key"], aggregate_single_filter(filter, category_uuid, language))
+      Map.put(acc, filter["key"], aggregate_single_filter(filter, scope))
     end)
   end
 
@@ -152,41 +156,53 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     Query.price_range(opts)
   end
 
-  defp aggregate_single_filter(%{"type" => "price_range"}, category_uuid, _language) do
-    {min_price, max_price} = get_price_range_for(category_uuid: category_uuid)
+  defp aggregate_single_filter(%{"type" => "price_range"}, scope) do
+    {min_price, max_price} = get_price_range_for(category_uuid: scope[:category_uuid])
     %{min: min_price, max: max_price}
   end
 
-  defp aggregate_single_filter(%{"type" => "vendor"}, category_uuid, _language) do
-    Query.vendor_counts(category_uuid: category_uuid)
+  defp aggregate_single_filter(%{"type" => "vendor"}, scope) do
+    Query.vendor_counts(category_uuid: scope[:category_uuid])
   end
 
   # `attribute_set` facets, backed by `Query.attribute_set_counts/2`.
   # `metadata_option` (`option_key`) is an alias of `attribute_set`
   # (`set_slug`) so a filter config saved before this block — the live
   # "size" filter — keeps working unchanged (2026-09-06 design doc §5
-  # "Блок 5").
-  defp aggregate_single_filter(%{"type" => "attribute_set"} = filter, category_uuid, language) do
+  # "Блок 5"). `:exclude_hidden_categories` is forwarded from the
+  # caller's own `opts` (the global catalog page listing already scopes
+  # its product query by it, shop_catalog.ex) so a hidden category's
+  # items don't inflate a facet count past what the listing actually
+  # shows.
+  defp aggregate_single_filter(%{"type" => "attribute_set"} = filter, scope) do
     case filter["set_slug"] || filter["key"] do
       slug when is_binary(slug) ->
-        Query.attribute_set_counts(slug, category_uuid: category_uuid, language: language)
+        Query.attribute_set_counts(slug,
+          category_uuid: scope[:category_uuid],
+          language: scope[:language],
+          exclude_hidden_categories: scope[:exclude_hidden_categories]
+        )
 
       _ ->
         []
     end
   end
 
-  defp aggregate_single_filter(%{"type" => "metadata_option"} = filter, category_uuid, language) do
+  defp aggregate_single_filter(%{"type" => "metadata_option"} = filter, scope) do
     case filter["option_key"] || filter["key"] do
       slug when is_binary(slug) ->
-        Query.attribute_set_counts(slug, category_uuid: category_uuid, language: language)
+        Query.attribute_set_counts(slug,
+          category_uuid: scope[:category_uuid],
+          language: scope[:language],
+          exclude_hidden_categories: scope[:exclude_hidden_categories]
+        )
 
       _ ->
         []
     end
   end
 
-  defp aggregate_single_filter(_filter, _category_uuid, _language), do: []
+  defp aggregate_single_filter(_filter, _scope), do: []
 
   @doc """
   For `attribute_set`/`metadata_option` filters, swaps `"label"` for the

@@ -244,7 +244,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
       %{
         key: "color",
         values: [
-          %{key: "red", label: "Red", extras: %{"fr-FR" => %{"_title" => "Rouge"}}}
+          %{
+            key: "red",
+            label: "Red",
+            extras: %{"_primary_language" => "en-US", "fr-FR" => %{"_title" => "Rouge"}}
+          }
         ],
         selected: ["red"]
       }

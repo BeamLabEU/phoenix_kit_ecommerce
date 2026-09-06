@@ -142,5 +142,28 @@ defmodule PhoenixKitEcommerce.Web.SettingsFiltersTest do
       {:ok, _view, html} = live(conn, "/en/admin/shop/settings")
       assert html =~ ~s(phx-click="remove_filter")
     end
+
+    test "adding a filter doesn't crash when an existing saved filter has no position (review fix)",
+         %{conn: conn} do
+      {:ok, _} =
+        Shop.update_storefront_filters([
+          %{
+            "key" => "vendor",
+            "type" => "vendor",
+            "label" => "Vendor",
+            "enabled" => true
+          }
+        ])
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+      view
+      |> element(~s{form[phx-submit="add_attribute_set_filter"]})
+      |> render_submit(%{"set_slug" => "size"})
+
+      saved = Shop.get_storefront_filters()
+      assert %{"position" => position} = Enum.find(saved, &(&1["key"] == "size"))
+      assert is_integer(position)
+    end
   end
 end

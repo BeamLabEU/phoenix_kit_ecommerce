@@ -27,6 +27,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   # don't declare the optional dependency.
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 
+  alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.PriceDisplay
@@ -373,12 +374,21 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   # call site before this option existed, and every caller that hasn't
   # opted in) skips the lookup entirely and returns the untranslated
   # `:label`, unchanged.
+  #
+  # Goes through `Multilang.get_language_data/2` (matching
+  # `EntityData.get_title_translation/2`'s own path) rather than a naive
+  # `data[language]["_title"]` key lookup, so a value translated under a
+  # base code ("fr") is still found from a dialect-precision page
+  # ("fr-FR") and vice versa, and `data[primary]["_title"]` (the
+  # PRIMARY language's own override, distinct from `:label`'s
+  # `record.title` whenever the two diverge) is consulted before falling
+  # back to `:label`.
   defp translated_value_label(value, nil), do: Map.get(value, :label)
 
   defp translated_value_label(value, language) do
     extras = Map.get(value, :extras) || %{}
 
-    case get_in(extras, [language, "_title"]) do
+    case Map.get(Multilang.get_language_data(extras, language), "_title") do
       title when is_binary(title) and title != "" -> title
       _ -> Map.get(value, :label)
     end

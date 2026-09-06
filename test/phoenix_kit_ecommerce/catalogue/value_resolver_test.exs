@@ -101,4 +101,42 @@ defmodule PhoenixKitEcommerce.Catalogue.ValueResolverTest do
       assert ValueResolver.resolve("no-such-set", "Small") == {:error, :set_not_found}
     end
   end
+
+  describe "resolve_many/3 — one set/values read for the whole batch (review fix)" do
+    test "resolves several labels, matching resolve/3 label-by-label" do
+      assert ValueResolver.resolve_many("size", ["Medium", "Small", "Large"]) == %{
+               "Medium" => {:ok, "medium"},
+               "Small" => {:ok, "s"},
+               "Large" => {:created, "large"}
+             }
+    end
+
+    test "two distinct new labels in the SAME call both persist (no re-fetch masks either)", %{
+      set: set
+    } do
+      results = ValueResolver.resolve_many("size", ["X-Large", "XL"])
+
+      assert {:created, xl_slug} = results["X-Large"]
+      assert {:created, _other_slug} = results["XL"]
+
+      values = AttributeSets.list_values(set)
+      assert Enum.count(values, &(&1.slug == xl_slug)) == 1
+    end
+
+    test "duplicate raw labels in one call collapse to a single lookup/create", %{set: set} do
+      assert ValueResolver.resolve_many("size", ["Gold", "Gold"]) == %{
+               "Gold" => {:created, "gold"}
+             }
+
+      values = AttributeSets.list_values(set)
+      assert Enum.count(values, &(&1.slug == "gold")) == 1
+    end
+
+    test "returns :set_not_found for every label when the set doesn't exist" do
+      assert ValueResolver.resolve_many("no-such-set", ["A", "B"]) == %{
+               "A" => {:error, :set_not_found},
+               "B" => {:error, :set_not_found}
+             }
+    end
+  end
 end

@@ -23,6 +23,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
 
   require Logger
 
+  alias PhoenixKit.Utils.Multilang
   alias PhoenixKit.Utils.UUID, as: UUIDUtils
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Schemas.Category, as: CatCategory
@@ -371,8 +372,14 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
 
   defp value_label(%{title: title}, nil), do: title
 
+  # `Multilang.get_language_data/2` (matching
+  # `EntityData.get_title_translation/2`'s own path) rather than a naive
+  # `data[language]["_title"]` key lookup, so a value translated under a
+  # base code ("fr") is still found from a dialect-precision page
+  # ("fr-FR") and vice versa, and `data[primary]["_title"]` is consulted
+  # before falling back to the untranslated `title` column.
   defp value_label(%{title: title, data: data}, language) do
-    case get_in(data || %{}, [language, "_title"]) do
+    case Map.get(Multilang.get_language_data(data, language), "_title") do
       value when is_binary(value) and value != "" -> value
       _ -> title
     end

@@ -1482,18 +1482,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       {:noreply,
        put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: option_key))}
     else
-      max_pos =
-        socket.assigns.storefront_filters
-        |> Enum.map(& &1["position"])
-        |> Enum.max(fn -> 0 end)
-
       new_filter = %{
         "key" => option_key,
         "type" => "metadata_option",
         "option_key" => option_key,
         "label" => String.capitalize(option_key),
         "enabled" => true,
-        "position" => max_pos + 1
+        "position" => next_filter_position(socket.assigns.storefront_filters)
       }
 
       filters = socket.assigns.storefront_filters ++ [new_filter]
@@ -1524,18 +1519,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
          put_flash(socket, :error, gettext("Filter for '%{key}' already exists", key: set_slug))}
 
       true ->
-        max_pos =
-          socket.assigns.storefront_filters
-          |> Enum.map(& &1["position"])
-          |> Enum.max(fn -> 0 end)
-
         new_filter = %{
           "key" => set_slug,
           "type" => "attribute_set",
           "set_slug" => set_slug,
           "label" => String.capitalize(set_slug),
           "enabled" => true,
-          "position" => max_pos + 1
+          "position" => next_filter_position(socket.assigns.storefront_filters)
         }
 
         filters = socket.assigns.storefront_filters ++ [new_filter]
@@ -1581,6 +1571,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to reset filters"))}
     end
+  end
+
+  # `Enum.max/2`'s fallback only fires on an EMPTY list — a filter saved
+  # with no `"position"` at all (nil) sitting alongside numbered ones
+  # would otherwise win `Enum.max` outright (Erlang term order ranks
+  # atoms, `nil` included, above every number) and then crash `+ 1` on
+  # `nil`. Defaulting each missing position to `0` before taking the max
+  # avoids both.
+  defp next_filter_position(filters) do
+    filters
+    |> Enum.map(&(&1["position"] || 0))
+    |> Enum.max(fn -> 0 end)
+    |> Kernel.+(1)
   end
 
   defp vocabulary_label("services"), do: gettext("Services")

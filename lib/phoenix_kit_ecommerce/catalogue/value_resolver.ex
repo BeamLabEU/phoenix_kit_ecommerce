@@ -43,7 +43,11 @@ defmodule PhoenixKitEcommerce.Catalogue.ValueResolver do
   `EntityData.changeset/2`, so this is a normal, validated write, not a
   raw SQL patch. (There is no `PhoenixKitEntities.update_entity_data/2`
   — that name does not exist on the top-level module; the real API is
-  the `EntityData.update/3` used here.)
+  the `EntityData.update/3` used here.) Both writes run inside one
+  `PhoenixKit.RepoHelper.repo().transaction/1` — a failed status update
+  rolls the just-created (published) value back too, rather than
+  leaving a published, un-approved value behind with the caller seeing
+  only an error tuple.
 
   Storefront facets and pickers already exclude non-`published` values
   (`Query.attribute_set_counts/2` joins on `entity_data.status ==
@@ -77,38 +81,104 @@ defmodule PhoenixKitEcommerce.Catalogue.ValueResolver do
   `set_slug` doesn't resolve to a set (or whatever error `create_value/3`
   / the follow-up status update returns, on the rare write failure).
   """
-  @spec resolve(String.t(), String.t(), keyword()) ::
-          {:ok, String.t()} | {:created, String.t()} | {:error, :set_not_found | term()}
+  @type result :: {:ok, String.t()} | {:created, String.t()} | {:error, :set_not_found | term()}
+
+  @spec resolve(String.t(), String.t(), keyword()) :: result()
   def resolve(set_slug, raw_label, opts \\ [])
       when is_binary(set_slug) and is_binary(raw_label) do
-    label = normalize_label(raw_label)
-
     case find_set(set_slug) do
       nil -> {:error, :set_not_found}
-      set -> resolve_in_set(set, label, opts)
+      set -> resolve_in_set(set, normalize_label(raw_label), opts)
     end
+  end
+
+  @doc """
+  Same as `resolve/3`, but for MULTIPLE labels against the SAME set —
+  `resolve/3` in a loop runs `AttributeSets.list_sets/0` (a full
+  entities read, filtered in Elixir) and `list_values/2` once PER
+  LABEL, an N+1 by construction for the exact caller this module was
+  built for (Block 7's Shopify sync, one label per variant option per
+  product). This resolves the set and reads its values once and reuses
+  both across every label — a `:created` value from an earlier label in
+  the same call is visible to a later label in the same call (a value
+  read once at the top would go stale the moment ANY label in the batch
+  creates one), so two labels needing the same NEW value in one call
+  create it only once.
+
+  Returns `%{raw_label => resolve/3's return}`, one entry per DISTINCT
+  raw label (duplicates in `raw_labels` collapse to a single lookup).
+  """
+  @spec resolve_many(String.t(), [String.t()], keyword()) :: %{String.t() => result()}
+  def resolve_many(set_slug, raw_labels, opts \\ [])
+      when is_binary(set_slug) and is_list(raw_labels) do
+    case find_set(set_slug) do
+      nil -> Map.new(raw_labels, &{&1, {:error, :set_not_found}})
+      set -> resolve_many_in_set(set, raw_labels, opts)
+    end
+  end
+
+  defp resolve_many_in_set(set, raw_labels, opts) do
+    values = AttributeSets.list_values(set, opts)
+
+    {results, _values} =
+      raw_labels
+      |> Enum.uniq()
+      |> Enum.reduce({%{}, values}, fn raw_label, {results, values} ->
+        {result, values} = resolve_against(set, normalize_label(raw_label), values, opts)
+        {Map.put(results, raw_label, result), values}
+      end)
+
+    results
   end
 
   defp resolve_in_set(set, label, opts) do
+    {result, _values} = resolve_against(set, label, AttributeSets.list_values(set, opts), opts)
+    result
+  end
+
+  # `values` is threaded through (rather than re-read) so `resolve_many/3`
+  # can fold a `:created` value from an earlier label into the list a
+  # later label in the SAME batch searches — see its moduledoc.
+  defp resolve_against(set, label, values, opts) do
     slug = Slug.slugify(label)
-    values = AttributeSets.list_values(set, opts)
 
-    cond do
-      value = Enum.find(values, &(&1.slug == slug)) ->
-        {:ok, value.slug}
+    case find_value(values, slug, label) do
+      %{slug: matched} ->
+        {{:ok, matched}, values}
 
-      value = Enum.find(values, &(&1.title == label)) ->
-        {:ok, value.slug}
+      nil ->
+        case create_draft_value(set, label, slug, opts) do
+          {:created, created_slug} = result ->
+            {result, [%{slug: created_slug, title: label} | values]}
 
-      true ->
-        create_draft_value(set, label, slug, opts)
+          error ->
+            {error, values}
+        end
     end
   end
 
+  defp find_value(values, slug, label) do
+    Enum.find(values, &(&1.slug == slug)) || Enum.find(values, &(&1.title == label))
+  end
+
+  # `create_value/3` hardcodes `status: "published"` — without a
+  # transaction, a failure of the follow-up status update would leave a
+  # PUBLISHED value the admin never approved sitting in the set,
+  # immediately visible in storefront facets/pickers, with the caller
+  # only seeing an error tuple. Wrapping both writes means a failed
+  # draft-ing rolls the creation back too.
   defp create_draft_value(set, label, slug, opts) do
-    with {:ok, value} <- AttributeSets.create_value(set, %{label: label, slug: slug}, opts),
-         {:ok, drafted} <- EntityData.update(value, %{status: "draft"}) do
-      {:created, drafted.slug}
+    PhoenixKit.RepoHelper.repo().transaction(fn ->
+      with {:ok, value} <- AttributeSets.create_value(set, %{label: label, slug: slug}, opts),
+           {:ok, drafted} <- EntityData.update(value, %{status: "draft"}) do
+        drafted.slug
+      else
+        {:error, reason} -> PhoenixKit.RepoHelper.repo().rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, slug} -> {:created, slug}
+      {:error, reason} -> {:error, reason}
     end
   end
 

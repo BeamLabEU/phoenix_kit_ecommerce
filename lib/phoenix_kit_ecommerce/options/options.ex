@@ -825,14 +825,33 @@ defmodule PhoenixKitEcommerce.Options do
               Enum.filter(schema_options, &(&1 in values)) ++
                 Enum.reject(values, &(&1 in schema_options))
 
-            Map.put(spec, "options", narrowed)
+            spec |> Map.put("options", narrowed) |> drop_stale_default(narrowed)
 
           _ ->
-            Map.put(spec, "options", values)
+            spec |> Map.put("options", values) |> drop_stale_default(values)
         end
 
       _ ->
         spec
+    end
+  end
+
+  # An admin-configured `"default"` is only meaningful if it's still one
+  # of the values narrowing just offered for THIS product. Narrowing to
+  # the product's own `_option_values` (the catalogue source's per-item,
+  # and per-language, value list) can drop the admin's untranslated
+  # default from the narrowed list entirely — `build_default_specs/2`
+  # would then seed `selected_specs` with a value the picker never
+  # renders, and `validate_selected_specs/2` rejects it on add-to-cart.
+  # Dropping the stale default here (once) is simpler than teaching every
+  # default-selection reader to re-check it.
+  defp drop_stale_default(spec, narrowed) do
+    default = Map.get(spec, "default")
+
+    if is_binary(default) and default not in narrowed do
+      Map.delete(spec, "default")
+    else
+      spec
     end
   end
 

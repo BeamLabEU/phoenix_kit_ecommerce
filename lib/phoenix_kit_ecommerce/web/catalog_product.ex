@@ -96,7 +96,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     category_uuid = if product.category, do: product.category.uuid, else: nil
 
     {enabled_filters, _fv} =
-      FilterHelpers.load_filter_data(category_uuid: category_uuid, language: current_language)
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
 
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
 
@@ -297,7 +301,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     category_uuid = if product.category, do: product.category.uuid, else: nil
 
     {enabled_filters, _fv} =
-      FilterHelpers.load_filter_data(category_uuid: category_uuid, language: current_language)
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
 
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
     filter_qs = FilterHelpers.build_query_string(active_filters, enabled_filters)

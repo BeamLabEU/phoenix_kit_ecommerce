@@ -654,7 +654,7 @@ defmodule PhoenixKitEcommerce do
   defp maybe_translate_filter_labels(filters, language) do
     current = ProductSource.current()
 
-    if function_exported?(current, :translate_filter_label, 2) do
+    if Code.ensure_loaded?(current) and function_exported?(current, :translate_filter_label, 2) do
       # `apply/3`, not a direct `current.translate_filter_label(...)` call:
       # the latter trips the compiler's cross-reference check the moment
       # `current` is provably `Legacy` in some branch, which has no
@@ -701,10 +701,18 @@ defmodule PhoenixKitEcommerce do
         end
       end)
 
+    # Sorted explicitly by `{position, key}` rather than left in
+    # `category_filters`' own (map, so unspecified) enumeration order —
+    # two category-only filters sharing a position, or both omitting
+    # it, must not have the sidebar's order depend on that. A missing
+    # `"position"` defaults to `0` (this codebase's floor elsewhere,
+    # `Settings.gated_event/3`'s `Enum.max(fn -> 0 end) + 1`), not
+    # whatever `nil`'s accidental placement in term ordering gives it.
     category_only =
       category_filters
       |> Enum.reject(fn {key, _override} -> MapSet.member?(existing_keys, key) end)
       |> Enum.map(fn {key, override} -> Map.put(override, "key", key) end)
+      |> Enum.sort_by(&{&1["position"] || 0, &1["key"]})
 
     merged ++ category_only
   end
@@ -2211,14 +2219,26 @@ defmodule PhoenixKitEcommerce do
   # `validate_locked_product_purchasable!/2` right after this then refuses
   # one that is no longer active. A product deleted/archived since is
   # treated as unavailable rather than falling back to the stale struct.
-  defp lock_or_reload_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}} = product) do
-    case ProductSource.current().get_product(product.uuid, []) do
+  #
+  # `language` is threaded into the catalogue reload because the SAME
+  # attribute-set value renders under a different label per language
+  # (`View.product_view/2`'s `:language` opt) — `_option_values` and
+  # `_price_modifiers` on the reloaded product must key on whatever label
+  # the shopper's page (and `selected_specs`) used, or a priced option
+  # picked on `/fr/...` reloads with English modifier keys, matches
+  # nothing in `calculate_product_price/2`, and the line is inserted at
+  # the base price while the page showed base+modifier.
+  defp lock_or_reload_product(
+         %Product{__meta__: %Ecto.Schema.Metadata{state: :built}} = product,
+         language
+       ) do
+    case ProductSource.current().get_product(product.uuid, language: language) do
       %Product{} = fresh -> fresh
       nil -> %{product | status: "archived"}
     end
   end
 
-  defp lock_or_reload_product(%Product{} = product) do
+  defp lock_or_reload_product(%Product{} = product, _language) do
     Product
     |> where([p], p.uuid == ^product.uuid)
     |> lock("FOR UPDATE")
@@ -2254,7 +2274,7 @@ defmodule PhoenixKitEcommerce do
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
         # This ensures price snapshot is consistent with current product state
-        locked_product = lock_or_reload_product(product)
+        locked_product = lock_or_reload_product(product, language)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
@@ -2305,7 +2325,7 @@ defmodule PhoenixKitEcommerce do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price/metadata changes during cart update
-        locked_product = lock_or_reload_product(product)
+        locked_product = lock_or_reload_product(product, language)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
