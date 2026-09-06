@@ -395,7 +395,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   end
 
   defp category_image(category) do
-    Shop.Category.get_image_url(category, size: "small")
+    Shop.category_image_url(category, size: "small")
   end
 
   # Build catalog path with filter params and optional page

@@ -30,6 +30,14 @@ defmodule PhoenixKitEcommerce do
 
   use PhoenixKit.Module
 
+  # `ProductSource.current/0` can return `ProductSource.Catalogue`, which
+  # only exists once the optional `phoenix_kit_catalogue` dependency ships
+  # the adapter (a later block). Quietened the same way `ai_translatable.ex`
+  # quietens the optional `phoenix_kit_ai` calls — real production dispatch
+  # never reaches the module when it's absent, only the compiler's static
+  # xref check would otherwise complain about it.
+  @compile {:no_warn_undefined, PhoenixKitEcommerce.ProductSource.Catalogue}
+
   import Ecto.Query, warn: false
   require Logger
 
@@ -53,6 +61,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Shopify.Provider, as: ShopifyProvider
@@ -126,6 +135,22 @@ defmodule PhoenixKitEcommerce do
       products_count: count_products(),
       categories_count: count_categories()
     }
+  end
+
+  @doc """
+  Gets a raw config value stored by key in `phoenix_kit_shop_config`.
+
+  Returns `nil` when the key has never been set. Distinct from
+  `get_config/0` (the fixed dashboard-stats map above) — this is a
+  generic key lookup, currently used by
+  `PhoenixKitEcommerce.ProductSource.current/0` to read
+  `"shop_product_source"`.
+  """
+  def get_config(key) when is_binary(key) do
+    case repo().get(ShopConfig, key) do
+      %ShopConfig{value: %{"value" => value}} -> value
+      _ -> nil
+    end
   end
 
   @doc """
@@ -544,36 +569,14 @@ defmodule PhoenixKitEcommerce do
   - `:preload` - Associations to preload
   """
   def list_products(opts \\ []) do
-    Product
-    |> apply_product_filters(opts)
-    |> order_by([p], desc: p.inserted_at)
-    |> maybe_preload(Keyword.get(opts, :preload))
-    |> repo().all()
+    ProductSource.current().list_products(opts)
   end
 
   @doc """
   Lists products with count for pagination.
   """
   def list_products_with_count(opts \\ []) do
-    page = Keyword.get(opts, :page, 1)
-    per_page = Keyword.get(opts, :per_page, 25)
-    offset = (page - 1) * per_page
-
-    base_query =
-      Product
-      |> apply_product_filters(opts)
-
-    total = repo().aggregate(base_query, :count)
-
-    products =
-      base_query
-      |> order_by([p], desc: p.inserted_at)
-      |> limit(^per_page)
-      |> offset(^offset)
-      |> maybe_preload(Keyword.get(opts, :preload, [:category]))
-      |> repo().all()
-
-    {products, total}
+    ProductSource.current().list_products_with_count(opts)
   end
 
   @doc """
@@ -581,10 +584,8 @@ defmodule PhoenixKitEcommerce do
 
   Returns products in the order of the provided IDs.
   """
-  def list_products_by_ids([]), do: []
-
-  def list_products_by_ids(ids) when is_list(ids) do
-    Product |> where([p], p.uuid in ^ids) |> repo().all()
+  def list_products_by_ids(ids) do
+    ProductSource.current().list_products_by_ids(ids)
   end
 
   # ============================================
@@ -651,77 +652,20 @@ defmodule PhoenixKitEcommerce do
   - `:category_uuid` - Scope aggregation to a specific category by UUID
   """
   def aggregate_filter_values(opts \\ []) do
-    filters = get_enabled_storefront_filters()
-    category_uuid = Keyword.get(opts, :category_uuid)
-
-    Enum.reduce(filters, %{}, fn filter, acc ->
-      Map.put(acc, filter["key"], aggregate_single_filter(filter, category_uuid))
-    end)
+    ProductSource.current().aggregate_filter_values(opts)
   end
 
-  defp aggregate_single_filter(%{"type" => "price_range"}, category_uuid) do
-    query =
-      Product
-      |> where([p], p.status == "active")
-      |> maybe_filter_category(category_uuid)
+  @doc """
+  Returns the `{min, max}` price across active products, optionally
+  scoped to a category.
 
-    min_price = repo().aggregate(query, :min, :price)
-    max_price = repo().aggregate(query, :max, :price)
-    %{min: min_price, max: max_price}
-  rescue
-    _ -> %{min: nil, max: nil}
+  ## Options
+
+    - `:category_uuid` - Scope to a specific category by UUID
+  """
+  def get_price_range_for(opts \\ []) do
+    ProductSource.current().get_price_range_for(opts)
   end
-
-  defp aggregate_single_filter(%{"type" => "vendor"}, category_uuid) do
-    query =
-      Product
-      |> where([p], p.status == "active" and not is_nil(p.vendor) and p.vendor != "")
-      |> maybe_filter_category(category_uuid)
-      |> group_by([p], p.vendor)
-      |> select([p], %{value: p.vendor, count: count(p.uuid)})
-      |> order_by([p], desc: count(p.uuid))
-
-    repo().all(query)
-  rescue
-    _ -> []
-  end
-
-  defp aggregate_single_filter(%{"type" => "metadata_option", "option_key" => key}, category_uuid)
-       when is_binary(key) do
-    # Query distinct option values from metadata->'_option_values'->key JSONB array
-    sql = """
-    SELECT val AS value, COUNT(DISTINCT p.uuid) AS count
-    FROM phoenix_kit_shop_products p,
-         jsonb_array_elements_text(COALESCE(p.metadata->'_option_values'->$1, '[]'::jsonb)) AS val
-    WHERE p.status = 'active'
-    #{if category_uuid, do: "AND p.category_uuid = $2", else: ""}
-    GROUP BY val
-    ORDER BY count DESC
-    """
-
-    params =
-      if category_uuid do
-        {:ok, uuid_bin} = Ecto.UUID.dump(category_uuid)
-        [key, uuid_bin]
-      else
-        [key]
-      end
-
-    case repo().query(sql, params) do
-      {:ok, %{rows: rows}} ->
-        Enum.map(rows, fn [value, count] -> %{value: value, count: count} end)
-
-      _ ->
-        []
-    end
-  rescue
-    _ -> []
-  end
-
-  defp aggregate_single_filter(_filter, _category_uuid), do: []
-
-  defp maybe_filter_category(query, nil), do: query
-  defp maybe_filter_category(query, uuid), do: where(query, [p], p.category_uuid == ^uuid)
 
   @doc """
   Discovers filterable option keys from product metadata.
@@ -825,20 +769,9 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Gets a product by ID or UUID.
   """
-  def get_product(id, opts \\ [])
-
-  def get_product(id, opts) when is_binary(id) do
-    if UUIDUtils.valid?(id) do
-      Product
-      |> where([p], p.uuid == ^id)
-      |> maybe_preload(Keyword.get(opts, :preload))
-      |> repo().one()
-    else
-      nil
-    end
+  def get_product(id, opts \\ []) do
+    ProductSource.current().get_product(id, opts)
   end
-
-  def get_product(_, _opts), do: nil
 
   @doc """
   Gets a product by ID or UUID, raises if not found.
@@ -907,7 +840,15 @@ defmodule PhoenixKitEcommerce do
 
   Automatically normalizes metadata (price modifiers, option values)
   before saving to ensure consistent storage format.
+
+  Refuses a view-struct (`__meta__.state == :built`, never `:loaded`) —
+  the catalogue adapter hands those out for display only; nothing may
+  write through them into `phoenix_kit_shop_products`.
   """
+  def update_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}, _attrs) do
+    {:error, :read_only_view}
+  end
+
   def update_product(%Product{} = product, attrs) do
     attrs = MetadataValidator.normalize_product_attrs(attrs)
 
@@ -928,7 +869,14 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Deletes a product.
+
+  Refuses a view-struct (`__meta__.state == :built`) for the same
+  reason `update_product/2` does.
   """
+  def delete_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}) do
+    {:error, :read_only_view}
+  end
+
   def delete_product(%Product{} = product) do
     product_uuid = product.uuid
 
@@ -1169,27 +1117,14 @@ defmodule PhoenixKitEcommerce do
   - `:preload` - Associations to preload
   """
   def list_categories(opts \\ []) do
-    Category
-    |> apply_category_filters(opts)
-    |> order_by([c], [c.position, c.name])
-    |> maybe_preload(Keyword.get(opts, :preload))
-    |> repo().all()
+    ProductSource.current().list_categories(opts)
   end
 
   @doc """
   Returns a map of category_uuid => product_count for all categories.
   """
   def product_counts_by_category do
-    Product
-    |> where([p], not is_nil(p.category_uuid))
-    |> group_by([p], p.category_uuid)
-    |> select([p], {p.category_uuid, count(p.uuid)})
-    |> repo().all()
-    |> Map.new()
-  rescue
-    e ->
-      Logger.warning("Failed to load product counts by category: #{inspect(e)}")
-      %{}
+    ProductSource.current().product_counts_by_category()
   end
 
   @doc """
@@ -1252,20 +1187,9 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Gets a category by ID or UUID.
   """
-  def get_category(id, opts \\ [])
-
-  def get_category(id, opts) when is_binary(id) do
-    if UUIDUtils.valid?(id) do
-      Category
-      |> where([c], c.uuid == ^id)
-      |> maybe_preload(Keyword.get(opts, :preload))
-      |> repo().one()
-    else
-      nil
-    end
+  def get_category(id, opts \\ []) do
+    ProductSource.current().get_category(id, opts)
   end
-
-  def get_category(_, _opts), do: nil
 
   @doc """
   Gets a category by ID or UUID, raises if not found.
@@ -3612,79 +3536,6 @@ defmodule PhoenixKitEcommerce do
     _ -> 0
   end
 
-  defp apply_product_filters(query, opts) do
-    query
-    |> filter_by_status(Keyword.get(opts, :status))
-    |> filter_by_product_type(Keyword.get(opts, :product_type))
-    |> filter_by_category(Keyword.get(opts, :category_uuid))
-    |> filter_by_product_search(Keyword.get(opts, :search))
-    |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
-    |> filter_by_price_range(Keyword.get(opts, :price_min), Keyword.get(opts, :price_max))
-    |> filter_by_vendors(Keyword.get(opts, :vendors))
-    |> filter_by_metadata_options(Keyword.get(opts, :metadata_filters))
-  end
-
-  defp filter_by_status(query, nil), do: query
-  defp filter_by_status(query, status), do: where(query, [p], p.status == ^status)
-
-  defp filter_by_product_type(query, nil), do: query
-  defp filter_by_product_type(query, type), do: where(query, [p], p.product_type == ^type)
-
-  defp filter_by_category(query, nil), do: query
-
-  defp filter_by_category(query, uuid) when is_binary(uuid) do
-    if UUIDUtils.valid?(uuid) do
-      where(query, [p], p.category_uuid == ^uuid)
-    else
-      query
-    end
-  end
-
-  defp filter_by_visible_categories(query, false), do: query
-
-  defp filter_by_visible_categories(query, true) do
-    # Exclude products from categories with status "hidden"
-    # Products from "active" and "unlisted" categories are visible
-    # Use distinct to avoid duplicates from the left_join
-    from(p in query,
-      left_join: c in Category,
-      on: c.uuid == p.category_uuid,
-      where: is_nil(c.uuid) or c.status != "hidden",
-      distinct: p.uuid
-    )
-  end
-
-  defp filter_by_price_range(query, nil, nil), do: query
-  defp filter_by_price_range(query, min, nil), do: where(query, [p], p.price >= ^min)
-  defp filter_by_price_range(query, nil, max), do: where(query, [p], p.price <= ^max)
-
-  defp filter_by_price_range(query, min, max),
-    do: where(query, [p], p.price >= ^min and p.price <= ^max)
-
-  defp filter_by_vendors(query, nil), do: query
-  defp filter_by_vendors(query, []), do: query
-
-  defp filter_by_vendors(query, vendors) when is_list(vendors),
-    do: where(query, [p], p.vendor in ^vendors)
-
-  defp filter_by_metadata_options(query, nil), do: query
-  defp filter_by_metadata_options(query, []), do: query
-
-  defp filter_by_metadata_options(query, filters) when is_list(filters) do
-    Enum.reduce(filters, query, fn %{key: key, values: values}, q ->
-      where(
-        q,
-        [p],
-        fragment(
-          "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'_option_values'->?, '[]'::jsonb)) elem WHERE elem = ANY(?))",
-          p.metadata,
-          ^key,
-          ^values
-        )
-      )
-    end)
-  end
-
   # Max length for a user-supplied search term. Anything longer is
   # truncated: ILIKE against unindexed JSONB expansions is linear in both
   # pattern and row count, so an unbounded public `?search=` param would be
@@ -3706,41 +3557,6 @@ defmodule PhoenixKitEcommerce do
       |> String.replace("_", "\\_")
 
     "%#{escaped}%"
-  end
-
-  defp filter_by_product_search(query, nil), do: query
-  defp filter_by_product_search(query, ""), do: query
-
-  defp filter_by_product_search(query, search) do
-    search_term = search_like_pattern(search)
-    default_lang = Translations.default_language()
-
-    # Search in JSONB localized fields using PostgreSQL operators
-    # Searches in default language and falls back to any language match,
-    # plus SKU (metadata->>'sku') and tags. Columns are bound through the
-    # product binding so the query stays valid when other filters join
-    # additional tables (e.g. :exclude_hidden_categories).
-    where(
-      query,
-      [p],
-      fragment(
-        "(COALESCE(?->>?, '') ILIKE ? OR COALESCE(?->>?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_each_text(?) WHERE value ILIKE ?) OR EXISTS (SELECT 1 FROM jsonb_each_text(?) WHERE value ILIKE ?) OR COALESCE(?->>'sku', '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?, '[]'::jsonb)) AS tag WHERE tag ILIKE ?))",
-        p.title,
-        ^default_lang,
-        ^search_term,
-        p.description,
-        ^default_lang,
-        ^search_term,
-        p.title,
-        ^search_term,
-        p.description,
-        ^search_term,
-        p.metadata,
-        ^search_term,
-        p.tags,
-        ^search_term
-      )
-    )
   end
 
   defp apply_category_filters(query, opts) do
@@ -4564,7 +4380,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Product{}}
   """
   def get_product_by_slug_localized(slug, language, opts \\ []) do
-    SlugResolver.find_product_by_slug(slug, language, opts)
+    ProductSource.current().get_product_by_slug_localized(slug, language, opts)
   end
 
   @doc """
@@ -4584,7 +4400,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Category{}}
   """
   def get_category_by_slug_localized(slug, language, opts \\ []) do
-    SlugResolver.find_category_by_slug(slug, language, opts)
+    ProductSource.current().get_category_by_slug_localized(slug, language, opts)
   end
 
   @doc """
@@ -4720,6 +4536,18 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Returns the image URL for a category, regardless of which
+  `ProductSource` adapter produced it.
+
+  Delegates to `Category.get_image_url/2` today; kept as a facade seam
+  because the catalogue adapter's view-struct categories won't have a
+  `:featured_product` Ecto preload to fall back on.
+  """
+  def category_image_url(category, opts \\ []) do
+    Category.get_image_url(category, opts)
+  end
+
+  @doc """
   Finds a product by slug in any language.
 
   Searches across all translated slugs to find the product.
@@ -4735,7 +4563,7 @@ defmodule PhoenixKitEcommerce do
       {:error, :not_found}
   """
   def get_product_by_any_slug(slug, opts \\ []) do
-    SlugResolver.find_product_by_any_slug(slug, opts)
+    ProductSource.current().get_product_by_any_slug(slug, opts)
   end
 
   @doc """
@@ -4747,7 +4575,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Category{}, "es"}
   """
   def get_category_by_any_slug(slug, opts \\ []) do
-    SlugResolver.find_category_by_any_slug(slug, opts)
+    ProductSource.current().get_category_by_any_slug(slug, opts)
   end
 
   # ============================================
