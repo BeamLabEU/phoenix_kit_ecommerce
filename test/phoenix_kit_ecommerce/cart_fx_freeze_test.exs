@@ -124,6 +124,38 @@ defmodule PhoenixKitEcommerce.CartFxFreezeTest do
     assert Decimal.equal?(new_item.unit_price, Decimal.new("95.00"))
   end
 
+  test "a line still converts at the frozen rate after the cart's currency is disabled (§12.2)" do
+    # Regression for a real bug the reviewer traced through
+    # Currency.present/3: routing snapshot_unit_price/2's conversion
+    # through present/3 with `rate:` did NOT fully bypass the currency
+    # table, because present/3 still re-resolved its TARGET currency
+    # live on every call. Disabling (not deleting, not changing the
+    # rate of) the cart's own currency made resolve_display_currency/1
+    # substitute the base as present/3's target, which then hit
+    # present/3's `target.code == base.code` early return and skipped
+    # conversion entirely — a USD amount silently mislabeled EUR. Fixed
+    # by having snapshot_unit_price/2 multiply by cart.exchange_rate
+    # directly instead of calling present/3 at all.
+    Currency.put_request_currency("EUR")
+    {:ok, cart} = Shop.create_cart(session_id: "s-#{System.unique_integer([:positive])}")
+    assert Decimal.equal?(cart.exchange_rate, Decimal.new("0.909091"))
+
+    {:ok, _} =
+      PhoenixKitBilling.update_currency(PhoenixKitBilling.get_currency_by_code("EUR"), %{
+        enabled: false
+      })
+
+    {:ok, product} = Shop.create_product(product_attrs(%{"price" => Decimal.new("138.00")}))
+    {:ok, cart} = Shop.add_to_cart(cart, product, 1)
+    [item] = cart.items
+
+    # Still converted at the FROZEN rate (0.909091), not left as the raw
+    # base amount (138.00) the bug produced.
+    assert Decimal.equal?(item.unit_price, Decimal.new("125.45"))
+    assert Decimal.equal?(item.base_unit_price, Decimal.new("138.00"))
+    assert item.currency == "EUR"
+  end
+
   test "no request currency -> base cart, rate 1.0, unit_price == product price (unchanged behaviour)" do
     Currency.put_request_currency(nil)
     {:ok, cart} = Shop.create_cart(session_id: "s-#{System.unique_integer([:positive])}")
