@@ -49,6 +49,15 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   ignored — this mirrors `ProductDiff.comparable_fields/0`'s set, but
   doesn't hard-code it, so a caller that already filtered `change_fields`
   (e.g. to a single field an operator picked) never has to know that.
+
+  `:handle` and `:product_id` are the exception: not part of
+  `ProductDiff.comparable_fields/0`, they are merged into
+  `data["ecommerce"]["shopify"]` (`product_id` stringified) whenever
+  present, alongside whatever `Writer` or a later Shopify sync already
+  wrote there (`image_ids`, `set_slugs`, `collection_id`) — never
+  replacing that sub-map wholesale. `Shopify.Sync.apply_change/2` sets
+  both on every applied `Change`, backfilling identity even when the
+  caller only asked for a subset of the diffed fields.
   """
   @spec update_from_shopify(Item.t(), map(), String.t()) ::
           {:ok, Item.t()} | {:error, Ecto.Changeset.t() | [{atom(), String.t()}]}
@@ -57,7 +66,10 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     current_ecommerce = get_in(item.data || %{}, ["ecommerce"])
 
     with {:ok, cast_ecommerce} <-
-           ItemCommerce.cast(ecommerce_params(change_fields), current_ecommerce) do
+           ItemCommerce.cast(
+             ecommerce_params(change_fields, current_ecommerce),
+             current_ecommerce
+           ) do
       # `ItemCommerce.cast/2` returns ONLY its own embedded-schema fields —
       # `to_storage_map/1` builds the map from `Map.from_struct/1`, so a
       # non-schema key such as `legacy_metadata` (the migration snapshot
@@ -194,7 +206,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   # data["ecommerce"]
   # ============================================================
 
-  defp ecommerce_params(change_fields) do
+  defp ecommerce_params(change_fields, current_ecommerce) do
     %{}
     |> maybe_put_param("vendor", Map.get(change_fields, :vendor))
     |> maybe_put_param("tags", Map.get(change_fields, :tags))
@@ -203,6 +215,31 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "compare_at_price",
       decimal_param(Map.get(change_fields, :compare_at_price))
     )
+    |> maybe_put_shopify_identity(change_fields, current_ecommerce)
+  end
+
+  # Merges `:handle`/`:product_id` into the EXISTING `data["ecommerce"]
+  # ["shopify"]` sub-map rather than replacing it outright — that sub-map
+  # is also where `sync_images/3`, `sync_variants/2`, and `CollectionSync`
+  # record `image_ids`, `set_slugs`, and `collection_id`; a plain
+  # `%{"handle" => ..., "product_id" => ...}` here would wipe those out
+  # on the next ordinary field sync.
+  defp maybe_put_shopify_identity(params, change_fields, current_ecommerce) do
+    handle = Map.get(change_fields, :handle)
+    product_id = Map.get(change_fields, :product_id)
+
+    if is_nil(handle) and is_nil(product_id) do
+      params
+    else
+      current_shopify = get_in(current_ecommerce || %{}, ["shopify"]) || %{}
+
+      shopify =
+        current_shopify
+        |> maybe_put_param("handle", handle)
+        |> maybe_put_param("product_id", product_id && to_string(product_id))
+
+      Map.put(params, "shopify", shopify)
+    end
   end
 
   defp create_ecommerce_params(shopify_product) do
