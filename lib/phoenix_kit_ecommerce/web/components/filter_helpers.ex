@@ -18,9 +18,13 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
 
   Options:
   - `:category_uuid` - Scope aggregation to a category by UUID
+  - `:category` - The `%Category{}` being viewed (its `storefront_filters`
+    overrides the global filter config for `:filters` - see
+    `Shop.merge_storefront_filters/2`); `nil` for the global catalog page
   """
   def load_filter_data(opts \\ []) do
-    filters = Shop.get_enabled_storefront_filters()
+    category = Keyword.get(opts, :category)
+    filters = Shop.get_enabled_storefront_filters(category)
     filter_values = Shop.aggregate_filter_values(opts)
     {filters, filter_values}
   end

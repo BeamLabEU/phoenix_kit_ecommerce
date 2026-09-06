@@ -129,7 +129,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def aggregate_filter_values(opts \\ []) do
-    filters = PhoenixKitEcommerce.get_enabled_storefront_filters()
+    # `:category` (the `%Category{}` being viewed, when the caller has
+    # one — `Web.Components.FilterHelpers.load_filter_data/1` on the
+    # category page) makes this category-aware: a `storefront_filters`
+    # key that only exists on the category (Task 2, 2026-09-06 plan)
+    # must still get its facet counted here, not just appear in the
+    # sidebar's filter list with an empty "No options available".
+    filters = PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category))
     category_uuid = Keyword.get(opts, :category_uuid)
 
     Enum.reduce(filters, %{}, fn filter, acc ->

@@ -59,9 +59,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         per_page = 24
         page = Helpers.parse_page(params["page"])
 
-        # Load storefront filters
+        # Load storefront filters (category-aware: applies this category's
+        # `storefront_filters` overrides on top of the global config)
         {enabled_filters, filter_values} =
-          FilterHelpers.load_filter_data(category_uuid: category.uuid)
+          FilterHelpers.load_filter_data(category_uuid: category.uuid, category: category)
 
         active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
         filter_opts = FilterHelpers.build_query_opts(active_filters, enabled_filters)

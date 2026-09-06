@@ -624,11 +624,68 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Returns only enabled storefront filters, sorted by position.
+
+  `category` (a `%Category{}`, or `nil` for the global list unmodified)
+  applies its `storefront_filters` overrides on top of the global config
+  first — see `merge_storefront_filters/2`.
   """
-  def get_enabled_storefront_filters do
+  def get_enabled_storefront_filters(category \\ nil) do
     get_storefront_filters()
+    |> merge_storefront_filters(category_filter_overrides(category))
     |> Enum.filter(& &1["enabled"])
     |> Enum.sort_by(& &1["position"])
+  end
+
+  defp category_filter_overrides(%Category{storefront_filters: overrides})
+       when is_map(overrides),
+       do: overrides
+
+  defp category_filter_overrides(_category), do: %{}
+
+  @doc """
+  Merges a category's `storefront_filters` overrides onto the global
+  filter list.
+
+  `category_filters` is a map of `filter key => override attrs` — the
+  shape stored at `Category.storefront_filters` (and, for the catalogue
+  source, `data["ecommerce"]["storefront_filters"]`). For a key that
+  matches a global filter, only `"enabled"`, `"position"`, `"label"` and
+  `"set_slug"` are taken from the override; every other attribute
+  (notably `"type"`) keeps the global filter's value. A key absent from
+  the global list is appended as a brand-new filter, taken from the
+  override attrs as they are (with `"key"` set to the map key, in case
+  the override itself omits it).
+  """
+  @spec merge_storefront_filters([map()], map()) :: [map()]
+  def merge_storefront_filters(global_filters, category_filters)
+      when is_list(global_filters) and is_map(category_filters) do
+    existing_keys = MapSet.new(global_filters, & &1["key"])
+
+    merged =
+      Enum.map(global_filters, fn filter ->
+        case Map.get(category_filters, filter["key"]) do
+          nil -> filter
+          override -> apply_category_filter_override(filter, override)
+        end
+      end)
+
+    category_only =
+      category_filters
+      |> Enum.reject(fn {key, _override} -> MapSet.member?(existing_keys, key) end)
+      |> Enum.map(fn {key, override} -> Map.put(override, "key", key) end)
+
+    merged ++ category_only
+  end
+
+  @category_override_attrs ~w(enabled position label set_slug)
+
+  defp apply_category_filter_override(filter, override) do
+    Enum.reduce(@category_override_attrs, filter, fn attr, acc ->
+      case Map.fetch(override, attr) do
+        {:ok, value} -> Map.put(acc, attr, value)
+        :error -> acc
+      end
+    end)
   end
 
   @doc """

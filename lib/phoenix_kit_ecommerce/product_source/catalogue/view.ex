@@ -99,6 +99,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   the first template that does a plain `if category.parent do` truthy
   check, same as `PhoenixKitEcommerce.ProductSource.Catalogue`'s
   `single_category/2` already resolves `:category` for products.
+
+  `:storefront_filters` is read straight off
+  `data["ecommerce"]["storefront_filters"]` (`%{}` when absent) — see
+  `PhoenixKitEcommerce.merge_storefront_filters/2` for how it overrides
+  the global filter config.
   """
   @spec category_view(map(), keyword()) :: Category.t()
   def category_view(category, opts \\ []) do
@@ -118,6 +123,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
       option_schema: Map.get(ecommerce, "option_schema") || [],
       image_uuid: Map.get(ecommerce, "image_uuid"),
       featured_product_uuid: Map.get(ecommerce, "featured_item_uuid"),
+      storefront_filters: Map.get(ecommerce, "storefront_filters") || %{},
       metadata: %{},
       inserted_at: Map.get(category, :inserted_at),
       updated_at: Map.get(category, :updated_at)

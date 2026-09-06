@@ -30,6 +30,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.FiltersTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.ProductSource.Catalogue, as: CatalogueSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View
 
   setup do
     # Entities gates on a settings toggle (default false) — same setup
@@ -190,6 +191,41 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.FiltersTest do
         ])
 
       values = CatalogueSource.aggregate_filter_values(category_uuid: category_x.uuid)
+
+      assert values["size"] == [
+               %{slug: "s", label: "Small", count: 1},
+               %{slug: "m", label: "Medium", count: 2}
+             ]
+    end
+  end
+
+  describe "category-aware aggregate_filter_values/1 (Task 2 storefront_filters overrides)" do
+    test "a category-only attribute_set filter gets its facet counted, not just listed empty",
+         %{category_x: category_x} do
+      {:ok, category_x} =
+        Catalogue.update_category(category_x, %{
+          data: %{
+            "ecommerce" => %{
+              "storefront_filters" => %{
+                "size" => %{
+                  "type" => "attribute_set",
+                  "set_slug" => "size",
+                  "label" => "Size",
+                  "enabled" => true,
+                  "position" => 0
+                }
+              }
+            }
+          }
+        })
+
+      category_view = View.category_view(category_x)
+
+      values =
+        CatalogueSource.aggregate_filter_values(
+          category_uuid: category_x.uuid,
+          category: category_view
+        )
 
       assert values["size"] == [
                %{slug: "s", label: "Small", count: 1},

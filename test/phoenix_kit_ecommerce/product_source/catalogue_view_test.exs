@@ -281,11 +281,26 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
       assert view.image_uuid == "cat-img-uuid"
       assert view.featured_product_uuid == "feat-item-uuid"
       assert view.metadata == %{}
+      assert view.storefront_filters == %{}
     end
 
     test "status defaults to active when shop_status is absent" do
       category = build_category(%{"ecommerce" => %{"shop_status" => nil}})
       assert View.category_view(category).status == "active"
+    end
+
+    test "storefront_filters is read from data.ecommerce.storefront_filters" do
+      overrides = %{
+        "ecommerce" => %{
+          "storefront_filters" => %{"price" => %{"enabled" => false}}
+        }
+      }
+
+      category = build_category(overrides)
+
+      assert View.category_view(category).storefront_filters == %{
+               "price" => %{"enabled" => false}
+             }
     end
   end
 
