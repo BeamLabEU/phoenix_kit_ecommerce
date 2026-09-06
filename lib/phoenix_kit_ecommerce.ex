@@ -4116,11 +4116,24 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  # Shipping methods are admin-configured in BASE currency (their price,
+  # `free_above_amount`, min/max order amount thresholds — §4.7, §2.11).
+  # `subtotal` here is the cart's own, potentially non-base, display-currency
+  # snapshot (§4.4), so a EUR cart's subtotal was being compared against a
+  # USD-denominated free-shipping threshold and priced with a USD-denominated
+  # per-method rate as if both were the same number. Convert the subtotal TO
+  # base before it reaches `calculate_method_shipping/4` (unchanged — it and
+  # `ShippingMethod` know nothing about display currency, §12.3), then
+  # convert the resulting cost back to the cart's currency before it's
+  # written onto `shipping_amount`.
   defp calculate_shipping(cart, subtotal, total_weight) do
     if cart.shipping_method_uuid do
+      base_subtotal = to_base(cart, subtotal)
+
       cart.shipping_method_uuid
       |> then(&repo().get_by(ShippingMethod, uuid: &1))
-      |> calculate_method_shipping(subtotal, total_weight, cart.shipping_country)
+      |> calculate_method_shipping(base_subtotal, total_weight, cart.shipping_country)
+      |> from_base(cart)
     else
       # No method selected, no charge - never echo back a stale
       # `cart.shipping_amount` from a previously-selected method that was
@@ -4129,6 +4142,32 @@ defmodule PhoenixKitEcommerce do
       # here would persist it indefinitely.
       Decimal.new("0")
     end
+  end
+
+  # The inverse of `snapshot_unit_price/2` (§10.14/§10.16): that one takes a
+  # LIVE base amount forward into the cart's currency at add-to-cart time;
+  # this takes the cart's OWN already-converted subtotal backward into base
+  # so it can be compared against a base-currency shipping threshold. Same
+  # currency (including an unmapped/no-currency cart) or no frozen rate
+  # (nothing to invert) both mean "already base, or as close as this cart
+  # can get" - pass the amount through unchanged rather than divide by a
+  # rate that isn't there.
+  defp to_base(%Cart{currency: same, base_currency: same}, amount), do: amount
+  defp to_base(%Cart{exchange_rate: nil}, amount), do: amount
+
+  defp to_base(%Cart{exchange_rate: rate}, amount) do
+    amount |> Decimal.div(rate) |> Decimal.round(2)
+  end
+
+  # Forward leg of the round trip: a base-currency shipping cost back into
+  # the cart's currency, through `Currency.present/3`'s frozen-rate path
+  # (§12.1 - the one function that does this arithmetic) so a disabled
+  # display currency can't silently drop the conversion (§12.2).
+  defp from_base(amount, %Cart{currency: same, base_currency: same}), do: amount
+  defp from_base(amount, %Cart{exchange_rate: nil}), do: amount
+
+  defp from_base(amount, %Cart{} = cart) do
+    Currency.present(amount, cart.currency, rate: cart.exchange_rate)
   end
 
   defp calculate_method_shipping(nil, _subtotal, _weight, _country), do: Decimal.new("0")
