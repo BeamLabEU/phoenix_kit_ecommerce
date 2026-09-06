@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Modules.Languages.DialectMapper
+  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
@@ -820,10 +821,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                     language: @current_language
                   )}
                 </span>
-                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
-                     Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
+                <%= if cmp = PriceDisplay.compare_at(@product, @currency, :selected, amount: @calculated_price) do %>
                   <span class="text-xl text-base-content/40 line-through">
-                    {format_price(@product.compare_at_price, @currency)}
+                    {cmp.price}
+                  </span>
+                  <span class="badge badge-success">
+                    {cmp.percent}% OFF
                   </span>
                 <% end %>
               <% else %>
@@ -831,13 +834,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <span class="text-3xl font-bold text-primary">
                   {PriceDisplay.render(@product, @currency, :catalog, language: @current_language)}
                 </span>
-                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
-                     Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
+                <%= if cmp = PriceDisplay.compare_at(@product, @currency, :catalog, []) do %>
                   <span class="text-xl text-base-content/40 line-through">
-                    {format_price(@product.compare_at_price, @currency)}
+                    {cmp.price}
                   </span>
                   <span class="badge badge-success">
-                    {discount_percentage(@product)}% OFF
+                    {cmp.percent}% OFF
                   </span>
                 <% end %>
               <% end %>
@@ -1018,16 +1020,23 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                     </div>
                     <span class="text-base-content/60">×</span>
                     <span class="text-base-content/60">
-                      {format_price(
-                        current_display_price(@product, @calculated_price, @price_affecting_specs),
-                        @currency
+                      {PriceDisplay.render(nil, @currency, :selected,
+                        amount:
+                          current_display_price(@product, @calculated_price, @price_affecting_specs)
                       )}
                     </span>
                     <span class="text-base-content/60">=</span>
                     <span class="text-xl font-bold text-primary">
                       {format_price(
                         line_total(
-                          current_display_price(@product, @calculated_price, @price_affecting_specs),
+                          Currency.present(
+                            current_display_price(
+                              @product,
+                              @calculated_price,
+                              @price_affecting_specs
+                            ),
+                            @currency
+                          ),
                           @quantity
                         ),
                         @currency
@@ -1126,7 +1135,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         !@selected && @is_missing && "btn-error btn-outline"
       ]}
     >
-      {@option_value} — {format_price(@price, @currency)}
+      {@option_value} — {PriceDisplay.render(nil, @currency, :selected, amount: @price)}
     </button>
     """
   end
@@ -1267,14 +1276,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         option["options"] || []
     end
   end
-
-  defp discount_percentage(%{price: price, compare_at_price: compare}) when not is_nil(compare) do
-    diff = Decimal.sub(compare, price)
-    percent = Decimal.div(diff, compare) |> Decimal.mult(100) |> Decimal.round(0)
-    Decimal.to_integer(percent)
-  end
-
-  defp discount_percentage(_), do: 0
 
   defp line_total(price, quantity) when not is_nil(price) do
     Decimal.mult(price, quantity)

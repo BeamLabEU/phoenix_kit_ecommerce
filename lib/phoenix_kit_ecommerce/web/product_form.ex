@@ -1983,6 +1983,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp normalize_override(_), do: nil
 
   # Calculate final price for a single option value
+  # Authoring screen: base currency, never converted (§4.3)
   defp calculate_option_price(base_price, modifier_type, modifier_value) do
     base = if is_nil(base_price), do: Decimal.new("0"), else: base_price
 
