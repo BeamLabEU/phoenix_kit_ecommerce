@@ -2220,39 +2220,22 @@ defmodule PhoenixKitEcommerce do
     amount
   end
 
-  # Deliberately does NOT call `Currency.present/3` here, even with
-  # `rate: cart.exchange_rate` — traced end to end, `present/3` still
-  # resolves its TARGET currency live via `resolve_display_currency/1`
-  # on every call, `:rate` only replaces the number used once inside its
-  # else-branch. If `cart.currency` has since been DISABLED (no rate
-  # change, no deletion — just disabled) while the cart sat open,
-  # `resolve_display_currency/1`'s own fail-safe substitutes the BASE
-  # currency as `present/3`'s target; `present/3` then sees
-  # `target.code == base.code` and returns `amount` completely
-  # unconverted, silently discarding the frozen rate this function was
-  # explicitly written to protect. §12.2 requires the frozen rate to be
-  # the ONLY thing consulted once a cart has one — that guarantee must
-  # not depend on the currency table's `enabled` flag moving after the
-  # freeze. Doing the multiply directly here removes that live lookup
-  # from the path entirely.
-  #
-  # The one live lookup left is cosmetic — decimal_places for rounding,
-  # not a gate on whether conversion happens. `get_currency_by_code/1`
-  # returns a disabled currency's row unchanged (only
-  # `resolve_display_currency/1` treats "disabled" as "unusable"), so
-  # this is safe even in the exact scenario above; a currency deleted
-  # outright falls back to 2, matching `Currency.convert/3`'s own
-  # hardcoded precision.
+  # `rate: cart.exchange_rate` makes this the ONE call in the codebase
+  # that freezes a rate rather than resolving one live (§12.2). A review
+  # initially found that `present/3` still re-resolved its TARGET
+  # currency via `resolve_display_currency/1` even with `:rate` given —
+  # if `cart.currency` had since been disabled (no rate change, no
+  # deletion, just disabled) while the cart sat open, that resolution
+  # fell back to the base, `present/3` then saw `target.code ==
+  # base.code`, and the frozen rate was silently discarded. Fixed
+  # upstream, in `present/3` itself (`phoenix_kit_billing`
+  # `feature/currency-e1`), not by a second conversion implementation
+  # here — §12.1 requires `present/3` to remain the ONE place a base
+  # amount becomes a display amount. See
+  # `cart_fx_freeze_test.exs`'s "disabled currency" scenario for the
+  # regression this call is now proven against.
   defp snapshot_unit_price(%Cart{} = cart, amount) do
-    decimal_places =
-      case Billing.get_currency_by_code(cart.currency) do
-        %{decimal_places: places} -> places
-        nil -> 2
-      end
-
-    amount
-    |> Decimal.mult(cart.exchange_rate)
-    |> Decimal.round(decimal_places)
+    Currency.present(amount, cart.currency, rate: cart.exchange_rate)
   end
 
   defp add_product_with_specs_to_cart(cart, product, quantity, selected_specs, language) do
