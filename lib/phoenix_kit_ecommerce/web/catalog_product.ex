@@ -481,32 +481,34 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       quantity: quantity,
       currency: currency,
       selected_specs: selected_specs,
-      price_affecting_specs: price_affecting_specs,
-      calculated_price: calculated_price
+      price_affecting_specs: price_affecting_specs
     } = socket.assigns
 
     add_result = add_to_cart(cart, product, quantity, selected_specs, socket)
 
     case add_result do
       {:ok, updated_cart} ->
-        unit_price =
-          if price_affecting_specs != [] do
-            calculated_price
-          else
-            product.price
-          end
-
-        display_name = build_cart_display_name(product, price_affecting_specs, selected_specs)
-
-        message =
-          build_cart_message(display_name, quantity, unit_price, updated_cart.total, currency)
-
+        # The STORED line item, not a fresh live-amount conversion: this is
+        # what the shopper was actually charged, so the flash cannot drift
+        # from the snapshot even by a rounding cent (review follow-up on
+        # Э1-E4).
         updated_cart_item =
           find_cart_item_after_add(
             updated_cart.items,
             product.uuid,
             selected_specs,
             price_affecting_specs
+          )
+
+        display_name = build_cart_display_name(product, price_affecting_specs, selected_specs)
+
+        message =
+          build_cart_message(
+            display_name,
+            quantity,
+            updated_cart_item,
+            updated_cart.total,
+            currency
           )
 
         {:noreply,
@@ -663,17 +665,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
-  defp build_cart_message(display_name, quantity, unit_price, cart_total, currency) do
-    # `unit_price` is a LIVE base-currency number (product.price or
-    # calculated_price); `currency` is now the shopper's DISPLAY currency
-    # (Э1-E4), which need not be base. Convert once here — `cart_total` is
-    # already a stored snapshot in `currency` and must not be converted
-    # again (N1).
-    converted_unit_price = Currency.present(unit_price, currency)
-    line_total = Decimal.mult(converted_unit_price, quantity)
+  defp build_cart_message(display_name, quantity, cart_item, cart_total, currency) do
+    # `cart_item.unit_price` is the STORED snapshot — already converted and
+    # rounded at add-to-cart time, in the cart's own currency — not a fresh
+    # live conversion recomputed here. That is what the shopper was
+    # actually charged, so the flash cannot drift from the persisted line
+    # even by a rounding cent (review follow-up on Э1-E4). `cart_total` is
+    # likewise already a stored snapshot; neither is converted again (N1).
+    unit_price = cart_item.unit_price
+    line_total = Decimal.mult(unit_price, quantity)
     line_str = format_price(line_total, currency)
     cart_total_str = format_price(cart_total, currency)
-    unit_price_str = format_price(converted_unit_price, currency)
+    unit_price_str = format_price(unit_price, currency)
 
     "#{display_name} (#{quantity} × #{unit_price_str} = #{line_str}) added to cart.\nCart total: #{cart_total_str}"
   end
