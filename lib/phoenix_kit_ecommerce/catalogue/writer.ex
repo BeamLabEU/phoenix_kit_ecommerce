@@ -26,12 +26,14 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   counterpart at all, in either language.
   """
 
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Attachments}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.Slugs}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
   @compile {:no_warn_undefined, PhoenixKitEntities}
 
   alias PhoenixKit.Utils.Multilang
+  alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitCatalogue.Schemas.Item
@@ -39,6 +41,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   alias PhoenixKitEcommerce.Catalogue.ValueResolver
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+  alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.Shopify.VariantMapper
   alias PhoenixKitEcommerce.Translations
 
@@ -281,6 +284,131 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
         entity -> AttributeSets.detach_set(item_uuid, entity.uuid)
       end
     end)
+  end
+
+  # ============================================================
+  # Images
+  # ============================================================
+
+  @doc """
+  Downloads `shopify_product`'s `"images"` into Storage and attaches
+  them to `item` in Shopify's own `position` order (ascending; the
+  payload's own array order is NOT trusted), featured = the position-1
+  image.
+
+  Dedup is keyed by Shopify's own image id, recorded in `data
+  ["ecommerce"]["shopify"]["image_ids"]` (`%{"<shopify image id>" =>
+  file_uuid}`) — an id already in that map reuses its file uuid instead
+  of downloading again. `opts[:downloader]` (default `&ImageDownloader.
+  download_and_store/3`, `(url, user_uuid, opts) -> {:ok, file_uuid} |
+  {:error, reason}`) and `opts[:user_uuid]` (the file owner passed
+  straight through — no local system-actor fallback here; deciding the
+  right actor for an unattended sync run is the worker's job) let tests
+  swap in a stub that never makes an HTTP call.
+
+  A download failure skips that image (it is not attached and its id is
+  not recorded, so a later run retries it) and is reported back in the
+  `:errors` list rather than aborting the whole product's images.
+
+  A no-op — `{:error, :catalogue_source_inactive}` — when
+  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  new Block 7 writer is legacy-source-safe on its own).
+
+  Idempotent: a second run against the same payload resolves every
+  image id to its already-known file uuid (`downloaded: 0`) and
+  re-attaches the same order. `image_ids` is rewritten fresh from the
+  current sync each run (same "derived fresh" idiom `sync_variants/2`
+  uses for `price_modifiers`/`set_slugs`) — an id Shopify no longer
+  lists is dropped from it, though the file itself is left attached (no
+  deletions in this block).
+  """
+  @spec sync_images(Item.t(), map(), keyword()) ::
+          {:ok,
+           %{
+             downloaded: non_neg_integer(),
+             reused: non_neg_integer(),
+             attached: non_neg_integer(),
+             errors: [{String.t(), term()}]
+           }}
+          | {:error, :catalogue_source_inactive | term()}
+  def sync_images(item, shopify_product, opts \\ [])
+      when is_map(item) and is_map(shopify_product) and is_list(opts) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      do_sync_images(item, shopify_product, opts)
+    else
+      {:error, :catalogue_source_inactive}
+    end
+  end
+
+  defp do_sync_images(item, shopify_product, opts) do
+    downloader = Keyword.get(opts, :downloader, &ImageDownloader.download_and_store/3)
+    user_uuid = Keyword.get(opts, :user_uuid)
+
+    known_image_ids =
+      get_in(item.data || %{}, ["ecommerce", "shopify", "image_ids"]) || %{}
+
+    images =
+      (shopify_product["images"] || [])
+      |> Enum.sort_by(&(&1["position"] || 0))
+
+    {image_ids, file_uuids, downloaded, reused, errors} =
+      Enum.reduce(images, {%{}, [], 0, 0, []}, fn image, acc ->
+        resolve_image(image, known_image_ids, downloader, user_uuid, acc)
+      end)
+
+    file_uuids = Enum.reverse(file_uuids)
+    errors = Enum.reverse(errors)
+
+    with {:ok, item_with_ids} <- put_image_ids(item, image_ids),
+         {:ok, _final_item} <- attach_images(item_with_ids, file_uuids) do
+      {:ok,
+       %{downloaded: downloaded, reused: reused, attached: length(file_uuids), errors: errors}}
+    end
+  end
+
+  defp resolve_image(image, known_image_ids, downloader, user_uuid, acc) do
+    id = to_string(image["id"])
+
+    case Map.fetch(known_image_ids, id) do
+      {:ok, uuid} ->
+        put_resolved(acc, id, uuid, :reused)
+
+      :error ->
+        case downloader.(image["src"], user_uuid, []) do
+          {:ok, uuid} -> put_resolved(acc, id, uuid, :downloaded)
+          {:error, reason} -> put_error(acc, id, reason)
+        end
+    end
+  end
+
+  defp put_resolved({image_ids, file_uuids, downloaded, reused, errors}, id, uuid, :downloaded) do
+    {Map.put(image_ids, id, uuid), [uuid | file_uuids], downloaded + 1, reused, errors}
+  end
+
+  defp put_resolved({image_ids, file_uuids, downloaded, reused, errors}, id, uuid, :reused) do
+    {Map.put(image_ids, id, uuid), [uuid | file_uuids], downloaded, reused + 1, errors}
+  end
+
+  defp put_error({image_ids, file_uuids, downloaded, reused, errors}, id, reason) do
+    {image_ids, file_uuids, downloaded, reused, [{id, reason} | errors]}
+  end
+
+  defp put_image_ids(item, image_ids) do
+    ecommerce = get_in(item.data || %{}, ["ecommerce"]) || %{}
+    shopify = Map.put(ecommerce["shopify"] || %{}, "image_ids", image_ids)
+    ecommerce = Map.put(ecommerce, "shopify", shopify)
+    data = Map.put(item.data || %{}, "ecommerce", ecommerce)
+
+    Catalogue.update_item(item, %{data: data})
+  end
+
+  defp attach_images(item, []), do: {:ok, item}
+
+  defp attach_images(item, file_uuids) do
+    Attachments.attach_files(item, file_uuids,
+      featured: List.first(file_uuids),
+      order: file_uuids
+    )
   end
 
   # ============================================================
