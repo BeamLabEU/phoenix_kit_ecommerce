@@ -438,4 +438,30 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def order_billing_identity(_order), do: nil
+
+  # ---------------------------------------------------------------------------
+  # Admin edit link (storefront -> admin)
+  # ---------------------------------------------------------------------------
+
+  @admin_edit_helper_mod PhoenixKitWeb.AdminEditHelper
+
+  @doc """
+  Assigns `:admin_edit_url`/`:admin_edit_label` on `socket` for an admin
+  visitor, via core's `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3`.
+
+  Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
+  calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
+  requirement, not an exact version, so a host running an older core that
+  predates the helper must not crash storefront pages. Returns `socket`
+  unchanged when the helper isn't available or the visitor isn't an admin.
+  """
+  def maybe_assign_admin_edit(socket, path, label) do
+    mod = @admin_edit_helper_mod
+
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) do
+      mod.assign_admin_edit(socket, path, label)
+    else
+      socket
+    end
+  end
 end
