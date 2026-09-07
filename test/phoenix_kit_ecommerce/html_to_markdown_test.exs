@@ -127,4 +127,63 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
       assert HtmlToMarkdown.convert(converted) == converted
     end
   end
+
+  describe "convert/1 - bare < and > in prose (not a tag)" do
+    test "a bare < used as a comparison symbol is preserved, not swallowed" do
+      assert HtmlToMarkdown.convert("<p>Sizes: 5in x 10in, ratio < 2 preferred</p>") ==
+               "Sizes: 5in x 10in, ratio < 2 preferred"
+    end
+
+    test "a bare > used as a comparison symbol is preserved, not swallowed" do
+      assert HtmlToMarkdown.convert("<p>Weight > 3kg needs a pallet</p>") ==
+               "Weight > 3kg needs a pallet"
+    end
+
+    test "&lt; and &gt; decode correctly alongside bare < and >" do
+      html = "<p>Fits sizes 5 &lt; x &gt; 12, but also raw 5 < 10 and > 3 here</p>"
+
+      assert HtmlToMarkdown.convert(html) ==
+               "Fits sizes 5 < x > 12, but also raw 5 < 10 and > 3 here"
+    end
+
+    test "convert/1 is idempotent for text containing bare < and >" do
+      html = "<p>Fits sizes 5 &lt; x &gt; 12, but also raw 5 < 10 and > 3 here</p>"
+      once = HtmlToMarkdown.convert(html)
+      twice = HtmlToMarkdown.convert(once)
+
+      assert once == twice
+    end
+  end
+
+  describe "convert/1 - script/style are stripped, not leaked as text" do
+    test "<script> content is dropped entirely" do
+      assert HtmlToMarkdown.convert("<p>Before</p><script>alert(1)</script><p>After</p>") ==
+               "Before\n\nAfter"
+    end
+
+    test "<style> content is dropped entirely" do
+      assert HtmlToMarkdown.convert(~s(<style>body{color: red}</style><p>Text</p>)) == "Text"
+    end
+
+    test "a tag-like string inside a <script> body is not parsed as a real tag" do
+      html = ~s(<p>Before</p><script>var x = "<img src=x>";</script><p>After</p>)
+
+      assert HtmlToMarkdown.convert(html) == "Before\n\nAfter"
+    end
+  end
+
+  describe "convert/1 - nested lists" do
+    test "a <ul> nested inside a <li> renders as an indented sub-list" do
+      html = "<ul><li>Item1<ul><li>Sub1</li><li>Sub2</li></ul></li><li>Item2</li></ul>"
+
+      assert HtmlToMarkdown.convert(html) ==
+               "- Item1\n  - Sub1\n  - Sub2\n- Item2"
+    end
+
+    test "three levels of nesting each get their own indent" do
+      html = "<ul><li>A<ul><li>B<ul><li>C</li></ul></li></ul></li></ul>"
+
+      assert HtmlToMarkdown.convert(html) == "- A\n  - B\n    - C"
+    end
+  end
 end
