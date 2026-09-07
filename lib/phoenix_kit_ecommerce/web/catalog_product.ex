@@ -113,6 +113,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
@@ -316,6 +317,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -1107,8 +1109,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
