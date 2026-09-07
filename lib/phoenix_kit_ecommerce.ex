@@ -254,6 +254,76 @@ defmodule PhoenixKitEcommerce do
     _ -> code
   end
 
+  @doc """
+  The percentage drift above which checkout flags a cart's frozen
+  exchange rate as stale (§4.4) — the shop-configurable threshold behind
+  `cart_rate_drift/1`. Defaults to 5 (five percent) when the setting is
+  unset or fails to parse as a number.
+  """
+  @spec fx_rate_drift_alert_pct() :: Decimal.t()
+  def fx_rate_drift_alert_pct do
+    raw = Settings.get_setting_cached("fx_rate_drift_alert_pct", "5")
+
+    case Decimal.parse(raw) do
+      {pct, ""} -> pct
+      _ -> Decimal.new("5")
+    end
+  end
+
+  @doc """
+  Whether a cart's frozen exchange rate (§4.4, §12.2) has drifted past
+  `fx_rate_drift_alert_pct/0` away from the currency table's CURRENT
+  rate — and by how much, for the checkout notice. A cart's own prices
+  are NEVER silently recalculated (§4.4); this only reports the drift so
+  checkout can offer `refresh_cart_rate/1` as an explicit choice.
+
+  Returns `nil` — nothing to report — for:
+  - a cart already in its base currency (nothing was ever converted);
+  - a cart with no frozen rate at all (`exchange_rate: nil` — nothing
+    to compare against);
+  - a cart currency the table no longer knows, that has since been
+    disabled, or whose current rate is not positive. Read DIRECTLY via
+    `Billing.get_currency_by_code/1` — never through
+    `resolve_display_currency/1` — because that function's §6.3
+    fail-safe silently substitutes the BASE currency for exactly these
+    cases, which would make an unrelated currency's outage look like a
+    rate drift on every open cart in it;
+  - a missing base currency (nothing configured to compare against);
+  - drift at or under the threshold.
+
+  Otherwise returns `%{frozen:, current:, pct:}`: the cart's frozen
+  rate, the currency table's live effective rate, and the absolute
+  percentage drift between them (rounded to 2 decimal places).
+  """
+  @spec cart_rate_drift(Cart.t()) ::
+          %{frozen: Decimal.t(), current: Decimal.t(), pct: Decimal.t()} | nil
+  def cart_rate_drift(%Cart{currency: same, base_currency: same}), do: nil
+  def cart_rate_drift(%Cart{exchange_rate: nil}), do: nil
+
+  def cart_rate_drift(%Cart{} = cart) do
+    with %Currency{enabled: true, exchange_rate: rate} = target <-
+           Billing.get_currency_by_code(cart.currency),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      frozen = cart.exchange_rate
+      current = Currency.effective_rate(target, base)
+
+      pct =
+        current
+        |> Decimal.sub(frozen)
+        |> Decimal.abs()
+        |> Decimal.div(frozen)
+        |> Decimal.mult(100)
+        |> Decimal.round(2)
+
+      if Decimal.compare(pct, fx_rate_drift_alert_pct()) == :gt do
+        %{frozen: frozen, current: current, pct: pct}
+      end
+    else
+      _ -> nil
+    end
+  end
+
   # ============================================
   # MODULE BEHAVIOUR CALLBACKS
   # ============================================
@@ -2326,6 +2396,84 @@ defmodule PhoenixKitEcommerce do
 
       error ->
         error
+    end
+  end
+
+  @doc """
+  Re-freezes a cart's exchange rate at the currency table's CURRENT rate
+  and re-snapshots every line at that new rate (§4.4) — the ONLY path
+  that changes a non-empty cart's `exchange_rate`. A plain add/update
+  never touches it (§12.2, `snapshot_unit_price/2`); this is the
+  shopper's own EXPLICIT choice, offered by the checkout drift notice
+  (`cart_rate_drift/1`) and never triggered automatically.
+
+  Each line's `unit_price` is re-derived from its `base_unit_price`
+  through the same `snapshot_unit_price/2` an add-to-cart uses
+  (§12.1/§12.2), so a refreshed line is indistinguishable from one added
+  fresh at the new rate. `compare_at_price` goes through the same
+  helper directly (not `unit_price`'s value) — `CartItem.from_product/2`
+  never converts `compare_at_price` forward at add-to-cart time, so what
+  a line already carries there is itself a base amount, not a
+  previously-frozen display one; running it through `to_base/2` first
+  would silently double-convert it.
+
+  Runs in one transaction: `{:error, :no_base_price}` (rolled back, no
+  partial reprice) if any line predates `base_unit_price` and has
+  nothing to re-derive from. `{:error, :currency_unavailable}` — checked
+  up front, same fail-safe boundary as `cart_rate_drift/1` — if the
+  cart's currency is no longer usable (unknown, disabled, or a
+  non-positive rate).
+  """
+  @spec refresh_cart_rate(Cart.t()) ::
+          {:ok, Cart.t()} | {:error, :currency_unavailable | :no_base_price}
+  def refresh_cart_rate(%Cart{} = cart) do
+    with %Currency{enabled: true, exchange_rate: rate} = target <-
+           Billing.get_currency_by_code(cart.currency),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      do_refresh_cart_rate(cart, Currency.effective_rate(target, base))
+    else
+      _ -> {:error, :currency_unavailable}
+    end
+  end
+
+  defp do_refresh_cart_rate(%Cart{} = cart, new_rate) do
+    result =
+      repo().transaction(fn ->
+        items = CartItem |> where([i], i.cart_uuid == ^cart.uuid) |> repo().all()
+
+        if Enum.any?(items, &is_nil(&1.base_unit_price)) do
+          repo().rollback(:no_base_price)
+        end
+
+        # A struct copy only, never persisted itself — it exists so
+        # `snapshot_unit_price/2` sees the NEW rate while every line is
+        # re-derived, before the cart row itself is written below.
+        repriced = %{cart | exchange_rate: new_rate}
+
+        Enum.each(items, fn item ->
+          attrs = %{
+            unit_price: snapshot_unit_price(repriced, item.base_unit_price),
+            compare_at_price:
+              item.compare_at_price && snapshot_unit_price(repriced, item.compare_at_price)
+          }
+
+          item |> CartItem.changeset(attrs) |> repo().update!()
+        end)
+
+        cart
+        |> Cart.totals_changeset(%{exchange_rate: new_rate})
+        |> repo().update!()
+        |> recalculate_cart_totals!()
+      end)
+
+    case result do
+      {:ok, updated_cart} ->
+        Events.broadcast_cart_updated(updated_cart)
+        {:ok, updated_cart}
+
+      {:error, :no_base_price} ->
+        {:error, :no_base_price}
     end
   end
 
