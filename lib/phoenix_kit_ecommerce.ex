@@ -2277,6 +2277,7 @@ defmodule PhoenixKitEcommerce do
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
                 |> Map.put(:base_unit_price, calculated_price)
+                |> Map.update!(:compare_at_price, &(&1 && snapshot_unit_price(cart, &1)))
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
 
@@ -2373,6 +2374,7 @@ defmodule PhoenixKitEcommerce do
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
                 |> Map.put(:base_unit_price, calculated_price)
+                |> Map.update!(:compare_at_price, &(&1 && snapshot_unit_price(cart, &1)))
                 |> Map.put(:selected_specs, selected_specs)
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
@@ -2410,12 +2412,17 @@ defmodule PhoenixKitEcommerce do
   Each line's `unit_price` is re-derived from its `base_unit_price`
   through the same `snapshot_unit_price/2` an add-to-cart uses
   (§12.1/§12.2), so a refreshed line is indistinguishable from one added
-  fresh at the new rate. `compare_at_price` goes through the same
-  helper directly (not `unit_price`'s value) — `CartItem.from_product/2`
-  never converts `compare_at_price` forward at add-to-cart time, so what
-  a line already carries there is itself a base amount, not a
-  previously-frozen display one; running it through `to_base/2` first
-  would silently double-convert it.
+  fresh at the new rate. `compare_at_price` is NOT a base amount like
+  `base_unit_price` — add-to-cart freezes it forward into the cart's
+  currency at the SAME time as `unit_price` (§4.3.1) — so repricing it
+  must first invert it back to base with `to_base/2` against the OLD
+  (pre-reprice) cart, then reconvert with `snapshot_unit_price/2` at the
+  new rate — the same to-base-and-back shape `calculate_shipping/3` uses
+  for a base-currency threshold, just without the `from_base/2` half
+  (that inverse belongs to `snapshot_unit_price/2` here, since a line's
+  target IS the cart's own currency). Skipping the inversion and
+  reconverting the already-converted figure directly would
+  double-convert it.
 
   Runs in one transaction: `{:error, :no_base_price}` (rolled back, no
   partial reprice) if any line predates `base_unit_price` and has
@@ -2452,10 +2459,19 @@ defmodule PhoenixKitEcommerce do
         repriced = %{cart | exchange_rate: new_rate}
 
         Enum.each(items, fn item ->
+          # Unlike `unit_price`, `compare_at_price` is NOT re-derived from a
+          # base column — add-to-cart freezes it forward into the cart's
+          # currency at the same time as `unit_price` (§4.3.1), so what is
+          # stored here is a DISPLAY-frame amount at the OLD rate. Invert it
+          # back to base against the OLD `cart` first, then reconvert at
+          # the new rate through the same `snapshot_unit_price/2` every
+          # other frozen amount uses — reconverting it directly would
+          # double-convert an already-converted figure.
           attrs = %{
             unit_price: snapshot_unit_price(repriced, item.base_unit_price),
             compare_at_price:
-              item.compare_at_price && snapshot_unit_price(repriced, item.compare_at_price)
+              item.compare_at_price &&
+                snapshot_unit_price(repriced, to_base(cart, item.compare_at_price))
           }
 
           item |> CartItem.changeset(attrs) |> repo().update!()
