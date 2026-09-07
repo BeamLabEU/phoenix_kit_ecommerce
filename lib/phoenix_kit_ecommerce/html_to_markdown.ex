@@ -251,22 +251,22 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
 
   defp render_list(children, ordered_start, indent) do
     # CommonMark requires a block nested inside a list item to be
-    # indented to at least that item's content column — 3 for an ordered
-    # marker ("1. "), 2 for an unordered one ("- ") — or it re-parses as
-    # a sibling block instead of staying part of the item. `child_indent`
-    # is the prefix a directly-nested list must carry, built from
-    # placeholder bytes (not literal spaces) so `trim_line_edges/1`
-    # doesn't eat it before `expand_indent_markers/1` turns it into real
-    # spaces at the very end of the pipeline.
-    marker_width = if ordered_start, do: 3, else: 2
-    child_indent = indent <> String.duplicate(@indent_marker, marker_width)
-
+    # indented to at least that item's content column — the width of
+    # that item's own marker ("1. " is 3 wide, "10. " is 4 wide, "- "
+    # is 2 wide) — or it re-parses as a sibling block instead of staying
+    # part of the item. Ordered markers grow with the item's number, so
+    # `child_indent` is computed per item from its actual marker string
+    # rather than a fixed width. It's built from placeholder bytes (not
+    # literal spaces) so `trim_line_edges/1` doesn't eat it before
+    # `expand_indent_markers/1` turns it into real spaces at the very
+    # end of the pipeline.
     items =
       children
       |> Enum.filter(&match?({:element, "li", _, _}, &1))
       |> Enum.with_index()
       |> Enum.map(fn {{:element, "li", _attrs, li_children}, index} ->
         marker = if ordered_start, do: "#{ordered_start + index}. ", else: "- "
+        child_indent = indent <> String.duplicate(@indent_marker, String.length(marker))
         indent <> marker <> render_li_content(li_children, child_indent)
       end)
 
