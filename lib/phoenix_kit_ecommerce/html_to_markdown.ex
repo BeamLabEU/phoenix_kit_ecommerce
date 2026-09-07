@@ -44,6 +44,12 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   # `"<img src=x>"` inside it) — stripped whole, before tokenization, so
   # the general tokenizer never sees what's inside them.
   @raw_text_regex ~r/<(script|style|noscript|template)\b[^>]*>.*?<\/\1\s*>/is
+  # A raw-text element left unclosed (truncated `body_html`, hand-edited
+  # HTML) has no matching `</tag>` for `@raw_text_regex` to anchor on —
+  # without this second pass its opening tag would tokenize as an
+  # ordinary element and the general tokenizer would render its raw
+  # script/style body as visible text.
+  @unclosed_raw_text_regex ~r/<(?:script|style|noscript|template)\b[^>]*>.*\z/is
   @indent_marker "\u0001"
   @block_tags ~w(p div h1 h2 h3 h4 h5 h6 ul ol li)
   @void_tags ~w(br img)
@@ -76,7 +82,11 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
     end
   end
 
-  defp strip_raw_text_elements(html), do: Regex.replace(@raw_text_regex, html, "")
+  defp strip_raw_text_elements(html) do
+    html
+    |> then(&Regex.replace(@raw_text_regex, &1, ""))
+    |> then(&Regex.replace(@unclosed_raw_text_regex, &1, ""))
+  end
 
   defp tokenize(html) do
     @tag_regex
@@ -237,14 +247,19 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
     end
   end
 
-  defp render_list(children, ordered_start), do: render_list(children, ordered_start, 0)
+  defp render_list(children, ordered_start), do: render_list(children, ordered_start, "")
 
-  defp render_list(children, ordered_start, depth) do
-    # A placeholder byte, not a literal space, so `trim_line_edges/1`
-    # (which strips stray spaces/tabs hugging every newline) doesn't eat
-    # this intentional indentation before `expand_indent_markers/1` turns
-    # it into real spaces at the very end of the pipeline.
-    indent = String.duplicate(@indent_marker, depth)
+  defp render_list(children, ordered_start, indent) do
+    # CommonMark requires a block nested inside a list item to be
+    # indented to at least that item's content column — 3 for an ordered
+    # marker ("1. "), 2 for an unordered one ("- ") — or it re-parses as
+    # a sibling block instead of staying part of the item. `child_indent`
+    # is the prefix a directly-nested list must carry, built from
+    # placeholder bytes (not literal spaces) so `trim_line_edges/1`
+    # doesn't eat it before `expand_indent_markers/1` turns it into real
+    # spaces at the very end of the pipeline.
+    marker_width = if ordered_start, do: 3, else: 2
+    child_indent = indent <> String.duplicate(@indent_marker, marker_width)
 
     items =
       children
@@ -252,7 +267,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       |> Enum.with_index()
       |> Enum.map(fn {{:element, "li", _attrs, li_children}, index} ->
         marker = if ordered_start, do: "#{ordered_start + index}. ", else: "- "
-        indent <> marker <> render_li_content(li_children, depth)
+        indent <> marker <> render_li_content(li_children, child_indent)
       end)
 
     case items do
@@ -262,10 +277,12 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   end
 
   # An `<li>`'s own text/inline content, followed by any `<ul>`/`<ol>`
-  # nested directly inside it rendered as an indented sub-list (two spaces
-  # per nesting level, matching CommonMark) on its own lines — instead of
-  # being unwrapped and concatenated straight onto the parent item's text.
-  defp render_li_content(li_children, depth) do
+  # nested directly inside it rendered as an indented sub-list, on its
+  # own lines — instead of being unwrapped and concatenated straight onto
+  # the parent item's text. `child_indent` (built by the caller) already
+  # carries the width this item's own marker requires, so it just gets
+  # threaded down to the nested `render_list/3` call.
+  defp render_li_content(li_children, child_indent) do
     {inline_nodes, nested_list_nodes} =
       Enum.split_with(li_children, fn
         {:element, tag, _attrs, _children} -> tag not in ["ul", "ol"]
@@ -278,7 +295,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       nested_list_nodes
       |> Enum.map_join(fn {:element, tag, _attrs, nested_children} ->
         ordered_start = if tag == "ol", do: 1, else: nil
-        render_list(nested_children, ordered_start, depth + 1)
+        render_list(nested_children, ordered_start, child_indent)
       end)
       |> String.trim_trailing("\n")
 
@@ -319,10 +336,12 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
 
   defp collapse_blank_lines(text), do: Regex.replace(~r/\n{3,}/, text, "\n\n")
 
-  # Turns each `@indent_marker` placeholder back into two real spaces.
-  # Run last, after `trim_line_edges/1` (which would otherwise strip real
-  # leading spaces as stray whitespace hugging a newline).
-  defp expand_indent_markers(text), do: String.replace(text, @indent_marker, "  ")
+  # Turns each `@indent_marker` placeholder back into one real space (the
+  # caller duplicates it marker_width-many times per level, so the count
+  # of markers is already the exact column width needed). Run last, after
+  # `trim_line_edges/1` (which would otherwise strip real leading spaces
+  # as stray whitespace hugging a newline).
+  defp expand_indent_markers(text), do: String.replace(text, @indent_marker, " ")
 
   # HTML treats runs of whitespace (including literal newlines in the
   # source markup, common right after a `<br>`) as insignificant —

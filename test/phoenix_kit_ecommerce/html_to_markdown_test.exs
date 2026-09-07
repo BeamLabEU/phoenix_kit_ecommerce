@@ -170,6 +170,29 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
 
       assert HtmlToMarkdown.convert(html) == "Before\n\nAfter"
     end
+
+    test "<noscript> content is dropped entirely" do
+      assert HtmlToMarkdown.convert(~s(<noscript>Enable JS</noscript><p>Text</p>)) == "Text"
+    end
+
+    test "<template> content is dropped entirely" do
+      assert HtmlToMarkdown.convert(~s(<template><p>Hidden</p></template><p>Text</p>)) == "Text"
+    end
+  end
+
+  describe "convert/1 - unclosed raw-text elements" do
+    # A truncated `body_html` (or hand-edited HTML) can leave a
+    # script/style tag with no matching close tag. `@raw_text_regex`
+    # can't anchor on a `</script>` that isn't there, so without a
+    # second pass the tag would tokenize as an ordinary element and its
+    # raw JS/CSS body would render as visible text.
+    test "an unclosed <script> strips to end of string" do
+      assert HtmlToMarkdown.convert("<p>Before</p><script>var x = 1;") == "Before"
+    end
+
+    test "an unclosed <style> strips to end of string" do
+      assert HtmlToMarkdown.convert("<p>Before</p><style>body{color:red}") == "Before"
+    end
   end
 
   describe "convert/1 - nested lists" do
@@ -184,6 +207,31 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
       html = "<ul><li>A<ul><li>B<ul><li>C</li></ul></li></ul></li></ul>"
 
       assert HtmlToMarkdown.convert(html) == "- A\n  - B\n    - C"
+    end
+
+    # An ordered marker's content column is 3 ("1. "), not 2 — indenting
+    # a nested sub-list by only 2 spaces (the unordered width) puts it
+    # short of that column, so CommonMark re-parses it as a sibling block
+    # instead of keeping it nested inside the item.
+    test "a <ul> nested inside an <ol> item indents to the ordered marker's content column (3 spaces)" do
+      html = "<ol><li>Item<ul><li>Sub</li></ul></li></ol>"
+
+      assert HtmlToMarkdown.convert(html) == "1. Item\n   - Sub"
+    end
+
+    test "an <ol> nested inside an <ol> item indents to the ordered marker's content column (3 spaces)" do
+      html = "<ol><li>Item<ol><li>Sub</li></ol></li></ol>"
+
+      assert HtmlToMarkdown.convert(html) == "1. Item\n   1. Sub"
+    end
+
+    test "MDEx renders the ordered-parent nested list as one nested list, not two siblings" do
+      html = "<ol><li>Item<ul><li>Sub</li></ul></li></ol>"
+      markdown = HtmlToMarkdown.convert(html)
+
+      rendered = MDEx.to_html!(markdown)
+
+      assert rendered =~ ~r/<li>Item\s*<ul>/
     end
   end
 end
