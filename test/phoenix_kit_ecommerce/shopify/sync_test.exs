@@ -1,9 +1,12 @@
 defmodule PhoenixKitEcommerce.Shopify.SyncTest do
   use PhoenixKitEcommerce.DataCase, async: true
 
+  alias PhoenixKit.Integrations
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Sync
+
+  @stub __MODULE__
 
   defp create_product(attrs) do
     defaults = %{"title" => %{"en" => "Old Title"}, "price" => "10.00", "vendor" => "Old Co"}
@@ -11,13 +14,264 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
     product
   end
 
-  defp build_change(product, changes) do
+  defp build_change(product, changes, base_locale \\ "en") do
     %Change{
       product_uuid: product.uuid,
       handle: "handle",
       title: "Old Title",
+      base_locale: base_locale,
       changes: changes
     }
+  end
+
+  defp connect_shopify(attrs \\ %{}) do
+    {:ok, %{uuid: uuid}} =
+      Integrations.add_connection("shopify", "Test Shop #{System.unique_integer([:positive])}")
+
+    {:ok, _} =
+      Integrations.save_setup(
+        uuid,
+        Map.merge(
+          %{"shop_domain" => "test-shop.myshopify.com", "access_token" => "shpat_test_token"},
+          attrs
+        )
+      )
+
+    uuid
+  end
+
+  defp check_opts(extra \\ []) do
+    Keyword.merge(
+      [
+        admin_options: [req_options: [plug: {Req.Test, @stub}]],
+        storefront_options: [req_options: [plug: {Req.Test, @stub}], page_delay_ms: 0]
+      ],
+      extra
+    )
+  end
+
+  defp json_response(conn, status, body) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.send_resp(status, JSON.encode!(body))
+  end
+
+  defp admin_request?(conn), do: String.starts_with?(conn.request_path, "/admin/")
+
+  defp storefront_page(conn) do
+    conn |> Plug.Conn.fetch_query_params() |> Map.fetch!(:query_params) |> Map.get("page")
+  end
+
+  # Storefront pagination must terminate itself (empty page once page 1 is
+  # served) or StorefrontClient pages until :too_many_pages.
+  defp storefront_first_page(conn, body) do
+    if storefront_page(conn) == "1" do
+      json_response(conn, 200, body)
+    else
+      json_response(conn, 200, %{"products" => []})
+    end
+  end
+
+  describe "check/2 — admin path" do
+    test "reports a full-field diff, tagged with the admin source and no fallback reason" do
+      uuid = connect_shopify()
+
+      product =
+        create_product(%{
+          "slug" => %{"en" => "planter"},
+          "vendor" => "Old Co",
+          "price" => "10.00"
+        })
+
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [
+            %{
+              "handle" => "planter",
+              "title" => "New Title",
+              "vendor" => "New Co",
+              "status" => "draft",
+              "variants" => [%{"price" => "15.00"}]
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, %{source: :admin, fallback_reason: nil, changes: [change]}} =
+               Sync.check(uuid, check_opts())
+
+      assert change.product_uuid == product.uuid
+      assert Map.keys(change.changes) |> Enum.sort() == [:price, :title, :vendor]
+      assert change.changes.title == %{current: "Old Title", incoming: "New Title"}
+      assert Decimal.eq?(change.changes.price.incoming, Decimal.new("15.00"))
+    end
+
+    # `total_shopify_products` counts everything Source.fetch/2 returned
+    # (matched or not); `matched_local_products` counts only the handles
+    # that found a local product — and is NOT `length(changes)`, since a
+    # matched-but-identical product is matched with no reported change.
+    test "total_shopify_products counts every fetched product; matched_local_products only the matched ones",
+         %{} do
+      uuid = connect_shopify()
+
+      create_product(%{"slug" => %{"en" => "matched-with-diff"}, "vendor" => "Old Co"})
+      create_product(%{"slug" => %{"en" => "matched-no-diff"}, "vendor" => "Acme"})
+
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [
+            %{
+              "handle" => "matched-with-diff",
+              "title" => "Old Title",
+              "vendor" => "New Co",
+              "status" => "draft",
+              "variants" => [%{"price" => "10.00"}]
+            },
+            %{
+              "handle" => "matched-no-diff",
+              "title" => "Old Title",
+              "vendor" => "Acme",
+              "status" => "draft",
+              "variants" => [%{"price" => "10.00"}]
+            },
+            %{
+              "handle" => "shopify-only-no-local-match",
+              "title" => "Whatever",
+              "status" => "draft",
+              "variants" => [%{"price" => "10.00"}]
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, %{changes: changes, total_shopify_products: 3, matched_local_products: 2}} =
+               Sync.check(uuid, check_opts())
+
+      assert length(changes) == 1
+    end
+  end
+
+  describe "check/2 — storefront fallback path" do
+    test "reports only price changes, and no text field appears as a deletion" do
+      uuid = connect_shopify()
+
+      product =
+        create_product(%{
+          "slug" => %{"en" => "planter"},
+          "price" => "10.00"
+        })
+
+      Req.Test.stub(@stub, fn conn ->
+        if admin_request?(conn) do
+          json_response(conn, 401, %{"errors" => "Invalid API key"})
+        else
+          storefront_first_page(conn, %{
+            "products" => [%{"handle" => "planter", "variants" => [%{"price" => "15.00"}]}]
+          })
+        end
+      end)
+
+      assert {:ok, %{source: :storefront, fallback_reason: :unauthorized, changes: [change]}} =
+               Sync.check(uuid, check_opts())
+
+      assert change.product_uuid == product.uuid
+      assert Map.keys(change.changes) == [:price]
+      refute Map.has_key?(change.changes, :title)
+      assert Decimal.eq?(change.changes.price.incoming, Decimal.new("15.00"))
+    end
+  end
+
+  describe "check/2 — :base_locale opt" do
+    test "matches and diffs against the given locale, not a hardcoded one" do
+      uuid = connect_shopify()
+
+      # The product schema requires an "en" title regardless of what this
+      # test is pinning, so both locales are present — but the "ru" slug
+      # is set explicitly to "kashpo" while the "en" slug is left to
+      # auto-generate from the "en" title (landing nowhere near
+      # "kashpo"). A hardcoded "en" (instead of threading
+      # opts[:base_locale] through to ProductDiff.diff/4) would read the
+      # wrong slug, fail the handle match entirely, and report zero
+      # changes regardless of what Shopify sends back.
+      product =
+        create_product(%{
+          "title" => %{"en" => "Old Title", "ru" => "Старое название"},
+          "slug" => %{"ru" => "kashpo"},
+          "price" => "10.00",
+          "vendor" => nil
+        })
+
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [
+            %{
+              "handle" => "kashpo",
+              "title" => "Новое название",
+              "status" => "draft",
+              "variants" => [%{"price" => "10.00"}]
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, %{source: :admin, changes: [change]}} =
+               Sync.check(uuid, check_opts(base_locale: "ru"))
+
+      assert change.product_uuid == product.uuid
+
+      assert change.changes.title == %{
+               current: "Старое название",
+               incoming: "Новое название"
+             }
+    end
+
+    # `Keyword.pop/3`'s default argument is evaluated eagerly regardless of
+    # whether the key is present — a prior version of `check/2` called
+    # `Keyword.pop(opts, :base_locale, Translations.default_language())`
+    # and paid for a `Translations.default_language/0` DB read on every
+    # call, even one that passed `base_locale:` explicitly. Detected here
+    # not by making `default_language/0` itself raise (it reads through
+    # `PhoenixKit.Cache`, which isn't started in this test environment and
+    # falls through to a real query on every call — there's no clean hook
+    # to break just that one call otherwise), but by listening for the
+    # settings key it reads (`"languages_enabled"`, its first read — see
+    # `Translations.default_language/0`) via repo telemetry: with
+    # `base_locale:` given, `Keyword.pop_lazy/3` must never invoke the
+    # default fun, so that key is never queried. `phoenix_kit_settings`
+    # itself isn't a safe-enough signal on its own — `Sync.check/2` also
+    # reads an integration's credentials from the same table (by `uuid`, a
+    # structurally different query) on every call; matching on the bound
+    # `"languages_enabled"` parameter instead of the table name is what
+    # tells the two apart.
+    test "does not read default_language when :base_locale is given explicitly" do
+      uuid = connect_shopify()
+      create_product(%{"slug" => %{"ru" => "kashpo"}, "price" => "10.00"})
+
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{
+          "products" => [
+            %{"handle" => "kashpo", "variants" => [%{"price" => "10.00"}]}
+          ]
+        })
+      end)
+
+      test_pid = self()
+      handler_id = "sync-base-locale-#{System.unique_integer([:positive])}"
+
+      :telemetry.attach(
+        handler_id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, %{params: params}, _config ->
+          if "languages_enabled" in params, do: send(test_pid, :default_language_queried)
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, _result} = Sync.check(uuid, check_opts(base_locale: "ru"))
+      refute_received :default_language_queried
+    end
   end
 
   describe "apply_change/2 field selection" do
@@ -98,6 +352,34 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
 
       assert updated.description["en"] == "New desc"
       assert updated.description["ru"] == "Старое описание"
+    end
+
+    # BLOCKER: a `Change` diffed against a non-default locale (via
+    # `Sync.check/2`'s own `:base_locale` opt, see the describe block
+    # above) must be APPLIED into that same locale — not silently
+    # re-read from `Translations.default_language/0` at apply time,
+    # which would leave the diffed locale untouched and instead overwrite
+    # a completely different one. `base_locale` living on the `Change`
+    # struct (set by `ProductDiff.diff/4`, read back here) is what makes
+    # that impossible to get wrong: there is no second place a caller has
+    # to remember to pass the locale.
+    test "applies into the locale the change was diffed against, not the default, leaving other locales untouched" do
+      product =
+        create_product(%{
+          "title" => %{"en" => "English Title", "ru" => "Старое название"}
+        })
+
+      c =
+        build_change(
+          product,
+          %{title: %{current: "Старое название", incoming: "Новое название"}},
+          "ru"
+        )
+
+      assert {:ok, updated} = Sync.apply_change(c, [:title])
+
+      assert updated.title["ru"] == "Новое название"
+      assert updated.title["en"] == "English Title"
     end
   end
 

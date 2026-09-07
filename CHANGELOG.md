@@ -4,6 +4,265 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.3 - 2026-09-05
+
+PR #31 plus the post-merge review in
+`dev_docs/pull_requests/2026/31-currency-hygiene/CLAUDE_REVIEW.md`.
+
+### Added
+
+- **Carts and cart lines require a currency.** `Cart.changeset/2` and
+  `CartItem.changeset/2` validate `:currency` as required, and `Cart`,
+  `CartItem`, `Product` and `ShippingMethod` drop their `default: "USD"`
+  field default. `get_default_currency_code/0` returns `nil`, not `"USD"`,
+  when Billing has no default currency configured, so an empty currency
+  table produces a loud changeset error out of `create_cart/1` instead of a
+  cart silently denominated in dollars. (#31)
+- **The shop's base currency is substituted once, at creation.** A new
+  context-level fallback in `create_product/1` and
+  `create_shipping_method/1` fills in the default currency for callers that
+  omit it — the admin forms and the CSV/Shopify importer alike — matching
+  the incoming attrs map's key style (atom vs string) first, because
+  `Ecto.Changeset.cast/3` raises on a mixed-key map and the callers
+  disagree. A caller that passes `:currency` is never overridden. (#31)
+- **Migration chain V2: `DROP DEFAULT` on the four `currency` columns.**
+  Dropping the Elixir-side `default: "USD"` did not remove the literal —
+  core's baseline declares `DEFAULT 'USD'` on `phoenix_kit_shop_carts`,
+  `…_cart_items`, `…_products` and `…_shipping_methods`, and Ecto omits an
+  unchanged field from the `INSERT`, so Postgres substituted it: the struct
+  came back with `currency: nil` and the row said `"USD"`. V2 drops those
+  column defaults, so an insert that names no currency stores NULL.
+  Existing rows are untouched and `down/1` restores the defaults. This is
+  the chain's first deliberate divergence from core's shape. (#31)
+
+### Fixed
+
+- **The cart page no longer crashes when no default currency is
+  configured.** `create_cart/1` gained a failure mode with the new
+  `validate_required`, but its two storefront callers still hard-matched
+  `{:ok, cart}` — so a shop in that state answered every cart-page request,
+  and every add-to-cart, with a `MatchError`. Both now take the same "The
+  shop is currently unavailable" exit the disabled-shop gate takes. (#31)
+- **The shipping-method form's `"USD"` literals are gone**, in the hidden
+  input and in the text beside it; an unconfigured default currency now
+  reads "No default currency configured" and submits no currency. The
+  comment claiming `validate_length(:currency, is: 3)` would reject that is
+  corrected — `validate_length` skips `nil` and the hidden input's `""` is
+  an Ecto empty value, so the method is simply stored without a currency.
+  (#31)
+
+### Changed
+
+- The test harness applies the module-owned migration chain on top of
+  core's migrations. V1 was purely adoptive so skipping it changed nothing;
+  V2 is not, and a test database that never ran it would still hand out
+  `"USD"` behind the schemas' backs. `migrations_test.exs`'s
+  destructive-statement scan now matches `DROP` by the object kind that
+  follows it, so `DROP DEFAULT` passes while every DROP that can lose data
+  or structure is still refused. (#31)
+
+## 0.4.2 - 2026-09-05
+
+PR #30 plus the post-merge review in
+`dev_docs/pull_requests/2026/30-module-owned-v1-migration-chain/CLAUDE_REVIEW.md`.
+Ships 0.4.1 as well, which was never tagged or published to Hex.
+
+### Added
+
+- **The module owns its migration chain.** `PhoenixKitEcommerce.Migrations` is
+  an adoptive V1 over the ten shop tables core still creates in its V135
+  baseline (`phoenix_kit_shop_config`, `…_shipping_methods`, `…_categories`,
+  `…_products`, `…_product_slugs`, `…_category_slugs`, `…_carts`,
+  `…_cart_items`, `…_import_configs`, `…_import_logs`) plus the two
+  slug-projection functions and their triggers, registered via
+  `migration_module/0` so `mix phoenix_kit.status` and `mix phoenix_kit.update`
+  see it. V1 changes no shape — every statement is `CREATE … IF NOT EXISTS`,
+  `CREATE OR REPLACE` or a `DO $$ … IF NOT EXISTS … $$` guard — and the only
+  new object on an existing install is the `pke_schema:1` marker COMMENT on
+  `phoenix_kit_shop_config`. `down/1` unstamps that marker and drops nothing:
+  the tables are core-created and rolling this chain back must not destroy
+  data. (#30)
+
+### Fixed
+
+- **Prefixed (non-`public` schema) installs no longer get five duplicate unique
+  indexes.** Core names exactly five of the shop indexes with the schema name
+  embedded — the `*_uuid_idx` on `phoenix_kit_shop_cart_items`, `…_carts`,
+  `…_categories`, `…_products` and `…_shipping_methods` (`pn` in core's V135,
+  `__PK_NAME_EXEMPT__` in its expected-schema manifest) — and every other one
+  identically in every schema. The chain emitted all 39 bare, which is correct
+  under `public` (where the tests run) but under a prefix matches none of
+  core's five, so `CREATE UNIQUE INDEX IF NOT EXISTS` created a second
+  redundant unique index on each of those tables and drifted the schema from
+  core's manifest. The five now carry core's embedding, and tests pin both
+  sides of the rule. (#30)
+
+## 0.4.1 - 2026-09-05
+
+PRs #28 and #29 plus the post-merge reviews in
+`dev_docs/pull_requests/2026/28-default-language-snapshot-overwrite/CLAUDE_REVIEW.md`
+and `dev_docs/pull_requests/2026/29-slug-head-and-regenerate/CLAUDE_REVIEW.md`.
+
+### Fixed
+
+- **Editing a default-language field in the admin product or category form no
+  longer discards the edit.** `merge_translations_to_attrs/5` reduced over the
+  mount-time snapshot `build_translations_map/2` took — which carries the
+  default language — *after* writing the value the main form submitted, so the
+  old text was put straight back. The save reported success and the previous
+  content returned. A field that was empty at mount had no snapshot entry and
+  saved correctly, which is why the defect read as "creating works, correcting
+  does not". The reduce now skips the default language; the main form is its
+  only source. (#27, #28)
+- **Saving a product no longer wipes the default language's `body_html`,
+  `seo_title` and `seo_description`.** The product form has main-field inputs
+  for `title`, `slug` and `description` only — the other three are
+  translation-tab-only — so `build_localized_params/4` passed them as `nil`,
+  which `merge_field_value/4` read as "the user cleared it" and deleted. That
+  deletion used to be undone by the same snapshot re-merge #28 removed. `nil`
+  now means "not submitted" (a rendered input always posts a string, `""` when
+  emptied), and both forms build the default-language values with `Map.take/2`
+  so only fields the submission actually carried take part.
+- **An AI-translation slug collision is a changeset error again, not a crash.**
+  Both write paths in `AITranslatable` build their changeset with
+  `Ecto.Changeset.change/2`, which skips `Product.changeset/2` and its
+  `unique_constraint`, so V171's projection pkey raised out of the transaction.
+  `unique_slug/3`'s pre-check cannot prevent it: it matches the exact jsonb key
+  while the projection buckets by base language (`en-US` folds to `en`), and it
+  is a check-then-write across products. The pkey is now named on both paths.
+
+### Added
+
+- **`AITranslatable.regenerate_slug/3`** — an explicit, one-off repair path that
+  recomputes a language's slug from its current title even when a slug exists,
+  bypassing the write-once rule `put_translation/4` enforces for the translation
+  pipeline. Returns `{:error, :no_title}` when the language has no title and
+  `{:ok, %{old: slug, new: slug}}` unchanged when the recomputed slug matches.
+  `dry_run: true` returns the same result without writing or broadcasting, for
+  previewing a bulk repair. Callers own their own redirect bookkeeping — this
+  module has none.
+
+### Changed
+
+- **AI-translated product slugs are shaped from the title head.** `slug_base/3`
+  used to slugify the whole translated title (SEO segments included) and
+  hard-cut it at 80 characters, landing mid-word and making near-identical
+  prefixes collide. It now takes the first segment before a `|` or a spaced dash
+  (` - `, ` – `, ` — `), falls back to the full title when that head slugifies
+  to `""` (CJK, Arabic, emoji), caps at 60 on a word boundary, and carries the
+  default-language slug's numeric identity tail (`-<4+ digits>`, e.g. an
+  imported Shopify id) so a translated slug keeps the id its default-language
+  sibling has. Four-or-more digits, so `unique_slug/3`'s own `-2`/`-3` collision
+  suffixes are never promoted to an identity tail. Existing slugs are untouched
+  — generation is still write-once. (#29)
+
+## 0.4.0 - 2026-09-02
+
+### Added
+
+- **Unified Shopify sync.** The Shopify Sync admin page now groups pending
+  changes into field sections (Prices, Titles, Descriptions, HTML texts,
+  Tags, Statuses, Vendors — price first), 25 rows to a page, with a
+  request → confirm modal on every write path and a per-section bulk
+  selection scoped to the current page. Extreme price changes are excluded
+  from every bulk write and must be applied row by row.
+- **`Shopify.TextDiff`** — word-level diff over `List.myers_difference/2`
+  on whitespace-preserving tokens, so rejoining the fragments reproduces
+  both inputs exactly. No diff dependency added. `summary/2` returns the
+  small shape (changed-region count, signed length delta) for a collapsed
+  row; `words/2` the full diff, only for a row an operator expanded.
+- **Keyless price fallback (`Shopify.StorefrontClient`).** When the Admin
+  API rejects the connection's credentials, the sync reads prices from the
+  store's public `/products.json` instead of stalling. Deliberately narrow
+  — `"handle"` and `"variants"` only, never text — with its own 429 and
+  `Retry-After` handling, a page cap, and a wall-clock deadline.
+- **`Shopify.Source`** — a pure `decide/2` plus an I/O `fetch/2`. The
+  storefront fallback fires *only* on a credential failure
+  (`:unauthorized`, `:forbidden`, `:missing_credentials`); a rate limit,
+  5xx or timeout aborts instead, because falling back on those would report
+  "no text changes" when the truth is "we could not check".
+- **`ProductDiff.diff/4`'s `opts[:only]`** — restricts the comparison to a
+  field subset so a narrow source's absent fields are never reported (or
+  applied) as deletions. Both the option key and every field atom in it are
+  validated; a typo raises rather than silently comparing nothing.
+- **`ProductDiff.matched_count/3`** and a catalogue-coverage stat on the
+  sync page (Admin source only — the storefront serves a narrower,
+  not-comparable population).
+- **German and French storefront translations.** Complete `de` and `fr`
+  gettext catalogues for the storefront/cart/checkout UI, additive only —
+  `en`/`et`/`ru` and all source msgids are untouched. Formal register
+  (Sie / vous), interpolation tokens preserved.
+
+### Changed
+
+- **`Shopify.Sync.check/1` is now `check/2`** and returns a map
+  (`:changes`, `:source`, `:fallback_reason`, `:total_shopify_products`,
+  `:matched_local_products`) rather than a bare change list. A caller MUST
+  branch on `:source`: a `:storefront` result carries price changes only.
+- **`ProductDiff.Change` carries `base_locale`**, and
+  `Sync.apply_change/2` writes localized fields back into *that* locale
+  rather than re-reading the default at apply time — a change diffed
+  against one locale could otherwise be applied into another.
+- `AdminClient` maps a 403 to `{:error, :forbidden}`.
+
+### Fixed
+
+- **The Shopify Sync page rendered entirely in English on every non-English
+  install.** 84 msgids added under `web/` were never run through
+  `mix gettext.extract && mix gettext.merge`, so the whole page — and the
+  Shopify provider's setup instructions — fell back to their msgids, which
+  *are* the English source strings. Extracted, merged, and translated into
+  `de`/`fr`/`ru`/`et`, which are back to 0 untranslated. `i18n_test.exs`
+  now asserts that property, so an un-run extraction fails the suite.
+- **Section headers and field names ignored the locale entirely.** Both
+  label sets lived as string literals in module attributes, where
+  `mix gettext.extract` cannot see them and `gettext/1` cannot read them
+  back — so `Prices`, `HTML texts` and the `%{field}` noun in every confirm
+  and flash message printed English under every locale. They are now one
+  `gettext/1` call per field.
+- **A 403 from the Admin API printed a raw atom.** `:forbidden` reached
+  `format_fallback_reason/1` but never `format_error/1`, so a rejected-scope
+  token whose storefront fallback also failed rendered `Could not reach
+  Shopify: :forbidden` — in the exact slot that is meant to carry the
+  operator's next action. It now names the missing `read_products` scope.
+- **`AdminClient` no longer trusts `Retry-After` unclamped.** A negative
+  value made `Process.sleep/1` raise out of a function whose spec promises
+  an error tuple; a huge one slept for real. Clamped to 0..60s, matching
+  `StorefrontClient`.
+- **The `ru` and `et` catalogues printed the count twice** on the
+  `item`/`items` plural (`"3 3 позиции"`, `"3 3 eset"`): the call site
+  renders the count itself, so the msgstr must carry the noun alone — as
+  the new `de`/`fr` entries correctly do. `et`'s `msgstr[0]` also had the
+  hardcoded `1` this release fixed in `fr`.
+- **Storefront filter labels no longer translate admin-entered text.**
+  `CatalogSidebar` used to run every filter's stored `label` through
+  Gettext by string alone, so any label an admin typed — or the
+  auto-capitalized label `add_metadata_filter` generates from an option
+  key — that happened to collide with an unrelated catalogue msgid (e.g.
+  `"Cost"` → `"Kosten"`) silently rewrote the shopkeeper's own copy on the
+  storefront, with no warning and no migration; new msgids added in later
+  releases could widen the collision set at any time. `translate_label/1`
+  now only translates a label that still matches the `{key, label}` pair
+  shipped by `default_storefront_filters/0` — a renamed built-in or any
+  custom label renders verbatim. Also stops labels containing `%{...}`
+  from hitting Gettext's interpolation and logging `missing Gettext
+  bindings` on every render.
+- **`fr` rendered "1" for an empty count on 6 plural msgids** (`1
+  category`/`1 product`/`1 item`/`1 cart total`/`1 method configured`/`1
+  day`), reachable from `carts.ex`, `categories.ex`, `products.ex`,
+  `shipping_methods.ex` and `product_detail.ex` — an empty French cart
+  read "1 article" ("1 item"). French's CLDR plural rule sends `n=0` to
+  the *singular* index (`de`'s sends it to plural, which is why German was
+  unaffected), and these six `msgstr[0]` entries had the digit `1`
+  hardcoded instead of `%{count}`.
+- **`fr` "Vendor" facet translated as `Fournisseur`** (supply-chain
+  "supplier"), not the customer-facing sense of the word. Now `Vendeur`,
+  matching the same correction on the product-detail page's `Vendor:`
+  label.
+- A pending confirmation modal is now gated on the value it dereferences,
+  and a single row's apply goes through the same source-visibility guard
+  as the section, selection and everything paths.
+
 ## 0.3.0 - 2026-08-21
 
 ### Added
