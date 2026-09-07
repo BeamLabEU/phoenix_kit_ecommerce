@@ -2467,6 +2467,18 @@ defmodule PhoenixKitEcommerce do
           # the new rate through the same `snapshot_unit_price/2` every
           # other frozen amount uses — reconverting it directly would
           # double-convert an already-converted figure.
+          #
+          # There is no `base_compare_at_price` column to re-derive from
+          # exactly (that would need a migration, deliberately deferred —
+          # the owner's call, not worth it for a crossed-out price), so
+          # `to_base/2`'s 2-decimal rounding makes this round trip lossy:
+          # REPEATED reprices can drift the displayed "was" price by a
+          # cent or two against a fresh conversion from the product's own
+          # base compare-at (see `CartFxDriftTest`'s "two consecutive
+          # reprices" test for the bound this is pinned to). `unit_price`
+          # above has no such error — it always re-derives from the
+          # exact `base_unit_price` — so this never touches what is
+          # actually charged or totalled.
           attrs = %{
             unit_price: snapshot_unit_price(repriced, item.base_unit_price),
             compare_at_price:

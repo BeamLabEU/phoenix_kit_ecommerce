@@ -53,8 +53,17 @@ defmodule PhoenixKitEcommerce.CartFxDriftTest do
     %{eur: eur, cart: cart, product: product}
   end
 
-  defp set_rate(eur, rate),
-    do: {:ok, _} = PhoenixKitBilling.update_currency(eur, %{exchange_rate: rate})
+  # Returns the UPDATED struct — a caller that reprices twice must thread
+  # it through rather than reusing the original: `update_currency/2`'s
+  # changeset diffs the new value against the struct it is CALLED with,
+  # not against the database, so calling it twice with the same stale
+  # struct and a value that happens to equal that struct's original
+  # field produces an empty changeset (no perceived change) and silently
+  # writes nothing on the second call.
+  defp set_rate(eur, rate) do
+    {:ok, updated} = PhoenixKitBilling.update_currency(eur, %{exchange_rate: rate})
+    updated
+  end
 
   test "no drift at or under the threshold, drift above it", %{cart: cart, eur: eur} do
     assert Shop.cart_rate_drift(cart) == nil
@@ -118,6 +127,44 @@ defmodule PhoenixKitEcommerce.CartFxDriftTest do
     assert Decimal.equal?(cart.subtotal, Decimal.new("276.00"))
     assert Decimal.equal?(cart.total, Decimal.new("276.00"))
     assert Shop.cart_rate_drift(cart) == nil
+  end
+
+  # §4.3.1 known rounding bound: `compare_at_price` has no `base_compare_at_price`
+  # column to re-derive from exactly the way `unit_price` re-derives from
+  # `base_unit_price` (a new column means a migration, deliberately
+  # deferred — the owner's call, not worth it for a crossed-out price).
+  # Each reprice therefore inverts it through `to_base/2`'s 2-decimal
+  # rounding before reconverting, so REPEATED reprices can drift the
+  # displayed "was" price by a cent or two against a fresh conversion.
+  # `unit_price` never has this error - it always re-derives exactly.
+  # This pins the ACTUAL observed numbers for two consecutive reprices
+  # on the same cart (0.909091 -> 1.0 -> 0.909091 again) rather than
+  # asserting a drift that may or may not occur for a given pair of
+  # rates - `unit_price` must land back on 125.45 exactly, and
+  # `compare_at_price` is asserted only to be within the documented
+  # 0.02 bound of its original 163.64, not to a specific drifted value.
+  test "two consecutive reprices: unit_price is exact, compare_at_price is bounded within a cent",
+       %{cart: cart, eur: eur} do
+    original_compare_at = List.first(cart.items).compare_at_price
+
+    eur = set_rate(eur, "1.0")
+    assert {:ok, cart} = Shop.refresh_cart_rate(cart)
+
+    _eur = set_rate(eur, "0.909091")
+    assert {:ok, cart} = Shop.refresh_cart_rate(cart)
+
+    [item] = cart.items
+    assert Decimal.equal?(cart.exchange_rate, Decimal.new("0.909091"))
+    assert Decimal.equal?(item.unit_price, Decimal.new("125.45"))
+
+    drift =
+      item.compare_at_price
+      |> Decimal.sub(original_compare_at)
+      |> Decimal.abs()
+
+    assert Decimal.compare(drift, Decimal.new("0.02")) != :gt,
+           "compare_at_price drifted #{drift} away from #{original_compare_at} " <>
+             "(now #{item.compare_at_price}) - past the documented 0.02 bound"
   end
 
   test "refresh_cart_rate/1 refuses when a line has no base price or the currency is gone", %{
