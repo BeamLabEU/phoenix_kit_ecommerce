@@ -113,8 +113,8 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/products.ex:372
 #: lib/phoenix_kit_ecommerce/web/products.ex:373
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1142
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1428
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1143
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1429
 #, elixir-autogen, elixir-format
 msgid "%{count} selected"
 msgstr ""
@@ -126,7 +126,7 @@ msgid_plural "%{count} categories"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:560
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:568
 #, elixir-autogen, elixir-format
 msgid "1 day"
 msgid_plural "%{count} days"
@@ -293,12 +293,12 @@ msgstr ""
 msgid "Are you sure you want to delete this product?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:621
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:629
 #, elixir-autogen, elixir-format
 msgid "Are you sure you want to delete this product? This action cannot be undone."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:549
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:557
 #, elixir-autogen, elixir-format
 msgid "Attached"
 msgstr ""
@@ -328,7 +328,7 @@ msgstr ""
 msgid "Auto-generated from title"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:292
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:291
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1181
 #, elixir-autogen, elixir-format
 msgid "Available Options"
@@ -344,7 +344,7 @@ msgstr ""
 msgid "Back to Orders"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:459
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:467
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:953
 #, elixir-autogen, elixir-format
 msgid "Base Price"
@@ -412,7 +412,7 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/categories.ex:621
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:679
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:791
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:633
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:641
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1859
 #: lib/phoenix_kit_ecommerce/web/products.ex:663
 #: lib/phoenix_kit_ecommerce/web/products.ex:701
@@ -458,7 +458,7 @@ msgstr ""
 msgid "Categories in shop enabled"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:529
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:537
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:916
 #: lib/phoenix_kit_ecommerce/web/products.ex:337
 #: lib/phoenix_kit_ecommerce/web/products.ex:416
@@ -557,7 +557,7 @@ msgstr ""
 msgid "Clear selection"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:429
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:437
 #, elixir-autogen, elixir-format
 msgid "Compare At"
 msgstr ""
@@ -626,7 +626,7 @@ msgstr ""
 msgid "Converted"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:438
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:446
 #, elixir-autogen, elixir-format
 msgid "Cost"
 msgstr ""
@@ -671,7 +671,7 @@ msgstr ""
 msgid "Create your first shipping method to get started"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:598
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:606
 #, elixir-autogen, elixir-format
 msgid "Created:"
 msgstr ""
@@ -739,8 +739,8 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/categories.ex:377
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1070
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1074
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:236
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:635
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:235
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:643
 #: lib/phoenix_kit_ecommerce/web/products.ex:399
 #: lib/phoenix_kit_ecommerce/web/products.ex:756
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:99
@@ -755,7 +755,7 @@ msgstr ""
 msgid "Delete Categories"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:619
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:627
 #: lib/phoenix_kit_ecommerce/web/products.ex:743
 #, elixir-autogen, elixir-format
 msgid "Delete Product"
@@ -767,7 +767,7 @@ msgstr ""
 msgid "Delete Products"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:630
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:638
 #: lib/phoenix_kit_ecommerce/web/products.ex:726
 #: lib/phoenix_kit_ecommerce/web/products.ex:752
 #, elixir-autogen, elixir-format
@@ -811,12 +811,12 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:925
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1101
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:159
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:835
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:836
 #, elixir-autogen, elixir-format
 msgid "Description"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:583
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:591
 #, elixir-autogen, elixir-format
 msgid "Description:"
 msgstr ""
@@ -827,7 +827,7 @@ msgstr ""
 msgid "Digital"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:544
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:552
 #, elixir-autogen, elixir-format
 msgid "Digital Product"
 msgstr ""
@@ -850,7 +850,7 @@ msgstr ""
 msgid "Display category cards above products in the main shop page"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:553
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:561
 #, elixir-autogen, elixir-format
 msgid "Download Limit:"
 msgstr ""
@@ -887,7 +887,7 @@ msgstr ""
 msgid "E-Commerce Settings"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:230
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:229
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:91
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:183
 #, elixir-autogen, elixir-format
@@ -977,7 +977,7 @@ msgstr ""
 msgid "Expired"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:557
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:565
 #, elixir-autogen, elixir-format
 msgid "Expiry:"
 msgstr ""
@@ -1007,7 +1007,7 @@ msgstr ""
 msgid "Failed to delete import log"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:184
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:183
 #: lib/phoenix_kit_ecommerce/web/products.ex:870
 #: lib/phoenix_kit_ecommerce/web/products.ex:901
 #, elixir-autogen, elixir-format
@@ -1081,7 +1081,7 @@ msgstr ""
 msgid "File is too large (max 50MB)"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:547
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:555
 #, elixir-autogen, elixir-format
 msgid "File:"
 msgstr ""
@@ -1136,7 +1136,7 @@ msgstr ""
 msgid "From Import"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:399
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:398
 #, elixir-autogen, elixir-format
 msgid "Full Description:"
 msgstr ""
@@ -1182,7 +1182,7 @@ msgstr ""
 msgid "If you have questions about your order, please contact our support team."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:248
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:247
 #, elixir-autogen, elixir-format
 msgid "Image"
 msgstr ""
@@ -1348,7 +1348,7 @@ msgstr ""
 msgid "Link to Global Option"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:375
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:374
 #, elixir-autogen, elixir-format
 msgid "Made to Order:"
 msgstr ""
@@ -1444,7 +1444,7 @@ msgstr ""
 msgid "Need help?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:561
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:569
 #, elixir-autogen, elixir-format
 msgid "Never"
 msgstr ""
@@ -1468,9 +1468,9 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1510
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1514
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:362
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:371
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:377
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:361
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:370
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:376
 #, elixir-autogen, elixir-format
 msgid "No"
 msgstr ""
@@ -1495,7 +1495,7 @@ msgstr ""
 msgid "No categories found"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:535
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:543
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:917
 #, elixir-autogen, elixir-format
 msgid "No category"
@@ -1517,7 +1517,7 @@ msgstr ""
 msgid "No icons"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:260
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:259
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1735
 #, elixir-autogen, elixir-format
 msgid "No image"
@@ -1758,7 +1758,7 @@ msgstr ""
 msgid "Preparing import..."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:204
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:203
 #, elixir-autogen, elixir-format
 msgid "Preview:"
 msgstr ""
@@ -1775,22 +1775,22 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:397
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:166
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:421
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:429
 #: lib/phoenix_kit_ecommerce/web/products.ex:423
 #: lib/phoenix_kit_ecommerce/web/products.ex:484
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:178
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:108
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:839
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:840
 #, elixir-autogen, elixir-format
 msgid "Price"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:453
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:461
 #, elixir-autogen, elixir-format
 msgid "Price Calculation"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:497
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:505
 #, elixir-autogen, elixir-format
 msgid "Price Range"
 msgstr ""
@@ -1800,7 +1800,7 @@ msgstr ""
 msgid "Price override is configured per-option in the options settings."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:415
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:423
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:945
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:171
 #, elixir-autogen, elixir-format
@@ -1814,12 +1814,12 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:97
 #: lib/phoenix_kit_ecommerce/web/products.ex:480
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1454
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1455
 #, elixir-autogen, elixir-format
 msgid "Product"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:338
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:337
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:831
 #, elixir-autogen, elixir-format
 msgid "Product Details"
@@ -1845,7 +1845,7 @@ msgstr ""
 msgid "Product created"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:180
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:179
 #: lib/phoenix_kit_ecommerce/web/products.ex:864
 #: lib/phoenix_kit_ecommerce/web/products.ex:898
 #, elixir-autogen, elixir-format
@@ -1928,7 +1928,7 @@ msgstr ""
 msgid "Required field"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:369
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:368
 #, elixir-autogen, elixir-format
 msgid "Requires Shipping:"
 msgstr ""
@@ -1959,7 +1959,7 @@ msgstr ""
 msgid "Root Only"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:573
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:581
 #, elixir-autogen, elixir-format
 msgid "SEO"
 msgstr ""
@@ -2177,14 +2177,14 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/categories.ex:426
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:419
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1000
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:517
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:525
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:867
 #: lib/phoenix_kit_ecommerce/web/products.ex:312
 #: lib/phoenix_kit_ecommerce/web/products.ex:413
 #: lib/phoenix_kit_ecommerce/web/products.ex:481
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:310
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:111
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:838
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:839
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:174
 #, elixir-autogen, elixir-format
 msgid "Status"
@@ -2216,7 +2216,7 @@ msgstr ""
 msgid "Supported formats: Shopify, Prom.ua (auto-detected from file headers)"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:386
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:385
 #, elixir-autogen, elixir-format
 msgid "Tags:"
 msgstr ""
@@ -2234,7 +2234,7 @@ msgstr ""
 msgid "Tax Settings"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:361
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:360
 #, elixir-autogen, elixir-format
 msgid "Taxable:"
 msgstr ""
@@ -2259,7 +2259,7 @@ msgstr ""
 msgid "Time"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:595
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:603
 #, elixir-autogen, elixir-format
 msgid "Timestamps"
 msgstr ""
@@ -2267,12 +2267,12 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:164
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:837
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1088
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:833
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:834
 #, elixir-autogen, elixir-format
 msgid "Title"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:577
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:585
 #, elixir-autogen, elixir-format
 msgid "Title:"
 msgstr ""
@@ -2340,7 +2340,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:353
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:352
 #, elixir-autogen, elixir-format
 msgid "Type:"
 msgstr ""
@@ -2356,7 +2356,7 @@ msgstr ""
 msgid "Unit (optional)"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:554
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:562
 #, elixir-autogen, elixir-format
 msgid "Unlimited"
 msgstr ""
@@ -2413,7 +2413,7 @@ msgstr ""
 msgid "Updated"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:604
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:612
 #, elixir-autogen, elixir-format
 msgid "Updated:"
 msgstr ""
@@ -2474,12 +2474,12 @@ msgid "Variant Images"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:899
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:836
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:837
 #, elixir-autogen, elixir-format
 msgid "Vendor"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:357
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:356
 #, elixir-autogen, elixir-format
 msgid "Vendor:"
 msgstr ""
@@ -2496,7 +2496,7 @@ msgid "View your order history"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:891
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:365
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:364
 #, elixir-autogen, elixir-format
 msgid "Weight:"
 msgstr ""
@@ -2508,9 +2508,9 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1510
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1514
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:362
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:371
-#: lib/phoenix_kit_ecommerce/web/product_detail.ex:377
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:361
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:370
+#: lib/phoenix_kit_ecommerce/web/product_detail.ex:376
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2036
 #, elixir-autogen, elixir-format
 msgid "Yes"
@@ -2850,11 +2850,6 @@ msgstr ""
 msgid "Format:"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1107
-#, elixir-autogen, elixir-format
-msgid "Full Description (HTML)"
-msgstr ""
-
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1498
 #, elixir-autogen, elixir-format
 msgid "Import details:"
@@ -3188,7 +3183,7 @@ msgid "Already in cart:"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/components/catalog_sidebar.ex:269
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1234
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1235
 #, elixir-autogen, elixir-format
 msgid "Apply"
 msgstr ""
@@ -3842,7 +3837,7 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1525
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1560
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1606
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1455
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1456
 #, elixir-autogen, elixir-format
 msgid "Change"
 msgstr ""
@@ -3852,7 +3847,7 @@ msgstr ""
 msgid "City *"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1439
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1440
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:48
 #, elixir-autogen, elixir-format
 msgid "Clear"
@@ -3943,7 +3938,7 @@ msgstr ""
 msgid "Missing required option: %{option}.\nPlease select all required parameters."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1523
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1524
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:138
 #, elixir-autogen, elixir-format
 msgid "Next"
@@ -4239,26 +4234,26 @@ msgstr ""
 msgid "Where the buyer picks a shipping method"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:977
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:978
 #, elixir-autogen, elixir-format
 msgid "%{count} changed region (%{delta})"
 msgid_plural "%{count} changed regions (%{delta})"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:903
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:904
 #, elixir-autogen, elixir-format
 msgid "%{count} extreme price change is excluded and must be applied individually."
 msgid_plural "%{count} extreme price changes are excluded and must be applied individually."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1040
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1041
 #, elixir-autogen, elixir-format
 msgid "%{credential_error} The storefront fallback also failed: %{storefront_error}"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1135
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1136
 #, elixir-autogen, elixir-format
 msgid "%{percent}% of the Shopify catalogue"
 msgstr ""
@@ -4268,7 +4263,7 @@ msgstr ""
 msgid "Admin API access token"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1069
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1070
 #, elixir-autogen, elixir-format
 msgid "All price changes have been applied."
 msgstr ""
@@ -4280,68 +4275,68 @@ msgid_plural "Applied %{count} changes from Shopify."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:865
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:866
 #, elixir-autogen, elixir-format
 msgid "Apply %{count} %{field} change from Shopify?"
 msgid_plural "Apply %{count} %{field} changes from Shopify?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:930
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:931
 #, elixir-autogen, elixir-format
 msgid "Apply change?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1359
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1360
 #, elixir-autogen, elixir-format
 msgid "Apply everything"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:969
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:970
 #, elixir-autogen, elixir-format
 msgid "Apply everything?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:885
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:886
 #, elixir-autogen, elixir-format
 msgid "Apply pending changes for %{count} product across all sections?"
 msgid_plural "Apply pending changes for %{count} products across all sections?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1396
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1397
 #, elixir-autogen, elixir-format
 msgid "Apply section"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:947
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:948
 #, elixir-autogen, elixir-format
 msgid "Apply section?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1436
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1437
 #, elixir-autogen, elixir-format
 msgid "Apply selection"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:958
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:959
 #, elixir-autogen, elixir-format
 msgid "Apply selection?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:875
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:876
 #, elixir-autogen, elixir-format
 msgid "Apply the selected %{field} change from Shopify?"
 msgid_plural "Apply %{count} selected %{field} changes from Shopify?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1326
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1327
 #, elixir-autogen, elixir-format
 msgid "Catalogue coverage"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1261
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1262
 #, elixir-autogen, elixir-format
 msgid "Check for changes"
 msgstr ""
@@ -4371,12 +4366,12 @@ msgstr ""
 msgid "Connect a Shopify Admin API token in Integrations settings, then review and apply catalog changes from the Shopify Sync page."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1271
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1272
 #, elixir-autogen, elixir-format
 msgid "Connect it in Integrations settings."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1277
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1278
 #, elixir-autogen, elixir-format
 msgid "Connected: %{name}"
 msgstr ""
@@ -4393,7 +4388,7 @@ msgid_plural "Could not apply %{count} changes — try again or apply individual
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1047
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1048
 #, elixir-autogen, elixir-format
 msgid "Could not reach Shopify: %{reason}"
 msgstr ""
@@ -4415,7 +4410,7 @@ msgstr ""
 msgid "Create a Custom App in Shopify"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1156
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1157
 #, elixir-autogen, elixir-format
 msgid "Current"
 msgstr ""
@@ -4440,7 +4435,7 @@ msgstr ""
 msgid "Go to **API credentials** and click **Install app**"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1223
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1224
 #, elixir-autogen, elixir-format
 msgid "Hide diff"
 msgstr ""
@@ -4450,7 +4445,7 @@ msgstr ""
 msgid "In your Shopify admin, go to **Settings → Apps and sales channels → Develop apps**"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1167
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1168
 #, elixir-autogen, elixir-format
 msgid "Incoming"
 msgstr ""
@@ -4460,12 +4455,12 @@ msgstr ""
 msgid "Install the app and copy the token"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1339
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1340
 #, elixir-autogen, elixir-format
 msgid "No changes — the shop matches Shopify."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1072
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1073
 #, elixir-autogen, elixir-format
 msgid "No price differences found. Other fields were not compared — see the notice above."
 msgstr ""
@@ -4485,32 +4480,32 @@ msgstr ""
 msgid "Open the app, go to **Configuration**, and click **Configure** under Admin API scopes"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1301
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1302
 #, elixir-autogen, elixir-format
 msgid "Pending changes"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1506
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1507
 #, elixir-autogen, elixir-format
 msgid "Prev"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1312
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1313
 #, elixir-autogen, elixir-format
 msgid "Price changes"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1313
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1314
 #, elixir-autogen, elixir-format
 msgid "Products whose price differs from Shopify"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1302
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1303
 #, elixir-autogen, elixir-format
 msgid "Products with at least one field to review"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1452
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1453
 #, elixir-autogen, elixir-format
 msgid "Select all on this page"
 msgstr ""
@@ -4520,7 +4515,7 @@ msgstr ""
 msgid "Shop domain"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1009
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1010
 #, elixir-autogen, elixir-format
 msgid "Shop domain not found — check the connection's shop domain."
 msgstr ""
@@ -4532,32 +4527,32 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:739
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:117
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1251
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1252
 #, elixir-autogen, elixir-format
 msgid "Shopify Sync"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1269
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1270
 #, elixir-autogen, elixir-format
 msgid "Shopify isn't connected yet."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1024
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1025
 #, elixir-autogen, elixir-format
 msgid "Shopify rate-limited this request — try again shortly."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1005
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1006
 #, elixir-autogen, elixir-format
 msgid "Shopify rejected the access token — check the connection's credentials."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1223
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1224
 #, elixir-autogen, elixir-format
 msgid "Show diff"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1290
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1291
 #, elixir-autogen, elixir-format
 msgid "Showing price-only changes — %{reason}. Connect a valid Admin API token to see the full diff."
 msgstr ""
@@ -4567,7 +4562,7 @@ msgstr ""
 msgid "Sync product data from a Shopify store (read-only)"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1028
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1029
 #, elixir-autogen, elixir-format
 msgid "The Shopify connection is missing its shop domain or access token."
 msgstr ""
@@ -4577,12 +4572,12 @@ msgstr ""
 msgid "This is a static token, not OAuth — Shopify's own recommended path for a single-store custom app. \"Test Connection\" on this page is a no-op for Shopify (no validation strategy is registered); use the sync feature's own connectivity check instead."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:850
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:851
 #, elixir-autogen, elixir-format
 msgid "Update %{title}'s %{field} from Shopify?"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:857
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:858
 #, elixir-autogen, elixir-format
 msgid "Update %{title}: %{field} → %{value}?"
 msgstr ""
@@ -4604,32 +4599,32 @@ msgstr ""
 msgid "Your Shopify store's *.myshopify.com domain"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1198
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1199
 #, elixir-autogen, elixir-format
 msgid "large change"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:988
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:989
 #, elixir-autogen, elixir-format
 msgid "no length change"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1066
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1067
 #, elixir-autogen, elixir-format
 msgid "the Admin API request was rejected (%{reason})"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1055
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1056
 #, elixir-autogen, elixir-format
 msgid "the access token is missing the required scope"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1051
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1052
 #, elixir-autogen, elixir-format
 msgid "the access token was rejected"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1062
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1063
 #, elixir-autogen, elixir-format
 msgid "the connection is missing its access token"
 msgstr ""
@@ -4639,22 +4634,12 @@ msgstr ""
 msgid "Descriptions"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:834
-#, elixir-autogen, elixir-format
-msgid "HTML text"
-msgstr ""
-
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:809
-#, elixir-autogen, elixir-format
-msgid "HTML texts"
-msgstr ""
-
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:806
 #, elixir-autogen, elixir-format
 msgid "Prices"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1020
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1021
 #, elixir-autogen, elixir-format
 msgid "Shopify rejected the access token's scope — the app needs read_products."
 msgstr ""
@@ -4665,7 +4650,7 @@ msgid "Statuses"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:810
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:837
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:838
 #, elixir-autogen, elixir-format
 msgid "Tags"
 msgstr ""
@@ -4688,4 +4673,15 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/errors.ex:78
 #, elixir-autogen, elixir-format
 msgid "This item is priced in a different currency and cannot be added right now."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1107
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:835
+#, elixir-autogen, elixir-format
+msgid "Full Description"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:809
+#, elixir-autogen, elixir-format
+msgid "Full Descriptions"
 msgstr ""
