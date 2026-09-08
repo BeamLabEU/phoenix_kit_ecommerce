@@ -358,4 +358,52 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
       assert rendered =~ ~r/<li>Item\s*<ul>/
     end
   end
+
+  describe "block content nested inside other blocks" do
+    test "a table inside a list item keeps its cells apart" do
+      # A size chart under a "Specifications:" bullet is ordinary Shopify
+      # copy. Rendering it inline used to glue every cell together.
+      html =
+        "<ul><li>Specs<table><tr><th>H1</th><th>H2</th></tr>" <>
+          "<tr><td>a</td><td>b</td></tr></table></li></ul>"
+
+      out = HtmlToMarkdown.convert(html)
+
+      assert out =~ "- Specs"
+      assert out =~ "| H1 | H2 |"
+      assert out =~ "| a | b |"
+      refute out =~ "SpecsH1"
+      refute out =~ "ab"
+      assert HtmlToMarkdown.convert(out) == out
+    end
+
+    test "a paragraph inside a list item stays on its own line" do
+      out = HtmlToMarkdown.convert("<ul><li>Intro<p>Second paragraph.</p></li></ul>")
+
+      assert out =~ "- Intro"
+      assert out =~ "Second paragraph."
+      refute out =~ "IntroSecond"
+      assert HtmlToMarkdown.convert(out) == out
+    end
+
+    test "a list inside a table cell is flattened with its boundaries kept" do
+      # A pipe cell is one line, so the list cannot survive as a list —
+      # but its text must not merge into the cell's own words.
+      out =
+        HtmlToMarkdown.convert(
+          "<table><tr><td>Row<ul><li>nested li in cell</li></ul></td></tr></table>"
+        )
+
+      assert out =~ "Row - nested li in cell"
+      refute out =~ "Rownested"
+      assert HtmlToMarkdown.convert(out) == out
+    end
+
+    test "two paragraphs in a table cell do not merge into one word" do
+      out = HtmlToMarkdown.convert("<table><tr><td><p>One</p><p>Two</p></td></tr></table>")
+
+      assert out =~ "| One Two |"
+      refute out =~ "OneTwo"
+    end
+  end
 end

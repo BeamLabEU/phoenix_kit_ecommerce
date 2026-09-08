@@ -319,26 +319,57 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   # carries the width this item's own marker requires, so it just gets
   # threaded down to the nested `render_list/3` call.
   defp render_li_content(li_children, child_indent) do
-    {inline_nodes, nested_list_nodes} =
+    # Anything that is a block in its own right has to be rendered as
+    # one. Splitting only `ul`/`ol` out used to send a `<table>` (or a
+    # `<p>`, `<h2>`, …) nested in a list item through `render_inline`'s
+    # catch-all, which unwraps tags and joins their children with no
+    # separator at all — a size chart under a "Specifications:" bullet
+    # came out as `SpecsH1H2ab`, the exact cell-collapse this module
+    # documents that it avoids.
+    {inline_nodes, block_nodes} =
       Enum.split_with(li_children, fn
-        {:element, tag, _attrs, _children} -> tag not in ["ul", "ol"]
+        {:element, tag, _attrs, _children} -> tag not in @block_tags
         _other -> true
       end)
 
     inline_text = String.trim(render_inline(inline_nodes))
 
     nested_text =
-      nested_list_nodes
-      |> Enum.map_join(fn {:element, tag, _attrs, nested_children} ->
-        ordered_start = if tag == "ol", do: 1, else: nil
-        render_list(nested_children, ordered_start, child_indent)
-      end)
+      block_nodes
+      |> Enum.map_join("\n", &render_li_block(&1, child_indent))
       |> String.trim_trailing("\n")
 
     case nested_text do
       "" -> inline_text
       _ -> inline_text <> "\n" <> nested_text
     end
+  end
+
+  # A nested list keeps the parent marker's indent; every other block
+  # renders the way it would anywhere else, then gets the same indent so
+  # it stays inside the item.
+  defp render_li_block({:element, tag, _attrs, children}, child_indent)
+       when tag in ["ul", "ol"] do
+    ordered_start = if tag == "ol", do: 1, else: nil
+    render_list(children, ordered_start, child_indent)
+  end
+
+  defp render_li_block(node, child_indent) do
+    node
+    |> render_block()
+    |> String.trim()
+    |> indent_block(child_indent)
+  end
+
+  defp indent_block("", _indent), do: ""
+
+  defp indent_block(text, indent) do
+    text
+    |> String.split("\n")
+    |> Enum.map_join("\n", fn
+      "" -> ""
+      line -> indent <> line
+    end)
   end
 
   # Renders `<table>` as a GFM pipe table. See the moduledoc for the
@@ -414,13 +445,23 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
 
   defp extract_table_row_node(_other, _in_thead?), do: []
 
+  # A pipe cell is a single line, so block children inside it (a list, a
+  # paragraph) are flattened — but flattened with their boundaries kept
+  # as spaces. Rendering them inline instead would join "Row" and its
+  # nested item into "Rownested".
   defp extract_cell_text({:element, _tag, _attrs, children}) do
     children
-    |> render_inline()
+    |> Enum.map_join(" ", &cell_fragment/1)
     |> String.trim()
     |> String.replace(~r/\s*\n\s*/, " ")
+    |> String.replace(~r/\s{2,}/, " ")
     |> String.replace("|", "\\|")
   end
+
+  defp cell_fragment({:element, tag, _attrs, _children} = node) when tag in @block_tags,
+    do: node |> render_block() |> String.trim()
+
+  defp cell_fragment(node), do: render_inline([node])
 
   # ── inline rendering ─────────────────────────────────────────────────
 
