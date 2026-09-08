@@ -65,7 +65,7 @@ msgstr "CSV-Import"
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:66
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:283
 #: lib/phoenix_kit_ecommerce/web/catalog_category.ex:290
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:736
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:738
 #: lib/phoenix_kit_ecommerce/web/components/shop_cards.ex:170
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:86
 #, elixir-autogen
@@ -2154,7 +2154,7 @@ msgstr "Slug"
 msgid "Something went wrong. Please try again."
 msgstr "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:947
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:949
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1864
 #, elixir-autogen, elixir-format
 msgid "Specifications"
@@ -2513,7 +2513,7 @@ msgstr "Details anzeigen"
 msgid "View your order history"
 msgstr "Bestellverlauf anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:923
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:925
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:365
 #, elixir-autogen, elixir-format
 msgid "Weight:"
@@ -3138,8 +3138,8 @@ msgstr "Die gewählte Versandart ist für Ihre Adresse nicht verfügbar — bitt
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:73
 #: lib/phoenix_kit_ecommerce/web/catalog_category.ex:33
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:47
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:491
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:543
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:493
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:545
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:47
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:863
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:30
@@ -3183,7 +3183,7 @@ msgstr "Warenkorb-Leiste deaktiviert"
 msgid "Storefront cart bar enabled"
 msgstr "Warenkorb-Leiste aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1123
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1125
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"
 msgstr "Mehr in den Warenkorb legen"
@@ -3193,7 +3193,7 @@ msgstr "Mehr in den Warenkorb legen"
 msgid "Add some products to get started"
 msgstr "Fügen Sie Produkte hinzu, um zu beginnen"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1125
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1127
 #, elixir-autogen, elixir-format
 msgid "Add to Cart"
 msgstr "In den Warenkorb"
@@ -3203,7 +3203,7 @@ msgstr "In den Warenkorb"
 msgid "All Products"
 msgstr "Alle Produkte"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1094
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1096
 #, elixir-autogen, elixir-format
 msgid "Already in cart:"
 msgstr "Bereits im Warenkorb:"
@@ -3232,7 +3232,7 @@ msgstr "Entdecken Sie unsere Produktauswahl in verschiedenen Kategorien"
 msgid "Category not found"
 msgstr "Kategorie nicht gefunden"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:931
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:933
 #, elixir-autogen, elixir-format
 msgid "Category:"
 msgstr "Kategorie:"
@@ -3252,7 +3252,7 @@ msgstr "Schauen Sie bald wieder vorbei oder durchsuchen Sie andere Kategorien"
 msgid "Check your inbox"
 msgstr "Prüfen Sie Ihr Postfach"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:979
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:981
 #, elixir-autogen, elixir-format
 msgid "Choose Options"
 msgstr "Optionen wählen"
@@ -3390,7 +3390,7 @@ msgstr "Bestellstatus"
 msgid "Please select a shipping method"
 msgstr "Bitte wählen Sie eine Versandart"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:996
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:998
 #, elixir-autogen, elixir-format
 msgid "Please select an option"
 msgstr "Bitte wählen Sie eine Option"
@@ -3401,7 +3401,7 @@ msgid "Product not found"
 msgstr "Produkt nicht gefunden"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:396
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1034
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1036
 #, elixir-autogen, elixir-format
 msgid "Quantity"
 msgstr "Menge"
@@ -3495,8 +3495,8 @@ msgstr "Ihr Warenkorb ist leer"
 msgid "Your order is being processed"
 msgstr "Ihre Bestellung wird bearbeitet"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:602
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:618
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:604
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:620
 #, elixir-autogen, elixir-format
 msgid "option"
 msgstr "Option"
@@ -3527,7 +3527,7 @@ msgstr "Preis auf Anfrage"
 msgid "Price on request (hide the amount)"
 msgstr "Preis auf Anfrage (Betrag ausblenden)"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1119
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1121
 #, elixir-autogen, elixir-format
 msgid "Adding..."
 msgstr "Wird hinzugefügt..."
@@ -3543,7 +3543,7 @@ msgstr "Filter"
 msgid "Proceed to Checkout"
 msgstr "Zur Kasse"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1132
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1134
 #, elixir-autogen, elixir-format
 msgid "View Cart"
 msgstr "Warenkorb ansehen"
@@ -3921,8 +3921,8 @@ msgstr "Warenkorb bearbeiten"
 msgid "Edit Category"
 msgstr "Kategorie bearbeiten"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:164
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:365
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:165
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:367
 #, elixir-autogen, elixir-format
 msgid "Edit Product"
 msgstr "Produkt bearbeiten"
@@ -3942,7 +3942,7 @@ msgstr "Bestellung konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
 msgid "First Name *"
 msgstr "Vorname *"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:641
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:643
 #, elixir-autogen, elixir-format
 msgid "Insufficient stock (only %{count} available).\nPlease reduce quantity."
 msgstr "Unzureichender Lagerbestand (nur %{count} verfügbar).\nBitte reduzieren Sie die Menge."
@@ -3960,7 +3960,7 @@ msgstr "Artikel mit Preis auf Anfrage sind in dieser Summe nicht enthalten."
 msgid "Last Name *"
 msgstr "Nachname *"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:629
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:631
 #, elixir-autogen, elixir-format
 msgid "Missing required option: %{option}.\nPlease select all required parameters."
 msgstr "Erforderliche Option fehlt: %{option}.\nBitte wählen Sie alle erforderlichen Parameter aus."
@@ -3971,12 +3971,12 @@ msgstr "Erforderliche Option fehlt: %{option}.\nBitte wählen Sie alle erforderl
 msgid "Next"
 msgstr "Weiter"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:620
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:622
 #, elixir-autogen, elixir-format
 msgid "Option \"%{option}\" does not exist.\nProduct was updated - please reload the page."
 msgstr "Option „%{option}“ existiert nicht.\nDas Produkt wurde aktualisiert – bitte laden Sie die Seite neu."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:609
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:611
 #, elixir-autogen, elixir-format
 msgid "Option \"%{option}: %{value}\" is no longer available.\nPlease refresh the page for current options."
 msgstr "Option „%{option}: %{value}“ ist nicht mehr verfügbar.\nBitte aktualisieren Sie die Seite, um die aktuellen Optionen zu sehen."
@@ -4001,7 +4001,7 @@ msgstr "Postleitzahl"
 msgid "Processing..."
 msgstr "Verarbeitung..."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1100
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1102
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1677
 #, elixir-autogen, elixir-format
 msgid "Qty: %{count}"
@@ -4027,7 +4027,7 @@ msgstr "Zahlungsmethode auswählen"
 msgid "Select country..."
 msgstr "Land auswählen..."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:606
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:608
 #, elixir-autogen, elixir-format
 msgid "Selected options are no longer available.\nPlease refresh and select again."
 msgstr "Die ausgewählten Optionen sind nicht mehr verfügbar.\nBitte aktualisieren Sie die Seite und wählen Sie erneut aus."
@@ -4059,17 +4059,17 @@ msgid_plural "Subtotal (%{count} items)"
 msgstr[0] "Zwischensumme (%{count} Artikel)"
 msgstr[1] "Zwischensumme (%{count} Artikel)"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:647
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:649
 #, elixir-autogen, elixir-format
 msgid "The price has changed.\nPlease refresh to see the current price."
 msgstr "Der Preis hat sich geändert.\nBitte aktualisieren Sie die Seite, um den aktuellen Preis zu sehen."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:635
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:637
 #, elixir-autogen, elixir-format
 msgid "This item is out of stock.\nPlease try again later or choose another one."
 msgstr "Dieser Artikel ist nicht auf Lager.\nBitte versuchen Sie es später erneut oder wählen Sie einen anderen aus."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:651
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:653
 #, elixir-autogen, elixir-format
 msgid "Unable to add to cart.\nPlease try again or contact support."
 msgstr "Hinzufügen zum Warenkorb nicht möglich.\nBitte versuchen Sie es erneut oder kontaktieren Sie den Support."
@@ -4079,7 +4079,7 @@ msgstr "Hinzufügen zum Warenkorb nicht möglich.\nBitte versuchen Sie es erneut
 msgid "You have multiple billing profiles. Please select one or"
 msgstr "Sie haben mehrere Rechnungsprofile. Bitte wählen Sie eines aus oder"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:627
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:629
 #, elixir-autogen, elixir-format
 msgid "required option"
 msgstr "erforderliche Option"
