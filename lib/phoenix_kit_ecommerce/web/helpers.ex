@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
+  alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
 
   # ---------------------------------------------------------------------------
@@ -152,6 +153,25 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   def get_language_from_params_or_default(_params) do
     Translations.default_language()
   end
+
+  @doc """
+  Whether a product's tags may be shown on a page rendered in `language`.
+
+  Tags arrive from Shopify as one untranslated list on
+  `data["ecommerce"]["tags"]` — there is no per-language variant of them.
+  Rendering that list on a translated page puts the only untranslated text
+  on the card, so tags stay on the default-language storefront and are
+  hidden elsewhere until translated tags exist.
+  """
+  @spec tags_visible?(String.t() | nil) :: boolean()
+  def tags_visible?(language) when is_binary(language) do
+    # A page carries a dialect ("en-US"), the setting holds a base code
+    # ("en") — compare them the way slugs are compared.
+    SlugResolver.normalize_language_public(language) ==
+      SlugResolver.normalize_language_public(Translations.default_language())
+  end
+
+  def tags_visible?(_language), do: false
 
   @doc """
   Point this module's Gettext backend at `language`, falling back to the base
