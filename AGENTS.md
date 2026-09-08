@@ -74,6 +74,13 @@ PHOENIX_KIT_BILLING_PATH=../phoenix_kit_billing mix test
 PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
 ```
 
+Repo-local aliases:
+
+- `mix quality` — `format` + `credo --strict` + `dialyzer` (applies formatting).
+- `mix quality.ci` — `format --check-formatted` + `credo --strict` + `dialyzer`: it CHECKS formatting rather than applying it, so run `mix format` first.
+- `mix test.reset` — drops the test database and recreates it.
+- `mix test.setup` — `ecto.create` on the test repo, the alias equivalent of `createdb`.
+
 ## Conventions
 
 - **Module key** is `"shop"` in every callback. Tab ids are prefixed
