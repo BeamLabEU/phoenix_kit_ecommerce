@@ -18,13 +18,15 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   `:dev`/`:prod` would be a wider dependency-footprint change than this
   fix calls for.
 
-  Supported tags: `p`, `br`, `h1`-`h6`, `ul`/`ol`/`li`, `table`
+  Supported tags: `p`, `br`, `h1`-`h6`, `ul`/`ol`/`li` (including lists
+  nested inside a `<li>`, rendered as an indented sub-list), `table`
   (`thead`/`tbody`/`tfoot`/`tr`/`td`/`th`), `strong`/`b`, `em`/`i`, `a`,
   `img`, plus a transparent `div` wrapper and HTML entity decoding
   (`&amp;`, `&nbsp;`, `&quot;`, `&#39;`, numeric character references).
-  `<script>` and `<style>` elements are dropped entirely, tag and
-  content, before parsing starts — their content is markup/code, not
-  prose, and (unlike HTML) isn't guaranteed to tokenize as balanced tags.
+  `<script>`, `<style>`, `<noscript>` and `<template>` elements are
+  dropped entirely, content included, rather than leaking their raw
+  text. A bare `<`/`>` that isn't part of a real tag (e.g. "5 < 10") is
+  left as plain text instead of being parsed as a tag boundary.
   Text with no HTML tag at all is returned byte-for-byte unchanged, which
   is what makes `convert/1` idempotent — converting an already-converted
   (or always-plain) value is a no-op. Markdown already present in text
@@ -44,8 +46,28 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   Markdown line.
   """
 
-  @tag_regex ~r/<(?:[^>"']|"[^"]*"|'[^']*')+>/
-  @script_or_style_regex ~r/<(script|style)\b[^>]*>.*?<\/\1\s*>/is
+  # A `<` only starts a tag when followed by `/`, a letter, or `!`
+  # (close tag, open tag, or a comment/doctype respectively) — a bare `<`
+  # or `>` used as a comparison symbol in prose (e.g. "ratio < 2") is left
+  # alone as ordinary text instead of being swallowed as part of a bogus
+  # tag match. Inside a real open tag, a quoted attribute value may
+  # itself contain `>` (e.g. `title="a > b"`) without ending the tag —
+  # the open-tag alternative tracks quotes for that reason; the
+  # close-tag/comment alternatives don't need to, since closing tags and
+  # comments don't carry quoted attribute values.
+  @tag_regex ~r/<(?:\/[a-zA-Z][^>]*|[a-zA-Z](?:[^>"']|"[^"]*"|'[^']*')*|![^>]*)>/
+  # Raw-text elements: their content is never markup, even if it contains
+  # characters that look like tags (e.g. a JS string literal with
+  # `"<img src=x>"` inside it) — stripped whole, before tokenization, so
+  # the general tokenizer never sees what's inside them.
+  @raw_text_regex ~r/<(script|style|noscript|template)\b[^>]*>.*?<\/\1\s*>/is
+  # A raw-text element left unclosed (truncated `body_html`, hand-edited
+  # HTML) has no matching `</tag>` for `@raw_text_regex` to anchor on —
+  # without this second pass its opening tag would tokenize as an
+  # ordinary element and the general tokenizer would render its raw
+  # script/style body as visible text.
+  @unclosed_raw_text_regex ~r/<(?:script|style|noscript|template)\b[^>]*>.*\z/is
+  @indent_marker "\u0001"
   @block_tags ~w(p div h1 h2 h3 h4 h5 h6 ul ol li table)
   @void_tags ~w(br img)
   @heading_tags ~w(h1 h2 h3 h4 h5 h6)
@@ -63,7 +85,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   def convert(""), do: ""
 
   def convert(html) when is_binary(html) do
-    stripped = strip_script_and_style(html)
+    stripped = strip_raw_text_elements(html)
 
     if Regex.match?(@tag_regex, stripped) do
       stripped
@@ -72,13 +94,18 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       |> render_blocks()
       |> trim_line_edges()
       |> collapse_blank_lines()
+      |> expand_indent_markers()
       |> String.trim()
     else
       stripped
     end
   end
 
-  defp strip_script_and_style(html), do: Regex.replace(@script_or_style_regex, html, "")
+  defp strip_raw_text_elements(html) do
+    html
+    |> then(&Regex.replace(@raw_text_regex, &1, ""))
+    |> then(&Regex.replace(@unclosed_raw_text_regex, &1, ""))
+  end
 
   defp tokenize(html) do
     @tag_regex
@@ -256,19 +283,61 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
     end
   end
 
-  defp render_list(children, ordered_start) do
+  defp render_list(children, ordered_start), do: render_list(children, ordered_start, "")
+
+  defp render_list(children, ordered_start, indent) do
+    # CommonMark requires a block nested inside a list item to be
+    # indented to at least that item's content column — the width of
+    # that item's own marker ("1. " is 3 wide, "10. " is 4 wide, "- "
+    # is 2 wide) — or it re-parses as a sibling block instead of staying
+    # part of the item. Ordered markers grow with the item's number, so
+    # `child_indent` is computed per item from its actual marker string
+    # rather than a fixed width. It's built from placeholder bytes (not
+    # literal spaces) so `trim_line_edges/1` doesn't eat it before
+    # `expand_indent_markers/1` turns it into real spaces at the very
+    # end of the pipeline.
     items =
       children
       |> Enum.filter(&match?({:element, "li", _, _}, &1))
       |> Enum.with_index()
       |> Enum.map(fn {{:element, "li", _attrs, li_children}, index} ->
         marker = if ordered_start, do: "#{ordered_start + index}. ", else: "- "
-        marker <> String.trim(render_inline(li_children))
+        child_indent = indent <> String.duplicate(@indent_marker, String.length(marker))
+        indent <> marker <> render_li_content(li_children, child_indent)
       end)
 
     case items do
       [] -> ""
       _ -> Enum.join(items, "\n") <> "\n\n"
+    end
+  end
+
+  # An `<li>`'s own text/inline content, followed by any `<ul>`/`<ol>`
+  # nested directly inside it rendered as an indented sub-list, on its
+  # own lines — instead of being unwrapped and concatenated straight onto
+  # the parent item's text. `child_indent` (built by the caller) already
+  # carries the width this item's own marker requires, so it just gets
+  # threaded down to the nested `render_list/3` call.
+  defp render_li_content(li_children, child_indent) do
+    {inline_nodes, nested_list_nodes} =
+      Enum.split_with(li_children, fn
+        {:element, tag, _attrs, _children} -> tag not in ["ul", "ol"]
+        _other -> true
+      end)
+
+    inline_text = String.trim(render_inline(inline_nodes))
+
+    nested_text =
+      nested_list_nodes
+      |> Enum.map_join(fn {:element, tag, _attrs, nested_children} ->
+        ordered_start = if tag == "ol", do: 1, else: nil
+        render_list(nested_children, ordered_start, child_indent)
+      end)
+      |> String.trim_trailing("\n")
+
+    case nested_text do
+      "" -> inline_text
+      _ -> inline_text <> "\n" <> nested_text
     end
   end
 
@@ -383,6 +452,13 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   defp render_inline_node({:element, _other, _attrs, children}), do: render_inline(children)
 
   defp collapse_blank_lines(text), do: Regex.replace(~r/\n{3,}/, text, "\n\n")
+
+  # Turns each `@indent_marker` placeholder back into one real space (the
+  # caller duplicates it marker_width-many times per level, so the count
+  # of markers is already the exact column width needed). Run last, after
+  # `trim_line_edges/1` (which would otherwise strip real leading spaces
+  # as stray whitespace hugging a newline).
+  defp expand_indent_markers(text), do: String.replace(text, @indent_marker, " ")
 
   # HTML treats runs of whitespace (including literal newlines in the
   # source markup, common right after a `<br>`) as insignificant —
