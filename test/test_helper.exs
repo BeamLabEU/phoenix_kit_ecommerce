@@ -84,6 +84,14 @@ repo_available =
       # re-applies any newly-shipped Vxxx migrations on every boot.
       PhoenixKit.Migration.ensure_current(TestRepo, log: false)
 
+      # ...then billing's chain, because this module reads and writes
+      # billing's schemas directly (checkout converts a cart through them).
+      # Billing owns `phoenix_kit_currencies` from its own V2 on, so a
+      # database built from core's baseline alone is missing columns its
+      # `Currency` schema selects, and every currency read fails with an
+      # `undefined_column` far from anything about currencies.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
       # ...then the module-owned chain on top. V1 was purely adoptive over
       # core's baseline, so skipping it changed nothing; V2 is not — it
       # drops the `DEFAULT 'USD'` core declares on the four `currency`

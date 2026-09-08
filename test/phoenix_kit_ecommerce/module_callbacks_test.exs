@@ -65,8 +65,8 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     assert "billing" in PhoenixKitEcommerce.required_modules()
   end
 
-  test "version/0 reports the app version rather than a placeholder" do
-    refute PhoenixKitEcommerce.version() == "0.0.0"
+  test "version/0 is single-sourced from mix.exs" do
+    assert PhoenixKitEcommerce.version() == Mix.Project.config()[:version]
   end
 
   test "required_integrations/0 names shopify" do
