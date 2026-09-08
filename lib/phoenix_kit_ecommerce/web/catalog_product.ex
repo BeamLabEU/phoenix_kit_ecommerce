@@ -55,7 +55,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     current_language =
       params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
-    case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
+    case Shop.get_product_by_slug_localized(slug, current_language,
+           preload: [:category],
+           language: current_language
+         ) do
       {:error, :not_found} ->
         handle_cross_language_redirect(slug, current_language, params, session, socket)
 
@@ -92,7 +95,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     selected_specs = build_default_specs(selectable_specs, product.metadata || %{})
 
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
 
     localized_title = Translations.get(product, :title, current_language)
@@ -100,6 +110,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -113,6 +124,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
@@ -161,7 +173,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Handle cross-language slug redirect
   # When user visits with a slug from a different language, redirect to correct localized URL
   defp handle_cross_language_redirect(slug, current_language, params, session, socket) do
-    case Shop.get_product_by_any_slug(slug, preload: [:category]) do
+    case Shop.get_product_by_any_slug(slug, preload: [:category], language: current_language) do
       {:error, :not_found} ->
         # Product truly not found
         {:ok,
@@ -292,7 +304,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     # Compute filter_qs from URL params (preserves filters across cross-language redirect)
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
     filter_qs = FilterHelpers.build_query_string(active_filters, enabled_filters)
 
@@ -306,6 +325,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -318,6 +338,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -687,10 +708,25 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   defp find_cart_item_after_add(items, product_uuid, selected_specs, _price_affecting_specs) do
     if map_size(selected_specs) > 0 do
-      Enum.find(items, &(&1.product_uuid == product_uuid && &1.selected_specs == selected_specs))
+      Enum.find(
+        items,
+        &(cart_item_matches_product?(&1, product_uuid) && &1.selected_specs == selected_specs)
+      )
     else
-      Enum.find(items, &(&1.product_uuid == product_uuid))
+      Enum.find(items, &cart_item_matches_product?(&1, product_uuid))
     end
+  end
+
+  # `product_uuid` here is always the product's real identifying uuid — for
+  # a catalogue-backed product that's the catalogue item's own uuid, which
+  # `CartItem.from_product/3` snapshots into `metadata["catalogue_item_uuid"]`
+  # rather than the row's `product_uuid` column (nil for those rows). Without
+  # this fallback, every post-add lookup for a catalogue product (the "added
+  # to cart" flash, the existing-item check before a repeat add) would come
+  # back nil even though the row is right there in `items`.
+  defp cart_item_matches_product?(item, product_uuid) do
+    item.product_uuid == product_uuid or
+      (item.metadata || %{})["catalogue_item_uuid"] == product_uuid
   end
 
   @impl true
@@ -1120,8 +1156,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
@@ -1400,7 +1438,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       %{items: items} when is_list(items) ->
         Enum.find(items, fn item ->
-          item.product_uuid == product_uuid &&
+          cart_item_matches_product?(item, product_uuid) &&
             specs_match?(item.selected_specs, selected_specs)
         end)
 
@@ -1479,6 +1517,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     else
       {:noreply, socket}
     end
+  end
+
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, Helpers.refresh_display_currency(socket)}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.

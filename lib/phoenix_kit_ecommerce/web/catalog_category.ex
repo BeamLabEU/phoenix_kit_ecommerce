@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
@@ -38,6 +39,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   end
 
   defp do_mount(%{"slug" => slug} = params, _session, socket) do
+    if connected?(socket), do: Events.subscribe_currencies()
+
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop/... always uses default language, not session
     current_language =
@@ -59,9 +62,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         per_page = 24
         page = Helpers.parse_page(params["page"])
 
-        # Load storefront filters
+        # Load storefront filters (category-aware: applies this category's
+        # `storefront_filters` overrides on top of the global config)
         {enabled_filters, filter_values} =
-          FilterHelpers.load_filter_data(category_uuid: category.uuid)
+          FilterHelpers.load_filter_data(
+            category_uuid: category.uuid,
+            category: category,
+            language: current_language
+          )
 
         active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
         filter_opts = FilterHelpers.build_query_opts(active_filters, enabled_filters)
@@ -73,7 +81,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               category_uuid: category.uuid,
               page: 1,
               per_page: page * per_page,
-              preload: [:category]
+              preload: [:category],
+              language: current_language
             ] ++ filter_opts
           )
 
@@ -160,7 +169,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             category_uuid: socket.assigns.category.uuid,
             page: 1,
             per_page: effective_page * socket.assigns.per_page,
-            preload: [:category]
+            preload: [:category],
+            language: socket.assigns.current_language
           ] ++ filter_opts
         )
 
@@ -219,6 +229,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         end
     end
   end
+
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, Helpers.refresh_display_currency(socket)}
+  end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("filter_price", params, socket) do
