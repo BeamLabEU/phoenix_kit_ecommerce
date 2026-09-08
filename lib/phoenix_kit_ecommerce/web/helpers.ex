@@ -125,6 +125,31 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   # ---------------------------------------------------------------------------
+  # Currency refresh
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Re-marks `@currency` as changed so every price expression that reads it
+  re-evaluates on the next render — the ONE way a mounted storefront picks
+  up a currency-table change (§4.2.1 п.5).
+
+  The rate is deliberately not in assigns (§12.4), so nothing in the
+  socket knows it moved; `Phoenix.Component.assign/3` skips an equal value
+  and HEEx re-evaluates an expression only when one of ITS assigns
+  changed. Passing through a sentinel value marks the key changed while
+  the code itself stays what the request resolved. Base numbers
+  (`@products`, `@calculated_price`) are unchanged and are not re-read.
+  """
+  @spec refresh_display_currency(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def refresh_display_currency(socket) do
+    code = PhoenixKitEcommerce.get_display_currency_code()
+
+    socket
+    |> Phoenix.Component.assign(:currency, :refreshing)
+    |> Phoenix.Component.assign(:currency, code)
+  end
+
+  # ---------------------------------------------------------------------------
   # Current user
   # ---------------------------------------------------------------------------
 
@@ -458,4 +483,30 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def order_billing_identity(_order), do: nil
+
+  # ---------------------------------------------------------------------------
+  # Admin edit link (storefront -> admin)
+  # ---------------------------------------------------------------------------
+
+  @admin_edit_helper_mod PhoenixKitWeb.AdminEditHelper
+
+  @doc """
+  Assigns `:admin_edit_url`/`:admin_edit_label` on `socket` for an admin
+  visitor, via core's `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3`.
+
+  Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
+  calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
+  requirement, not an exact version, so a host running an older core that
+  predates the helper must not crash storefront pages. Returns `socket`
+  unchanged when the helper isn't available or the visitor isn't an admin.
+  """
+  def maybe_assign_admin_edit(socket, path, label) do
+    mod = @admin_edit_helper_mod
+
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) do
+      mod.assign_admin_edit(socket, path, label)
+    else
+      socket
+    end
+  end
 end

@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
@@ -38,6 +39,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   end
 
   defp do_mount(%{"slug" => slug} = params, _session, socket) do
+    if connected?(socket), do: Events.subscribe_currencies()
+
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop/... always uses default language, not session
     current_language =
@@ -59,9 +62,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         per_page = 24
         page = Helpers.parse_page(params["page"])
 
-        # Load storefront filters
+        # Load storefront filters (category-aware: applies this category's
+        # `storefront_filters` overrides on top of the global config)
         {enabled_filters, filter_values} =
-          FilterHelpers.load_filter_data(category_uuid: category.uuid)
+          FilterHelpers.load_filter_data(
+            category_uuid: category.uuid,
+            category: category,
+            language: current_language
+          )
 
         active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
         filter_opts = FilterHelpers.build_query_opts(active_filters, enabled_filters)
@@ -73,7 +81,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               category_uuid: category.uuid,
               page: 1,
               per_page: page * per_page,
-              preload: [:category]
+              preload: [:category],
+              language: current_language
             ] ++ filter_opts
           )
 
@@ -130,8 +139,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             :category_icon_mode,
             Settings.get_setting_cached("shop_category_icon_mode", "none")
           )
-          |> assign(:admin_edit_url, Routes.path("/admin/shop/categories/#{category.uuid}/edit"))
-          |> assign(:admin_edit_label, gettext("Edit Category"))
+          |> Helpers.maybe_assign_admin_edit(
+            Routes.path("/admin/shop/categories/#{category.uuid}/edit"),
+            gettext("Edit Category")
+          )
 
         {:ok, socket}
     end
@@ -158,7 +169,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             category_uuid: socket.assigns.category.uuid,
             page: 1,
             per_page: effective_page * socket.assigns.per_page,
-            preload: [:category]
+            preload: [:category],
+            language: socket.assigns.current_language
           ] ++ filter_opts
         )
 
@@ -217,6 +229,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         end
     end
   end
+
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, Helpers.refresh_display_currency(socket)}
+  end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("filter_price", params, socket) do
@@ -372,7 +394,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             <div class="lg:col-span-3">
               <%!-- Category Header --%>
               <div class="mb-8">
-                <h1 class="text-3xl font-bold">{@localized_name}</h1>
+                <div class="flex items-start justify-between gap-4">
+                  <h1 class="text-3xl font-bold">{@localized_name}</h1>
+                  <%!-- Admin Edit Button --%>
+                  <%= if assigns[:admin_edit_url] do %>
+                    <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2 shrink-0">
+                      <.icon name="hero-pencil-square" class="w-4 h-4" />
+                      {@admin_edit_label || "Edit"}
+                    </.link>
+                  <% end %>
+                </div>
                 <%= if @localized_description do %>
                   <p class="text-base-content/70 mt-2">{@localized_description}</p>
                 <% end %>
