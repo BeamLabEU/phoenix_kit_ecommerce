@@ -81,6 +81,90 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
     end
   end
 
+  describe "convert/1 - <table>" do
+    test "a table with a <th> header row and a data row becomes a GFM pipe table" do
+      html =
+        "<table><tr><th>H1</th><th>H2</th></tr><tr><td>a</td><td>b</td></tr></table>"
+
+      assert HtmlToMarkdown.convert(html) ==
+               "| H1 | H2 |\n| --- | --- |\n| a | b |"
+    end
+
+    test "cells are never glued together with no separator" do
+      assert HtmlToMarkdown.convert("<table><tr><td>Cell 1</td><td>Cell 2</td></tr></table>") ==
+               "| Cell 1 | Cell 2 |\n| --- | --- |"
+    end
+
+    test "<thead>/<tbody> mark the header row explicitly" do
+      html =
+        "<table><thead><tr><td>Name</td><td>Price</td></tr></thead>" <>
+          "<tbody><tr><td>Widget</td><td>$5</td></tr>" <>
+          "<tr><td>Gadget</td><td>$10</td></tr></tbody></table>"
+
+      assert HtmlToMarkdown.convert(html) ==
+               "| Name | Price |\n| --- | --- |\n| Widget | $5 |\n| Gadget | $10 |"
+    end
+
+    test "a pipe character inside a cell is escaped so it can't be mistaken for a column" do
+      assert HtmlToMarkdown.convert("<table><tr><td>A | B</td><td>C</td></tr></table>") ==
+               "| A \\| B | C |\n| --- | --- |"
+    end
+
+    test "a <br> inside a cell collapses to a space rather than breaking the row" do
+      assert HtmlToMarkdown.convert("<table><tr><td>Line one<br>Line two</td></tr></table>") ==
+               "| Line one Line two |\n| --- |"
+    end
+
+    test "a table converted twice is idempotent" do
+      html =
+        "<table><tr><th>H1</th><th>H2</th></tr><tr><td>a</td><td>b</td></tr></table>"
+
+      once = HtmlToMarkdown.convert(html)
+      twice = HtmlToMarkdown.convert(once)
+
+      assert once == twice
+    end
+  end
+
+  describe "convert/1 - <script>/<style> stripping" do
+    test "<script> content, including embedded < and >, never leaks into the output" do
+      html =
+        "<p>Before</p>" <>
+          "<script>if (1 < 2) { alert('hi > there'); }</script>" <>
+          "<p>After</p>"
+
+      assert HtmlToMarkdown.convert(html) == "Before\n\nAfter"
+    end
+
+    test "<style> content never leaks into the output" do
+      html = "<p>Before</p><style>.a { color: red; }</style><p>After</p>"
+
+      assert HtmlToMarkdown.convert(html) == "Before\n\nAfter"
+    end
+  end
+
+  describe "convert/1 - attribute value quoting" do
+    test "an unquoted href/src value is still parsed, not dropped" do
+      assert HtmlToMarkdown.convert(~s(<p><a href=https://example.com>link</a></p>)) ==
+               "[link](https://example.com)"
+
+      assert HtmlToMarkdown.convert(~s(<p><img src=https://example.com/x.png alt=Alt></p>)) ==
+               "![Alt](https://example.com/x.png)"
+    end
+
+    test "a single-quoted href value is parsed" do
+      assert HtmlToMarkdown.convert(~s(<p><a href='https://example.com'>link</a></p>)) ==
+               "[link](https://example.com)"
+    end
+
+    test "an unescaped > inside a quoted attribute value doesn't truncate the tag" do
+      assert HtmlToMarkdown.convert(
+               ~s(<p><a href="https://example.com?a=1&b=2" title="x > y">link</a></p>)
+             ) ==
+               "[link](https://example.com?a=1&b=2)"
+    end
+  end
+
   describe "convert/1 - Markdown preservation and idempotency" do
     test "existing ** and - Markdown inside text nodes survives unescaped" do
       html = "<p>**Color Disclaimer:**<br>Please note the colors may vary.</p>"

@@ -18,22 +18,41 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   `:dev`/`:prod` would be a wider dependency-footprint change than this
   fix calls for.
 
-  Supported tags: `p`, `br`, `h1`-`h6`, `ul`/`ol`/`li`, `strong`/`b`,
-  `em`/`i`, `a`, `img`, plus a transparent `div` wrapper and HTML entity
-  decoding (`&amp;`, `&nbsp;`, `&quot;`, `&#39;`, numeric character
-  references). Text with no HTML tag at all is returned byte-for-byte
-  unchanged, which is what makes `convert/1` idempotent — converting an
-  already-converted (or always-plain) value is a no-op. Markdown already
-  present in text nodes (`**bold**`, `- item`) is never escaped, it is
-  copied through verbatim.
+  Supported tags: `p`, `br`, `h1`-`h6`, `ul`/`ol`/`li`, `table`
+  (`thead`/`tbody`/`tfoot`/`tr`/`td`/`th`), `strong`/`b`, `em`/`i`, `a`,
+  `img`, plus a transparent `div` wrapper and HTML entity decoding
+  (`&amp;`, `&nbsp;`, `&quot;`, `&#39;`, numeric character references).
+  `<script>` and `<style>` elements are dropped entirely, tag and
+  content, before parsing starts — their content is markup/code, not
+  prose, and (unlike HTML) isn't guaranteed to tokenize as balanced tags.
+  Text with no HTML tag at all is returned byte-for-byte unchanged, which
+  is what makes `convert/1` idempotent — converting an already-converted
+  (or always-plain) value is a no-op. Markdown already present in text
+  nodes (`**bold**`, `- item`) is never escaped, it is copied through
+  verbatim.
+
+  `<table>` becomes a GitHub-Flavored-Markdown pipe table (header row,
+  `---` separator, data rows) rather than dropping the structure — a
+  naive cell-concatenation would silently glue adjacent cells' text
+  together with no separator, which loses information a reader can't
+  recover. The header row is whichever row is inside `<thead>`, or the
+  first row containing a `<th>`, or — if neither marker is present —
+  the table's first row, promoted, so the output is always a valid
+  table; any other `<thead>`-tagged rows are folded into the body
+  instead of being dropped. Cell text has its own line breaks collapsed
+  to spaces and `|` escaped to `\|`, since a table row is a single
+  Markdown line.
   """
 
-  @tag_regex ~r/<[^>]+>/
-  @block_tags ~w(p div h1 h2 h3 h4 h5 h6 ul ol li)
+  @tag_regex ~r/<(?:[^>"']|"[^"]*"|'[^']*')+>/
+  @script_or_style_regex ~r/<(script|style)\b[^>]*>.*?<\/\1\s*>/is
+  @block_tags ~w(p div h1 h2 h3 h4 h5 h6 ul ol li table)
   @void_tags ~w(br img)
   @heading_tags ~w(h1 h2 h3 h4 h5 h6)
   @bold_tags ~w(strong b)
   @italic_tags ~w(em i)
+  @table_container_tags ~w(thead tbody tfoot)
+  @table_cell_tags ~w(td th)
 
   @doc """
   Converts `html` to Markdown. Text that contains no HTML tag at all is
@@ -44,8 +63,10 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   def convert(""), do: ""
 
   def convert(html) when is_binary(html) do
-    if Regex.match?(@tag_regex, html) do
-      html
+    stripped = strip_script_and_style(html)
+
+    if Regex.match?(@tag_regex, stripped) do
+      stripped
       |> tokenize()
       |> parse()
       |> render_blocks()
@@ -53,9 +74,11 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       |> collapse_blank_lines()
       |> String.trim()
     else
-      html
+      stripped
     end
   end
+
+  defp strip_script_and_style(html), do: Regex.replace(@script_or_style_regex, html, "")
 
   defp tokenize(html) do
     @tag_regex
@@ -123,7 +146,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   end
 
   defp classify_open_tag(token) do
-    case Regex.run(~r/^<([a-zA-Z][a-zA-Z0-9]*)([^>]*)>$/, token) do
+    case Regex.run(~r/^<([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>$/, token) do
       [_, name, raw_attrs] ->
         {attrs_str, self_closing?} = strip_self_closing_marker(raw_attrs)
         {:open, String.downcase(name), parse_attrs(attrs_str), self_closing?}
@@ -145,12 +168,27 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
     end
   end
 
-  defp parse_attrs(str) do
-    double = Regex.scan(~r/([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*"([^"]*)"/, str) |> Enum.map(&tl/1)
-    single = Regex.scan(~r/([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*'([^']*)'/, str) |> Enum.map(&tl/1)
+  # A single alternation, scanned left-to-right, so a quoted value's
+  # content (which may itself contain `key=value`-shaped substrings, e.g.
+  # a URL query string) is consumed as part of that match and never
+  # re-scanned as a stray unquoted attribute. Unquoted values end at
+  # whitespace, a quote, or `>` — the same set HTML5 uses.
+  @attr_regex ~r/([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/
 
-    (double ++ single)
-    |> Enum.reduce(%{}, fn [k, v], acc -> Map.put(acc, String.downcase(k), decode_entities(v)) end)
+  defp parse_attrs(str) do
+    @attr_regex
+    |> Regex.scan(str)
+    |> Enum.reduce(%{}, fn [_full, key | value_groups], acc ->
+      # Trailing capture groups that never participated in this match are
+      # dropped from the result entirely (not returned as ""), so pad
+      # back out to three before picking the one alternative that fired.
+      # A non-participating alternative that IS present scans as "" too,
+      # so this can't mistake a genuinely empty quoted value (`alt=""`)
+      # for a missing one.
+      [dq, sq, uq] = value_groups ++ List.duplicate("", 3 - length(value_groups))
+      value = Enum.find([dq, sq, uq], "", &(&1 != ""))
+      Map.put_new(acc, String.downcase(key), decode_entities(value))
+    end)
   end
 
   # ── block-level rendering ───────────────────────────────────────────
@@ -207,6 +245,8 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
     wrap_paragraph("- " <> render_inline(children))
   end
 
+  defp render_block({:element, "table", _attrs, children}), do: render_table(children)
+
   defp render_block({:element, _other, _attrs, children}), do: render_blocks(children)
 
   defp wrap_paragraph(inline) do
@@ -230,6 +270,87 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       [] -> ""
       _ -> Enum.join(items, "\n") <> "\n\n"
     end
+  end
+
+  # Renders `<table>` as a GFM pipe table. See the moduledoc for the
+  # header-row selection rule and why cells never collapse into one
+  # unseparated run of text.
+  defp render_table(children) do
+    case extract_table_rows(children) do
+      [] ->
+        ""
+
+      rows ->
+        {header_cells, body_rows} = split_header(rows)
+        col_count = Enum.max(Enum.map([header_cells | body_rows], &length/1))
+
+        lines =
+          [
+            render_table_row(header_cells, col_count),
+            render_table_row(List.duplicate("---", col_count), col_count)
+          ] ++ Enum.map(body_rows, &render_table_row(&1, col_count))
+
+        Enum.join(lines, "\n") <> "\n\n"
+    end
+  end
+
+  # A row is `is_header?` when it came from inside `<thead>` or contains
+  # at least one `<th>`. The first header row found becomes the table
+  # header; any further header-marked rows (a malformed multi-row
+  # `<thead>`) are folded into the body rather than dropped, since a
+  # Markdown table can only have one header row.
+  defp split_header(rows) do
+    case Enum.split_with(rows, fn {is_header?, _cells} -> is_header? end) do
+      {[{_, header_cells} | extra_header_rows], other_rows} ->
+        extra = Enum.map(extra_header_rows, fn {_, cells} -> cells end)
+        body = Enum.map(other_rows, fn {_, cells} -> cells end)
+        {header_cells, extra ++ body}
+
+      {[], [{_, first_cells} | rest]} ->
+        body = Enum.map(rest, fn {_, cells} -> cells end)
+        {first_cells, body}
+    end
+  end
+
+  defp render_table_row(cells, col_count) do
+    padded = cells ++ List.duplicate("", max(col_count - length(cells), 0))
+    "| " <> Enum.join(padded, " | ") <> " |"
+  end
+
+  defp extract_table_rows(nodes), do: extract_table_rows(nodes, false)
+
+  defp extract_table_rows(nodes, in_thead?) do
+    Enum.flat_map(nodes, &extract_table_row_node(&1, in_thead?))
+  end
+
+  defp extract_table_row_node({:element, "thead", _attrs, children}, _in_thead?) do
+    extract_table_rows(children, true)
+  end
+
+  defp extract_table_row_node({:element, tag, _attrs, children}, in_thead?)
+       when tag in @table_container_tags do
+    extract_table_rows(children, in_thead?)
+  end
+
+  defp extract_table_row_node({:element, "tr", _attrs, cell_nodes}, in_thead?) do
+    cells =
+      cell_nodes
+      |> Enum.filter(&match?({:element, tag, _, _} when tag in @table_cell_tags, &1))
+
+    has_th? = Enum.any?(cells, &match?({:element, "th", _, _}, &1))
+    texts = Enum.map(cells, &extract_cell_text/1)
+
+    [{in_thead? or has_th?, texts}]
+  end
+
+  defp extract_table_row_node(_other, _in_thead?), do: []
+
+  defp extract_cell_text({:element, _tag, _attrs, children}) do
+    children
+    |> render_inline()
+    |> String.trim()
+    |> String.replace(~r/\s*\n\s*/, " ")
+    |> String.replace("|", "\\|")
   end
 
   # ── inline rendering ─────────────────────────────────────────────────
