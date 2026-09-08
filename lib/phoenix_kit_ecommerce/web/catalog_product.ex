@@ -110,6 +110,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -123,6 +124,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
@@ -321,6 +323,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -333,6 +336,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -1139,8 +1143,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
@@ -1498,6 +1504,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     else
       {:noreply, socket}
     end
+  end
+
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, Helpers.refresh_display_currency(socket)}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
