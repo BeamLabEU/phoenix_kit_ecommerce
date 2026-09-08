@@ -737,7 +737,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     <ShopLayouts.shop_layout {assigns}>
       <div class="container flex-col mx-auto px-4 py-6 max-w-[96rem]">
         
-        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
+        <ShopCards.storefront_bar
+          language={@current_language}
+          cart_count={@cart_count}
+          admin_edit_url={assigns[:admin_edit_url]}
+          admin_edit_label={assigns[:admin_edit_label]}
+        />
         <%!-- Breadcrumbs --%>
         <div class="breadcrumbs text-sm mb-6">
           <ul>
@@ -758,12 +763,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </ul>
         </div>
 
-        <%!-- Two columns: gallery | buy box. The category column that used to
-              sit on the left was dropped on purpose — it squeezed the buy box
-              into a fifth of the page, and a long description above the
-              options pushed "Add to Cart" off the first screen. Categories now
-              render in a collapsed panel under the product. --%>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-10">
+        <%!-- Two columns, 65/35: gallery and description on the left, the buy
+              box on the right. The gallery carries the description under it,
+              so the picture and the words about it read as one block, while
+              the narrower right column keeps "Add to Cart" on the first
+              screen. --%>
+        <div class="grid grid-cols-1 md:grid-cols-[65fr_35fr] gap-6 lg:gap-10">
           <%!-- Product Images --%>
           <div class="space-y-4">
             <%!-- Main Image --%>
@@ -839,21 +844,55 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <% end %>
               </div>
             <% end %>
+
+            <%!-- Description, directly under the gallery and in the same
+                  column: the picture and the text about it belong together.
+                  It is kept out of the buy box, where one long supplier text
+                  used to push "Add to Cart" off the first screen. --%>
+            <%= if has_text?(@localized_description) or has_text?(@localized_body) do %>
+              <section class="mt-8">
+                <div class="divider"></div>
+                <h2 class="text-xl font-semibold mb-4">
+                  <.icon name="hero-document-text" class="w-5 h-5 inline" /> {gettext("Description")}
+                </h2>
+
+                <%!-- Sanitized unless an admin has explicitly opted into raw
+                      HTML. This renders on the UNAUTHENTICATED storefront, and
+                      product descriptions are writable by anyone holding the
+                      "shop" permission and by whoever supplies a CSV import
+                      file — so `sanitize={false}` here was a path from "can
+                      edit a product" to script execution in every shopper's
+                      and the Owner's browser. See PhoenixKitEcommerce.Policy. --%>
+                <%= if has_text?(@localized_description) do %>
+                  <.markdown
+                    content={@localized_description}
+                    sanitize={not Policy.allow_raw_html_descriptions?()}
+                    compact
+                  />
+                <% end %>
+
+                <%!-- Full body (imports put the complete supplier description
+                      in body_html and only a short extract in description).
+                      Same sanitization policy as the description above. --%>
+                <%= if has_text?(@localized_body) do %>
+                  <div class="mt-4">
+                    <.markdown
+                      content={@localized_body}
+                      sanitize={not Policy.allow_raw_html_descriptions?()}
+                    />
+                  </div>
+                <% end %>
+              </section>
+            <% end %>
           </div>
 
           <%!-- Product Info --%>
           <div class="space-y-6">
             <div>
-              <div class="flex items-start justify-between gap-4">
-                <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
-                <%!-- Admin Edit Button --%>
-                <%= if assigns[:admin_edit_url] do %>
-                  <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2 shrink-0">
-                    <.icon name="hero-pencil-square" class="w-4 h-4" />
-                    {@admin_edit_label || "Edit"}
-                  </.link>
-                <% end %>
-              </div>
+              <%!-- Heading only: the admin edit link lives in the shop bar
+                    above, so an admin sees the same title layout a shopper
+                    does. --%>
+              <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
 
               <%= if @product.vendor do %>
                 <p class="text-base-content/60">{gettext("by %{vendor}", vendor: @product.vendor)}</p>
@@ -1100,48 +1139,28 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <% end %>
               </div>
             <% end %>
+
+            <%!-- Category filter, under the tags: browsing the rest of the
+                  shop belongs with the other navigation in this column, not
+                  in a collapsed panel at the foot of the page. --%>
+            <%= if @show_categories? and @categories != [] do %>
+              <div id="product-category-filter" class="card bg-base-100 shadow mt-6">
+                <div class="card-body p-4">
+                  <CatalogSidebar.category_nav
+                    categories={@categories}
+                    current_category={@product.category}
+                    current_language={@current_language}
+                    category_icon_mode={@category_icon_mode}
+                    category_name_wrap={@category_name_wrap}
+                    open={true}
+                    filter_qs={@filter_qs}
+                  />
+                </div>
+              </div>
+            <% end %>
           </div>
         </div>
 
-        <%!-- Description, full width under the gallery and the buy box.
-              It used to sit inside the buy box column above the options,
-              where one long supplier text pushed "Add to Cart" off the first
-              screen. --%>
-        <%= if has_text?(@localized_description) or has_text?(@localized_body) do %>
-          <section class="mt-10 max-w-5xl">
-            <div class="divider"></div>
-            <h2 class="text-xl font-semibold mb-4">
-              <.icon name="hero-document-text" class="w-5 h-5 inline" /> {gettext("Description")}
-            </h2>
-
-            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
-                  This renders on the UNAUTHENTICATED storefront, and product
-                  descriptions are writable by anyone holding the "shop"
-                  permission and by whoever supplies a CSV import file — so
-                  `sanitize={false}` here was a path from "can edit a product"
-                  to script execution in every shopper's and the Owner's
-                  browser. See PhoenixKitEcommerce.Policy. --%>
-            <%= if has_text?(@localized_description) do %>
-              <.markdown
-                content={@localized_description}
-                sanitize={not Policy.allow_raw_html_descriptions?()}
-                compact
-              />
-            <% end %>
-
-            <%!-- Full body (imports put the complete supplier description in
-                  body_html and only a short extract in description). Same
-                  sanitization policy as the description above. --%>
-            <%= if has_text?(@localized_body) do %>
-              <div class="mt-4">
-                <.markdown
-                  content={@localized_body}
-                  sanitize={not Policy.allow_raw_html_descriptions?()}
-                />
-              </div>
-            <% end %>
-          </section>
-        <% end %>
 
         <%!-- Specifications Table --%>
         <%= if @specifications != [] do %>
@@ -1171,25 +1190,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </section>
         <% end %>
 
-        <%!-- Category navigation, collapsed. Moved here from the left column. --%>
-        <%= if @show_categories? and @categories != [] do %>
-          <details class="collapse collapse-arrow bg-base-100 shadow mt-10 max-w-5xl">
-            <summary class="collapse-title font-semibold">
-              <.icon name="hero-squares-2x2" class="w-5 h-5 inline" /> {gettext("Categories")}
-            </summary>
-            <div class="collapse-content">
-              <CatalogSidebar.category_nav
-                categories={@categories}
-                current_category={@product.category}
-                current_language={@current_language}
-                category_icon_mode={@category_icon_mode}
-                category_name_wrap={@category_name_wrap}
-                open={true}
-                filter_qs={@filter_qs}
-              />
-            </div>
-          </details>
-        <% end %>
       </div>
     </ShopLayouts.shop_layout>
     """
