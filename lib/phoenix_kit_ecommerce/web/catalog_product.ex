@@ -113,6 +113,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
@@ -316,6 +317,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -683,10 +685,25 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   defp find_cart_item_after_add(items, product_uuid, selected_specs, _price_affecting_specs) do
     if map_size(selected_specs) > 0 do
-      Enum.find(items, &(&1.product_uuid == product_uuid && &1.selected_specs == selected_specs))
+      Enum.find(
+        items,
+        &(cart_item_matches_product?(&1, product_uuid) && &1.selected_specs == selected_specs)
+      )
     else
-      Enum.find(items, &(&1.product_uuid == product_uuid))
+      Enum.find(items, &cart_item_matches_product?(&1, product_uuid))
     end
+  end
+
+  # `product_uuid` here is always the product's real identifying uuid — for
+  # a catalogue-backed product that's the catalogue item's own uuid, which
+  # `CartItem.from_product/3` snapshots into `metadata["catalogue_item_uuid"]`
+  # rather than the row's `product_uuid` column (nil for those rows). Without
+  # this fallback, every post-add lookup for a catalogue product (the "added
+  # to cart" flash, the existing-item check before a repeat add) would come
+  # back nil even though the row is right there in `items`.
+  defp cart_item_matches_product?(item, product_uuid) do
+    item.product_uuid == product_uuid or
+      (item.metadata || %{})["catalogue_item_uuid"] == product_uuid
   end
 
   @impl true
@@ -1107,8 +1124,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
@@ -1387,7 +1406,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       %{items: items} when is_list(items) ->
         Enum.find(items, fn item ->
-          item.product_uuid == product_uuid &&
+          cart_item_matches_product?(item, product_uuid) &&
             specs_match?(item.selected_specs, selected_specs)
         end)
 
