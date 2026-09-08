@@ -162,8 +162,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -365,8 +367,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -849,7 +853,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           <%!-- Product Info --%>
           <div class="space-y-6">
             <div>
-              <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
+              <div class="flex items-start justify-between gap-4">
+                <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
+                <%!-- Admin Edit Button --%>
+                <%= if assigns[:admin_edit_url] do %>
+                  <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2 shrink-0">
+                    <.icon name="hero-pencil-square" class="w-4 h-4" />
+                    {@admin_edit_label || "Edit"}
+                  </.link>
+                <% end %>
+              </div>
 
               <%= if @product.vendor do %>
                 <p class="text-base-content/60">by {@product.vendor}</p>

@@ -139,8 +139,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             :category_icon_mode,
             Settings.get_setting_cached("shop_category_icon_mode", "none")
           )
-          |> assign(:admin_edit_url, Routes.path("/admin/shop/categories/#{category.uuid}/edit"))
-          |> assign(:admin_edit_label, gettext("Edit Category"))
+          |> Helpers.maybe_assign_admin_edit(
+            Routes.path("/admin/shop/categories/#{category.uuid}/edit"),
+            gettext("Edit Category")
+          )
 
         {:ok, socket}
     end
@@ -392,7 +394,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             <div class="lg:col-span-3">
               <%!-- Category Header --%>
               <div class="mb-8">
-                <h1 class="text-3xl font-bold">{@localized_name}</h1>
+                <div class="flex items-start justify-between gap-4">
+                  <h1 class="text-3xl font-bold">{@localized_name}</h1>
+                  <%!-- Admin Edit Button --%>
+                  <%= if assigns[:admin_edit_url] do %>
+                    <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2 shrink-0">
+                      <.icon name="hero-pencil-square" class="w-4 h-4" />
+                      {@admin_edit_label || "Edit"}
+                    </.link>
+                  <% end %>
+                </div>
                 <%= if @localized_description do %>
                   <p class="text-base-content/70 mt-2">{@localized_description}</p>
                 <% end %>
