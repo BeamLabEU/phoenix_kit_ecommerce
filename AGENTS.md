@@ -175,14 +175,19 @@ PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
 
 ### Landmines
 
-- **The committed `mix.lock` does not satisfy `mix.exs`.** It pins core
-  `2.14.2` and billing `0.9.0` while the requirements are `~> 2.15` and
-  `~> 0.11`, so a fresh checkout cannot compile until `mix deps.get` resolves
-  them — and that rewrites the lock by eight core minors. Consumers are
-  unaffected (a library's lock is not published), so this is a repo-hygiene
-  problem, not a release one; landing the updated lock deliberately, with the
-  integration suite run against it, is the fix. Until then, expect any `mix`
-  command in a clean checkout to start with a resolution step.
+- **The test harness must apply billing's migration chain, not just core's.**
+  This module reads and writes billing's schemas directly, and billing owns
+  `phoenix_kit_currencies` from its own V2 on, so a test database built from
+  core's baseline alone is missing columns billing's `Currency` schema selects.
+  The symptom is an `undefined_column` on `rounding_rule` raised from a
+  currency read, hundreds of tests deep and nowhere near anything about
+  currencies. `test_helper.exs` runs core's chain, then billing's, then this
+  module's, in that order.
+- **Raising a dependency requirement means updating `mix.lock` in the same
+  change.** A requirement bumped without it leaves the repo refusing to
+  compile ("lock mismatch: the dependency is out of date") until someone runs
+  `mix deps.get`, and the failure names the dependency rather than the commit
+  that raised the floor.
 - A new public page that omits `put_content_locale/1` in `mount/3` renders
   fully English while its siblings translate — the page looks correct in
   tests and inert in production. Call it, or inherit it via
