@@ -4149,6 +4149,512 @@ defmodule PhoenixKitEcommerce do
   end
 
   # ============================================
+  # BASE CURRENCY CHANGE (§4.9 steps 2-4)
+  # ============================================
+
+  @doc """
+  Reprices the catalog after a base-currency change (spec §4.9, steps 2-4).
+
+  This is the `:reprice` callback `PhoenixKitBilling.change_base_currency/2`
+  invokes — see that function's moduledoc for the full contract. In short:
+  it runs strictly INSIDE billing's own transaction, AFTER every currency
+  rate has already been renormalized and BEFORE the new base is promoted,
+  so it must NEVER open a transaction of its own — every `repo()` call it
+  makes joins the caller's transaction automatically (both packages resolve
+  `PhoenixKit.RepoHelper.repo()` to the same host repo). Returning
+  `{:error, _}` here rolls back the ENTIRE base-currency change, including
+  the rate renormalization — the catalog and the currency table can never
+  end up disagreeing about which currency is base.
+
+  `multiplier` is the new base currency's PRE-operation exchange rate
+  (billing hands it over explicitly because it stops being derivable from
+  the currency table the moment renormalization has run). Every stored
+  FIXED authoring amount is multiplied by it and rounded to
+  `new_base_code`'s `decimal_places` — nothing else. This is arithmetic on
+  stored prices, not a display conversion: `Currency.present/3` and
+  `rounding_rule` (§5) never enter here (§4.9's third consequence).
+
+  Touches, regardless of a product's own currency:
+
+    - `products.price`, `.compare_at_price`, `.cost_per_item`, `.currency`
+      (set to `new_base_code` — §4.6: the field means "the currency the
+      stored price is in")
+    - the global option schema's and every category's option schema's
+      FIXED `price_modifiers` entries (percent entries are currency-free
+      and are left untouched)
+    - a product's own `metadata["_price_modifiers"]` overrides whose
+      EFFECTIVE type — its own explicit override type if given, else the
+      schema option's `modifier_type` — is fixed
+    - `shipping_methods.price`, `.free_above_amount`, `.min_order_amount`,
+      `.max_order_amount`
+
+  GUARDED HAZARD: writing a product's overrides goes through
+  `update_product/2`, whose `MetadataValidator.normalize_product_attrs/1`
+  collapses an explicit `%{"type" => ..., "value" => ...}` override to a
+  bare string on ANY save, this one included — so a product whose
+  override type disagrees with its option schema's default would
+  silently have that override's type reverted, an operation where an
+  operator has the least reason to expect unrelated data to move. Rather
+  than let that happen silently, this function scans every product's
+  overrides BEFORE any write and refuses the ENTIRE operation with
+  `{:error, {:ambiguous_modifier_overrides, mismatches}}` — `mismatches`
+  a list of `%{product_uuid:, option_key:, stored_type:, schema_type:}`
+  — if any explicit override's own type disagrees with its option's
+  schema default. An explicit override whose type AGREES with the
+  schema default is harmless (the normalizer's collapse is lossless
+  there) and does not refuse. See `MetadataValidator.normalize_product_attrs/1`
+  for the underlying behavior this guards against.
+
+  Never touches carts or orders (§4.9 step 6) — they carry their own
+  frozen `currency`/`exchange_rate` (§4.4, §4.5), which is the entire
+  point of freezing them; this function does not reference either schema.
+
+  ## Product source scope — READ BEFORE EXTENDING
+
+  This function reprices the LEGACY `PhoenixKitEcommerce.Product` store
+  ONLY. This checkout's `lib/` tree carries no `PhoenixKitEcommerce.ProductSource`
+  module and no `phoenix_kit_catalogue` dependency at all — that adapter
+  layer exists only on a separate, not-yet-merged branch — so there is
+  nothing else here to reprice.
+
+  A build where the catalogue product source IS present is a different
+  situation: silently repricing shipping and option modifiers while every
+  catalogue item's stored price stays in the old base currency is exactly
+  the silent shop-wide mispricing §4.9 exists to prevent, made worse by
+  looking like a working reprice because the counts come back non-zero.
+  To make that impossible rather than merely undocumented, this function
+  checks for `PhoenixKitEcommerce.ProductSource` at runtime (via
+  `Code.ensure_loaded?/1` and a dynamic dispatch — no compile-time
+  reference to a module this branch does not have) and REFUSES with
+  `{:error, {:unsupported_product_source, current}}` when a source other
+  than `Legacy` is active, instead of silently doing a partial job.
+
+  Whoever wires the catalogue source in must EXTEND this function with an
+  equivalent pass over the catalogue item's stored price column and its
+  `data["ecommerce"]` fields (`compare_at_price`, `cost_per_item`,
+  `currency`, `price_modifiers`) — through
+  `PhoenixKitCatalogue.Catalogue.update_item/3`, not a second, parallel
+  `reprice_for_base_change`-like function. `:reprice` is one callback;
+  billing does not know or care which product source is active, and must
+  never have to.
+
+  Returns `{:ok, %{products: n, shipping_methods: n, global_modifiers: n,
+  category_modifiers: n, product_modifiers: n}}` on success. The modifier
+  counts are broken out per store — rather than a single total — because
+  the admin confirmation screen (§4.9's first required consequence) has
+  to show an operator the blast radius of what they are about to commit
+  to, and "N modifiers" alone does not: "3 global, 12 category, 32
+  product" does. Each count is the number of individual FIXED
+  price-modifier VALUES touched in that store; percent entries are never
+  counted because they are never touched. Returns `{:error, term}` on the
+  first failure encountered — including `{:error, {:unsupported_product_source, _}}`
+  from the product-source check and `{:error, {:ambiguous_modifier_overrides, _}}`
+  from the pre-flight override scan, both above, both raised before any
+  write happens.
+  """
+  @spec reprice_for_base_change(String.t(), String.t(), Decimal.t()) ::
+          {:ok,
+           %{
+             products: non_neg_integer(),
+             shipping_methods: non_neg_integer(),
+             global_modifiers: non_neg_integer(),
+             category_modifiers: non_neg_integer(),
+             product_modifiers: non_neg_integer()
+           }}
+          | {:error, term()}
+  def reprice_for_base_change(old_base_code, new_base_code, %Decimal{} = multiplier)
+      when is_binary(old_base_code) and is_binary(new_base_code) do
+    case reject_unsupported_product_source() do
+      :ok -> do_reprice_for_base_change(new_base_code, multiplier)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp do_reprice_for_base_change(new_base_code, multiplier) do
+    products = repo().all(Product)
+
+    with :ok <- reject_ambiguous_modifier_overrides(products),
+         {:ok, decimal_places} <- fetch_currency_decimal_places(new_base_code),
+         {:ok, product_count, product_modifiers} <-
+           reprice_products_for_base_change(products, new_base_code, multiplier, decimal_places),
+         {:ok, global_modifiers} <-
+           reprice_global_options_for_base_change(multiplier, decimal_places),
+         {:ok, category_modifiers} <-
+           reprice_category_options_for_base_change(multiplier, decimal_places),
+         {:ok, shipping_methods} <-
+           reprice_shipping_methods_for_base_change(multiplier, decimal_places) do
+      {:ok,
+       %{
+         products: product_count,
+         shipping_methods: shipping_methods,
+         global_modifiers: global_modifiers,
+         category_modifiers: category_modifiers,
+         product_modifiers: product_modifiers
+       }}
+    end
+  end
+
+  # Pre-flight, before any write: refuses the WHOLE operation if any
+  # product's override is stored in the explicit `%{"type" => ...,
+  # "value" => ...}` format with a type that disagrees with its option's
+  # schema default — see the moduledoc's "GUARDED HAZARD" paragraph for
+  # why. Reuses `override_effective_type_and_amount/2` rather than a
+  # second parser: that function's contract already guarantees its
+  # returned type can differ from the schema default ONLY when the
+  # override carried an explicit, disagreeing `"type"` of its own — a
+  # bare-string or type-less override always echoes the schema default
+  # back unchanged (see that function's clauses).
+  defp reject_ambiguous_modifier_overrides(products) do
+    case Enum.flat_map(products, &product_modifier_mismatches/1) do
+      [] -> :ok
+      mismatches -> {:error, {:ambiguous_modifier_overrides, mismatches}}
+    end
+  end
+
+  defp product_modifier_mismatches(product) do
+    overrides = get_in(product.metadata || %{}, ["_price_modifiers"]) || %{}
+
+    if overrides == %{} do
+      []
+    else
+      schema_by_key = product_option_schema_by_key(product)
+
+      Enum.flat_map(overrides, fn {key, values} ->
+        option_modifier_mismatches(product.uuid, key, values, Map.get(schema_by_key, key))
+      end)
+    end
+  end
+
+  defp option_modifier_mismatches(product_uuid, key, values, schema_type) when is_map(values) do
+    Enum.reduce(values, [], fn {_value, modifier}, acc ->
+      accumulate_modifier_mismatch(acc, product_uuid, key, modifier, schema_type)
+    end)
+  end
+
+  defp option_modifier_mismatches(_product_uuid, _key, _values, _schema_type), do: []
+
+  defp accumulate_modifier_mismatch(acc, product_uuid, key, modifier, schema_type) do
+    case override_effective_type_and_amount(modifier, schema_type) do
+      {stored_type, amount}
+      when not is_nil(schema_type) and not is_nil(amount) and stored_type != schema_type ->
+        mismatch = %{
+          product_uuid: product_uuid,
+          option_key: key,
+          stored_type: stored_type,
+          schema_type: schema_type
+        }
+
+        [mismatch | acc]
+
+      _ ->
+        acc
+    end
+  end
+
+  # No compile-time reference to `PhoenixKitEcommerce.ProductSource` —
+  # built entirely from atoms via `Module.concat/2` and dispatched
+  # dynamically (`product_source.current()`, a runtime call because the
+  # receiver is a variable, not a literal alias) — because that module
+  # does not exist anywhere in this checkout's compiled tree (see the
+  # moduledoc's "Product source scope").
+  # `Code.ensure_loaded?/1` is the same pattern this file already uses
+  # elsewhere to call into a module without a hard compile-time reference
+  # to it (`billing_tax_enabled?/0` and friends, further down).
+  defp reject_unsupported_product_source do
+    product_source = Module.concat(PhoenixKitEcommerce, ProductSource)
+
+    if Code.ensure_loaded?(product_source) do
+      legacy = Module.concat(product_source, Legacy)
+      current = product_source.current()
+
+      if current == legacy do
+        :ok
+      else
+        {:error, {:unsupported_product_source, current}}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp fetch_currency_decimal_places(code) do
+    case repo().get_by(Currency, code: code) do
+      %Currency{decimal_places: places} -> {:ok, places}
+      nil -> {:error, {:unknown_currency, code}}
+    end
+  end
+
+  defp reprice_amount(nil, _multiplier, _decimal_places), do: nil
+
+  defp reprice_amount(%Decimal{} = amount, multiplier, decimal_places) do
+    amount
+    |> Decimal.mult(multiplier)
+    |> Decimal.round(decimal_places)
+  end
+
+  defp maybe_put_repriced(attrs, _field, nil, _multiplier, _decimal_places), do: attrs
+
+  defp maybe_put_repriced(attrs, field, %Decimal{} = amount, multiplier, decimal_places) do
+    Map.put(attrs, field, reprice_amount(amount, multiplier, decimal_places))
+  end
+
+  # Reprices a FIXED modifier's stored decimal string. Non-numeric or
+  # empty values are left untouched rather than raising — a malformed
+  # stored value is a pre-existing data problem this operation should not
+  # newly fail on.
+  defp reprice_modifier_string(amount_str, multiplier, decimal_places) do
+    case Decimal.parse(amount_str) do
+      {decimal, ""} ->
+        new_amount =
+          decimal
+          |> Decimal.mult(multiplier)
+          |> Decimal.round(decimal_places)
+
+        {:ok, Decimal.to_string(new_amount)}
+
+      _ ->
+        :skip
+    end
+  end
+
+  # ---- Products ----
+
+  defp reprice_products_for_base_change(products, new_base_code, multiplier, decimal_places) do
+    Enum.reduce_while(products, {:ok, 0, 0}, fn product, {:ok, products, modifiers} ->
+      {new_metadata, changed} = reprice_product_overrides(product, multiplier, decimal_places)
+
+      attrs =
+        %{"currency" => new_base_code}
+        |> Map.put("price", reprice_amount(product.price, multiplier, decimal_places))
+        |> maybe_put_repriced(
+          "compare_at_price",
+          product.compare_at_price,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced("cost_per_item", product.cost_per_item, multiplier, decimal_places)
+        |> maybe_put_metadata(changed, new_metadata)
+
+      case update_product(product, attrs) do
+        {:ok, _updated} -> {:cont, {:ok, products + 1, modifiers + changed}}
+        {:error, reason} -> {:halt, {:error, {:product_reprice_failed, product.uuid, reason}}}
+      end
+    end)
+  end
+
+  defp maybe_put_metadata(attrs, 0, _new_metadata), do: attrs
+
+  defp maybe_put_metadata(attrs, _changed, new_metadata),
+    do: Map.put(attrs, "metadata", new_metadata)
+
+  # Reprices a product's own `metadata["_price_modifiers"]` overrides
+  # (options/options.ex) whose EFFECTIVE type is fixed. An override may be
+  # a bare decimal string (inherits the option's own `modifier_type`) or a
+  # `%{"type" => ..., "value" => ...}` map (explicit override type) —
+  # `options/options.ex`'s `get_effective_modifier_info/3` uses the same
+  # precedence to decide what a shopper is charged.
+  defp reprice_product_overrides(product, multiplier, decimal_places) do
+    overrides = get_in(product.metadata || %{}, ["_price_modifiers"]) || %{}
+
+    if overrides == %{} do
+      {product.metadata, 0}
+    else
+      schema_by_key = product_option_schema_by_key(product)
+
+      {new_overrides, count} =
+        Enum.reduce(overrides, {%{}, 0}, fn {key, values}, {acc, count} ->
+          default_type = Map.get(schema_by_key, key)
+
+          {new_values, changed} =
+            reprice_override_values(values, default_type, multiplier, decimal_places)
+
+          {Map.put(acc, key, new_values), count + changed}
+        end)
+
+      {Map.put(product.metadata, "_price_modifiers", new_overrides), count}
+    end
+  end
+
+  # Shared by the reprice pass and the pre-flight ambiguous-override scan
+  # — both need "what modifier_type does the merged (global + category)
+  # option schema declare for this product's option key", keyed for O(1)
+  # lookup per override key.
+  defp product_option_schema_by_key(product) do
+    product
+    |> Options.get_option_schema_for_product()
+    |> Map.new(fn opt -> {opt["key"], opt["modifier_type"]} end)
+  end
+
+  defp reprice_override_values(values, default_type, multiplier, decimal_places)
+       when is_map(values) do
+    Enum.reduce(values, {%{}, 0}, fn {value, modifier}, {acc, count} ->
+      reprice_one_override_value(
+        {acc, count},
+        value,
+        modifier,
+        override_effective_type_and_amount(modifier, default_type),
+        multiplier,
+        decimal_places
+      )
+    end)
+  end
+
+  defp reprice_override_values(values, _default_type, _multiplier, _decimal_places),
+    do: {values, 0}
+
+  defp reprice_one_override_value(
+         {acc, count},
+         value,
+         modifier,
+         {"fixed", amount_str},
+         multiplier,
+         decimal_places
+       ) do
+    case reprice_modifier_string(amount_str, multiplier, decimal_places) do
+      {:ok, new_amount} -> {Map.put(acc, value, new_amount), count + 1}
+      :skip -> {Map.put(acc, value, modifier), count}
+    end
+  end
+
+  defp reprice_one_override_value(
+         {acc, count},
+         value,
+         modifier,
+         _not_fixed,
+         _multiplier,
+         _decimal_places
+       ) do
+    {Map.put(acc, value, modifier), count}
+  end
+
+  # Mirrors the precedence `options/options.ex`'s private
+  # `get_override_info/2` + `parse_modifier_value/1` use: an explicit
+  # `"type"` on the override wins, otherwise the option schema's own
+  # `modifier_type` applies.
+  defp override_effective_type_and_amount(%{"type" => type, "value" => value}, default_type)
+       when is_binary(value) and value != "" do
+    {type || default_type, value}
+  end
+
+  defp override_effective_type_and_amount(%{"value" => value}, default_type)
+       when is_binary(value) and value != "" do
+    {default_type, value}
+  end
+
+  defp override_effective_type_and_amount(value, default_type)
+       when is_binary(value) and value != "" do
+    {default_type, value}
+  end
+
+  defp override_effective_type_and_amount(_modifier, _default_type), do: {nil, nil}
+
+  # ---- Option schemas (global + category) ----
+
+  defp reprice_global_options_for_base_change(multiplier, decimal_places) do
+    case Options.get_global_options() do
+      [] ->
+        {:ok, 0}
+
+      options ->
+        {new_options, count} = reprice_option_definitions(options, multiplier, decimal_places)
+
+        case Options.update_global_options(new_options) do
+          {:ok, _} -> {:ok, count}
+          {:error, reason} -> {:error, {:global_options_reprice_failed, reason}}
+        end
+    end
+  end
+
+  defp reprice_category_options_for_base_change(multiplier, decimal_places) do
+    Category
+    |> repo().all()
+    |> Enum.reduce_while({:ok, 0}, fn category, {:ok, count} ->
+      reprice_one_category(category, count, multiplier, decimal_places)
+    end)
+  end
+
+  defp reprice_one_category(%Category{option_schema: []}, count, _multiplier, _decimal_places) do
+    {:cont, {:ok, count}}
+  end
+
+  defp reprice_one_category(
+         %Category{option_schema: options} = category,
+         count,
+         multiplier,
+         decimal_places
+       ) do
+    {new_options, changed} = reprice_option_definitions(options, multiplier, decimal_places)
+
+    case Options.update_category_options(category, new_options) do
+      {:ok, _} ->
+        {:cont, {:ok, count + changed}}
+
+      {:error, reason} ->
+        {:halt, {:error, {:category_options_reprice_failed, category.uuid, reason}}}
+    end
+  end
+
+  defp reprice_option_definitions(options, multiplier, decimal_places) do
+    Enum.map_reduce(options, 0, fn opt, count ->
+      case opt do
+        %{"modifier_type" => "fixed", "price_modifiers" => modifiers} when is_map(modifiers) ->
+          {new_modifiers, changed} = reprice_modifier_map(modifiers, multiplier, decimal_places)
+          {Map.put(opt, "price_modifiers", new_modifiers), count + changed}
+
+        _ ->
+          {opt, count}
+      end
+    end)
+  end
+
+  defp reprice_modifier_map(modifiers, multiplier, decimal_places) do
+    Enum.reduce(modifiers, {%{}, 0}, fn {value, amount_str}, {acc, count} ->
+      case reprice_modifier_string(amount_str, multiplier, decimal_places) do
+        {:ok, new_amount} -> {Map.put(acc, value, new_amount), count + 1}
+        :skip -> {Map.put(acc, value, amount_str), count}
+      end
+    end)
+  end
+
+  # ---- Shipping methods ----
+
+  defp reprice_shipping_methods_for_base_change(multiplier, decimal_places) do
+    ShippingMethod
+    |> repo().all()
+    |> Enum.reduce_while({:ok, 0}, fn method, {:ok, count} ->
+      attrs =
+        %{}
+        |> Map.put("price", reprice_amount(method.price, multiplier, decimal_places))
+        |> maybe_put_repriced(
+          "free_above_amount",
+          method.free_above_amount,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced(
+          "min_order_amount",
+          method.min_order_amount,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced(
+          "max_order_amount",
+          method.max_order_amount,
+          multiplier,
+          decimal_places
+        )
+
+      case update_shipping_method(method, attrs) do
+        {:ok, _updated} ->
+          {:cont, {:ok, count + 1}}
+
+        {:error, reason} ->
+          {:halt, {:error, {:shipping_method_reprice_failed, method.uuid, reason}}}
+      end
+    end)
+  end
+
+  # ============================================
   # PRIVATE HELPERS
   # ============================================
 
