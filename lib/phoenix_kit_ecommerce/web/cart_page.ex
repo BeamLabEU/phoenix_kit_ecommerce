@@ -209,6 +209,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     socket
     |> assign(:cart, cart)
+    |> assign(:currency, Shop.currency_for_code(cart.currency))
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
     |> assign(:skip_mode, skip_mode)

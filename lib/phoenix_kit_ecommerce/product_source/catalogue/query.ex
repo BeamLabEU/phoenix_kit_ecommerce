@@ -159,8 +159,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
 
   @doc """
   Active-item counts grouped by `category_uuid`, "active" meaning
-  `item.status == "active" AND data.ecommerce.shop_status == "active"`
-  (spec principle 7) — items with no category are excluded, same as
+  `item.status == "active"` and `COALESCE(shop_status, 'active') =
+  'active'` (spec principle 7, same fallback as the listing) — items
+  with no category are excluded, same as
   `ProductSource.Legacy.product_counts_by_category/0`.
   """
   @spec product_counts_by_category() :: %{String.t() => non_neg_integer()}
@@ -198,6 +199,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
           |> where([i], i.catalogue_uuid == ^uuid)
           |> active_visibility()
           |> maybe_filter_category(Keyword.get(opts, :category_uuid))
+          |> exclude_hidden_categories(Keyword.get(opts, :exclude_hidden_categories, false))
 
         {repo().aggregate(query, :min, :base_price), repo().aggregate(query, :max, :base_price)}
     end
@@ -221,6 +223,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
         |> active_visibility()
         |> where([i], fragment("COALESCE(?->'ecommerce'->>'vendor', '') != ''", i.data))
         |> maybe_filter_category(Keyword.get(opts, :category_uuid))
+        |> exclude_hidden_categories(Keyword.get(opts, :exclude_hidden_categories, false))
         |> group_by([i], fragment("?->'ecommerce'->>'vendor'", i.data))
         |> select([i], %{
           value: fragment("?->'ecommerce'->>'vendor'", i.data),
@@ -461,6 +464,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp apply_item_filters(query, opts) do
     query
     |> filter_by_status(Keyword.get(opts, :status))
+    |> filter_by_product_type(Keyword.get(opts, :product_type))
     |> filter_by_category(Keyword.get(opts, :category_uuid))
     |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
     |> filter_by_search(Keyword.get(opts, :search))
@@ -496,13 +500,27 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     )
   end
 
-  # Item visibility per spec principle 7.
+  # Item visibility per spec principle 7. Same COALESCE fallback as
+  # `filter_by_status(query, "active")` / `View.product_status/2`: a
+  # missing `shop_status` is treated as `"active"` when `item.status` is
+  # `"active"`, so counts and facets cannot silently drop items the
+  # listing still shows.
   defp active_visibility(query) do
     where(
       query,
       [i],
       i.status == "active" and
-        fragment("(?->'ecommerce'->>'shop_status') = 'active'", i.data)
+        fragment("COALESCE(?->'ecommerce'->>'shop_status', 'active') = 'active'", i.data)
+    )
+  end
+
+  defp filter_by_product_type(query, nil), do: query
+
+  defp filter_by_product_type(query, type) when is_binary(type) do
+    where(
+      query,
+      [i],
+      fragment("COALESCE(?->'ecommerce'->>'product_type', 'physical') = ?", i.data, ^type)
     )
   end
 
@@ -512,18 +530,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp maybe_filter_category(query, nil), do: query
   defp maybe_filter_category(query, uuid), do: where(query, [i], i.category_uuid == ^uuid)
 
-  defp filter_by_visible_categories(query, false), do: query
-
-  defp filter_by_visible_categories(query, true) do
-    from(i in query,
-      left_join: c in CatCategory,
-      on: c.uuid == i.category_uuid,
-      where:
-        is_nil(c.uuid) or
-          fragment("COALESCE(?->'ecommerce'->>'shop_status', 'active')", c.data) != "hidden",
-      distinct: i.uuid
-    )
-  end
+  # Same subquery as `exclude_hidden_categories/2`. The previous
+  # `left_join` + `distinct: i.uuid` compiled to `DISTINCT ON (uuid)`
+  # and made Ecto prepend `uuid` to `ORDER BY`, so every listing with
+  # `exclude_hidden_categories: true` was ordered by uuid, not
+  # position/name. The join also cannot duplicate items (one category
+  # row per `category_uuid`).
+  defp filter_by_visible_categories(query, flag), do: exclude_hidden_categories(query, flag)
 
   defp filter_by_price_range(query, nil, nil), do: query
   defp filter_by_price_range(query, min, nil), do: where(query, [i], i.base_price >= ^min)

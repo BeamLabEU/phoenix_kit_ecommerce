@@ -165,12 +165,42 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
   @impl true
   def handle_info({:currencies_changed, _code}, socket) do
-    {:noreply, Helpers.refresh_display_currency(socket)}
+    socket = Helpers.refresh_display_currency(socket)
+
+    {:noreply,
+     if socket.assigns[:products] do
+       reload_catalog_products(socket)
+     else
+       socket
+     end}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
   @impl true
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp reload_catalog_products(socket) do
+    filter_opts =
+      FilterHelpers.build_query_opts(
+        socket.assigns.active_filters,
+        socket.assigns.enabled_filters
+      )
+
+    {products, total} =
+      Shop.list_products_with_count(
+        [
+          status: "active",
+          page: 1,
+          per_page: socket.assigns.page * socket.assigns.per_page,
+          exclude_hidden_categories: true,
+          language: socket.assigns.current_language
+        ] ++ filter_opts
+      )
+
+    socket
+    |> assign(:products, products)
+    |> assign(:total_products, total)
+  end
 
   @impl true
   def handle_event("filter_price", params, socket) do

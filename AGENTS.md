@@ -138,7 +138,8 @@ Repo-local aliases:
   `PhoenixKitEcommerce.Policy` (security policy),
   `PhoenixKitEcommerce.Vocabulary` (catalog vocabulary),
   `PhoenixKitEcommerce` itself (`shipping_skip_mode/0`,
-  `shipping_selection_position/0`, `notify_event?/1`). The wrapper is the
+  `shipping_selection_position/0`, `notify_event?/1`,
+  `enforce_product_currency?/0`). The wrapper is the
   single source of truth for the default, so the admin UI and the enforcement
   point cannot disagree; every policy reader fails *closed* on a
   settings-layer error and tolerates a malformed stored value by falling back
@@ -372,7 +373,8 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_inventory_tracking` — track product inventory (default: `true`)
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
-  currency does not match the shop's (default: `false`)
+  currency does not match the shop's (default: `false`). Read through
+  `enforce_product_currency?/0`.
 
 **Storefront display**
 
