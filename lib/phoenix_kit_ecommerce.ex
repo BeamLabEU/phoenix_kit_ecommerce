@@ -33,6 +33,8 @@ defmodule PhoenixKitEcommerce do
   import Ecto.Query, warn: false
   require Logger
 
+  @version Mix.Project.config()[:version]
+
   alias PhoenixKit.Dashboard.Tab
   alias PhoenixKit.Migrations.Postgres, as: PostgresMigrations
   alias PhoenixKit.Modules.Languages
@@ -282,12 +284,7 @@ defmodule PhoenixKitEcommerce do
   def css_sources, do: [:phoenix_kit_ecommerce]
 
   @impl PhoenixKit.Module
-  def version do
-    case Application.spec(:phoenix_kit_ecommerce, :vsn) do
-      nil -> "0.0.0"
-      vsn -> to_string(vsn)
-    end
-  end
+  def version, do: @version
 
   @impl PhoenixKit.Module
   def permission_metadata do
