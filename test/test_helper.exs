@@ -106,6 +106,15 @@ repo_available =
       # them is idempotent.
       Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
+      # ...and billing's own chain. `phoenix_kit_currencies` is created by
+      # CORE's migrations, but billing (floor raised to "~> 0.11" for
+      # per-domain-currency) OWNS extending it — `rounding_rule`,
+      # `rate_updated_at`, the partial default-currency index — via its own
+      # versioned chain, never core's. Without this, a freshly fetched
+      # billing (0.11+) raises `undefined_column: rounding_rule` on every
+      # currency read, since core's schema never grows that column itself.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
       Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
       true
     rescue
@@ -133,6 +142,20 @@ Application.put_env(:phoenix_kit_ecommerce, :test_repo_available, repo_available
 
 # Minimal PhoenixKit services needed by the context layer.
 {:ok, _pid} = PhoenixKit.PubSub.Manager.start_link([])
+
+# `PhoenixKitCatalogue.Catalogue.PubSub.broadcast/3` (fired on every
+# catalogue mutation) needs a `Phoenix.PubSub` server registered as
+# `PhoenixKit.PubSub` — the host app provides this in production, and
+# `phoenix_kit_catalogue`'s own test suite starts it the same way. Only
+# relevant when the optional test-only `phoenix_kit_catalogue` path dep
+# (see mix.exs's `catalogue_test_deps/0`) is actually resolved, so the
+# common (`:catalogue` excluded) run starts no extra process.
+if Code.ensure_loaded?(PhoenixKitCatalogue) do
+  case Phoenix.PubSub.Supervisor.start_link(name: PhoenixKit.PubSub) do
+    {:ok, _} -> :ok
+    {:error, {:already_started, _}} -> :ok
+  end
+end
 
 # The permission layer resolves a sub-permission through the module
 # registry: `Scope.can?/2` requires `feature_enabled?/1`, which asks the
@@ -200,4 +223,25 @@ transliteration_exclude =
     []
   end
 
-ExUnit.start(exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude)
+# `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
+# by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
+# `ProductSource.Catalogue` adapter's own tests need it loaded (a real
+# `PhoenixKitCatalogue.Schemas.Item`/`Category` struct for the pure view
+# tests, a live catalogue DB for the query tests) and are tagged
+# `:catalogue` so they run automatically once a host declares the dep.
+catalogue_exclude =
+  if Code.ensure_loaded?(PhoenixKitCatalogue) do
+    []
+  else
+    Logger.info(
+      "[test_helper] phoenix_kit_catalogue not loaded — ProductSource.Catalogue " <>
+        "tests excluded. They will run automatically once a host declares the " <>
+        "optional dependency."
+    )
+
+    [:catalogue]
+  end
+
+ExUnit.start(
+  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+)

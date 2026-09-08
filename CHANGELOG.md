@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- **Storefront pages show an admin "Edit" link, gated on admin-area
+  access.** The shop index, category and product pages call core's
+  `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3` (via a guarded
+  `Web.Helpers.maybe_assign_admin_edit/3`, so an older host core without
+  the helper degrades to no link rather than crashing) and render it next
+  to the page heading — "Manage Shop" on `/shop`, "Edit Category" on a
+  category page, "Edit Product" on a product page. Replaces the
+  `:admin_edit_url`/`:admin_edit_label` assigns `CatalogProduct` and
+  `CatalogCategory` already carried, which were unconditional (every
+  visitor got them, admin or not) and never rendered anywhere.
+
 ## 0.4.3 - 2026-09-05
 
 PR #31 plus the post-merge review in

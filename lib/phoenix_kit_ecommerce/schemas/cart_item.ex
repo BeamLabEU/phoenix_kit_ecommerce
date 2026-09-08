@@ -17,8 +17,12 @@ defmodule PhoenixKitEcommerce.CartItem do
   - `product_slug` - Product slug snapshot
   - `product_sku` - Product SKU snapshot
   - `product_image` - Product image URL snapshot
-  - `unit_price` - Price per unit at time of adding (required)
-  - `compare_at_price` - Original price for showing discounts
+  - `unit_price` - Price per unit at time of adding (required), frozen in
+    the CART's own currency (§4.3.1, §4.4, §12.1)
+  - `compare_at_price` - Original price for showing discounts, frozen the
+    same way and at the same rate as `unit_price` (§4.3.1) — never a raw
+    base amount alongside an already-converted `unit_price`, or the
+    displayed discount misstates itself
   - `quantity` - Number of items (required, > 0)
   - `line_total` - Calculated: unit_price * quantity
   - `weight_grams` - Weight for shipping calculation
@@ -142,7 +146,13 @@ defmodule PhoenixKitEcommerce.CartItem do
     lang = Keyword.get(opts, :language) || default_language()
 
     %{
-      product_uuid: product.uuid,
+      # A catalogue-backed product is a hand-built view-struct
+      # (`__meta__.state == :built`) — there is no row in
+      # `phoenix_kit_shop_products` for `product_uuid` to reference, so the
+      # column stays nil (it is `ON DELETE SET NULL`, already nullable) and
+      # the catalogue item's own uuid is carried in `metadata` instead, the
+      # only place left to reach it from a cart row.
+      product_uuid: if(catalogue_backed?(product), do: nil, else: product.uuid),
       product_title: get_localized_string(product.title, lang),
       product_slug: get_localized_string(product.slug, lang),
       product_image: get_product_image_url(product),
@@ -159,6 +169,12 @@ defmodule PhoenixKitEcommerce.CartItem do
       # after calling `from_product/3`, the same as `unit_price` above.
       base_unit_price:
         if(PriceDisplay.on_request?(product), do: Decimal.new(0), else: product.price),
+      # Default only, same as `unit_price`/`base_unit_price` above — a base
+      # amount here. Both cart-context callers convert it forward into the
+      # cart's own currency, through the SAME `snapshot_unit_price/2` the
+      # unit price uses, right after calling `from_product/3` (§4.3.1: a
+      # cart line's "was" price must discount from the same currency frame
+      # as its "now" price, or the displayed percentage off is wrong).
       compare_at_price:
         if(PriceDisplay.on_request?(product), do: nil, else: product.compare_at_price),
       # Line amounts are summed in the CART's currency frame, so the line
@@ -175,11 +191,27 @@ defmodule PhoenixKitEcommerce.CartItem do
       metadata:
         %{"requires_shipping" => product.requires_shipping}
         |> put_price_unit(product, lang)
+        |> put_catalogue_item_uuid(product)
     }
   end
 
   def from_product(%Product{} = product, quantity, language) do
     from_product(product, quantity, language: language)
+  end
+
+  # A view-struct built by `ProductSource.Catalogue` (see the module doc for
+  # `PhoenixKitEcommerce.ProductSource`) — never a row from
+  # `phoenix_kit_shop_products`. Same test the facade already uses to refuse
+  # `Repo` writes on one (`update_product/2`/`delete_product/2`).
+  defp catalogue_backed?(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}), do: true
+  defp catalogue_backed?(%Product{}), do: false
+
+  defp put_catalogue_item_uuid(metadata, product) do
+    if catalogue_backed?(product) do
+      Map.put(metadata, "catalogue_item_uuid", product.uuid)
+    else
+      metadata
+    end
   end
 
   # The unit is snapshotted with the line, not read live at render time:

@@ -55,7 +55,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     current_language =
       params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
-    case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
+    case Shop.get_product_by_slug_localized(slug, current_language,
+           preload: [:category],
+           language: current_language
+         ) do
       {:error, :not_found} ->
         handle_cross_language_redirect(slug, current_language, params, session, socket)
 
@@ -92,7 +95,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     selected_specs = build_default_specs(selectable_specs, product.metadata || %{})
 
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
 
     localized_title = Translations.get(product, :title, current_language)
@@ -100,6 +110,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -113,6 +124,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
@@ -141,6 +153,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         socket.assigns[:url_path] || Shop.product_url(product, current_language)
       )
       |> assign(:categories, Shop.list_active_categories(preload: [:featured_product]))
+      |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
       |> assign(:filter_qs, FilterHelpers.build_query_string(active_filters, enabled_filters))
       |> assign(
         :category_name_wrap,
@@ -150,8 +163,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -159,7 +174,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Handle cross-language slug redirect
   # When user visits with a slug from a different language, redirect to correct localized URL
   defp handle_cross_language_redirect(slug, current_language, params, session, socket) do
-    case Shop.get_product_by_any_slug(slug, preload: [:category]) do
+    case Shop.get_product_by_any_slug(slug, preload: [:category], language: current_language) do
       {:error, :not_found} ->
         # Product truly not found
         {:ok,
@@ -290,7 +305,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     # Compute filter_qs from URL params (preserves filters across cross-language redirect)
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
     filter_qs = FilterHelpers.build_query_string(active_filters, enabled_filters)
 
@@ -304,6 +326,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -316,6 +339,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -335,6 +359,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:missing_required_specs, missing_required_specs)
       |> assign(:current_path, current_path)
       |> assign(:categories, all_categories)
+      |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
       |> assign(:filter_qs, filter_qs)
       |> assign(
         :category_name_wrap,
@@ -344,8 +369,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -683,17 +710,32 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   defp find_cart_item_after_add(items, product_uuid, selected_specs, _price_affecting_specs) do
     if map_size(selected_specs) > 0 do
-      Enum.find(items, &(&1.product_uuid == product_uuid && &1.selected_specs == selected_specs))
+      Enum.find(
+        items,
+        &(cart_item_matches_product?(&1, product_uuid) && &1.selected_specs == selected_specs)
+      )
     else
-      Enum.find(items, &(&1.product_uuid == product_uuid))
+      Enum.find(items, &cart_item_matches_product?(&1, product_uuid))
     end
+  end
+
+  # `product_uuid` here is always the product's real identifying uuid — for
+  # a catalogue-backed product that's the catalogue item's own uuid, which
+  # `CartItem.from_product/3` snapshots into `metadata["catalogue_item_uuid"]`
+  # rather than the row's `product_uuid` column (nil for those rows). Without
+  # this fallback, every post-add lookup for a catalogue product (the "added
+  # to cart" flash, the existing-item check before a repeat add) would come
+  # back nil even though the row is right there in `items`.
+  defp cart_item_matches_product?(item, product_uuid) do
+    item.product_uuid == product_uuid or
+      (item.metadata || %{})["catalogue_item_uuid"] == product_uuid
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div class="container flex-col mx-auto px-4 py-6 max-w-7xl">
+      <div class="container flex-col mx-auto px-4 py-6 max-w-[96rem]">
         
         <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
         <%!-- Breadcrumbs --%>
@@ -716,23 +758,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </ul>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8">
-          <%!-- Category navigation (no filters on product page) --%>
-          <aside class="hidden lg:block">
-            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-              <div class="card-body p-4">
-                <CatalogSidebar.category_nav
-                  categories={@categories}
-                  current_category={@product.category}
-                  current_language={@current_language}
-                  category_icon_mode={@category_icon_mode}
-                  category_name_wrap={@category_name_wrap}
-                  open={true}
-                  filter_qs={@filter_qs}
-                />
-              </div>
-            </div>
-          </aside>
+        <%!-- Two columns: gallery | buy box. The category column that used to
+              sit on the left was dropped on purpose — it squeezed the buy box
+              into a fifth of the page, and a long description above the
+              options pushed "Add to Cart" off the first screen. Categories now
+              render in a collapsed panel under the product. --%>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-10">
           <%!-- Product Images --%>
           <div class="space-y-4">
             <%!-- Main Image --%>
@@ -813,10 +844,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           <%!-- Product Info --%>
           <div class="space-y-6">
             <div>
-              <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
+              <div class="flex items-start justify-between gap-4">
+                <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
+                <%!-- Admin Edit Button --%>
+                <%= if assigns[:admin_edit_url] do %>
+                  <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2 shrink-0">
+                    <.icon name="hero-pencil-square" class="w-4 h-4" />
+                    {@admin_edit_label || "Edit"}
+                  </.link>
+                <% end %>
+              </div>
 
               <%= if @product.vendor do %>
-                <p class="text-base-content/60">by {@product.vendor}</p>
+                <p class="text-base-content/60">{gettext("by %{vendor}", vendor: @product.vendor)}</p>
               <% end %>
             </div>
 
@@ -853,88 +893,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <% end %>
               <% end %>
             </div>
-
-            <%!-- Description --%>
-            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
-                  This renders on the UNAUTHENTICATED storefront, and product
-                  descriptions are writable by anyone holding the "shop"
-                  permission and by whoever supplies a CSV import file — so
-                  `sanitize={false}` here was a path from "can edit a product"
-                  to script execution in every shopper's and the Owner's
-                  browser. See PhoenixKitEcommerce.Policy. --%>
-            <%= if @localized_description do %>
-              <.markdown
-                content={@localized_description}
-                sanitize={not Policy.allow_raw_html_descriptions?()}
-                compact
-              />
-            <% end %>
-
-            <%!-- Full body (imports put the complete supplier description in
-                  body_html and only a short extract in description). Same
-                  sanitization policy as the description above. --%>
-            <%= if @localized_body && @localized_body != "" do %>
-              <div class="mt-4">
-                <.markdown
-                  content={@localized_body}
-                  sanitize={not Policy.allow_raw_html_descriptions?()}
-                />
-              </div>
-            <% end %>
-
-            <%!-- Product Details --%>
-            <div class="divider"></div>
-
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <%= if @product.weight_grams && @product.weight_grams > 0 do %>
-                <div>
-                  <span class="text-base-content/60">{gettext("Weight:")}</span>
-                  <span class="ml-2 font-medium">{@product.weight_grams}g</span>
-                </div>
-              <% end %>
-
-              <%= if @product.category do %>
-                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
-                <div>
-                  <span class="text-base-content/60">{gettext("Category:")}</span>
-                  <.link
-                    navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}
-                    class="ml-2 link link-primary"
-                  >
-                    {cat_name}
-                  </.link>
-                </div>
-              <% end %>
-            </div>
-
-            <%!-- Specifications Table --%>
-            <%= if @specifications != [] do %>
-              <div class="divider"></div>
-
-              <h3 class="font-semibold text-lg mb-3">
-                <.icon name="hero-tag" class="w-5 h-5 inline" /> {gettext("Specifications")}
-              </h3>
-
-              <div class="overflow-x-auto">
-                <table class="table table-zebra table-sm">
-                  <tbody>
-                    <%= for {label, value, unit} <- @specifications do %>
-                      <tr>
-                        <td class="font-medium w-1/3 text-base-content/70">{label}</td>
-                        <td>
-                          {format_spec_value(value)}
-                          <%= if unit do %>
-                            <span class="text-base-content/50 ml-1">{unit}</span>
-                          <% end %>
-                        </td>
-                      </tr>
-                    <% end %>
-                  </tbody>
-                </table>
-              </div>
-            <% end %>
-
-            <div class="divider"></div>
 
             <%!-- Add to Cart Section --%>
             <%= if @product.status == "active" do %>
@@ -1107,8 +1065,35 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Product Details --%>
+            <div class="divider"></div>
+
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <%= if @product.weight_grams && @product.weight_grams > 0 do %>
+                <div>
+                  <span class="text-base-content/60">{gettext("Weight:")}</span>
+                  <span class="ml-2 font-medium">{@product.weight_grams}g</span>
+                </div>
+              <% end %>
+
+              <%= if @product.category do %>
+                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+                <div>
+                  <span class="text-base-content/60">{gettext("Category:")}</span>
+                  <.link
+                    navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}
+                    class="ml-2 link link-primary"
+                  >
+                    {cat_name}
+                  </.link>
+                </div>
+              <% end %>
+            </div>
+
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
@@ -1117,6 +1102,94 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <% end %>
           </div>
         </div>
+
+        <%!-- Description, full width under the gallery and the buy box.
+              It used to sit inside the buy box column above the options,
+              where one long supplier text pushed "Add to Cart" off the first
+              screen. --%>
+        <%= if has_text?(@localized_description) or has_text?(@localized_body) do %>
+          <section class="mt-10 max-w-5xl">
+            <div class="divider"></div>
+            <h2 class="text-xl font-semibold mb-4">
+              <.icon name="hero-document-text" class="w-5 h-5 inline" /> {gettext("Description")}
+            </h2>
+
+            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
+                  This renders on the UNAUTHENTICATED storefront, and product
+                  descriptions are writable by anyone holding the "shop"
+                  permission and by whoever supplies a CSV import file — so
+                  `sanitize={false}` here was a path from "can edit a product"
+                  to script execution in every shopper's and the Owner's
+                  browser. See PhoenixKitEcommerce.Policy. --%>
+            <%= if has_text?(@localized_description) do %>
+              <.markdown
+                content={@localized_description}
+                sanitize={not Policy.allow_raw_html_descriptions?()}
+                compact
+              />
+            <% end %>
+
+            <%!-- Full body (imports put the complete supplier description in
+                  body_html and only a short extract in description). Same
+                  sanitization policy as the description above. --%>
+            <%= if has_text?(@localized_body) do %>
+              <div class="mt-4">
+                <.markdown
+                  content={@localized_body}
+                  sanitize={not Policy.allow_raw_html_descriptions?()}
+                />
+              </div>
+            <% end %>
+          </section>
+        <% end %>
+
+        <%!-- Specifications Table --%>
+        <%= if @specifications != [] do %>
+          <section class="mt-10 max-w-5xl">
+            <div class="divider"></div>
+            <h2 class="text-xl font-semibold mb-4">
+              <.icon name="hero-tag" class="w-5 h-5 inline" /> {gettext("Specifications")}
+            </h2>
+
+            <div class="overflow-x-auto">
+              <table class="table table-zebra table-sm">
+                <tbody>
+                  <%= for {label, value, unit} <- @specifications do %>
+                    <tr>
+                      <td class="font-medium w-1/3 text-base-content/70">{label}</td>
+                      <td>
+                        {format_spec_value(value)}
+                        <%= if unit do %>
+                          <span class="text-base-content/50 ml-1">{unit}</span>
+                        <% end %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        <% end %>
+
+        <%!-- Category navigation, collapsed. Moved here from the left column. --%>
+        <%= if @show_categories? and @categories != [] do %>
+          <details class="collapse collapse-arrow bg-base-100 shadow mt-10 max-w-5xl">
+            <summary class="collapse-title font-semibold">
+              <.icon name="hero-squares-2x2" class="w-5 h-5 inline" /> {gettext("Categories")}
+            </summary>
+            <div class="collapse-content">
+              <CatalogSidebar.category_nav
+                categories={@categories}
+                current_category={@product.category}
+                current_language={@current_language}
+                category_icon_mode={@category_icon_mode}
+                category_name_wrap={@category_name_wrap}
+                open={true}
+                filter_qs={@filter_qs}
+              />
+            </div>
+          </details>
+        <% end %>
       </div>
     </ShopLayouts.shop_layout>
     """
@@ -1175,6 +1248,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   # Private helpers
+
+  defp has_text?(nil), do: false
+  defp has_text?(text) when is_binary(text), do: String.trim(text) != ""
+  defp has_text?(_), do: false
 
   defp generate_session_id do
     :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
@@ -1387,7 +1464,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       %{items: items} when is_list(items) ->
         Enum.find(items, fn item ->
-          item.product_uuid == product_uuid &&
+          cart_item_matches_product?(item, product_uuid) &&
             specs_match?(item.selected_specs, selected_specs)
         end)
 
@@ -1466,6 +1543,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     else
       {:noreply, socket}
     end
+  end
+
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, Helpers.refresh_display_currency(socket)}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.

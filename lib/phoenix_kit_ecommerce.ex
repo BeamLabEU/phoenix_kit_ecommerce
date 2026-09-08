@@ -30,6 +30,14 @@ defmodule PhoenixKitEcommerce do
 
   use PhoenixKit.Module
 
+  # `ProductSource.current/0` can return `ProductSource.Catalogue`, which
+  # only exists once the optional `phoenix_kit_catalogue` dependency ships
+  # the adapter (a later block). Quietened the same way `ai_translatable.ex`
+  # quietens the optional `phoenix_kit_ai` calls — real production dispatch
+  # never reaches the module when it's absent, only the compiler's static
+  # xref check would otherwise complain about it.
+  @compile {:no_warn_undefined, PhoenixKitEcommerce.ProductSource.Catalogue}
+
   import Ecto.Query, warn: false
   require Logger
 
@@ -55,6 +63,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Shopify.Provider, as: ShopifyProvider
@@ -130,6 +139,33 @@ defmodule PhoenixKitEcommerce do
       categories_count: count_categories()
     }
   end
+
+  @doc """
+  Gets a raw config value stored by key in `phoenix_kit_shop_config`.
+
+  Returns `nil` when the key has never been set, except for the few keys
+  `default_config_value/1` gives a typed default instead — currently
+  used by `PhoenixKitEcommerce.ProductSource.current/0` to read
+  `"shop_product_source"` and by
+  `PhoenixKitEcommerce.Shopify.CollectionSync.run/1` to read
+  `"shopify_collections_filter"`. Distinct from `get_config/0` (the
+  fixed dashboard-stats map above).
+  """
+  def get_config(key) when is_binary(key) do
+    case repo().get(ShopConfig, key) do
+      %ShopConfig{value: %{"value" => value}} -> value
+      _ -> default_config_value(key)
+    end
+  end
+
+  # `"shopify_collections_filter"` (`CollectionSync.run/1`'s allowlist)
+  # is the one key here whose absence must NOT read as "not configured"
+  # — every place that consults it (`Map.get(filter, "prefix")`,
+  # `Map.get(filter, "exclude", [])`) treats `%{}` as "everything
+  # passes", so an operator who never set a filter gets the unfiltered
+  # behaviour rather than a `nil` the caller must special-case.
+  defp default_config_value("shopify_collections_filter"), do: %{}
+  defp default_config_value(_key), do: nil
 
   @doc """
   Effective shipping-skip mode for checkout.
@@ -254,6 +290,76 @@ defmodule PhoenixKitEcommerce do
     Billing.get_currency_by_code(code) || code
   rescue
     _ -> code
+  end
+
+  @doc """
+  The percentage drift above which checkout flags a cart's frozen
+  exchange rate as stale (§4.4) — the shop-configurable threshold behind
+  `cart_rate_drift/1`. Defaults to 5 (five percent) when the setting is
+  unset or fails to parse as a number.
+  """
+  @spec fx_rate_drift_alert_pct() :: Decimal.t()
+  def fx_rate_drift_alert_pct do
+    raw = Settings.get_setting_cached("fx_rate_drift_alert_pct", "5")
+
+    case Decimal.parse(raw) do
+      {pct, ""} -> pct
+      _ -> Decimal.new("5")
+    end
+  end
+
+  @doc """
+  Whether a cart's frozen exchange rate (§4.4, §12.2) has drifted past
+  `fx_rate_drift_alert_pct/0` away from the currency table's CURRENT
+  rate — and by how much, for the checkout notice. A cart's own prices
+  are NEVER silently recalculated (§4.4); this only reports the drift so
+  checkout can offer `refresh_cart_rate/1` as an explicit choice.
+
+  Returns `nil` — nothing to report — for:
+  - a cart already in its base currency (nothing was ever converted);
+  - a cart with no frozen rate at all (`exchange_rate: nil` — nothing
+    to compare against);
+  - a cart currency the table no longer knows, that has since been
+    disabled, or whose current rate is not positive. Read DIRECTLY via
+    `Billing.get_currency_by_code/1` — never through
+    `resolve_display_currency/1` — because that function's §6.3
+    fail-safe silently substitutes the BASE currency for exactly these
+    cases, which would make an unrelated currency's outage look like a
+    rate drift on every open cart in it;
+  - a missing base currency (nothing configured to compare against);
+  - drift at or under the threshold.
+
+  Otherwise returns `%{frozen:, current:, pct:}`: the cart's frozen
+  rate, the currency table's live effective rate, and the absolute
+  percentage drift between them (rounded to 2 decimal places).
+  """
+  @spec cart_rate_drift(Cart.t()) ::
+          %{frozen: Decimal.t(), current: Decimal.t(), pct: Decimal.t()} | nil
+  def cart_rate_drift(%Cart{currency: same, base_currency: same}), do: nil
+  def cart_rate_drift(%Cart{exchange_rate: nil}), do: nil
+
+  def cart_rate_drift(%Cart{} = cart) do
+    with %Currency{enabled: true, exchange_rate: rate} = target <-
+           Billing.get_currency_by_code(cart.currency),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      frozen = cart.exchange_rate
+      current = Currency.effective_rate(target, base)
+
+      pct =
+        current
+        |> Decimal.sub(frozen)
+        |> Decimal.abs()
+        |> Decimal.div(frozen)
+        |> Decimal.mult(100)
+        |> Decimal.round(2)
+
+      if Decimal.compare(pct, fx_rate_drift_alert_pct()) == :gt do
+        %{frozen: frozen, current: current, pct: pct}
+      end
+    else
+      _ -> nil
+    end
   end
 
   # ============================================
@@ -541,9 +647,19 @@ defmodule PhoenixKitEcommerce do
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see
   `PhoenixKitAI.Translatables`).
+
+  Empty under the catalogue product source: `PhoenixKitEcommerce.AITranslatable`
+  translates `phoenix_kit_shop_products` rows, which the catalogue source
+  never writes to — translation moves to catalogue's own item/category AI
+  adapters there (design spec §5 Блок 3 / Блок 6), so this package must stop
+  advertising a translatable resource nothing reads through it anymore.
   """
   def ai_translatables do
-    [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+    if ProductSource.current() == ProductSource.Catalogue do
+      []
+    else
+      [{PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable}]
+    end
   end
 
   @doc """
@@ -576,36 +692,14 @@ defmodule PhoenixKitEcommerce do
   - `:preload` - Associations to preload
   """
   def list_products(opts \\ []) do
-    Product
-    |> apply_product_filters(opts)
-    |> order_by([p], desc: p.inserted_at)
-    |> maybe_preload(Keyword.get(opts, :preload))
-    |> repo().all()
+    ProductSource.current().list_products(opts)
   end
 
   @doc """
   Lists products with count for pagination.
   """
   def list_products_with_count(opts \\ []) do
-    page = Keyword.get(opts, :page, 1)
-    per_page = Keyword.get(opts, :per_page, 25)
-    offset = (page - 1) * per_page
-
-    base_query =
-      Product
-      |> apply_product_filters(opts)
-
-    total = repo().aggregate(base_query, :count)
-
-    products =
-      base_query
-      |> order_by([p], desc: p.inserted_at)
-      |> limit(^per_page)
-      |> offset(^offset)
-      |> maybe_preload(Keyword.get(opts, :preload, [:category]))
-      |> repo().all()
-
-    {products, total}
+    ProductSource.current().list_products_with_count(opts)
   end
 
   @doc """
@@ -613,10 +707,8 @@ defmodule PhoenixKitEcommerce do
 
   Returns products in the order of the provided IDs.
   """
-  def list_products_by_ids([]), do: []
-
-  def list_products_by_ids(ids) when is_list(ids) do
-    Product |> where([p], p.uuid in ^ids) |> repo().all()
+  def list_products_by_ids(ids) do
+    ProductSource.current().list_products_by_ids(ids)
   end
 
   # ============================================
@@ -645,11 +737,108 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Returns only enabled storefront filters, sorted by position.
+
+  `category` (a `%Category{}`, or `nil` for the global list unmodified)
+  applies its `storefront_filters` overrides on top of the global config
+  first — see `merge_storefront_filters/2`. `language` (default `nil`)
+  additionally translates each `attribute_set`/`metadata_option`
+  filter's `"label"` to that language's attribute-set display name —
+  see `maybe_translate_filter_labels/2`.
   """
-  def get_enabled_storefront_filters do
+  def get_enabled_storefront_filters(category \\ nil, language \\ nil) do
     get_storefront_filters()
+    |> merge_storefront_filters(category_filter_overrides(category))
     |> Enum.filter(& &1["enabled"])
     |> Enum.sort_by(& &1["position"])
+    |> maybe_translate_filter_labels(language)
+  end
+
+  # `attribute_set`/`metadata_option` filter labels are otherwise a
+  # single flat string an admin typed once (`update_storefront_filters/1`)
+  # — the underlying attribute set has its OWN per-language name, which
+  # only `ProductSource.Catalogue` (via `phoenix_kit_catalogue`) can
+  # resolve. `translate_filter_label/2` isn't a `ProductSource`
+  # `@behaviour` callback (this facade must stay adapter-agnostic, and
+  # `Legacy` has no attribute sets to translate) — duck-typed via
+  # `function_exported?/3`, same pattern `View.base_currency_code/0`
+  # uses for the reverse direction.
+  defp maybe_translate_filter_labels(filters, nil), do: filters
+
+  defp maybe_translate_filter_labels(filters, language) do
+    current = ProductSource.current()
+
+    if Code.ensure_loaded?(current) and function_exported?(current, :translate_filter_label, 2) do
+      # `apply/3`, not a direct `current.translate_filter_label(...)` call:
+      # the latter trips the compiler's cross-reference check the moment
+      # `current` is provably `Legacy` in some branch, which has no
+      # matching function by design (see the moduledoc above) — same
+      # workaround `View.base_currency_code/0` uses for the reverse
+      # direction.
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      Enum.map(filters, &apply(current, :translate_filter_label, [&1, language]))
+    else
+      filters
+    end
+  end
+
+  defp category_filter_overrides(%Category{storefront_filters: overrides})
+       when is_map(overrides),
+       do: overrides
+
+  defp category_filter_overrides(_category), do: %{}
+
+  @doc """
+  Merges a category's `storefront_filters` overrides onto the global
+  filter list.
+
+  `category_filters` is a map of `filter key => override attrs` — the
+  shape stored at `Category.storefront_filters` (and, for the catalogue
+  source, `data["ecommerce"]["storefront_filters"]`). For a key that
+  matches a global filter, only `"enabled"`, `"position"`, `"label"` and
+  `"set_slug"` are taken from the override; every other attribute
+  (notably `"type"`) keeps the global filter's value. A key absent from
+  the global list is appended as a brand-new filter, taken from the
+  override attrs as they are (with `"key"` set to the map key, in case
+  the override itself omits it).
+  """
+  @spec merge_storefront_filters([map()], map()) :: [map()]
+  def merge_storefront_filters(global_filters, category_filters)
+      when is_list(global_filters) and is_map(category_filters) do
+    existing_keys = MapSet.new(global_filters, & &1["key"])
+
+    merged =
+      Enum.map(global_filters, fn filter ->
+        case Map.get(category_filters, filter["key"]) do
+          nil -> filter
+          override -> apply_category_filter_override(filter, override)
+        end
+      end)
+
+    # Sorted explicitly by `{position, key}` rather than left in
+    # `category_filters`' own (map, so unspecified) enumeration order —
+    # two category-only filters sharing a position, or both omitting
+    # it, must not have the sidebar's order depend on that. A missing
+    # `"position"` defaults to `0` (this codebase's floor elsewhere,
+    # `Settings.gated_event/3`'s `Enum.max(fn -> 0 end) + 1`), not
+    # whatever `nil`'s accidental placement in term ordering gives it.
+    category_only =
+      category_filters
+      |> Enum.reject(fn {key, _override} -> MapSet.member?(existing_keys, key) end)
+      |> Enum.map(fn {key, override} -> Map.put(override, "key", key) end)
+      |> Enum.sort_by(&{&1["position"] || 0, &1["key"]})
+
+    merged ++ category_only
+  end
+
+  @category_override_attrs ~w(enabled position label set_slug)
+
+  defp apply_category_filter_override(filter, override) do
+    Enum.reduce(@category_override_attrs, filter, fn attr, acc ->
+      case Map.fetch(override, attr) do
+        {:ok, value} -> Map.put(acc, attr, value)
+        :error -> acc
+      end
+    end)
   end
 
   @doc """
@@ -683,77 +872,20 @@ defmodule PhoenixKitEcommerce do
   - `:category_uuid` - Scope aggregation to a specific category by UUID
   """
   def aggregate_filter_values(opts \\ []) do
-    filters = get_enabled_storefront_filters()
-    category_uuid = Keyword.get(opts, :category_uuid)
-
-    Enum.reduce(filters, %{}, fn filter, acc ->
-      Map.put(acc, filter["key"], aggregate_single_filter(filter, category_uuid))
-    end)
+    ProductSource.current().aggregate_filter_values(opts)
   end
 
-  defp aggregate_single_filter(%{"type" => "price_range"}, category_uuid) do
-    query =
-      Product
-      |> where([p], p.status == "active")
-      |> maybe_filter_category(category_uuid)
+  @doc """
+  Returns the `{min, max}` price across active products, optionally
+  scoped to a category.
 
-    min_price = repo().aggregate(query, :min, :price)
-    max_price = repo().aggregate(query, :max, :price)
-    %{min: min_price, max: max_price}
-  rescue
-    _ -> %{min: nil, max: nil}
+  ## Options
+
+    - `:category_uuid` - Scope to a specific category by UUID
+  """
+  def get_price_range_for(opts \\ []) do
+    ProductSource.current().get_price_range_for(opts)
   end
-
-  defp aggregate_single_filter(%{"type" => "vendor"}, category_uuid) do
-    query =
-      Product
-      |> where([p], p.status == "active" and not is_nil(p.vendor) and p.vendor != "")
-      |> maybe_filter_category(category_uuid)
-      |> group_by([p], p.vendor)
-      |> select([p], %{value: p.vendor, count: count(p.uuid)})
-      |> order_by([p], desc: count(p.uuid))
-
-    repo().all(query)
-  rescue
-    _ -> []
-  end
-
-  defp aggregate_single_filter(%{"type" => "metadata_option", "option_key" => key}, category_uuid)
-       when is_binary(key) do
-    # Query distinct option values from metadata->'_option_values'->key JSONB array
-    sql = """
-    SELECT val AS value, COUNT(DISTINCT p.uuid) AS count
-    FROM phoenix_kit_shop_products p,
-         jsonb_array_elements_text(COALESCE(p.metadata->'_option_values'->$1, '[]'::jsonb)) AS val
-    WHERE p.status = 'active'
-    #{if category_uuid, do: "AND p.category_uuid = $2", else: ""}
-    GROUP BY val
-    ORDER BY count DESC
-    """
-
-    params =
-      if category_uuid do
-        {:ok, uuid_bin} = Ecto.UUID.dump(category_uuid)
-        [key, uuid_bin]
-      else
-        [key]
-      end
-
-    case repo().query(sql, params) do
-      {:ok, %{rows: rows}} ->
-        Enum.map(rows, fn [value, count] -> %{value: value, count: count} end)
-
-      _ ->
-        []
-    end
-  rescue
-    _ -> []
-  end
-
-  defp aggregate_single_filter(_filter, _category_uuid), do: []
-
-  defp maybe_filter_category(query, nil), do: query
-  defp maybe_filter_category(query, uuid), do: where(query, [p], p.category_uuid == ^uuid)
 
   @doc """
   Discovers filterable option keys from product metadata.
@@ -857,20 +989,9 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Gets a product by ID or UUID.
   """
-  def get_product(id, opts \\ [])
-
-  def get_product(id, opts) when is_binary(id) do
-    if UUIDUtils.valid?(id) do
-      Product
-      |> where([p], p.uuid == ^id)
-      |> maybe_preload(Keyword.get(opts, :preload))
-      |> repo().one()
-    else
-      nil
-    end
+  def get_product(id, opts \\ []) do
+    ProductSource.current().get_product(id, opts)
   end
-
-  def get_product(_, _opts), do: nil
 
   @doc """
   Gets a product by ID or UUID, raises if not found.
@@ -915,8 +1036,19 @@ defmodule PhoenixKitEcommerce do
 
   Automatically normalizes metadata (price modifiers, option values)
   before saving to ensure consistent storage format.
+
+  Refuses while the catalogue source is active — a legacy row created
+  here would never be surfaced by a catalogue-backed storefront read.
   """
   def create_product(attrs) do
+    if catalogue_source_active?() do
+      {:error, :read_only_view}
+    else
+      do_create_product(attrs)
+    end
+  end
+
+  defp do_create_product(attrs) do
     attrs =
       attrs
       |> MetadataValidator.normalize_product_attrs()
@@ -967,7 +1099,15 @@ defmodule PhoenixKitEcommerce do
 
   Automatically normalizes metadata (price modifiers, option values)
   before saving to ensure consistent storage format.
+
+  Refuses a view-struct (`__meta__.state == :built`, never `:loaded`) —
+  the catalogue adapter hands those out for display only; nothing may
+  write through them into `phoenix_kit_shop_products`.
   """
+  def update_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}, _attrs) do
+    {:error, :read_only_view}
+  end
+
   def update_product(%Product{} = product, attrs) do
     attrs = MetadataValidator.normalize_product_attrs(attrs)
 
@@ -988,7 +1128,14 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Deletes a product.
+
+  Refuses a view-struct (`__meta__.state == :built`) for the same
+  reason `update_product/2` does.
   """
+  def delete_product(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}) do
+    {:error, :read_only_view}
+  end
+
   def delete_product(%Product{} = product) do
     product_uuid = product.uuid
 
@@ -1011,27 +1158,44 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Bulk update product status.
-  Returns count of updated products.
+  Returns count of updated products. `0` while the catalogue source is
+  active — these ids are catalogue item uuids, not
+  `phoenix_kit_shop_products` rows, so this would silently update
+  nothing anyway; returning `0` up front makes that explicit rather
+  than reporting a phantom no-op success.
   """
   def bulk_update_product_status(ids, status) when is_list(ids) and is_binary(status) do
-    query = Product |> where([p], p.uuid in ^ids)
+    if catalogue_source_active?() do
+      0
+    else
+      query = Product |> where([p], p.uuid in ^ids)
 
-    {count, _} =
-      query
-      |> repo().update_all(set: [status: status, updated_at: UtilsDate.utc_now()])
+      {count, _} =
+        query
+        |> repo().update_all(set: [status: status, updated_at: UtilsDate.utc_now()])
 
-    if count > 0 do
-      Events.broadcast_products_bulk_status_changed(ids, status)
+      if count > 0 do
+        Events.broadcast_products_bulk_status_changed(ids, status)
+      end
+
+      count
     end
-
-    count
   end
 
   @doc """
   Bulk update product category.
-  Returns count of updated products.
+  Returns count of updated products. `0` while the catalogue source is
+  active — see `bulk_update_product_status/2`.
   """
   def bulk_update_product_category(uuids, category_uuid) when is_list(uuids) do
+    if catalogue_source_active?() do
+      0
+    else
+      do_bulk_update_product_category(uuids, category_uuid)
+    end
+  end
+
+  defp do_bulk_update_product_category(uuids, category_uuid) do
     cat_uuid =
       if category_uuid do
         case repo().get_by(Category, uuid: category_uuid) do
@@ -1063,14 +1227,17 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Bulk delete products.
-  Returns count of deleted products.
+  Returns count of deleted products. `0` while the catalogue source is
+  active — see `bulk_update_product_status/2`.
   """
   def bulk_delete_products(ids) when is_list(ids) do
-    query = Product |> where([p], p.uuid in ^ids)
-
-    {count, _} = repo().delete_all(query)
-
-    count
+    if catalogue_source_active?() do
+      0
+    else
+      query = Product |> where([p], p.uuid in ^ids)
+      {count, _} = repo().delete_all(query)
+      count
+    end
   end
 
   @doc """
@@ -1225,27 +1392,14 @@ defmodule PhoenixKitEcommerce do
   - `:preload` - Associations to preload
   """
   def list_categories(opts \\ []) do
-    Category
-    |> apply_category_filters(opts)
-    |> order_by([c], [c.position, c.name])
-    |> maybe_preload(Keyword.get(opts, :preload))
-    |> repo().all()
+    ProductSource.current().list_categories(opts)
   end
 
   @doc """
   Returns a map of category_uuid => product_count for all categories.
   """
   def product_counts_by_category do
-    Product
-    |> where([p], not is_nil(p.category_uuid))
-    |> group_by([p], p.category_uuid)
-    |> select([p], {p.category_uuid, count(p.uuid)})
-    |> repo().all()
-    |> Map.new()
-  rescue
-    e ->
-      Logger.warning("Failed to load product counts by category: #{inspect(e)}")
-      %{}
+    ProductSource.current().product_counts_by_category()
   end
 
   @doc """
@@ -1282,46 +1436,34 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Lists categories with count for pagination.
+
+  Reads through `list_categories/1` (the same `ProductSource.current/0`
+  dispatch every other category read goes through) rather than querying
+  `Category` directly — under the catalogue source, listing here and
+  row resolution (`get_category!/2`) must come from the same adapter, or
+  a listed row's uuid resolves to nothing on the next click.
   """
   def list_categories_with_count(opts \\ []) do
     page = Keyword.get(opts, :page, 1)
     per_page = Keyword.get(opts, :per_page, 25)
-    offset = (page - 1) * per_page
 
-    base_query =
-      Category
-      |> apply_category_filters(opts)
+    categories = list_categories(opts)
+    total = length(categories)
 
-    total = repo().aggregate(base_query, :count)
+    paged =
+      categories
+      |> Enum.drop((page - 1) * per_page)
+      |> Enum.take(per_page)
 
-    categories =
-      base_query
-      |> order_by([c], [c.position, c.name])
-      |> limit(^per_page)
-      |> offset(^offset)
-      |> maybe_preload(Keyword.get(opts, :preload))
-      |> repo().all()
-
-    {categories, total}
+    {paged, total}
   end
 
   @doc """
   Gets a category by ID or UUID.
   """
-  def get_category(id, opts \\ [])
-
-  def get_category(id, opts) when is_binary(id) do
-    if UUIDUtils.valid?(id) do
-      Category
-      |> where([c], c.uuid == ^id)
-      |> maybe_preload(Keyword.get(opts, :preload))
-      |> repo().one()
-    else
-      nil
-    end
+  def get_category(id, opts \\ []) do
+    ProductSource.current().get_category(id, opts)
   end
-
-  def get_category(_, _opts), do: nil
 
   @doc """
   Gets a category by ID or UUID, raises if not found.
@@ -1363,8 +1505,19 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Creates a new category.
+
+  Refuses while the catalogue source is active — same reason
+  `create_product/1` does.
   """
   def create_category(attrs) do
+    if catalogue_source_active?() do
+      {:error, :read_only_view}
+    else
+      do_create_category(attrs)
+    end
+  end
+
+  defp do_create_category(attrs) do
     result =
       %Category{}
       |> Category.changeset(attrs)
@@ -1382,7 +1535,14 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Updates a category.
+
+  Refuses a view-struct (`__meta__.state == :built`, never `:loaded`) —
+  same reason `update_product/2` does.
   """
+  def update_category(%Category{__meta__: %Ecto.Schema.Metadata{state: :built}}, _attrs) do
+    {:error, :read_only_view}
+  end
+
   def update_category(%Category{} = category, attrs) do
     result =
       category
@@ -1411,7 +1571,14 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Deletes a category.
+
+  Refuses a view-struct (`__meta__.state == :built`) for the same
+  reason `update_category/2` does.
   """
+  def delete_category(%Category{__meta__: %Ecto.Schema.Metadata{state: :built}}) do
+    {:error, :read_only_view}
+  end
+
   def delete_category(%Category{} = category) do
     category_uuid = category.uuid
 
@@ -1434,28 +1601,42 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Bulk update category status.
-  Returns count of updated categories.
+  Returns count of updated categories. `0` while the catalogue source is
+  active — see `bulk_update_product_status/2`.
   """
   def bulk_update_category_status(ids, status) when is_list(ids) and is_binary(status) do
-    query = Category |> where([c], c.uuid in ^ids)
+    if catalogue_source_active?() do
+      0
+    else
+      query = Category |> where([c], c.uuid in ^ids)
 
-    {count, _} =
-      query
-      |> repo().update_all(set: [status: status, updated_at: UtilsDate.utc_now()])
+      {count, _} =
+        query
+        |> repo().update_all(set: [status: status, updated_at: UtilsDate.utc_now()])
 
-    if count > 0 do
-      Events.broadcast_categories_bulk_status_changed(ids, status)
+      if count > 0 do
+        Events.broadcast_categories_bulk_status_changed(ids, status)
+      end
+
+      count
     end
-
-    count
   end
 
   @doc """
   Bulk update category parent.
   Returns count of updated categories. Excludes the target parent from the update set
   to prevent self-reference. Uses a single UPDATE with subquery to resolve parent_uuid.
+  `0` while the catalogue source is active — see `bulk_update_product_status/2`.
   """
   def bulk_update_category_parent(ids, parent_uuid) when is_list(ids) do
+    if catalogue_source_active?() do
+      0
+    else
+      do_bulk_update_category_parent(ids, parent_uuid)
+    end
+  end
+
+  defp do_bulk_update_category_parent(ids, parent_uuid) do
     # Exclude the target parent and its ancestors from update set to prevent cycles
     ids_to_update =
       if parent_uuid do
@@ -1508,8 +1689,17 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Bulk delete categories.
   Returns count of deleted categories. Nullifies category references on orphaned products.
+  `0` while the catalogue source is active — see `bulk_update_product_status/2`.
   """
   def bulk_delete_categories(ids) when is_list(ids) do
+    if catalogue_source_active?() do
+      0
+    else
+      do_bulk_delete_categories(ids)
+    end
+  end
+
+  defp do_bulk_delete_categories(ids) do
     # Nullify category references on products to prevent orphans
     orphan_query = Product |> where([p], p.category_uuid in ^ids)
 
@@ -1550,7 +1740,16 @@ defmodule PhoenixKitEcommerce do
   If the category has no image_uuid and no featured_product_uuid, auto-detects the
   first active product with an image and saves it. Returns the (possibly updated)
   category with :featured_product preloaded.
+
+  A view-struct (`__meta__.state == :built`) is returned unchanged — this
+  function computes a value to write, and a view-struct has nowhere to
+  write it (`update_category/2` refuses it); read-only here means
+  read-only, not "raise".
   """
+  def ensure_featured_product(%Category{__meta__: %Ecto.Schema.Metadata{state: :built}} = cat) do
+    cat
+  end
+
   def ensure_featured_product(
         %Category{featured_product_uuid: nil, image_uuid: nil, uuid: cat_uuid} = cat
       ) do
@@ -2185,16 +2384,77 @@ defmodule PhoenixKitEcommerce do
     :ok
   end
 
+  # Row-locks the product before pricing/inserting the cart line, so a
+  # concurrent price/status edit cannot race the add.
+  #
+  # A catalogue-backed product is a view-struct (`__meta__.state == :built`)
+  # with no row in `phoenix_kit_shop_products` — the plain
+  # `Product |> where(uuid: ...) |> lock(...) |> repo().one!()` below would
+  # raise `Ecto.NoResultsError` for every one of them, and there is no
+  # FOR-UPDATE-capable read of a catalogue item exposed to this module to
+  # lock instead. This is therefore a fresh READ, not a lock — a
+  # concurrent write can still race it — but it does re-fetch through
+  # `ProductSource.current/0` rather than trusting the struct the product
+  # page mounted with, so an archive/reprice since mount is seen;
+  # `validate_locked_product_purchasable!/2` right after this then refuses
+  # one that is no longer active. A product deleted/archived since is
+  # treated as unavailable rather than falling back to the stale struct.
+  #
+  # `language` is threaded into the catalogue reload because the SAME
+  # attribute-set value renders under a different label per language
+  # (`View.product_view/2`'s `:language` opt) — `_option_values` and
+  # `_price_modifiers` on the reloaded product must key on whatever label
+  # the shopper's page (and `selected_specs`) used, or a priced option
+  # picked on `/fr/...` reloads with English modifier keys, matches
+  # nothing in `calculate_product_price/2`, and the line is inserted at
+  # the base price while the page showed base+modifier.
+  defp lock_or_reload_product(
+         %Product{__meta__: %Ecto.Schema.Metadata{state: :built}} = product,
+         language
+       ) do
+    case ProductSource.current().get_product(product.uuid, language: language) do
+      %Product{} = fresh -> fresh
+      nil -> %{product | status: "archived"}
+    end
+  end
+
+  defp lock_or_reload_product(%Product{} = product, _language) do
+    Product
+    |> where([p], p.uuid == ^product.uuid)
+    |> lock("FOR UPDATE")
+    |> repo().one!()
+  end
+
+  # The identity a cart line is matched/deduplicated on: the real
+  # `product_uuid` for a legacy product, or the catalogue item's uuid
+  # (carried in `metadata["catalogue_item_uuid"]`, never in the nil
+  # `product_uuid` column) for a view-struct one.
+  defp product_lookup_key(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}, uuid: uuid}) do
+    {:catalogue_item_uuid, uuid}
+  end
+
+  defp product_lookup_key(%Product{uuid: uuid}), do: {:product_uuid, uuid}
+
+  # Same identity, read off an EXISTING cart row (guest-cart merge on
+  # login) instead of a live `%Product{}` — a catalogue-backed row has no
+  # `product_uuid` to fall back to, only the metadata snapshot.
+  defp cart_item_lookup_key(%CartItem{product_uuid: uuid}) when is_binary(uuid) do
+    {:product_uuid, uuid}
+  end
+
+  defp cart_item_lookup_key(%CartItem{metadata: metadata}) do
+    case metadata do
+      %{"catalogue_item_uuid" => uuid} when is_binary(uuid) -> {:catalogue_item_uuid, uuid}
+      _ -> {:product_uuid, nil}
+    end
+  end
+
   defp add_simple_product_to_cart(cart, product, quantity, language) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
         # This ensures price snapshot is consistent with current product state
-        locked_product =
-          Product
-          |> where([p], p.uuid == ^product.uuid)
-          |> lock("FOR UPDATE")
-          |> repo().one!()
+        locked_product = lock_or_reload_product(product, language)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
@@ -2203,7 +2463,7 @@ defmodule PhoenixKitEcommerce do
         calculated_price = calculate_product_price(locked_product, %{})
 
         # Check if product already in cart (without specs)
-        existing = find_cart_item_by_specs(cart.uuid, product.uuid, %{})
+        existing = find_cart_item_by_specs(cart.uuid, product_lookup_key(locked_product), %{})
 
         item =
           case existing do
@@ -2217,6 +2477,7 @@ defmodule PhoenixKitEcommerce do
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
                 |> Map.put(:base_unit_price, calculated_price)
+                |> Map.update!(:compare_at_price, &(&1 && snapshot_unit_price(cart, &1)))
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
 
@@ -2287,11 +2548,7 @@ defmodule PhoenixKitEcommerce do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price/metadata changes during cart update
-        locked_product =
-          Product
-          |> where([p], p.uuid == ^product.uuid)
-          |> lock("FOR UPDATE")
-          |> repo().one!()
+        locked_product = lock_or_reload_product(product, language)
 
         validate_locked_product_purchasable!(repo(), locked_product)
 
@@ -2299,7 +2556,8 @@ defmodule PhoenixKitEcommerce do
         calculated_price = calculate_product_price(locked_product, selected_specs)
 
         # Check if same product with same specs already in cart
-        existing = find_cart_item_by_specs(cart.uuid, product.uuid, selected_specs)
+        existing =
+          find_cart_item_by_specs(cart.uuid, product_lookup_key(locked_product), selected_specs)
 
         item =
           case existing do
@@ -2313,6 +2571,7 @@ defmodule PhoenixKitEcommerce do
                 |> Map.put(:cart_uuid, cart.uuid)
                 |> Map.put(:unit_price, snapshot_unit_price(cart, calculated_price))
                 |> Map.put(:base_unit_price, calculated_price)
+                |> Map.update!(:compare_at_price, &(&1 && snapshot_unit_price(cart, &1)))
                 |> Map.put(:selected_specs, selected_specs)
 
               %CartItem{} |> CartItem.changeset(attrs) |> repo().insert!()
@@ -2336,6 +2595,112 @@ defmodule PhoenixKitEcommerce do
 
       error ->
         error
+    end
+  end
+
+  @doc """
+  Re-freezes a cart's exchange rate at the currency table's CURRENT rate
+  and re-snapshots every line at that new rate (§4.4) — the ONLY path
+  that changes a non-empty cart's `exchange_rate`. A plain add/update
+  never touches it (§12.2, `snapshot_unit_price/2`); this is the
+  shopper's own EXPLICIT choice, offered by the checkout drift notice
+  (`cart_rate_drift/1`) and never triggered automatically.
+
+  Each line's `unit_price` is re-derived from its `base_unit_price`
+  through the same `snapshot_unit_price/2` an add-to-cart uses
+  (§12.1/§12.2), so a refreshed line is indistinguishable from one added
+  fresh at the new rate. `compare_at_price` is NOT a base amount like
+  `base_unit_price` — add-to-cart freezes it forward into the cart's
+  currency at the SAME time as `unit_price` (§4.3.1) — so repricing it
+  must first invert it back to base with `to_base/2` against the OLD
+  (pre-reprice) cart, then reconvert with `snapshot_unit_price/2` at the
+  new rate — the same to-base-and-back shape `calculate_shipping/3` uses
+  for a base-currency threshold, just without the `from_base/2` half
+  (that inverse belongs to `snapshot_unit_price/2` here, since a line's
+  target IS the cart's own currency). Skipping the inversion and
+  reconverting the already-converted figure directly would
+  double-convert it.
+
+  Runs in one transaction: `{:error, :no_base_price}` (rolled back, no
+  partial reprice) if any line predates `base_unit_price` and has
+  nothing to re-derive from. `{:error, :currency_unavailable}` — checked
+  up front, same fail-safe boundary as `cart_rate_drift/1` — if the
+  cart's currency is no longer usable (unknown, disabled, or a
+  non-positive rate).
+  """
+  @spec refresh_cart_rate(Cart.t()) ::
+          {:ok, Cart.t()} | {:error, :currency_unavailable | :no_base_price}
+  def refresh_cart_rate(%Cart{} = cart) do
+    with %Currency{enabled: true, exchange_rate: rate} = target <-
+           Billing.get_currency_by_code(cart.currency),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      do_refresh_cart_rate(cart, Currency.effective_rate(target, base))
+    else
+      _ -> {:error, :currency_unavailable}
+    end
+  end
+
+  defp do_refresh_cart_rate(%Cart{} = cart, new_rate) do
+    result =
+      repo().transaction(fn ->
+        items = CartItem |> where([i], i.cart_uuid == ^cart.uuid) |> repo().all()
+
+        if Enum.any?(items, &is_nil(&1.base_unit_price)) do
+          repo().rollback(:no_base_price)
+        end
+
+        # A struct copy only, never persisted itself — it exists so
+        # `snapshot_unit_price/2` sees the NEW rate while every line is
+        # re-derived, before the cart row itself is written below.
+        repriced = %{cart | exchange_rate: new_rate}
+
+        Enum.each(items, fn item ->
+          # Unlike `unit_price`, `compare_at_price` is NOT re-derived from a
+          # base column — add-to-cart freezes it forward into the cart's
+          # currency at the same time as `unit_price` (§4.3.1), so what is
+          # stored here is a DISPLAY-frame amount at the OLD rate. Invert it
+          # back to base against the OLD `cart` first, then reconvert at
+          # the new rate through the same `snapshot_unit_price/2` every
+          # other frozen amount uses — reconverting it directly would
+          # double-convert an already-converted figure.
+          #
+          # There is no `base_compare_at_price` column to re-derive from
+          # exactly (that would need a migration, deliberately deferred —
+          # the owner's call, not worth it for a crossed-out price), so
+          # `to_base/2`'s 2-decimal rounding makes this round trip lossy:
+          # a reprice CAN drift the displayed "was" price by a cent or
+          # two against a fresh conversion from the product's own base
+          # compare-at — pinned, with exact numbers, by `CartFxDriftTest`'s
+          # "a single reprice on a lossy pair of rates" test (0.615 ->
+          # 1.13 loses a cent); the drift-free common case is pinned
+          # separately by its "two consecutive reprices on a drift-free
+          # pair of rates" test. `unit_price` above has no such error —
+          # it always re-derives from the exact `base_unit_price` — so
+          # this never touches what is actually charged or totalled.
+          attrs = %{
+            unit_price: snapshot_unit_price(repriced, item.base_unit_price),
+            compare_at_price:
+              item.compare_at_price &&
+                snapshot_unit_price(repriced, to_base(cart, item.compare_at_price))
+          }
+
+          item |> CartItem.changeset(attrs) |> repo().update!()
+        end)
+
+        cart
+        |> Cart.totals_changeset(%{exchange_rate: new_rate})
+        |> repo().update!()
+        |> recalculate_cart_totals!()
+      end)
+
+    case result do
+      {:ok, updated_cart} ->
+        Events.broadcast_cart_updated(updated_cart)
+        {:ok, updated_cart}
+
+      {:error, :no_base_price} ->
+        {:error, :no_base_price}
     end
   end
 
@@ -2790,7 +3155,11 @@ defmodule PhoenixKitEcommerce do
 
   defp merge_cart_item(user_cart, item) do
     existing =
-      find_cart_item_by_specs(user_cart.uuid, item.product_uuid, item.selected_specs || %{})
+      find_cart_item_by_specs(
+        user_cart.uuid,
+        cart_item_lookup_key(item),
+        item.selected_specs || %{}
+      )
 
     case existing do
       nil ->
@@ -3161,25 +3530,67 @@ defmodule PhoenixKitEcommerce do
   # races a concurrent archive between validation and order creation. A line
   # whose product row is gone (or was detached by ON DELETE SET NULL) is not
   # sellable either.
+  #
+  # A catalogue-backed line has `product_uuid: nil` by design (see
+  # `CartItem.from_product/3`), so it is resolved by
+  # `metadata["catalogue_item_uuid"]` through the current `ProductSource`
+  # instead of the `phoenix_kit_shop_products` row lock — there is no
+  # FOR-UPDATE-capable read of a catalogue item exposed to this module, so
+  # this half of the check is a plain (unlocked) re-read, not a lock. A line
+  # with neither a `product_uuid` nor a resolvable `catalogue_item_uuid` is
+  # treated the same as before: not available.
   defp validate_line_products_active(%Cart{items: items}) do
-    uuids = items |> Enum.map(& &1.product_uuid) |> Enum.reject(&is_nil/1)
+    {legacy_uuids, catalogue_uuids, unresolved} = partition_cart_item_products(items)
 
-    if length(uuids) < length(items) do
-      {:error, :product_not_available}
-    else
-      active =
-        Product
-        |> where([p], p.uuid in ^uuids and p.status == "active")
-        |> lock("FOR UPDATE")
-        |> select([p], p.uuid)
-        |> repo().all()
-
-      if length(active) == length(Enum.uniq(uuids)) do
-        :ok
-      else
-        {:error, :product_not_available}
-      end
+    with :ok <- validate_legacy_products_active(legacy_uuids),
+         :ok <- validate_catalogue_products_active(catalogue_uuids) do
+      if unresolved == [], do: :ok, else: {:error, :product_not_available}
     end
+  end
+
+  defp partition_cart_item_products(items) do
+    Enum.reduce(items, {[], [], []}, fn item, {legacy, catalogue, unresolved} ->
+      cond do
+        is_binary(item.product_uuid) ->
+          {[item.product_uuid | legacy], catalogue, unresolved}
+
+        is_binary((item.metadata || %{})["catalogue_item_uuid"]) ->
+          {legacy, [item.metadata["catalogue_item_uuid"] | catalogue], unresolved}
+
+        true ->
+          {legacy, catalogue, [item | unresolved]}
+      end
+    end)
+  end
+
+  defp validate_legacy_products_active([]), do: :ok
+
+  defp validate_legacy_products_active(uuids) do
+    active =
+      Product
+      |> where([p], p.uuid in ^uuids and p.status == "active")
+      |> lock("FOR UPDATE")
+      |> select([p], p.uuid)
+      |> repo().all()
+
+    if length(active) == length(Enum.uniq(uuids)) do
+      :ok
+    else
+      {:error, :product_not_available}
+    end
+  end
+
+  defp validate_catalogue_products_active([]), do: :ok
+
+  defp validate_catalogue_products_active(uuids) do
+    all_active? =
+      uuids
+      |> Enum.uniq()
+      |> Enum.all?(fn uuid ->
+        match?(%Product{status: "active"}, get_product(uuid, []))
+      end)
+
+    if all_active?, do: :ok, else: {:error, :product_not_available}
   end
 
   # The selected payment option must still exist, be active, and have its
@@ -3373,6 +3784,8 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp build_product_line_item(item) do
+    metadata = item.metadata || %{}
+
     %{
       "name" => item.product_title,
       "description" => format_item_description(item),
@@ -3388,17 +3801,24 @@ defmodule PhoenixKitEcommerce do
       "base_unit_price" => item.base_unit_price && Decimal.to_string(item.base_unit_price),
       "sku" => item.product_sku,
       "type" => "product",
+      # Carries the catalogue item identity forward past the cart row
+      # (whose own `product_uuid` is nil for a catalogue-backed line —
+      # see `CartItem.from_product/3`) so the order snapshot can still
+      # be traced back to the item it was sold from. nil for a legacy
+      # line, matching the absent key on rows created before this
+      # shipped.
+      "catalogue_item_uuid" => metadata["catalogue_item_uuid"],
       # Carried so invoices and the confirmation page can render the
       # unit the customer saw. Rides billing's existing line-item JSONB;
       # first-class linkage is a billing-side change.
-      "price_unit" => (item.metadata || %{})["price_unit"],
+      "price_unit" => metadata["price_unit"],
       # Carried for the same reason and with more at stake: without it the
       # order confirmation and order-details pages fall back to formatting
       # `total`, which for an on-request service is 0 — so a line the
       # customer agreed as "Price on request" reads "0.00" on a COMMITTED
       # order. The cart line snapshots this; the conversion has to forward it
       # or the snapshot dies at the cart/order boundary.
-      "price_on_request" => (item.metadata || %{})["price_on_request"] == true
+      "price_on_request" => metadata["price_on_request"] == true
     }
   end
 
@@ -3729,6 +4149,512 @@ defmodule PhoenixKitEcommerce do
   end
 
   # ============================================
+  # BASE CURRENCY CHANGE (§4.9 steps 2-4)
+  # ============================================
+
+  @doc """
+  Reprices the catalog after a base-currency change (spec §4.9, steps 2-4).
+
+  This is the `:reprice` callback `PhoenixKitBilling.change_base_currency/2`
+  invokes — see that function's moduledoc for the full contract. In short:
+  it runs strictly INSIDE billing's own transaction, AFTER every currency
+  rate has already been renormalized and BEFORE the new base is promoted,
+  so it must NEVER open a transaction of its own — every `repo()` call it
+  makes joins the caller's transaction automatically (both packages resolve
+  `PhoenixKit.RepoHelper.repo()` to the same host repo). Returning
+  `{:error, _}` here rolls back the ENTIRE base-currency change, including
+  the rate renormalization — the catalog and the currency table can never
+  end up disagreeing about which currency is base.
+
+  `multiplier` is the new base currency's PRE-operation exchange rate
+  (billing hands it over explicitly because it stops being derivable from
+  the currency table the moment renormalization has run). Every stored
+  FIXED authoring amount is multiplied by it and rounded to
+  `new_base_code`'s `decimal_places` — nothing else. This is arithmetic on
+  stored prices, not a display conversion: `Currency.present/3` and
+  `rounding_rule` (§5) never enter here (§4.9's third consequence).
+
+  Touches, regardless of a product's own currency:
+
+    - `products.price`, `.compare_at_price`, `.cost_per_item`, `.currency`
+      (set to `new_base_code` — §4.6: the field means "the currency the
+      stored price is in")
+    - the global option schema's and every category's option schema's
+      FIXED `price_modifiers` entries (percent entries are currency-free
+      and are left untouched)
+    - a product's own `metadata["_price_modifiers"]` overrides whose
+      EFFECTIVE type — its own explicit override type if given, else the
+      schema option's `modifier_type` — is fixed
+    - `shipping_methods.price`, `.free_above_amount`, `.min_order_amount`,
+      `.max_order_amount`
+
+  GUARDED HAZARD: writing a product's overrides goes through
+  `update_product/2`, whose `MetadataValidator.normalize_product_attrs/1`
+  collapses an explicit `%{"type" => ..., "value" => ...}` override to a
+  bare string on ANY save, this one included — so a product whose
+  override type disagrees with its option schema's default would
+  silently have that override's type reverted, an operation where an
+  operator has the least reason to expect unrelated data to move. Rather
+  than let that happen silently, this function scans every product's
+  overrides BEFORE any write and refuses the ENTIRE operation with
+  `{:error, {:ambiguous_modifier_overrides, mismatches}}` — `mismatches`
+  a list of `%{product_uuid:, option_key:, stored_type:, schema_type:}`
+  — if any explicit override's own type disagrees with its option's
+  schema default. An explicit override whose type AGREES with the
+  schema default is harmless (the normalizer's collapse is lossless
+  there) and does not refuse. See `MetadataValidator.normalize_product_attrs/1`
+  for the underlying behavior this guards against.
+
+  Never touches carts or orders (§4.9 step 6) — they carry their own
+  frozen `currency`/`exchange_rate` (§4.4, §4.5), which is the entire
+  point of freezing them; this function does not reference either schema.
+
+  ## Product source scope — READ BEFORE EXTENDING
+
+  This function reprices the LEGACY `PhoenixKitEcommerce.Product` store
+  ONLY. This checkout's `lib/` tree carries no `PhoenixKitEcommerce.ProductSource`
+  module and no `phoenix_kit_catalogue` dependency at all — that adapter
+  layer exists only on a separate, not-yet-merged branch — so there is
+  nothing else here to reprice.
+
+  A build where the catalogue product source IS present is a different
+  situation: silently repricing shipping and option modifiers while every
+  catalogue item's stored price stays in the old base currency is exactly
+  the silent shop-wide mispricing §4.9 exists to prevent, made worse by
+  looking like a working reprice because the counts come back non-zero.
+  To make that impossible rather than merely undocumented, this function
+  checks for `PhoenixKitEcommerce.ProductSource` at runtime (via
+  `Code.ensure_loaded?/1` and a dynamic dispatch — no compile-time
+  reference to a module this branch does not have) and REFUSES with
+  `{:error, {:unsupported_product_source, current}}` when a source other
+  than `Legacy` is active, instead of silently doing a partial job.
+
+  Whoever wires the catalogue source in must EXTEND this function with an
+  equivalent pass over the catalogue item's stored price column and its
+  `data["ecommerce"]` fields (`compare_at_price`, `cost_per_item`,
+  `currency`, `price_modifiers`) — through
+  `PhoenixKitCatalogue.Catalogue.update_item/3`, not a second, parallel
+  `reprice_for_base_change`-like function. `:reprice` is one callback;
+  billing does not know or care which product source is active, and must
+  never have to.
+
+  Returns `{:ok, %{products: n, shipping_methods: n, global_modifiers: n,
+  category_modifiers: n, product_modifiers: n}}` on success. The modifier
+  counts are broken out per store — rather than a single total — because
+  the admin confirmation screen (§4.9's first required consequence) has
+  to show an operator the blast radius of what they are about to commit
+  to, and "N modifiers" alone does not: "3 global, 12 category, 32
+  product" does. Each count is the number of individual FIXED
+  price-modifier VALUES touched in that store; percent entries are never
+  counted because they are never touched. Returns `{:error, term}` on the
+  first failure encountered — including `{:error, {:unsupported_product_source, _}}`
+  from the product-source check and `{:error, {:ambiguous_modifier_overrides, _}}`
+  from the pre-flight override scan, both above, both raised before any
+  write happens.
+  """
+  @spec reprice_for_base_change(String.t(), String.t(), Decimal.t()) ::
+          {:ok,
+           %{
+             products: non_neg_integer(),
+             shipping_methods: non_neg_integer(),
+             global_modifiers: non_neg_integer(),
+             category_modifiers: non_neg_integer(),
+             product_modifiers: non_neg_integer()
+           }}
+          | {:error, term()}
+  def reprice_for_base_change(old_base_code, new_base_code, %Decimal{} = multiplier)
+      when is_binary(old_base_code) and is_binary(new_base_code) do
+    case reject_unsupported_product_source() do
+      :ok -> do_reprice_for_base_change(new_base_code, multiplier)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp do_reprice_for_base_change(new_base_code, multiplier) do
+    products = repo().all(Product)
+
+    with :ok <- reject_ambiguous_modifier_overrides(products),
+         {:ok, decimal_places} <- fetch_currency_decimal_places(new_base_code),
+         {:ok, product_count, product_modifiers} <-
+           reprice_products_for_base_change(products, new_base_code, multiplier, decimal_places),
+         {:ok, global_modifiers} <-
+           reprice_global_options_for_base_change(multiplier, decimal_places),
+         {:ok, category_modifiers} <-
+           reprice_category_options_for_base_change(multiplier, decimal_places),
+         {:ok, shipping_methods} <-
+           reprice_shipping_methods_for_base_change(multiplier, decimal_places) do
+      {:ok,
+       %{
+         products: product_count,
+         shipping_methods: shipping_methods,
+         global_modifiers: global_modifiers,
+         category_modifiers: category_modifiers,
+         product_modifiers: product_modifiers
+       }}
+    end
+  end
+
+  # Pre-flight, before any write: refuses the WHOLE operation if any
+  # product's override is stored in the explicit `%{"type" => ...,
+  # "value" => ...}` format with a type that disagrees with its option's
+  # schema default — see the moduledoc's "GUARDED HAZARD" paragraph for
+  # why. Reuses `override_effective_type_and_amount/2` rather than a
+  # second parser: that function's contract already guarantees its
+  # returned type can differ from the schema default ONLY when the
+  # override carried an explicit, disagreeing `"type"` of its own — a
+  # bare-string or type-less override always echoes the schema default
+  # back unchanged (see that function's clauses).
+  defp reject_ambiguous_modifier_overrides(products) do
+    case Enum.flat_map(products, &product_modifier_mismatches/1) do
+      [] -> :ok
+      mismatches -> {:error, {:ambiguous_modifier_overrides, mismatches}}
+    end
+  end
+
+  defp product_modifier_mismatches(product) do
+    overrides = get_in(product.metadata || %{}, ["_price_modifiers"]) || %{}
+
+    if overrides == %{} do
+      []
+    else
+      schema_by_key = product_option_schema_by_key(product)
+
+      Enum.flat_map(overrides, fn {key, values} ->
+        option_modifier_mismatches(product.uuid, key, values, Map.get(schema_by_key, key))
+      end)
+    end
+  end
+
+  defp option_modifier_mismatches(product_uuid, key, values, schema_type) when is_map(values) do
+    Enum.reduce(values, [], fn {_value, modifier}, acc ->
+      accumulate_modifier_mismatch(acc, product_uuid, key, modifier, schema_type)
+    end)
+  end
+
+  defp option_modifier_mismatches(_product_uuid, _key, _values, _schema_type), do: []
+
+  defp accumulate_modifier_mismatch(acc, product_uuid, key, modifier, schema_type) do
+    case override_effective_type_and_amount(modifier, schema_type) do
+      {stored_type, amount}
+      when not is_nil(schema_type) and not is_nil(amount) and stored_type != schema_type ->
+        mismatch = %{
+          product_uuid: product_uuid,
+          option_key: key,
+          stored_type: stored_type,
+          schema_type: schema_type
+        }
+
+        [mismatch | acc]
+
+      _ ->
+        acc
+    end
+  end
+
+  # No compile-time reference to `PhoenixKitEcommerce.ProductSource` —
+  # built entirely from atoms via `Module.concat/2` and dispatched
+  # dynamically (`product_source.current()`, a runtime call because the
+  # receiver is a variable, not a literal alias) — because that module
+  # does not exist anywhere in this checkout's compiled tree (see the
+  # moduledoc's "Product source scope").
+  # `Code.ensure_loaded?/1` is the same pattern this file already uses
+  # elsewhere to call into a module without a hard compile-time reference
+  # to it (`billing_tax_enabled?/0` and friends, further down).
+  defp reject_unsupported_product_source do
+    product_source = Module.concat(PhoenixKitEcommerce, ProductSource)
+
+    if Code.ensure_loaded?(product_source) do
+      legacy = Module.concat(product_source, Legacy)
+      current = product_source.current()
+
+      if current == legacy do
+        :ok
+      else
+        {:error, {:unsupported_product_source, current}}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp fetch_currency_decimal_places(code) do
+    case repo().get_by(Currency, code: code) do
+      %Currency{decimal_places: places} -> {:ok, places}
+      nil -> {:error, {:unknown_currency, code}}
+    end
+  end
+
+  defp reprice_amount(nil, _multiplier, _decimal_places), do: nil
+
+  defp reprice_amount(%Decimal{} = amount, multiplier, decimal_places) do
+    amount
+    |> Decimal.mult(multiplier)
+    |> Decimal.round(decimal_places)
+  end
+
+  defp maybe_put_repriced(attrs, _field, nil, _multiplier, _decimal_places), do: attrs
+
+  defp maybe_put_repriced(attrs, field, %Decimal{} = amount, multiplier, decimal_places) do
+    Map.put(attrs, field, reprice_amount(amount, multiplier, decimal_places))
+  end
+
+  # Reprices a FIXED modifier's stored decimal string. Non-numeric or
+  # empty values are left untouched rather than raising — a malformed
+  # stored value is a pre-existing data problem this operation should not
+  # newly fail on.
+  defp reprice_modifier_string(amount_str, multiplier, decimal_places) do
+    case Decimal.parse(amount_str) do
+      {decimal, ""} ->
+        new_amount =
+          decimal
+          |> Decimal.mult(multiplier)
+          |> Decimal.round(decimal_places)
+
+        {:ok, Decimal.to_string(new_amount)}
+
+      _ ->
+        :skip
+    end
+  end
+
+  # ---- Products ----
+
+  defp reprice_products_for_base_change(products, new_base_code, multiplier, decimal_places) do
+    Enum.reduce_while(products, {:ok, 0, 0}, fn product, {:ok, products, modifiers} ->
+      {new_metadata, changed} = reprice_product_overrides(product, multiplier, decimal_places)
+
+      attrs =
+        %{"currency" => new_base_code}
+        |> Map.put("price", reprice_amount(product.price, multiplier, decimal_places))
+        |> maybe_put_repriced(
+          "compare_at_price",
+          product.compare_at_price,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced("cost_per_item", product.cost_per_item, multiplier, decimal_places)
+        |> maybe_put_metadata(changed, new_metadata)
+
+      case update_product(product, attrs) do
+        {:ok, _updated} -> {:cont, {:ok, products + 1, modifiers + changed}}
+        {:error, reason} -> {:halt, {:error, {:product_reprice_failed, product.uuid, reason}}}
+      end
+    end)
+  end
+
+  defp maybe_put_metadata(attrs, 0, _new_metadata), do: attrs
+
+  defp maybe_put_metadata(attrs, _changed, new_metadata),
+    do: Map.put(attrs, "metadata", new_metadata)
+
+  # Reprices a product's own `metadata["_price_modifiers"]` overrides
+  # (options/options.ex) whose EFFECTIVE type is fixed. An override may be
+  # a bare decimal string (inherits the option's own `modifier_type`) or a
+  # `%{"type" => ..., "value" => ...}` map (explicit override type) —
+  # `options/options.ex`'s `get_effective_modifier_info/3` uses the same
+  # precedence to decide what a shopper is charged.
+  defp reprice_product_overrides(product, multiplier, decimal_places) do
+    overrides = get_in(product.metadata || %{}, ["_price_modifiers"]) || %{}
+
+    if overrides == %{} do
+      {product.metadata, 0}
+    else
+      schema_by_key = product_option_schema_by_key(product)
+
+      {new_overrides, count} =
+        Enum.reduce(overrides, {%{}, 0}, fn {key, values}, {acc, count} ->
+          default_type = Map.get(schema_by_key, key)
+
+          {new_values, changed} =
+            reprice_override_values(values, default_type, multiplier, decimal_places)
+
+          {Map.put(acc, key, new_values), count + changed}
+        end)
+
+      {Map.put(product.metadata, "_price_modifiers", new_overrides), count}
+    end
+  end
+
+  # Shared by the reprice pass and the pre-flight ambiguous-override scan
+  # — both need "what modifier_type does the merged (global + category)
+  # option schema declare for this product's option key", keyed for O(1)
+  # lookup per override key.
+  defp product_option_schema_by_key(product) do
+    product
+    |> Options.get_option_schema_for_product()
+    |> Map.new(fn opt -> {opt["key"], opt["modifier_type"]} end)
+  end
+
+  defp reprice_override_values(values, default_type, multiplier, decimal_places)
+       when is_map(values) do
+    Enum.reduce(values, {%{}, 0}, fn {value, modifier}, {acc, count} ->
+      reprice_one_override_value(
+        {acc, count},
+        value,
+        modifier,
+        override_effective_type_and_amount(modifier, default_type),
+        multiplier,
+        decimal_places
+      )
+    end)
+  end
+
+  defp reprice_override_values(values, _default_type, _multiplier, _decimal_places),
+    do: {values, 0}
+
+  defp reprice_one_override_value(
+         {acc, count},
+         value,
+         modifier,
+         {"fixed", amount_str},
+         multiplier,
+         decimal_places
+       ) do
+    case reprice_modifier_string(amount_str, multiplier, decimal_places) do
+      {:ok, new_amount} -> {Map.put(acc, value, new_amount), count + 1}
+      :skip -> {Map.put(acc, value, modifier), count}
+    end
+  end
+
+  defp reprice_one_override_value(
+         {acc, count},
+         value,
+         modifier,
+         _not_fixed,
+         _multiplier,
+         _decimal_places
+       ) do
+    {Map.put(acc, value, modifier), count}
+  end
+
+  # Mirrors the precedence `options/options.ex`'s private
+  # `get_override_info/2` + `parse_modifier_value/1` use: an explicit
+  # `"type"` on the override wins, otherwise the option schema's own
+  # `modifier_type` applies.
+  defp override_effective_type_and_amount(%{"type" => type, "value" => value}, default_type)
+       when is_binary(value) and value != "" do
+    {type || default_type, value}
+  end
+
+  defp override_effective_type_and_amount(%{"value" => value}, default_type)
+       when is_binary(value) and value != "" do
+    {default_type, value}
+  end
+
+  defp override_effective_type_and_amount(value, default_type)
+       when is_binary(value) and value != "" do
+    {default_type, value}
+  end
+
+  defp override_effective_type_and_amount(_modifier, _default_type), do: {nil, nil}
+
+  # ---- Option schemas (global + category) ----
+
+  defp reprice_global_options_for_base_change(multiplier, decimal_places) do
+    case Options.get_global_options() do
+      [] ->
+        {:ok, 0}
+
+      options ->
+        {new_options, count} = reprice_option_definitions(options, multiplier, decimal_places)
+
+        case Options.update_global_options(new_options) do
+          {:ok, _} -> {:ok, count}
+          {:error, reason} -> {:error, {:global_options_reprice_failed, reason}}
+        end
+    end
+  end
+
+  defp reprice_category_options_for_base_change(multiplier, decimal_places) do
+    Category
+    |> repo().all()
+    |> Enum.reduce_while({:ok, 0}, fn category, {:ok, count} ->
+      reprice_one_category(category, count, multiplier, decimal_places)
+    end)
+  end
+
+  defp reprice_one_category(%Category{option_schema: []}, count, _multiplier, _decimal_places) do
+    {:cont, {:ok, count}}
+  end
+
+  defp reprice_one_category(
+         %Category{option_schema: options} = category,
+         count,
+         multiplier,
+         decimal_places
+       ) do
+    {new_options, changed} = reprice_option_definitions(options, multiplier, decimal_places)
+
+    case Options.update_category_options(category, new_options) do
+      {:ok, _} ->
+        {:cont, {:ok, count + changed}}
+
+      {:error, reason} ->
+        {:halt, {:error, {:category_options_reprice_failed, category.uuid, reason}}}
+    end
+  end
+
+  defp reprice_option_definitions(options, multiplier, decimal_places) do
+    Enum.map_reduce(options, 0, fn opt, count ->
+      case opt do
+        %{"modifier_type" => "fixed", "price_modifiers" => modifiers} when is_map(modifiers) ->
+          {new_modifiers, changed} = reprice_modifier_map(modifiers, multiplier, decimal_places)
+          {Map.put(opt, "price_modifiers", new_modifiers), count + changed}
+
+        _ ->
+          {opt, count}
+      end
+    end)
+  end
+
+  defp reprice_modifier_map(modifiers, multiplier, decimal_places) do
+    Enum.reduce(modifiers, {%{}, 0}, fn {value, amount_str}, {acc, count} ->
+      case reprice_modifier_string(amount_str, multiplier, decimal_places) do
+        {:ok, new_amount} -> {Map.put(acc, value, new_amount), count + 1}
+        :skip -> {Map.put(acc, value, amount_str), count}
+      end
+    end)
+  end
+
+  # ---- Shipping methods ----
+
+  defp reprice_shipping_methods_for_base_change(multiplier, decimal_places) do
+    ShippingMethod
+    |> repo().all()
+    |> Enum.reduce_while({:ok, 0}, fn method, {:ok, count} ->
+      attrs =
+        %{}
+        |> Map.put("price", reprice_amount(method.price, multiplier, decimal_places))
+        |> maybe_put_repriced(
+          "free_above_amount",
+          method.free_above_amount,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced(
+          "min_order_amount",
+          method.min_order_amount,
+          multiplier,
+          decimal_places
+        )
+        |> maybe_put_repriced(
+          "max_order_amount",
+          method.max_order_amount,
+          multiplier,
+          decimal_places
+        )
+
+      case update_shipping_method(method, attrs) do
+        {:ok, _updated} ->
+          {:cont, {:ok, count + 1}}
+
+        {:error, reason} ->
+          {:halt, {:error, {:shipping_method_reprice_failed, method.uuid, reason}}}
+      end
+    end)
+  end
+
+  # ============================================
   # PRIVATE HELPERS
   # ============================================
 
@@ -3783,79 +4709,6 @@ defmodule PhoenixKitEcommerce do
     _ -> 0
   end
 
-  defp apply_product_filters(query, opts) do
-    query
-    |> filter_by_status(Keyword.get(opts, :status))
-    |> filter_by_product_type(Keyword.get(opts, :product_type))
-    |> filter_by_category(Keyword.get(opts, :category_uuid))
-    |> filter_by_product_search(Keyword.get(opts, :search))
-    |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
-    |> filter_by_price_range(Keyword.get(opts, :price_min), Keyword.get(opts, :price_max))
-    |> filter_by_vendors(Keyword.get(opts, :vendors))
-    |> filter_by_metadata_options(Keyword.get(opts, :metadata_filters))
-  end
-
-  defp filter_by_status(query, nil), do: query
-  defp filter_by_status(query, status), do: where(query, [p], p.status == ^status)
-
-  defp filter_by_product_type(query, nil), do: query
-  defp filter_by_product_type(query, type), do: where(query, [p], p.product_type == ^type)
-
-  defp filter_by_category(query, nil), do: query
-
-  defp filter_by_category(query, uuid) when is_binary(uuid) do
-    if UUIDUtils.valid?(uuid) do
-      where(query, [p], p.category_uuid == ^uuid)
-    else
-      query
-    end
-  end
-
-  defp filter_by_visible_categories(query, false), do: query
-
-  defp filter_by_visible_categories(query, true) do
-    # Exclude products from categories with status "hidden"
-    # Products from "active" and "unlisted" categories are visible
-    # Use distinct to avoid duplicates from the left_join
-    from(p in query,
-      left_join: c in Category,
-      on: c.uuid == p.category_uuid,
-      where: is_nil(c.uuid) or c.status != "hidden",
-      distinct: p.uuid
-    )
-  end
-
-  defp filter_by_price_range(query, nil, nil), do: query
-  defp filter_by_price_range(query, min, nil), do: where(query, [p], p.price >= ^min)
-  defp filter_by_price_range(query, nil, max), do: where(query, [p], p.price <= ^max)
-
-  defp filter_by_price_range(query, min, max),
-    do: where(query, [p], p.price >= ^min and p.price <= ^max)
-
-  defp filter_by_vendors(query, nil), do: query
-  defp filter_by_vendors(query, []), do: query
-
-  defp filter_by_vendors(query, vendors) when is_list(vendors),
-    do: where(query, [p], p.vendor in ^vendors)
-
-  defp filter_by_metadata_options(query, nil), do: query
-  defp filter_by_metadata_options(query, []), do: query
-
-  defp filter_by_metadata_options(query, filters) when is_list(filters) do
-    Enum.reduce(filters, query, fn %{key: key, values: values}, q ->
-      where(
-        q,
-        [p],
-        fragment(
-          "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'_option_values'->?, '[]'::jsonb)) elem WHERE elem = ANY(?))",
-          p.metadata,
-          ^key,
-          ^values
-        )
-      )
-    end)
-  end
-
   # Max length for a user-supplied search term. Anything longer is
   # truncated: ILIKE against unindexed JSONB expansions is linear in both
   # pattern and row count, so an unbounded public `?search=` param would be
@@ -3879,83 +4732,6 @@ defmodule PhoenixKitEcommerce do
     "%#{escaped}%"
   end
 
-  defp filter_by_product_search(query, nil), do: query
-  defp filter_by_product_search(query, ""), do: query
-
-  defp filter_by_product_search(query, search) do
-    search_term = search_like_pattern(search)
-    default_lang = Translations.default_language()
-
-    # Search in JSONB localized fields using PostgreSQL operators
-    # Searches in default language and falls back to any language match,
-    # plus SKU (metadata->>'sku') and tags. Columns are bound through the
-    # product binding so the query stays valid when other filters join
-    # additional tables (e.g. :exclude_hidden_categories).
-    where(
-      query,
-      [p],
-      fragment(
-        "(COALESCE(?->>?, '') ILIKE ? OR COALESCE(?->>?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_each_text(?) WHERE value ILIKE ?) OR EXISTS (SELECT 1 FROM jsonb_each_text(?) WHERE value ILIKE ?) OR COALESCE(?->>'sku', '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?, '[]'::jsonb)) AS tag WHERE tag ILIKE ?))",
-        p.title,
-        ^default_lang,
-        ^search_term,
-        p.description,
-        ^default_lang,
-        ^search_term,
-        p.title,
-        ^search_term,
-        p.description,
-        ^search_term,
-        p.metadata,
-        ^search_term,
-        p.tags,
-        ^search_term
-      )
-    )
-  end
-
-  defp apply_category_filters(query, opts) do
-    query
-    |> filter_by_parent_uuid(Keyword.get(opts, :parent_uuid, :skip))
-    |> filter_by_category_status(Keyword.get(opts, :status, :skip))
-    |> filter_by_category_search(Keyword.get(opts, :search))
-  end
-
-  defp filter_by_parent_uuid(query, :skip), do: query
-  defp filter_by_parent_uuid(query, nil), do: where(query, [c], is_nil(c.parent_uuid))
-  defp filter_by_parent_uuid(query, uuid), do: where(query, [c], c.parent_uuid == ^uuid)
-
-  defp filter_by_category_status(query, :skip), do: query
-  defp filter_by_category_status(query, nil), do: query
-
-  defp filter_by_category_status(query, status) when is_binary(status) do
-    where(query, [c], c.status == ^status)
-  end
-
-  defp filter_by_category_status(query, statuses) when is_list(statuses) do
-    where(query, [c], c.status in ^statuses)
-  end
-
-  defp filter_by_category_search(query, nil), do: query
-  defp filter_by_category_search(query, ""), do: query
-
-  defp filter_by_category_search(query, search) do
-    search_term = search_like_pattern(search)
-    default_lang = Translations.default_language()
-
-    # Search in JSONB localized name field using PostgreSQL operators
-    where(
-      query,
-      [c],
-      fragment(
-        "(COALESCE(name->>?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_each_text(name) WHERE value ILIKE ?))",
-        ^default_lang,
-        ^search_term,
-        ^search_term
-      )
-    )
-  end
-
   defp maybe_preload(query, nil), do: query
   defp maybe_preload(query, preloads), do: preload(query, ^preloads)
 
@@ -3965,19 +4741,49 @@ defmodule PhoenixKitEcommerce do
 
   # Cart helpers
 
-  # Find cart item by product and selected_specs
-  defp find_cart_item_by_specs(cart_uuid, product_uuid, specs) when map_size(specs) == 0 do
-    # No specs - find item without specs
+  # Find cart item by product identity (see `product_lookup_key/1` and
+  # `cart_item_lookup_key/1`) and selected_specs. A legacy product matches
+  # on the row's own `product_uuid`; a catalogue-backed one has that column
+  # nil, so it matches on `metadata["catalogue_item_uuid"]` instead - without
+  # this, re-adding the same catalogue product would never find the line it
+  # just inserted and would duplicate the row on every add instead of
+  # bumping quantity.
+  defp find_cart_item_by_specs(cart_uuid, {:product_uuid, product_uuid}, specs)
+       when map_size(specs) == 0 do
     CartItem
     |> where([i], i.cart_uuid == ^cart_uuid and i.product_uuid == ^product_uuid)
     |> where([i], i.selected_specs == ^%{})
     |> repo().one()
   end
 
-  defp find_cart_item_by_specs(cart_uuid, product_uuid, specs) when is_map(specs) do
-    # With specs - find item with matching specs
+  defp find_cart_item_by_specs(cart_uuid, {:product_uuid, product_uuid}, specs)
+       when is_map(specs) do
     CartItem
     |> where([i], i.cart_uuid == ^cart_uuid and i.product_uuid == ^product_uuid)
+    |> where([i], i.selected_specs == ^specs)
+    |> repo().one()
+  end
+
+  defp find_cart_item_by_specs(cart_uuid, {:catalogue_item_uuid, item_uuid}, specs)
+       when map_size(specs) == 0 do
+    CartItem
+    |> where(
+      [i],
+      i.cart_uuid == ^cart_uuid and
+        fragment("?->>'catalogue_item_uuid' = ?", i.metadata, ^item_uuid)
+    )
+    |> where([i], i.selected_specs == ^%{})
+    |> repo().one()
+  end
+
+  defp find_cart_item_by_specs(cart_uuid, {:catalogue_item_uuid, item_uuid}, specs)
+       when is_map(specs) do
+    CartItem
+    |> where(
+      [i],
+      i.cart_uuid == ^cart_uuid and
+        fragment("?->>'catalogue_item_uuid' = ?", i.metadata, ^item_uuid)
+    )
     |> where([i], i.selected_specs == ^specs)
     |> repo().one()
   end
@@ -4299,6 +5105,15 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
+
+  # Guards the legacy write path: while the catalogue source is active,
+  # `phoenix_kit_shop_products`/`phoenix_kit_shop_categories` must never
+  # gain a row a catalogue-backed storefront read will never surface
+  # (spec principle — "no write path targets phoenix_kit_shop_products
+  # while the switch is on").
+  defp catalogue_source_active? do
+    ProductSource.current() == ProductSource.Catalogue
+  end
 
   # ============================================
   # TAX RATE (from Billing module — single source of truth)
@@ -4852,7 +5667,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Product{}}
   """
   def get_product_by_slug_localized(slug, language, opts \\ []) do
-    SlugResolver.find_product_by_slug(slug, language, opts)
+    ProductSource.current().get_product_by_slug_localized(slug, language, opts)
   end
 
   @doc """
@@ -4872,7 +5687,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Category{}}
   """
   def get_category_by_slug_localized(slug, language, opts \\ []) do
-    SlugResolver.find_category_by_slug(slug, language, opts)
+    ProductSource.current().get_category_by_slug_localized(slug, language, opts)
   end
 
   @doc """
@@ -5008,6 +5823,18 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Returns the image URL for a category, regardless of which
+  `ProductSource` adapter produced it.
+
+  Delegates to `Category.get_image_url/2` today; kept as a facade seam
+  because the catalogue adapter's view-struct categories won't have a
+  `:featured_product` Ecto preload to fall back on.
+  """
+  def category_image_url(category, opts \\ []) do
+    Category.get_image_url(category, opts)
+  end
+
+  @doc """
   Finds a product by slug in any language.
 
   Searches across all translated slugs to find the product.
@@ -5023,7 +5850,7 @@ defmodule PhoenixKitEcommerce do
       {:error, :not_found}
   """
   def get_product_by_any_slug(slug, opts \\ []) do
-    SlugResolver.find_product_by_any_slug(slug, opts)
+    ProductSource.current().get_product_by_any_slug(slug, opts)
   end
 
   @doc """
@@ -5035,7 +5862,7 @@ defmodule PhoenixKitEcommerce do
       {:ok, %Category{}, "es"}
   """
   def get_category_by_any_slug(slug, opts \\ []) do
-    SlugResolver.find_category_by_any_slug(slug, opts)
+    ProductSource.current().get_category_by_any_slug(slug, opts)
   end
 
   # ============================================
