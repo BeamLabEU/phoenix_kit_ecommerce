@@ -84,6 +84,14 @@ repo_available =
       # re-applies any newly-shipped Vxxx migrations on every boot.
       PhoenixKit.Migration.ensure_current(TestRepo, log: false)
 
+      # ...then billing's chain, because this module reads and writes
+      # billing's schemas directly (checkout converts a cart through them).
+      # Billing owns `phoenix_kit_currencies` from its own V2 on, so a
+      # database built from core's baseline alone is missing columns its
+      # `Currency` schema selects, and every currency read fails with an
+      # `undefined_column` far from anything about currencies.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
       # ...then the module-owned chain on top. V1 was purely adoptive over
       # core's baseline, so skipping it changed nothing; V2 is not — it
       # drops the `DEFAULT 'USD'` core declares on the four `currency`
@@ -93,6 +101,15 @@ repo_available =
       # that is exactly what `up_statements/1` exists for, and every one of
       # them is idempotent.
       Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
+
+      # ...and billing's own chain. `phoenix_kit_currencies` is created by
+      # CORE's migrations, but billing (floor raised to "~> 0.11" for
+      # per-domain-currency) OWNS extending it — `rounding_rule`,
+      # `rate_updated_at`, the partial default-currency index — via its own
+      # versioned chain, never core's. Without this, a freshly fetched
+      # billing (0.11+) raises `undefined_column: rounding_rule` on every
+      # currency read, since core's schema never grows that column itself.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
 
       Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
       true
@@ -190,4 +207,25 @@ transliteration_exclude =
     []
   end
 
-ExUnit.start(exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude)
+# `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
+# by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
+# `ProductSource.Catalogue` adapter's own tests need it loaded (a real
+# `PhoenixKitCatalogue.Schemas.Item`/`Category` struct for the pure view
+# tests, a live catalogue DB for the query tests) and are tagged
+# `:catalogue` so they run automatically once a host declares the dep.
+catalogue_exclude =
+  if Code.ensure_loaded?(PhoenixKitCatalogue) do
+    []
+  else
+    Logger.info(
+      "[test_helper] phoenix_kit_catalogue not loaded — ProductSource.Catalogue " <>
+        "tests excluded. They will run automatically once a host declares the " <>
+        "optional dependency."
+    )
+
+    [:catalogue]
+  end
+
+ExUnit.start(
+  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+)

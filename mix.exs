@@ -120,28 +120,46 @@ defmodule PhoenixKitEcommerce.MixProject do
       {:gettext, "~> 1.0"},
 
       # Billing integration for checkout and order conversion.
-      # 0.11 is the floor (raised from 0.7 for per-domain-currency Э1-E1,
-      # plan §0.3/§8.5): `create_cart/1` and both add-to-cart paths call
+      # 0.13 is the floor (raised from 0.11 for per-domain-currency Э2,
+      # plan §0.3/§8.5): `PhoenixKitEcommerce.Events.subscribe_currencies/0`
+      # calls `PhoenixKitBilling.Events.subscribe_currencies/0` (subscribed
+      # from every storefront LiveView that shows a converted price —
+      # `catalog_category.ex`, `shop_catalog.ex`, `catalog_product.ex`,
+      # `checkout_page.ex`), which does not exist below the release
+      # carrying Э2's `{:currencies_changed, code}` PubSub event (CHANGELOG
+      # 0.13.0, merged upstream 2026-09-07 as PR #33). Below the floor this
+      # is `UndefinedFunctionError` on the storefront the moment a shopper
+      # opens the catalog, not at compile time — exactly what §8.5's hard
+      # floor exists to make impossible to install. 0.11's own reasons
+      # remain true too: `create_cart/1` and both add-to-cart paths call
       # `PhoenixKitBilling.get_base_currency/0`, `get_display_currency/0`,
       # `resolve_display_currency/1`, and `Currency.present/3`/
-      # `effective_rate/2` — none exist below the release carrying Э1-B1
-      # through B5. Below the floor these are `UndefinedFunctionError` at
-      # checkout, not a silently-dropped attr. 0.5.2 remains true too:
-      # `payment_option_uuid` on `PhoenixKitBilling.Order`, still required,
-      # now subsumed by the higher floor. Exact number confirmed at PR
-      # time once billing's currency work is the one actually released.
-      pk_dep(:phoenix_kit_billing, "~> 0.11"),
+      # `effective_rate/2`; 0.5.2's `payment_option_uuid` on
+      # `PhoenixKitBilling.Order` also still required — both now subsumed
+      # by the higher floor.
+      pk_dep(:phoenix_kit_billing, "~> 0.13"),
       # Optional: only the AI-translate UI/adapter use it, and both compile out
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).
       pk_dep(:phoenix_kit_ai, "~> 0.18", optional: true),
-      # No declared dependency on `phoenix_kit_catalogue`: the catalogue
-      # "extension slot" integration (`PhoenixKitEcommerce.Catalogue.Extension`)
-      # is fully duck-typed — nothing here calls into `PhoenixKitCatalogue`
-      # directly. No released version yet ships the extension slot
-      # (`PhoenixKitCatalogue.Extension`) this integration targets, so a
-      # `~>` floor here could only be inaccurate; add one once a real
-      # release ships it.
+      # No declared dependency on `phoenix_kit_catalogue`, though this app
+      # DOES call into `PhoenixKitCatalogue` directly (the ProductSource
+      # catalogue adapter, `Catalogue.Writer`, and the Shopify-sync 6a
+      # path call `Catalogue.{get_item_by_slug/3, get_category_by_slug/3,
+      # get_item!/1, create_item/2, update_item/2, list_catalogues/0,
+      # translated_*}`, `Catalogue.AttributeSets.{resolve_for_item/2,
+      # resolve_for_items/2, list_sets/1}`, `Catalogue.Slugs.from_title/2`
+      # and several `Schemas.*` structs — none of that is duck-typed).
+      # It IS true for the older extension-slot integration
+      # (`PhoenixKitEcommerce.Catalogue.Extension`), which is fully
+      # duck-typed and calls nothing in `PhoenixKitCatalogue` directly.
+      # No released version yet ships the API the ProductSource adapter
+      # targets, several of which exist only on the fork's own
+      # `feature/shop-extensions` branch — so a `~>` floor here could
+      # only be inaccurate, and every one of those call sites is
+      # unreachable unless a host resolves that exact branch. Add
+      # `pk_dep(:phoenix_kit_catalogue, "~> <floor>", optional: true)`
+      # once a release carries the API.
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
