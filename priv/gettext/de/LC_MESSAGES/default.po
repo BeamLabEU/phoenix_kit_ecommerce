@@ -115,8 +115,8 @@ msgstr "%{count} Produkte auf %{status} aktualisiert"
 
 #: lib/phoenix_kit_ecommerce/web/products.ex:383
 #: lib/phoenix_kit_ecommerce/web/products.ex:384
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1142
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1428
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1265
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1598
 #, elixir-autogen, elixir-format
 msgid "%{count} selected"
 msgstr "%{count} ausgewählt"
@@ -820,7 +820,7 @@ msgstr "Lieferung in 3–5 Werktagen"
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:948
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1124
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:159
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:835
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:958
 #, elixir-autogen, elixir-format
 msgid "Description"
 msgstr "Beschreibung"
@@ -1776,7 +1776,7 @@ msgstr "Zurück"
 #: lib/phoenix_kit_ecommerce/web/products.ex:495
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:178
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:108
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:839
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:962
 #, elixir-autogen, elixir-format
 msgid "Price"
 msgstr "Preis"
@@ -1810,7 +1810,7 @@ msgstr "In Bearbeitung"
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:97
 #: lib/phoenix_kit_ecommerce/web/products.ex:491
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1454
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1624
 #, elixir-autogen, elixir-format
 msgid "Product"
 msgstr "Produkt"
@@ -2181,7 +2181,7 @@ msgstr "Migration für %{count} Produkte gestartet"
 #: lib/phoenix_kit_ecommerce/web/products.ex:492
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:310
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:111
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:838
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:961
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:174
 #, elixir-autogen, elixir-format
 msgid "Status"
@@ -2264,7 +2264,7 @@ msgstr "Zeitstempel"
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:164
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:860
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1111
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:833
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:956
 #, elixir-autogen, elixir-format
 msgid "Title"
 msgstr "Titel"
@@ -2467,7 +2467,7 @@ msgstr "Variantenbilder"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:98
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:922
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:836
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:959
 #, elixir-autogen, elixir-format
 msgid "Vendor"
 msgstr "Anbieter"
@@ -3184,7 +3184,7 @@ msgid "Already in cart:"
 msgstr "Bereits im Warenkorb:"
 
 #: lib/phoenix_kit_ecommerce/web/components/catalog_sidebar.ex:269
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1234
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1357
 #, elixir-autogen, elixir-format
 msgid "Apply"
 msgstr "Anwenden"
@@ -3839,7 +3839,7 @@ msgstr "Rechnungsdaten"
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1584
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1619
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1665
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1455
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1625
 #, elixir-autogen, elixir-format
 msgid "Change"
 msgstr "Ändern"
@@ -3849,7 +3849,7 @@ msgstr "Ändern"
 msgid "City *"
 msgstr "Stadt *"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1439
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1609
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:48
 #, elixir-autogen, elixir-format
 msgid "Clear"
@@ -3940,7 +3940,7 @@ msgstr "Nachname *"
 msgid "Missing required option: %{option}.\nPlease select all required parameters."
 msgstr "Erforderliche Option fehlt: %{option}.\nBitte wählen Sie alle erforderlichen Parameter aus."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1523
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1693
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:138
 #, elixir-autogen, elixir-format
 msgid "Next"
@@ -4236,26 +4236,26 @@ msgstr "Was passiert, wenn keine aktive Versandmethode das Land des Käufers abd
 msgid "Where the buyer picks a shipping method"
 msgstr "Wo der Käufer eine Versandmethode auswählt"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:977
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1100
 #, elixir-autogen, elixir-format
 msgid "%{count} changed region (%{delta})"
 msgid_plural "%{count} changed regions (%{delta})"
 msgstr[0] "%{count} geänderter Bereich (%{delta})"
 msgstr[1] "%{count} geänderte Bereiche (%{delta})"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:903
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1026
 #, elixir-autogen, elixir-format
 msgid "%{count} extreme price change is excluded and must be applied individually."
 msgid_plural "%{count} extreme price changes are excluded and must be applied individually."
 msgstr[0] "%{count} extreme Preisänderung ist ausgeschlossen und muss einzeln angewendet werden."
 msgstr[1] "%{count} extreme Preisänderungen sind ausgeschlossen und müssen einzeln angewendet werden."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1040
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1163
 #, elixir-autogen, elixir-format
 msgid "%{credential_error} The storefront fallback also failed: %{storefront_error}"
 msgstr "%{credential_error} Der Storefront-Fallback ist ebenfalls fehlgeschlagen: %{storefront_error}"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1135
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1258
 #, elixir-autogen, elixir-format
 msgid "%{percent}% of the Shopify catalogue"
 msgstr "%{percent} % des Shopify-Katalogs"
@@ -4265,80 +4265,80 @@ msgstr "%{percent} % des Shopify-Katalogs"
 msgid "Admin API access token"
 msgstr "Admin-API-Zugriffstoken"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1069
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1192
 #, elixir-autogen, elixir-format
 msgid "All price changes have been applied."
 msgstr "Alle Preisänderungen wurden angewendet."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:619
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:661
 #, elixir-autogen, elixir-format
 msgid "Applied %{count} change from Shopify."
 msgid_plural "Applied %{count} changes from Shopify."
 msgstr[0] "%{count} Änderung von Shopify angewendet."
 msgstr[1] "%{count} Änderungen von Shopify angewendet."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:865
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:988
 #, elixir-autogen, elixir-format
 msgid "Apply %{count} %{field} change from Shopify?"
 msgid_plural "Apply %{count} %{field} changes from Shopify?"
 msgstr[0] "%{count} %{field}-Änderung von Shopify anwenden?"
 msgstr[1] "%{count} %{field}-Änderungen von Shopify anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:930
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1053
 #, elixir-autogen, elixir-format
 msgid "Apply change?"
 msgstr "Änderung anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1359
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1529
 #, elixir-autogen, elixir-format
 msgid "Apply everything"
 msgstr "Alles anwenden"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:969
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1092
 #, elixir-autogen, elixir-format
 msgid "Apply everything?"
 msgstr "Alles anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:885
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1008
 #, elixir-autogen, elixir-format
 msgid "Apply pending changes for %{count} product across all sections?"
 msgid_plural "Apply pending changes for %{count} products across all sections?"
 msgstr[0] "Ausstehende Änderungen für %{count} Produkt in allen Abschnitten anwenden?"
 msgstr[1] "Ausstehende Änderungen für %{count} Produkte in allen Abschnitten anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1396
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1566
 #, elixir-autogen, elixir-format
 msgid "Apply section"
 msgstr "Abschnitt anwenden"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:947
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1070
 #, elixir-autogen, elixir-format
 msgid "Apply section?"
 msgstr "Abschnitt anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1436
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1606
 #, elixir-autogen, elixir-format
 msgid "Apply selection"
 msgstr "Auswahl anwenden"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:958
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1081
 #, elixir-autogen, elixir-format
 msgid "Apply selection?"
 msgstr "Auswahl anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:875
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:998
 #, elixir-autogen, elixir-format
 msgid "Apply the selected %{field} change from Shopify?"
 msgid_plural "Apply %{count} selected %{field} changes from Shopify?"
 msgstr[0] "Ausgewählte %{field}-Änderung von Shopify anwenden?"
 msgstr[1] "%{count} ausgewählte %{field}-Änderungen von Shopify anwenden?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1326
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1496
 #, elixir-autogen, elixir-format
 msgid "Catalogue coverage"
 msgstr "Katalogabdeckung"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1261
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1384
 #, elixir-autogen, elixir-format
 msgid "Check for changes"
 msgstr "Auf Änderungen prüfen"
@@ -4368,12 +4368,12 @@ msgstr "Verbinden"
 msgid "Connect a Shopify Admin API token in Integrations settings, then review and apply catalog changes from the Shopify Sync page."
 msgstr "Hinterlegen Sie ein Shopify-Admin-API-Token in den Integrationseinstellungen und prüfen und übernehmen Sie Katalogänderungen anschließend auf der Seite „Shopify Sync“."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1271
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1394
 #, elixir-autogen, elixir-format
 msgid "Connect it in Integrations settings."
 msgstr "Verbinden Sie es in den Integrationseinstellungen."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1277
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1400
 #, elixir-autogen, elixir-format
 msgid "Connected: %{name}"
 msgstr "Verbunden: %{name}"
@@ -4383,26 +4383,26 @@ msgstr "Verbunden: %{name}"
 msgid "Copy the **Admin API access token** (shown once) and paste it into the form above, along with your shop's `*.myshopify.com` domain"
 msgstr "Kopieren Sie das **Admin API access token** (wird nur einmal angezeigt) und fügen Sie es zusammen mit der `*.myshopify.com`-Domain Ihres Shops in das Formular oben ein"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:634
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:676
 #, elixir-autogen, elixir-format
 msgid "Could not apply %{count} change — try again or apply individually."
 msgid_plural "Could not apply %{count} changes — try again or apply individually."
 msgstr[0] "%{count} Änderung konnte nicht angewendet werden – erneut versuchen oder einzeln anwenden."
 msgstr[1] "%{count} Änderungen konnten nicht angewendet werden – erneut versuchen oder einzeln anwenden."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1047
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1170
 #, elixir-autogen, elixir-format
 msgid "Could not reach Shopify: %{reason}"
 msgstr "Shopify konnte nicht erreicht werden: %{reason}"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:600
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:642
 #, elixir-autogen, elixir-format
 msgid "Could not update %{count} product's %{field} — try again or apply individually."
 msgid_plural "Could not update %{count} products' %{field} — try again or apply individually."
 msgstr[0] "%{field} von %{count} Produkt konnte nicht aktualisiert werden – erneut versuchen oder einzeln anwenden."
 msgstr[1] "%{field} von %{count} Produkten konnte nicht aktualisiert werden – erneut versuchen oder einzeln anwenden."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:443
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:485
 #, elixir-autogen, elixir-format
 msgid "Could not update %{title}'s %{field}."
 msgstr "%{field} von %{title} konnte nicht aktualisiert werden."
@@ -4412,7 +4412,7 @@ msgstr "%{field} von %{title} konnte nicht aktualisiert werden."
 msgid "Create a Custom App in Shopify"
 msgstr "Custom App in Shopify erstellen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1156
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1279
 #, elixir-autogen, elixir-format
 msgid "Current"
 msgstr "Aktuell"
@@ -4437,7 +4437,7 @@ msgstr "Geben Sie ihr einen Namen (z. B. \"PhoenixKit sync\")"
 msgid "Go to **API credentials** and click **Install app**"
 msgstr "Gehen Sie zu **API credentials** und klicken Sie auf **Install app**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1223
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1346
 #, elixir-autogen, elixir-format
 msgid "Hide diff"
 msgstr "Diff ausblenden"
@@ -4447,7 +4447,7 @@ msgstr "Diff ausblenden"
 msgid "In your Shopify admin, go to **Settings → Apps and sales channels → Develop apps**"
 msgstr "Gehen Sie in Ihrem Shopify-Adminbereich zu **Settings → Apps and sales channels → Develop apps**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1167
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1290
 #, elixir-autogen, elixir-format
 msgid "Incoming"
 msgstr "Eingehend"
@@ -4457,12 +4457,12 @@ msgstr "Eingehend"
 msgid "Install the app and copy the token"
 msgstr "App installieren und Token kopieren"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1339
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1509
 #, elixir-autogen, elixir-format
 msgid "No changes — the shop matches Shopify."
 msgstr "Keine Änderungen – der Shop stimmt mit Shopify überein."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1072
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1195
 #, elixir-autogen, elixir-format
 msgid "No price differences found. Other fields were not compared — see the notice above."
 msgstr "Keine Preisunterschiede gefunden. Andere Felder wurden nicht verglichen – siehe Hinweis oben."
@@ -4482,32 +4482,32 @@ msgstr "Sync öffnen"
 msgid "Open the app, go to **Configuration**, and click **Configure** under Admin API scopes"
 msgstr "Öffnen Sie die App, gehen Sie zu **Configuration** und klicken Sie unter „Admin API scopes“ auf **Configure**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1301
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1471
 #, elixir-autogen, elixir-format
 msgid "Pending changes"
 msgstr "Ausstehende Änderungen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1506
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1676
 #, elixir-autogen, elixir-format
 msgid "Prev"
 msgstr "Zurück"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1312
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1482
 #, elixir-autogen, elixir-format
 msgid "Price changes"
 msgstr "Preisänderungen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1313
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1483
 #, elixir-autogen, elixir-format
 msgid "Products whose price differs from Shopify"
 msgstr "Produkte, deren Preis von Shopify abweicht"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1302
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1472
 #, elixir-autogen, elixir-format
 msgid "Products with at least one field to review"
 msgstr "Produkte mit mindestens einem zu prüfenden Feld"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1452
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1622
 #, elixir-autogen, elixir-format
 msgid "Select all on this page"
 msgstr "Alle auf dieser Seite auswählen"
@@ -4517,7 +4517,7 @@ msgstr "Alle auf dieser Seite auswählen"
 msgid "Shop domain"
 msgstr "Shop-Domain"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1009
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1132
 #, elixir-autogen, elixir-format
 msgid "Shop domain not found — check the connection's shop domain."
 msgstr "Shop-Domain nicht gefunden – prüfen Sie die Shop-Domain der Verbindung."
@@ -4528,33 +4528,33 @@ msgid "Shopify"
 msgstr "Shopify"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:646
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:117
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1251
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:122
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1374
 #, elixir-autogen, elixir-format
 msgid "Shopify Sync"
 msgstr "Shopify Sync"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1269
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1392
 #, elixir-autogen, elixir-format
 msgid "Shopify isn't connected yet."
 msgstr "Shopify ist noch nicht verbunden."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1024
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1147
 #, elixir-autogen, elixir-format
 msgid "Shopify rate-limited this request — try again shortly."
 msgstr "Shopify hat diese Anfrage gedrosselt – versuchen Sie es in Kürze erneut."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1005
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1128
 #, elixir-autogen, elixir-format
 msgid "Shopify rejected the access token — check the connection's credentials."
 msgstr "Shopify hat das Zugriffstoken abgelehnt – prüfen Sie die Zugangsdaten der Verbindung."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1223
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1346
 #, elixir-autogen, elixir-format
 msgid "Show diff"
 msgstr "Diff anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1290
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1460
 #, elixir-autogen, elixir-format
 msgid "Showing price-only changes — %{reason}. Connect a valid Admin API token to see the full diff."
 msgstr "Es werden nur Preisänderungen angezeigt – %{reason}. Verbinden Sie ein gültiges Admin-API-Token, um den vollständigen Diff zu sehen."
@@ -4564,7 +4564,7 @@ msgstr "Es werden nur Preisänderungen angezeigt – %{reason}. Verbinden Sie ei
 msgid "Sync product data from a Shopify store (read-only)"
 msgstr "Produktdaten aus einem Shopify-Shop synchronisieren (schreibgeschützt)"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1028
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1151
 #, elixir-autogen, elixir-format
 msgid "The Shopify connection is missing its shop domain or access token."
 msgstr "Der Shopify-Verbindung fehlt die Shop-Domain oder das Zugriffstoken."
@@ -4574,24 +4574,24 @@ msgstr "Der Shopify-Verbindung fehlt die Shop-Domain oder das Zugriffstoken."
 msgid "This is a static token, not OAuth — Shopify's own recommended path for a single-store custom app. \"Test Connection\" on this page is a no-op for Shopify (no validation strategy is registered); use the sync feature's own connectivity check instead."
 msgstr "Dies ist ein statisches Token, kein OAuth – der von Shopify selbst empfohlene Weg für eine Custom App mit nur einem Shop. \"Test Connection\" ist auf dieser Seite für Shopify wirkungslos (es ist keine Validierungsstrategie registriert); nutzen Sie stattdessen die Konnektivitätsprüfung der Sync-Funktion."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:850
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:973
 #, elixir-autogen, elixir-format
 msgid "Update %{title}'s %{field} from Shopify?"
 msgstr "%{field} von %{title} aus Shopify aktualisieren?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:857
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:980
 #, elixir-autogen, elixir-format
 msgid "Update %{title}: %{field} → %{value}?"
 msgstr "%{title} aktualisieren: %{field} → %{value}?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:584
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:626
 #, elixir-autogen, elixir-format
 msgid "Updated %{count} product's %{field}."
 msgid_plural "Updated %{count} products' %{field}."
 msgstr[0] "%{field} von %{count} Produkt aktualisiert."
 msgstr[1] "%{field} von %{count} Produkten aktualisiert."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:432
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:474
 #, elixir-autogen, elixir-format
 msgid "Updated %{title}'s %{field}."
 msgstr "%{field} von %{title} aktualisiert."
@@ -4601,79 +4601,79 @@ msgstr "%{field} von %{title} aktualisiert."
 msgid "Your Shopify store's *.myshopify.com domain"
 msgstr "Die *.myshopify.com-Domain Ihres Shopify-Shops"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1198
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1321
 #, elixir-autogen, elixir-format
 msgid "large change"
 msgstr "große Änderung"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:988
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1111
 #, elixir-autogen, elixir-format
 msgid "no length change"
 msgstr "keine Längenänderung"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1066
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1189
 #, elixir-autogen, elixir-format
 msgid "the Admin API request was rejected (%{reason})"
 msgstr "die Admin-API-Anfrage wurde abgelehnt (%{reason})"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1055
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1178
 #, elixir-autogen, elixir-format
 msgid "the access token is missing the required scope"
 msgstr "dem Zugriffstoken fehlt die erforderliche Berechtigung"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1051
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1174
 #, elixir-autogen, elixir-format
 msgid "the access token was rejected"
 msgstr "das Zugriffstoken wurde abgelehnt"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1062
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1185
 #, elixir-autogen, elixir-format
 msgid "the connection is missing its access token"
 msgstr "der Verbindung fehlt das Zugriffstoken"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:808
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:931
 #, elixir-autogen, elixir-format
 msgid "Descriptions"
 msgstr "Beschreibungen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:834
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:957
 #, elixir-autogen, elixir-format
 msgid "HTML text"
 msgstr "HTML-Text"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:809
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:932
 #, elixir-autogen, elixir-format
 msgid "HTML texts"
 msgstr "HTML-Texte"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:806
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:929
 #, elixir-autogen, elixir-format
 msgid "Prices"
 msgstr "Preise"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1020
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1143
 #, elixir-autogen, elixir-format
 msgid "Shopify rejected the access token's scope — the app needs read_products."
 msgstr "Shopify hat die Berechtigung des Zugriffstokens abgelehnt – die App benötigt read_products."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:811
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:934
 #, elixir-autogen, elixir-format
 msgid "Statuses"
 msgstr "Status"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:109
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:810
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:837
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:933
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:960
 #, elixir-autogen, elixir-format
 msgid "Tags"
 msgstr "Tags"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:807
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:930
 #, elixir-autogen, elixir-format
 msgid "Titles"
 msgstr "Titel"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:812
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:935
 #, elixir-autogen, elixir-format
 msgid "Vendors"
 msgstr "Anbieter"
@@ -4824,6 +4824,82 @@ msgstr "Set-Slug darf nicht leer sein"
 #, elixir-autogen, elixir-format
 msgid "Set slug, e.g. size"
 msgstr "Set-Slug, z. B. size"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:790
+#, elixir-autogen, elixir-format
+msgid "%{kind}: %{status} (%{done}/%{total}, %{error_count} errors)"
+msgstr "%{kind}: %{status} (%{done}/%{total}, %{error_count} Fehler)"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:814
+#, elixir-autogen, elixir-format
+msgid "(any)"
+msgstr "(beliebig)"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:815
+#, elixir-autogen, elixir-format
+msgid "(none)"
+msgstr "(keine)"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:774
+#, elixir-autogen, elixir-format
+msgid "A sync of this kind is already running."
+msgstr "Eine Synchronisierung dieser Art läuft bereits."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:811
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:824
+#, elixir-autogen, elixir-format
+msgid "Collections filter: none — every Shopify collection becomes a category."
+msgstr "Sammlungsfilter: keiner — jede Shopify-Sammlung wird zu einer Kategorie."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:813
+#, elixir-autogen, elixir-format
+msgid "Collections filter: prefix %{prefix}, excluding %{exclude}"
+msgstr "Sammlungsfilter: Präfix %{prefix}, ausgenommen %{exclude}"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:778
+#, elixir-autogen, elixir-format
+msgid "Could not queue the sync — try again."
+msgstr "Die Synchronisierung konnte nicht eingereiht werden — bitte erneut versuchen."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1412
+#, elixir-autogen, elixir-format
+msgid "Media & collections"
+msgstr "Medien & Kollektionen"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1414
+#, elixir-autogen, elixir-format
+msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
+msgstr "Läuft im Hintergrund: Produktbilder werden in Storage übernommen, Optionen werden zu Merkmalsets und Preismodifikatoren, und Shopify-Kollektionen werden zu Katalogkategorien."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:758
+#, elixir-autogen, elixir-format
+msgid "Sync collections"
+msgstr "Kollektionen synchronisieren"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:757
+#, elixir-autogen, elixir-format
+msgid "Sync images"
+msgstr "Bilder synchronisieren"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:770
+#, elixir-autogen, elixir-format
+msgid "Sync queued — running in the background."
+msgstr "Synchronisierung eingereiht — läuft im Hintergrund."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:756
+#, elixir-autogen, elixir-format
+msgid "Sync variants & prices"
+msgstr "Varianten & Preise synchronisieren"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:788
+#, elixir-autogen, elixir-format
+msgid "finished"
+msgstr "abgeschlossen"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:788
+#, elixir-autogen, elixir-format
+msgid "running"
+msgstr "läuft"
 
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:122
 #, elixir-autogen, elixir-format

@@ -2,9 +2,12 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   @moduledoc """
   Writes Shopify sync changes into `phoenix_kit_catalogue` items — the
   write side of Block 3's "sync 6a" (`docs/superpowers/specs/2026-09-05-
-  catalogue-as-shop-product-list-design.md` §5 Блок 3), active only when
-  `ProductSource.current/0` is `Catalogue`. `PhoenixKitEcommerce.Shopify.Sync`
-  is the only intended caller; nothing here touches
+  catalogue-as-shop-product-list-design.md` §5 Блок 3) and Block 7's 6b
+  (same doc, same §, "Блок 7"), active only when `ProductSource.
+  current/0` is `Catalogue`. `update_from_shopify/3`/`create_from_shopify/2`
+  are called by `PhoenixKitEcommerce.Shopify.Sync`; `sync_variants/2` (and
+  the images/collections writers Block 7 adds alongside it) is called
+  directly by the sync worker instead — nothing here touches
   `phoenix_kit_shop_products` (the legacy writer, `Shop.update_product/2`,
   stays the write path for the legacy source).
 
@@ -23,14 +26,29 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   counterpart at all, in either language.
   """
 
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Attachments}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.Slugs}
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
+  @compile {:no_warn_undefined, PhoenixKitEntities}
 
+  import Ecto.Query, only: [from: 2]
+
+  alias PhoenixKit.Modules.Storage.File, as: StorageFile
+  alias PhoenixKit.Modules.Storage.FolderLink
+  alias PhoenixKit.RepoHelper
+  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Multilang
+  alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
+  alias PhoenixKitEcommerce.Catalogue.ValueResolver
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+  alias PhoenixKitEcommerce.Services.ImageDownloader
+  alias PhoenixKitEcommerce.Shopify.VariantMapper
   alias PhoenixKitEcommerce.Translations
 
   @max_slug_attempts 3
@@ -49,6 +67,15 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   ignored — this mirrors `ProductDiff.comparable_fields/0`'s set, but
   doesn't hard-code it, so a caller that already filtered `change_fields`
   (e.g. to a single field an operator picked) never has to know that.
+
+  `:handle` and `:product_id` are the exception: not part of
+  `ProductDiff.comparable_fields/0`, they are merged into
+  `data["ecommerce"]["shopify"]` (`product_id` stringified) whenever
+  present, alongside whatever `Writer` or a later Shopify sync already
+  wrote there (`image_ids`, `set_slugs`, `collection_id`) — never
+  replacing that sub-map wholesale. `Shopify.Sync.apply_change/2` sets
+  both on every applied `Change`, backfilling identity even when the
+  caller only asked for a subset of the diffed fields.
   """
   @spec update_from_shopify(Item.t(), map(), String.t()) ::
           {:ok, Item.t()} | {:error, Ecto.Changeset.t() | [{atom(), String.t()}]}
@@ -57,7 +84,10 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     current_ecommerce = get_in(item.data || %{}, ["ecommerce"])
 
     with {:ok, cast_ecommerce} <-
-           ItemCommerce.cast(ecommerce_params(change_fields), current_ecommerce) do
+           ItemCommerce.cast(
+             ecommerce_params(change_fields, current_ecommerce),
+             current_ecommerce
+           ) do
       # `ItemCommerce.cast/2` returns ONLY its own embedded-schema fields —
       # `to_storage_map/1` builds the map from `Map.from_struct/1`, so a
       # non-schema key such as `legacy_metadata` (the migration snapshot
@@ -97,8 +127,11 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   `unit "piece"`; `status "active"`; `category_uuid nil` (uncategorized,
   same as a legacy-sync-created product used to be — sorting into a
   category is a manual follow-up either way); `data["ecommerce"]` carries
-  `shopify: %{"handle" => ..., "product_id" => ...}` and `shop_status`
-  derived from the Shopify product's own `status`.
+  `shopify: %{"handle" => ..., "product_id" => ...}` (`product_id`
+  stringified, same as `update_from_shopify/3`'s own backfill — every
+  reader, `CollectionSync` and the Task 5 worker's item index included,
+  matches it as a string) and `shop_status` derived from the Shopify
+  product's own `status`.
   """
   @spec create_from_shopify(map(), String.t()) ::
           {:ok, Item.t()}
@@ -126,6 +159,398 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       create_with_slug(attrs, base_slug, base_locale, 1)
     end
   end
+
+  @doc """
+  Turns `shopify_product`'s options/variants
+  (`PhoenixKitEcommerce.Shopify.VariantMapper.build/1`) into catalogue
+  attribute-set attachments on `item`: one set per real Shopify option
+  (found by blueprint name `"catalogue_set_" <> slug`, created `kind:
+  "fixed"` when missing), values resolved to slugs via `ValueResolver.
+  resolve_many/3` (unknown labels become `draft` values), attached in
+  Shopify's option order and selected in label order, with a
+  slug-keyed price-modifier map written to `data["ecommerce"]
+  ["price_modifiers"][set_slug]`.
+
+  A no-op — `{:error, :catalogue_source_inactive}` — when
+  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  new Block 7 writer is legacy-source-safe on its own, not only via
+  whatever caller happens to gate it).
+
+  Idempotent: a second call against the same `shopify_product` resolves
+  every label to its already-created slug (`values_created: 0`), leaves
+  already-selected/attached sets untouched (no write, no activity row —
+  `AttributeSets.attach_set/3` and `set_attachment_selection/4` are both
+  no-ops on an unchanged state), and rewrites the same `price_modifiers`/
+  `set_slugs`. Any set previously written by a Shopify sync (tracked in
+  `data["ecommerce"]["shopify"]["set_slugs"]`) that this product no
+  longer has options for is detached and dropped from both that list and
+  `price_modifiers`.
+  """
+  @spec sync_variants(Item.t(), map()) ::
+          {:ok, %{sets: non_neg_integer(), values_created: non_neg_integer()}}
+          | {:error, :catalogue_source_inactive | term()}
+  def sync_variants(item, shopify_product) when is_map(item) and is_map(shopify_product) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      do_sync_variants(item, shopify_product)
+    else
+      {:error, :catalogue_source_inactive}
+    end
+  end
+
+  defp do_sync_variants(item, shopify_product) do
+    %{sets: mapped_sets, modifiers: modifiers} = VariantMapper.build(shopify_product)
+
+    mapped_sets
+    |> Enum.reduce_while({:ok, [], 0}, fn set, {:ok, acc, created_total} ->
+      case sync_one_set(item, set, Map.get(modifiers, set.slug, %{})) do
+        {:ok, result} -> {:cont, {:ok, [result | acc], created_total + result.created}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, results, values_created} ->
+        finalize_variant_sync(item, Enum.reverse(results), values_created)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp sync_one_set(item, %{name: name, slug: slug, values: values}, modifiers_by_label) do
+    with {:ok, set} <- find_or_create_set(name, slug),
+         {:ok, value_slugs, created} <- resolve_values(slug, values),
+         {:ok, _attachment} <- AttributeSets.attach_set(item.uuid, set.uuid),
+         :ok <- AttributeSets.set_attachment_selection(item.uuid, set.uuid, value_slugs) do
+      {:ok,
+       %{
+         slug: slug,
+         created: created,
+         value_amounts: amounts_by_slug(values, value_slugs, modifiers_by_label)
+       }}
+    end
+  end
+
+  defp find_or_create_set(name, slug) do
+    case PhoenixKitEntities.get_entity_by_name("catalogue_set_" <> slug) do
+      nil -> AttributeSets.create_set(%{name: name, slug: slug, kind: "fixed"})
+      entity -> {:ok, entity}
+    end
+  end
+
+  defp resolve_values(slug, values) do
+    resolved = ValueResolver.resolve_many(slug, values)
+
+    Enum.reduce_while(values, {:ok, [], 0}, fn label, {:ok, slugs, created} ->
+      case Map.fetch!(resolved, label) do
+        {:ok, value_slug} -> {:cont, {:ok, [value_slug | slugs], created}}
+        {:created, value_slug} -> {:cont, {:ok, [value_slug | slugs], created + 1}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, slugs, created} -> {:ok, Enum.reverse(slugs), created}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp amounts_by_slug(values, value_slugs, modifiers_by_label) do
+    values
+    |> Enum.zip(value_slugs)
+    |> Map.new(fn {label, value_slug} ->
+      amount = Map.get(modifiers_by_label, label, Decimal.new("0.00"))
+      {value_slug, Decimal.to_string(amount)}
+    end)
+  end
+
+  defp finalize_variant_sync(item, results, values_created) do
+    new_slugs = Enum.map(results, & &1.slug)
+    new_modifiers = Map.new(results, &{&1.slug, &1.value_amounts})
+
+    ecommerce = get_in(item.data || %{}, ["ecommerce"]) || %{}
+    previous_slugs = get_in(ecommerce, ["shopify", "set_slugs"]) || []
+    stale_slugs = previous_slugs -- new_slugs
+
+    detach_stale_sets(item.uuid, stale_slugs)
+
+    shopify = Map.put(ecommerce["shopify"] || %{}, "set_slugs", new_slugs)
+
+    # Write per set, never replace the whole map: `price_modifiers` can
+    # also carry a set THIS sync never drove (a set never listed in
+    # `set_slugs` — an operator-authored modifier, or a legacy-migration
+    # key whose Shopify option name normalises to a different slug) —
+    # only the stale, previously-Shopify-owned slugs (already detached
+    # above) are dropped; every set in `new_modifiers` is (re)written.
+    price_modifiers =
+      (ecommerce["price_modifiers"] || %{})
+      |> Map.drop(stale_slugs)
+      |> Map.merge(new_modifiers)
+
+    ecommerce =
+      ecommerce
+      |> Map.put("shopify", shopify)
+      |> Map.put("price_modifiers", price_modifiers)
+
+    data = Map.put(item.data || %{}, "ecommerce", ecommerce)
+
+    case Catalogue.update_item(item, %{data: data}) do
+      {:ok, _updated} -> {:ok, %{sets: length(results), values_created: values_created}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp detach_stale_sets(item_uuid, stale_slugs) do
+    Enum.each(stale_slugs, fn slug ->
+      case PhoenixKitEntities.get_entity_by_name("catalogue_set_" <> slug) do
+        nil -> :ok
+        entity -> AttributeSets.detach_set(item_uuid, entity.uuid)
+      end
+    end)
+  end
+
+  # ============================================================
+  # Images
+  # ============================================================
+
+  @doc """
+  Downloads `shopify_product`'s `"images"` into Storage and attaches
+  them to `item` in Shopify's own `position` order (ascending; the
+  payload's own array order is NOT trusted), featured = the position-1
+  image.
+
+  Resolves each Shopify image in this order: (a) an id already in `data
+  ["ecommerce"]["shopify"]["image_ids"]` (`%{"<shopify image id>" =>
+  file_uuid}`) reuses its file uuid; (b) failing that, a Storage file
+  already linked to `item` — one of its `data["media_order"]`/
+  `featured_image_uuid` files, or any file living in (or folder-linked
+  into) its `data["files_folder_uuid"]` — whose `metadata["source_url"]`
+  matches the Shopify image's `src` once both are stripped of their
+  `?v=`-style query string reuses that file instead of downloading a
+  second copy of it (this is what lets a rerun against a catalogue item
+  migrated with plain Storage images, never tagged with a Shopify image
+  id, converge without duplicating every file); (c) otherwise downloads
+  via `opts[:downloader]` (default `&ImageDownloader.download_and_store/
+  3`, `(url, user_uuid, opts) -> {:ok, file_uuid} | {:error, reason}`).
+
+  `opts[:user_uuid]` is the Storage file owner for anything downloaded;
+  when omitted it falls back to `PhoenixKit.Users.Auth.
+  get_first_admin_uuid/0` so an unattended sync run never fails
+  Storage's `user_uuid can't be blank` validation for lack of an
+  explicit actor.
+
+  A download failure never corrupts a binding that does not belong to it:
+  an image id already synced before (`image_ids`) or matched to a
+  previously-linked file by `source_url` is resolved WITHOUT ever
+  attempting a download (see (a)/(b) above), so an existing binding can
+  never be lost to a transient failure. An image with neither — a
+  genuinely new Shopify image whose download fails — is skipped: not
+  attached, not recorded in `image_ids`, so a later run retries it. It
+  is never bound to some other image's file merely because it landed at
+  the same list position; still listed in `:errors` so the failure
+  stays visible.
+
+  A no-op — `{:error, :catalogue_source_inactive}` — when
+  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  new Block 7 writer is legacy-source-safe on its own).
+
+  Idempotent: a second run against the same payload resolves every
+  image id to its already-known file uuid (`downloaded: 0`) and
+  re-attaches the same order. `image_ids` is rewritten fresh from the
+  current sync each run (same "derived fresh" idiom `sync_variants/2`
+  uses for `price_modifiers`/`set_slugs`) — an id Shopify no longer
+  lists is dropped from it, though the file itself is left attached (no
+  deletions in this block).
+  """
+  @spec sync_images(Item.t(), map(), keyword()) ::
+          {:ok,
+           %{
+             downloaded: non_neg_integer(),
+             reused: non_neg_integer(),
+             attached: non_neg_integer(),
+             errors: [{String.t(), term()}]
+           }}
+          | {:error, :catalogue_source_inactive | term()}
+  def sync_images(item, shopify_product, opts \\ [])
+      when is_map(item) and is_map(shopify_product) and is_list(opts) do
+    if ProductSource.current() == ProductSource.Catalogue do
+      do_sync_images(item, shopify_product, opts)
+    else
+      {:error, :catalogue_source_inactive}
+    end
+  end
+
+  defp do_sync_images(item, shopify_product, opts) do
+    downloader = Keyword.get(opts, :downloader, &ImageDownloader.download_and_store/3)
+    user_uuid = Keyword.get(opts, :user_uuid) || default_actor_uuid()
+
+    known_image_ids =
+      get_in(item.data || %{}, ["ecommerce", "shopify", "image_ids"]) || %{}
+
+    url_index = item |> linked_files() |> source_url_index()
+
+    images = (shopify_product["images"] || []) |> Enum.sort_by(&(&1["position"] || 0))
+
+    {image_ids, file_uuids, downloaded, reused, errors} =
+      Enum.reduce(images, {%{}, [], 0, 0, []}, fn image, acc ->
+        resolve_image(image, known_image_ids, url_index, downloader, user_uuid, acc)
+      end)
+
+    # Order is already Shopify position order; dedupe defensively so a
+    # file resolved for two different Shopify image ids (e.g. two ids
+    # that both matched the same reused uuid) can never repeat in
+    # `media_order` or be attached twice.
+    file_uuids = file_uuids |> Enum.reverse() |> Enum.uniq()
+    errors = Enum.reverse(errors)
+
+    with {:ok, item_with_ids} <- put_image_ids(item, image_ids),
+         {:ok, _final_item} <- attach_images(item_with_ids, file_uuids) do
+      {:ok,
+       %{downloaded: downloaded, reused: reused, attached: length(file_uuids), errors: errors}}
+    end
+  end
+
+  defp resolve_image(image, known_image_ids, url_index, downloader, user_uuid, acc) do
+    id = to_string(image["id"])
+
+    case reused_file_uuid(id, image["src"], known_image_ids, url_index) do
+      {:ok, uuid} ->
+        put_resolved(acc, id, uuid, :reused)
+
+      :error ->
+        download_image(id, image["src"], downloader, user_uuid, acc)
+    end
+  end
+
+  # (a) an id already synced before; (b) failing that, a linked file
+  # whose download source matches this image's `src` (query stripped).
+  # Both are provable bindings to THIS Shopify image — never a guess
+  # from list position.
+  defp reused_file_uuid(id, src, known_image_ids, url_index) do
+    case Map.fetch(known_image_ids, id) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> Map.fetch(url_index, normalize_image_url(src))
+    end
+  end
+
+  defp download_image(id, src, downloader, user_uuid, acc) do
+    case downloader.(src, user_uuid, []) do
+      {:ok, uuid} ->
+        put_resolved(acc, id, uuid, :downloaded)
+
+      {:error, reason} ->
+        # No provable prior binding for this id (see `reused_file_uuid/4`
+        # above) — skip it rather than guess one from list position; a
+        # later run retries it once the download can succeed.
+        put_error(acc, id, reason)
+    end
+  end
+
+  defp put_resolved({image_ids, file_uuids, downloaded, reused, errors}, id, uuid, :downloaded) do
+    {Map.put(image_ids, id, uuid), [uuid | file_uuids], downloaded + 1, reused, errors}
+  end
+
+  defp put_resolved({image_ids, file_uuids, downloaded, reused, errors}, id, uuid, :reused) do
+    {Map.put(image_ids, id, uuid), [uuid | file_uuids], downloaded, reused + 1, errors}
+  end
+
+  defp put_error({image_ids, file_uuids, downloaded, reused, errors}, id, reason) do
+    {image_ids, file_uuids, downloaded, reused, [{id, reason} | errors]}
+  end
+
+  defp put_image_ids(item, image_ids) do
+    ecommerce = get_in(item.data || %{}, ["ecommerce"]) || %{}
+    shopify = Map.put(ecommerce["shopify"] || %{}, "image_ids", image_ids)
+    ecommerce = Map.put(ecommerce, "shopify", shopify)
+    data = Map.put(item.data || %{}, "ecommerce", ecommerce)
+
+    Catalogue.update_item(item, %{data: data})
+  end
+
+  defp attach_images(item, []), do: {:ok, item}
+
+  defp attach_images(item, file_uuids) do
+    Attachments.attach_files(item, file_uuids,
+      featured: List.first(file_uuids),
+      order: file_uuids
+    )
+  end
+
+  # The default Storage actor for an unattended sync run that was not
+  # given one explicitly — the same first-admin fallback
+  # `PhoenixKit.Users.Auth.get_first_admin_uuid/0` provides for exactly
+  # this kind of programmatic write.
+  defp default_actor_uuid, do: Auth.get_first_admin_uuid()
+
+  defp read_string_list(nil, _key), do: []
+
+  defp read_string_list(data, key) do
+    case data[key] do
+      list when is_list(list) -> Enum.filter(list, &is_binary/1)
+      _ -> []
+    end
+  end
+
+  # Storage files already linked to `item`: its `media_order`/
+  # `featured_image_uuid` uuids as they currently stand (even if an
+  # earlier run left them pointing at only some of the item's images)
+  # plus every file living in — or folder-linked into — its own
+  # attachment folder.
+  defp linked_files(item) do
+    data = item.data || %{}
+
+    explicit_uuids =
+      Enum.uniq(read_string_list(data, "media_order") ++ List.wrap(data["featured_image_uuid"]))
+
+    (explicit_files(explicit_uuids) ++ folder_files(data["files_folder_uuid"]))
+    |> Enum.uniq_by(& &1.uuid)
+  end
+
+  defp explicit_files([]), do: []
+
+  defp explicit_files(uuids) do
+    from(f in StorageFile, where: f.uuid in ^uuids and f.status == "active")
+    |> RepoHelper.repo().all()
+  end
+
+  defp folder_files(folder_uuid) when is_binary(folder_uuid) do
+    linked_subquery =
+      from(fl in FolderLink, where: fl.folder_uuid == ^folder_uuid, select: fl.file_uuid)
+
+    from(f in StorageFile,
+      where:
+        (f.folder_uuid == ^folder_uuid or f.uuid in subquery(linked_subquery)) and
+          f.status == "active"
+    )
+    |> RepoHelper.repo().all()
+  end
+
+  defp folder_files(_folder_uuid), do: []
+
+  # Indexes linked files by their (query-stripped) download source URL.
+  # When more than one file matches the same URL — e.g. a duplicate a
+  # previous buggy run created — the earliest-inserted one wins, since
+  # that is the original rather than the duplicate; `inserted_at` is
+  # second-precision, so a `uuid` tie-break keeps the choice
+  # deterministic for two rows inserted in the same second.
+  defp source_url_index(files) do
+    files
+    |> Enum.filter(&is_binary(get_in(&1.metadata || %{}, ["source_url"])))
+    |> Enum.sort_by(&{&1.inserted_at, &1.uuid}, fn {ts_a, uuid_a}, {ts_b, uuid_b} ->
+      case DateTime.compare(ts_a, ts_b) do
+        :eq -> uuid_a <= uuid_b
+        :lt -> true
+        :gt -> false
+      end
+    end)
+    |> Enum.reduce(%{}, fn file, acc ->
+      Map.put_new(acc, normalize_image_url(file.metadata["source_url"]), file.uuid)
+    end)
+  end
+
+  defp normalize_image_url(url) when is_binary(url) do
+    url |> URI.parse() |> Map.put(:query, nil) |> URI.to_string()
+  end
+
+  defp normalize_image_url(_url), do: nil
 
   # ============================================================
   # Update: localized fields
@@ -194,7 +619,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   # data["ecommerce"]
   # ============================================================
 
-  defp ecommerce_params(change_fields) do
+  defp ecommerce_params(change_fields, current_ecommerce) do
     %{}
     |> maybe_put_param("vendor", Map.get(change_fields, :vendor))
     |> maybe_put_param("tags", Map.get(change_fields, :tags))
@@ -203,6 +628,31 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "compare_at_price",
       decimal_param(Map.get(change_fields, :compare_at_price))
     )
+    |> maybe_put_shopify_identity(change_fields, current_ecommerce)
+  end
+
+  # Merges `:handle`/`:product_id` into the EXISTING `data["ecommerce"]
+  # ["shopify"]` sub-map rather than replacing it outright — that sub-map
+  # is also where `sync_images/3`, `sync_variants/2`, and `CollectionSync`
+  # record `image_ids`, `set_slugs`, and `collection_id`; a plain
+  # `%{"handle" => ..., "product_id" => ...}` here would wipe those out
+  # on the next ordinary field sync.
+  defp maybe_put_shopify_identity(params, change_fields, current_ecommerce) do
+    handle = Map.get(change_fields, :handle)
+    product_id = Map.get(change_fields, :product_id)
+
+    if is_nil(handle) and is_nil(product_id) do
+      params
+    else
+      current_shopify = get_in(current_ecommerce || %{}, ["shopify"]) || %{}
+
+      shopify =
+        current_shopify
+        |> maybe_put_param("handle", handle)
+        |> maybe_put_param("product_id", product_id && to_string(product_id))
+
+      Map.put(params, "shopify", shopify)
+    end
   end
 
   defp create_ecommerce_params(shopify_product) do
@@ -210,7 +660,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "shop_status" => shopify_shop_status(shopify_product["status"]),
       "shopify" => %{
         "handle" => shopify_product["handle"],
-        "product_id" => shopify_product["id"]
+        "product_id" => shopify_product["id"] && to_string(shopify_product["id"])
       }
     }
   end
