@@ -102,6 +102,15 @@ repo_available =
       # them is idempotent.
       Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
+      # ...and billing's own chain. `phoenix_kit_currencies` is created by
+      # CORE's migrations, but billing (floor raised to "~> 0.11" for
+      # per-domain-currency) OWNS extending it — `rounding_rule`,
+      # `rate_updated_at`, the partial default-currency index — via its own
+      # versioned chain, never core's. Without this, a freshly fetched
+      # billing (0.11+) raises `undefined_column: rounding_rule` on every
+      # currency read, since core's schema never grows that column itself.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
       Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
       true
     rescue

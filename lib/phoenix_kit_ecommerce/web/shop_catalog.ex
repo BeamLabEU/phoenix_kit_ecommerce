@@ -6,6 +6,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Translations
@@ -118,6 +119,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         :show_categories_grid,
         PhoenixKit.Settings.get_setting_cached("shop_sidebar_show_categories", "true") == "true"
       )
+      |> Helpers.maybe_assign_admin_edit(Routes.path("/admin/shop"), gettext("Manage Shop"))
 
     {:ok, socket}
   end
@@ -244,6 +246,15 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
               {Vocabulary.collection_blurb()}
             </p>
           </div>
+          <%!-- Admin Edit Button --%>
+          <%= if assigns[:admin_edit_url] do %>
+            <div class="flex justify-center mt-4">
+              <.link navigate={@admin_edit_url} class="btn btn-sm btn-outline gap-2">
+                <.icon name="hero-pencil-square" class="w-4 h-4" />
+                {@admin_edit_label || "Edit"}
+              </.link>
+            </div>
+          <% end %>
         </header>
 
         <%!-- Categories on mobile. The only other category list on this page is
