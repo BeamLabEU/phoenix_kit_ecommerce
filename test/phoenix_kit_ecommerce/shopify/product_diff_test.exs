@@ -240,6 +240,118 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffTest do
     end
   end
 
+  describe "field: compare_at_price" do
+    test "a changed compare_at_price is included, using the minimum variant compare_at_price" do
+      local = [product(compare_at_price: Decimal.new("30.00"))]
+
+      shopify = [
+        shopify_product(%{
+          "variants" => [
+            %{"price" => "20.00", "compare_at_price" => "45.00"},
+            %{"price" => "20.00", "compare_at_price" => "40.00"}
+          ]
+        })
+      ]
+
+      assert [%Change{changes: %{compare_at_price: %{current: current, incoming: incoming}}}] =
+               diff(local, shopify)
+
+      assert Decimal.eq?(current, "30.00")
+      assert Decimal.eq?(incoming, "40.00")
+    end
+
+    test "unchanged compare_at_price does not appear in changes" do
+      local = [product(compare_at_price: Decimal.new("30.00"))]
+
+      shopify = [
+        shopify_product(%{"variants" => [%{"price" => "20.00", "compare_at_price" => "30.00"}]})
+      ]
+
+      assert diff(local, shopify) == []
+    end
+
+    test "no variant carrying compare_at_price means it is not compared at all" do
+      local = [product(compare_at_price: Decimal.new("30.00"))]
+      shopify = [shopify_product(%{"variants" => [%{"price" => "20.00"}]})]
+
+      assert diff(local, shopify) == []
+    end
+
+    test "a nil local compare_at_price against an incoming value is reported as a change" do
+      local = [product(compare_at_price: nil)]
+
+      shopify = [
+        shopify_product(%{"variants" => [%{"price" => "20.00", "compare_at_price" => "35.00"}]})
+      ]
+
+      assert [%Change{changes: %{compare_at_price: %{current: nil, incoming: incoming}}}] =
+               diff(local, shopify)
+
+      assert Decimal.eq?(incoming, "35.00")
+    end
+  end
+
+  describe "matching: catalogue view-struct handle" do
+    # `ProductSource.Catalogue.View` writes `metadata["_shopify"]["handle"]`
+    # from `data["ecommerce"]["shopify"]["handle"]` on every catalogue
+    # view-struct — matching must prefer it over `slug[base_locale]`,
+    # since a catalogue item's slug is a URL, not necessarily the Shopify
+    # handle it was migrated from.
+    test "a product with metadata._shopify.handle matches by that, not by slug" do
+      local = [
+        product(
+          slug: %{"en" => "totally-different-url-slug"},
+          metadata: %{"_shopify" => %{"handle" => "original-shopify-handle"}}
+        )
+      ]
+
+      shopify = [shopify_product(%{"handle" => "original-shopify-handle", "title" => "New"})]
+
+      assert [%Change{handle: "original-shopify-handle"}] = diff(local, shopify)
+    end
+
+    test "falls back to slug[base_locale] when metadata carries no _shopify handle" do
+      local = [product(slug: %{"en" => "planter"}, metadata: %{})]
+      shopify = [shopify_product(%{"title" => "New"})]
+
+      assert [%Change{handle: "planter"}] = diff(local, shopify)
+    end
+  end
+
+  describe "new_product_changes/3" do
+    test "a Shopify handle with no local match becomes a create-Change" do
+      local = [product(slug: %{"en" => "planter"})]
+
+      shopify = [
+        shopify_product(%{}),
+        %{"handle" => "brand-new-mug", "title" => "Brand New Mug"}
+      ]
+
+      assert [change] = ProductDiff.new_product_changes(local, shopify, @base_locale)
+
+      assert change.create?
+      assert change.product_uuid == nil
+      assert change.handle == "brand-new-mug"
+      assert change.title == "Brand New Mug"
+      assert change.changes == %{}
+      assert change.shopify_product == %{"handle" => "brand-new-mug", "title" => "Brand New Mug"}
+    end
+
+    test "a Shopify handle already matched by diff/4 is not surfaced as a create-Change" do
+      local = [product(slug: %{"en" => "planter"})]
+      shopify = [shopify_product(%{})]
+
+      assert ProductDiff.new_product_changes(local, shopify, @base_locale) == []
+    end
+
+    test "a Shopify entry with no handle at all is skipped, not surfaced as a create-Change" do
+      local = [product(slug: %{"en" => "planter"})]
+      shopify = [shopify_product(%{}), %{"title" => "No handle at all"}]
+
+      assert ProductDiff.new_product_changes(local, shopify, @base_locale) == []
+    end
+  end
+
   describe "price_extreme?" do
     test "flags a price change whose ratio exceeds 3x" do
       local = [product(price: Decimal.new("10.00"))]
@@ -274,8 +386,16 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffTest do
       # field", so its return value needs a real assertion, not a
       # tautology (`@x ProductDiff.comparable_fields()` followed by
       # `assert ... == @x` proves nothing about what it actually returns).
-      assert ProductDiff.comparable_fields() ==
-               [:title, :body_html, :description, :vendor, :tags, :status, :price]
+      assert ProductDiff.comparable_fields() == [
+               :title,
+               :body_html,
+               :description,
+               :vendor,
+               :tags,
+               :status,
+               :price,
+               :compare_at_price
+             ]
     end
 
     test "is genuinely equivalent to diff/4's implicit default, on a product differing in every field" do
@@ -289,7 +409,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffTest do
           "vendor" => "NewVendor",
           "tags" => "new, tags",
           "status" => "draft",
-          "variants" => [%{"price" => "99.00"}]
+          "variants" => [%{"price" => "99.00", "compare_at_price" => "150.00"}]
         }
       ]
 

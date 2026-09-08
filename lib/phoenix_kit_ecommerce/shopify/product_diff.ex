@@ -2,14 +2,21 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   @moduledoc """
   Compares local products against Shopify Admin API product data.
 
-  Matching is by `product.slug[base_locale] == shopify_product["handle"]`.
-  A Shopify product with no local match is skipped — this module never
-  creates products, only flags differences on ones that already exist
-  (product creation stays the CSV importer's job).
+  Matching is by handle: for a catalogue-backed view-struct
+  (`metadata["_shopify"]["handle"]`, written by
+  `ProductSource.Catalogue.View`) that handle is used directly; for a
+  legacy product (no such metadata) matching falls back to
+  `product.slug[base_locale] == shopify_product["handle"]`, unchanged.
+  A Shopify product with no local match is skipped by `diff/4` — this
+  module never creates products from there (product creation stays the
+  CSV importer's job under the legacy source; under the catalogue
+  source, `new_product_changes/3` below surfaces those same unmatched
+  handles as create-`Change`s for `Shopify.Sync` instead).
 
   Compared fields: `title`, `body_html`, `description`, `vendor`, `tags`,
-  `status`, `price`. `title`/`body_html`/`description` are localized fields;
-  only the base locale is read/compared here (writing them back is
+  `status`, `price`, `compare_at_price`. `title`/`body_html`/`description`
+  are localized fields; only the base locale is read/compared here
+  (writing them back is
   `Shopify.Sync.apply_change/2`'s job). `diff/4`'s `opts[:only]` narrows this
   set to a chosen list of fields — needed because some Shopify data sources
   (e.g. a public storefront fallback) only ever carry a subset of fields,
@@ -27,7 +34,16 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   alias PhoenixKitEcommerce.Translations
 
   @extreme_ratio Decimal.new("3")
-  @comparable_fields [:title, :body_html, :description, :vendor, :tags, :status, :price]
+  @comparable_fields [
+    :title,
+    :body_html,
+    :description,
+    :vendor,
+    :tags,
+    :status,
+    :price,
+    :compare_at_price
+  ]
 
   defmodule Change do
     @moduledoc """
@@ -43,17 +59,36 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
     SAME locale they were diffed against. Reading a fresh default at
     apply time would silently apply a change diffed in one locale into
     another.
+
+    `create?`/`shopify_product` are only set on a create-`Change` (see
+    `ProductDiff.new_product_changes/3`, catalogue source only):
+    `product_uuid` is `nil` (there is no local product yet), `changes` is
+    always `%{}`, and `shopify_product` carries the raw Shopify payload
+    `Shopify.Sync.apply_change/2` hands to
+    `PhoenixKitEcommerce.Catalogue.Writer.create_from_shopify/2`. A
+    regular diff-`Change` never sets `shopify_product`.
     """
     @enforce_keys [:product_uuid, :handle, :title, :base_locale]
-    defstruct [:product_uuid, :handle, :title, :base_locale, changes: %{}, price_extreme?: false]
+    defstruct [
+      :product_uuid,
+      :handle,
+      :title,
+      :base_locale,
+      :shopify_product,
+      changes: %{},
+      price_extreme?: false,
+      create?: false
+    ]
 
     @type t :: %__MODULE__{
-            product_uuid: String.t(),
+            product_uuid: String.t() | nil,
             handle: String.t(),
             title: String.t() | nil,
             base_locale: String.t(),
             changes: %{atom() => %{current: term(), incoming: term()}},
-            price_extreme?: boolean()
+            price_extreme?: boolean(),
+            create?: boolean(),
+            shopify_product: map() | nil
           }
   end
 
@@ -153,6 +188,51 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
     |> length()
   end
 
+  @doc """
+  Shopify products with no matching local product, as create-`Change`s
+  (`create?: true`, `product_uuid: nil`, `shopify_product: <raw payload>`,
+  `changes: %{}`) — the mirror image of `diff/4`'s own skip rule (see this
+  module's moduledoc). Meant for the catalogue source only, where a new
+  Shopify handle becomes a new catalogue item via
+  `PhoenixKitEcommerce.Catalogue.Writer.create_from_shopify/2`; the legacy
+  source has no create path here at all (product creation stays the CSV
+  importer's job there), so a caller must not call this under the legacy
+  source.
+
+  `base_locale` defaults to `Translations.default_language/0`, same as
+  `diff/4` — pass it explicitly to keep a call free of that default's
+  database access.
+  """
+  @spec new_product_changes([Product.t()], [map()]) :: [Change.t()]
+  @spec new_product_changes([Product.t()], [map()], String.t()) :: [Change.t()]
+  def new_product_changes(
+        local_products,
+        shopify_products,
+        base_locale \\ Translations.default_language()
+      )
+      when is_binary(base_locale) do
+    index = index_by_handle(local_products, base_locale)
+
+    shopify_products
+    |> Enum.filter(fn shopify_product ->
+      handle = shopify_product["handle"]
+      is_binary(handle) and handle != "" and not Map.has_key?(index, handle)
+    end)
+    |> Enum.map(&build_create_change(&1, base_locale))
+  end
+
+  defp build_create_change(shopify_product, base_locale) do
+    %Change{
+      product_uuid: nil,
+      handle: shopify_product["handle"],
+      title: shopify_product["title"] || shopify_product["handle"],
+      base_locale: base_locale,
+      shopify_product: shopify_product,
+      changes: %{},
+      create?: true
+    }
+  end
+
   defp validate_only!(only) do
     case Enum.reject(only, &(&1 in @comparable_fields)) do
       [] ->
@@ -167,11 +247,25 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
 
   defp index_by_handle(products, base_locale) do
     Enum.reduce(products, %{}, fn product, acc ->
-      case get_in(product.slug || %{}, [base_locale]) do
+      case shopify_handle(product, base_locale) do
         handle when is_binary(handle) and handle != "" -> Map.put(acc, handle, product)
         _ -> acc
       end
     end)
+  end
+
+  # A catalogue-backed view-struct carries its own Shopify handle in
+  # `metadata["_shopify"]["handle"]` (written by `ProductSource.Catalogue.View`
+  # from `data["ecommerce"]["shopify"]["handle"]`) — read that first, since a
+  # catalogue item's `slug[base_locale]` is a URL, not necessarily the
+  # original Shopify handle it was migrated from. A legacy product (or a
+  # catalogue item never touched by Shopify) has no such metadata, so this
+  # falls back to the slug, unchanged from before.
+  defp shopify_handle(product, base_locale) do
+    case get_in(product.metadata || %{}, ["_shopify", "handle"]) do
+      handle when is_binary(handle) and handle != "" -> handle
+      _ -> get_in(product.slug || %{}, [base_locale])
+    end
   end
 
   defp build_change(product, shopify_product, base_locale, only) do
@@ -196,6 +290,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       |> maybe_put_tags(product.tags, shopify_product["tags"], only)
       |> maybe_put(:status, product.status, shopify_product["status"], only)
       |> maybe_put_price(product.price, shopify_product["variants"], only)
+      |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
 
     %Change{
       product_uuid: product.uuid,
@@ -274,6 +369,46 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   end
 
   defp min_variant_price(_variants), do: nil
+
+  # `compare_at_price` (Shopify's "old price", shown struck through next to
+  # the current one) is optional per variant and legitimately absent when a
+  # product has no sale — unlike `price`, absence on the Shopify side is NOT
+  # "no data to compare" so much as "not on sale", but this mirrors
+  # `maybe_put_price/4`'s conservative rule anyway: only report a change when
+  # Shopify actually carries a compare_at value on at least one variant.
+  # Clearing an existing compare_at_price (sale ended) is not a scenario this
+  # diff surfaces — same limitation `price` already has for a fully-absent
+  # `variants` list.
+  defp maybe_put_compare_at(changes, current_compare_at, variants, only) do
+    if :compare_at_price in only do
+      put_compare_at_change(changes, current_compare_at, min_variant_compare_at_price(variants))
+    else
+      changes
+    end
+  end
+
+  defp put_compare_at_change(changes, _current, nil), do: changes
+
+  defp put_compare_at_change(changes, current, incoming) do
+    if current && Decimal.eq?(current, incoming) do
+      changes
+    else
+      Map.put(changes, :compare_at_price, %{current: current, incoming: incoming})
+    end
+  end
+
+  defp min_variant_compare_at_price(variants) when is_list(variants) and variants != [] do
+    variants
+    |> Enum.map(& &1["compare_at_price"])
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.map(&Decimal.new/1)
+    |> case do
+      [] -> nil
+      prices -> Enum.min(prices, Decimal)
+    end
+  end
+
+  defp min_variant_compare_at_price(_variants), do: nil
 
   defp extreme_price?(%{price: %{current: current, incoming: incoming}}) do
     case price_ratio(current, incoming) do
