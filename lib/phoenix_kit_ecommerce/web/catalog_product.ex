@@ -27,7 +27,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Date, as: UtilsDate
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce.Vocabulary
 
   # Data URI placeholder for broken images - works without external file serving
@@ -150,7 +149,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       )
       |> assign(
         :current_path,
-        socket.assigns[:url_path] || Shop.product_url(product, current_language)
+        Shop.product_url(product, current_language)
       )
       |> assign(:categories, Shop.list_active_categories(preload: [:featured_product]))
       |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
@@ -164,7 +163,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
       |> Helpers.maybe_assign_admin_edit(
-        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        Helpers.admin_edit_path(
+          :item,
+          product.uuid,
+          Shop.product_url(product, current_language)
+        ),
         gettext("Edit Product")
       )
 
@@ -320,7 +323,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     localized_title = Translations.get(product, :title, current_language)
     localized_description = Translations.get(product, :description, current_language)
     localized_body = Translations.get(product, :body_html, current_language)
-    current_path = socket.assigns[:url_path] || Shop.product_url(product, current_language)
+    current_path = Shop.product_url(product, current_language)
 
     # Subscribe to updates
     if connected?(socket) do
@@ -371,7 +374,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
       |> Helpers.maybe_assign_admin_edit(
-        Routes.path("/admin/shop/products/#{product.uuid}/edit"),
+        Helpers.admin_edit_path(
+          :item,
+          product.uuid,
+          Shop.product_url(product, current_language)
+        ),
         gettext("Edit Product")
       )
 
@@ -736,32 +743,41 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div class="container flex-col mx-auto px-4 py-6 max-w-[96rem]">
-        
-        <ShopCards.storefront_bar
-          language={@current_language}
-          cart_count={@cart_count}
-          admin_edit_url={assigns[:admin_edit_url]}
-          admin_edit_label={assigns[:admin_edit_label]}
-        />
-        <%!-- Breadcrumbs --%>
-        <div class="breadcrumbs text-sm mb-6">
-          <ul>
-            <li>
-              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
-                {gettext("Shop")}
-              </.link>
-            </li>
-            <%= if @product.category do %>
-              <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+      <%!-- `pt-0`: the host layout already pads the top of every page, and a
+            second helping of it pushed the first row of the shop below the
+            fold's most valuable strip. --%>
+      <div class="container flex-col mx-auto px-4 pt-0 pb-6 max-w-[96rem]">
+        <%!-- One row under the site header: breadcrumbs on the left, cart and
+              (for an admin) edit on the right. --%>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <%!-- Breadcrumbs --%>
+          <div class="breadcrumbs text-sm">
+            <ul>
               <li>
-                <.link navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}>
-                  {cat_name}
+                <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+                  {gettext("Shop")}
                 </.link>
               </li>
-            <% end %>
-            <li class="font-medium truncate max-w-[10rem] sm:max-w-xs">{@localized_title}</li>
-          </ul>
+              <%= if @product.category do %>
+                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+                <li>
+                  <.link navigate={
+                    Shop.category_url(@product.category, @current_language) <> @filter_qs
+                  }>
+                    {cat_name}
+                  </.link>
+                </li>
+              <% end %>
+              <li class="font-medium truncate max-w-[10rem] sm:max-w-xs">{@localized_title}</li>
+            </ul>
+          </div>
+
+          <ShopCards.storefront_bar
+            language={@current_language}
+            cart_count={@cart_count}
+            admin_edit_url={assigns[:admin_edit_url]}
+            admin_edit_label={assigns[:admin_edit_label]}
+          />
         </div>
 
         <%!-- Two columns, 65/35: gallery with the description under it on the
