@@ -197,7 +197,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCurrencyTest do
   end
 
   describe "currency guard — shop lookup fails" do
-    test "an unreachable Shopify does not block the sync; one warning is logged" do
+    test "an unreachable Shopify does not block the sync; the failure logs at error" do
       set_base_currency("USD")
       connect_shopify()
 
@@ -216,7 +216,14 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCurrencyTest do
           assert Decimal.eq?(updated.price, Decimal.new("12.00"))
         end)
 
-      assert log =~ "could not verify the shop's currency"
+      # A lookup failure is not the same kind of event as a mismatch: the
+      # mismatch is an admin's own decision (logged at warning), while a
+      # dead connection means this guard is checking nothing at all, for
+      # every price write, until someone fixes it. It has to be loud
+      # enough that an operator ignoring currency-guard warnings still
+      # hears it.
+      assert log =~ "could not reach the shop to verify its currency"
+      assert log =~ "[error]"
     end
 
     test "no Shopify connection at all behaves exactly as before the guard existed" do

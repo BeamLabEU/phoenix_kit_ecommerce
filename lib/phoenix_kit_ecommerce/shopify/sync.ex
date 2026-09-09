@@ -425,10 +425,27 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
     end
   end
 
-  defp log_lookup_failure(reason) do
+  # A mismatch is an admin decision and logs at `warning` (see
+  # `log_price_refusal/3`). A failed LOOKUP is not: a rotted access
+  # token, a revoked app or a renamed shop domain leaves this guard
+  # fail-open for every price write until someone notices, and there is
+  # no other signal that it stopped protecting anything — so the branch
+  # that means "something is broken" logs at `error`, while the two that
+  # mean "there is nothing to check here" stay at `warning`.
+  defp log_lookup_failure(:missing_currency) do
     Logger.warning(
-      "Shopify sync: could not verify the shop's currency (#{inspect(reason)}) — " <>
+      "Shopify sync: the shop response carried no currency — " <>
         "proceeding without the currency guard"
+    )
+
+    :match
+  end
+
+  defp log_lookup_failure(reason) do
+    Logger.error(
+      "Shopify sync: could not reach the shop to verify its currency " <>
+        "(#{inspect(reason)}) — proceeding without the currency guard, and " <>
+        "every price this sync writes is unchecked until this is fixed"
     )
 
     :match
