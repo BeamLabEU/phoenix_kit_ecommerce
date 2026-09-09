@@ -4403,6 +4403,11 @@ msgstr[1] ""
 msgid "Could not update %{title}'s %{field}."
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:495
+#, elixir-autogen, elixir-format
+msgid "Could not update %{title}'s %{field}: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}."
+msgstr ""
+
 #: lib/phoenix_kit_ecommerce/shopify/provider.ex:75
 #, elixir-autogen, elixir-format
 msgid "Create a Custom App in Shopify"

@@ -131,5 +131,24 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
       assert item.data["ecommerce"]["vendor"] == "Acme"
       assert item.data["ecommerce"]["tags"] == ["red", "blue"]
     end
+
+    test "stores a multi-paragraph body_html as Markdown, like the update path does" do
+      # Shopify always sends raw HTML. The storefront renders the stored
+      # description as Markdown, so an HTML block would print the `**`
+      # inside it literally — and the item would read as permanently
+      # changed against the next sync, whose diff normalises first.
+      shopify_product = %{
+        "handle" => "md-widget",
+        "title" => "MD Widget",
+        "id" => 555_124,
+        "body_html" => "<p><strong>Handmade.</strong></p><p>Ships in 2 days.</p>",
+        "variants" => [%{"price" => "9.99"}]
+      }
+
+      assert {:ok, item} = Writer.create_from_shopify(shopify_product, "en")
+
+      assert item.description == "**Handmade.**\n\nShips in 2 days."
+      refute item.description =~ "<p>"
+    end
   end
 end

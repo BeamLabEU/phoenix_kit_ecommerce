@@ -4402,6 +4402,11 @@ msgstr[1] "%{count} toote välja „%{field}“ ei õnnestunud uuendada — proo
 msgid "Could not update %{title}'s %{field}."
 msgstr "Toote „%{title}“ välja „%{field}“ ei õnnestunud uuendada."
 
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:495
+#, elixir-autogen, elixir-format
+msgid "Could not update %{title}'s %{field}: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}."
+msgstr "Toote „%{title}“ välja „%{field}“ ei õnnestunud uuendada: pood on nüüd valuutas %{shop_currency}, selle poe baasvaluuta on aga %{base_currency}."
+
 #: lib/phoenix_kit_ecommerce/shopify/provider.ex:75
 #, elixir-autogen, elixir-format
 msgid "Create a Custom App in Shopify"
