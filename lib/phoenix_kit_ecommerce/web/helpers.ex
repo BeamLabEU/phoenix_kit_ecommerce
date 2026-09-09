@@ -511,34 +511,38 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   Assigns `:admin_edit_url`/`:admin_edit_label` on `socket` for an admin
   visitor, via core's `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3`.
 
+  `permission` is what the LINKED PAGE actually requires, and it defaults
+  to `"shop.manage_catalog"` because most of these links open a catalog
+  editor. Core's own helper gates on "can this visitor reach the admin
+  area at all", which is broader: an admin with, say, only order-desk
+  permissions used to be shown an Edit button that landed them on a form
+  they could not submit. But the gate must not run ahead of the target
+  either — the shop index's "Manage Shop" link opens the dashboard at
+  `/admin/shop`, which asks for base `"shop"` — so that call site passes
+  its own weaker permission rather than inheriting the catalog one.
+
   Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
   calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
   requirement, not an exact version, so a host running an older core that
   predates the helper must not crash storefront pages. Returns `socket`
   unchanged when the helper isn't available or the visitor isn't an admin.
   """
-  def maybe_assign_admin_edit(socket, path, label) do
+  def maybe_assign_admin_edit(socket, path, label, opts \\ []) do
     mod = @admin_edit_helper_mod
+    permission = Keyword.get(opts, :permission, "shop.manage_catalog")
 
     if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) and
-         can_manage_catalog?(socket) do
-      # `permission: "shop"` so an admin who can reach the admin area
-      # through some other module (Publishing, etc.) does not see an
-      # Edit link into ecommerce they cannot actually open.
-      mod.assign_admin_edit(socket, path, label: label, permission: "shop")
+         can?(socket, permission) do
+      mod.assign_admin_edit(socket, path, label: label, permission: permission)
     else
       socket
     end
   end
 
-  # Core's helper gates on "can this visitor reach the admin area at all",
-  # which is broader than what these links do: every one of them opens a
-  # catalog editor. An admin with, say, only order-desk permissions would
-  # have been shown a button that lands them on a page they cannot use.
-  defp can_manage_catalog?(socket) do
+  defp can?(socket, permission) do
     case socket.assigns[:phoenix_kit_current_scope] do
       nil -> false
-      scope -> Scope.can?(scope, "shop.manage_catalog")
+      scope -> Scope.can?(scope, permission)
     end
   end
 
@@ -549,10 +553,14 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   The shop's products and categories live in `phoenix_kit_catalogue` once
   the catalogue product source is on, so the link has to open the catalogue
   editor rather than the legacy shop form, which no longer backs the page
-  being viewed. `return_to` carries the storefront URL the visitor came
-  from — both catalogue forms validate it (`safe_return_to/1`) and use it
-  for their exit, so "edit, save, back to the page I was on" works without
-  the visitor reaching for the browser's back button.
+  being viewed. `return_to` is where the editor should send the visitor
+  back to — both catalogue forms validate it (`safe_return_to/1`) and use
+  it for their exit, so "edit, save, back to the page I was on" works
+  without reaching for the browser's back button. It is the page's
+  canonical URL rather than the exact one the visitor typed: these links
+  are built in `mount/3`, while core assigns `:url_path` from
+  `handle_params`, which runs later — so query state (a filter, a page
+  number) is not carried back.
 
   Falls back to the legacy shop path when the catalogue source is off or
   the catalogue module isn't loaded at all (it is an optional dependency).

@@ -116,7 +116,13 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         PhoenixKit.Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
       |> assign(:show_categories_grid, Helpers.sidebar_categories_enabled?())
-      |> Helpers.maybe_assign_admin_edit(Routes.path("/admin/shop"), gettext("Manage Shop"))
+      # `/admin/shop` is the shop DASHBOARD, gated on base `"shop"` — not
+      # a catalog editor. Gating this link on `shop.manage_catalog` would
+      # hide it from an admin (order desk, settings) who can still open
+      # the page it points to.
+      |> Helpers.maybe_assign_admin_edit(Routes.path("/admin/shop"), gettext("Manage Shop"),
+        permission: "shop"
+      )
 
     {:ok, socket}
   end

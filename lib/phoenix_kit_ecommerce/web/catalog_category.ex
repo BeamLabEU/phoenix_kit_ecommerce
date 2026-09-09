@@ -142,7 +142,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             Helpers.admin_edit_path(
               :category,
               category.uuid,
-              socket.assigns[:url_path] || Shop.category_url(category, current_language)
+              Shop.category_url(category, current_language)
             ),
             gettext("Edit Category")
           )

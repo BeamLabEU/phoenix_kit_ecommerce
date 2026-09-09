@@ -149,7 +149,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       )
       |> assign(
         :current_path,
-        socket.assigns[:url_path] || Shop.product_url(product, current_language)
+        Shop.product_url(product, current_language)
       )
       |> assign(:categories, Shop.list_active_categories(preload: [:featured_product]))
       |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
@@ -166,7 +166,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Helpers.admin_edit_path(
           :item,
           product.uuid,
-          socket.assigns[:url_path] || Shop.product_url(product, current_language)
+          Shop.product_url(product, current_language)
         ),
         gettext("Edit Product")
       )
@@ -323,7 +323,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     localized_title = Translations.get(product, :title, current_language)
     localized_description = Translations.get(product, :description, current_language)
     localized_body = Translations.get(product, :body_html, current_language)
-    current_path = socket.assigns[:url_path] || Shop.product_url(product, current_language)
+    current_path = Shop.product_url(product, current_language)
 
     # Subscribe to updates
     if connected?(socket) do
@@ -377,7 +377,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Helpers.admin_edit_path(
           :item,
           product.uuid,
-          socket.assigns[:url_path] || Shop.product_url(product, current_language)
+          Shop.product_url(product, current_language)
         ),
         gettext("Edit Product")
       )

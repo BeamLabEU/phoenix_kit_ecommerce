@@ -133,11 +133,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
       assert cart < heading
 
       # The bar used to carry its own "Shop" link beside the crumb that
-      # already links there; only the crumb is left.
-      assert html
-             |> String.split(~s(class="breadcrumbs))
-             |> hd()
-             |> String.contains?("hero-building-storefront") == false
+      # already links there; only the crumb is left. The bar renders AFTER
+      # the breadcrumbs inside the same row, so this has to read the slice
+      # BETWEEN the crumbs and the heading: everything before the crumbs
+      # never held that link in either layout, and an assertion that
+      # cannot fail is worse than no assertion at all.
+      top_row =
+        html
+        |> String.split(~s(class="breadcrumbs))
+        |> Enum.at(1)
+        |> String.split(~s(class="text-3xl font-bold))
+        |> hd()
+
+      refute top_row =~ "hero-building-storefront"
     end
   end
 end

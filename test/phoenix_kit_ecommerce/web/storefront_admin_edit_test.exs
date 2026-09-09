@@ -81,6 +81,19 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
       assert html =~ "Manage Shop"
       assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
     end
+
+    test "an admin with base shop but not manage_catalog still gets it", %{conn: conn} do
+      # `/admin/shop` is the shop dashboard, which asks for base `"shop"`.
+      # The catalog gate belongs on the links that open a catalog editor;
+      # applied here it would hide a link to a page this visitor can open
+      # by typing the URL — the link and its target must not disagree.
+      conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
+
+      {:ok, view, html} = live(conn, "/shop")
+
+      assert html =~ "Manage Shop"
+      assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
+    end
   end
 
   describe "category page (/shop/category/:slug)" do
