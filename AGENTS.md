@@ -74,6 +74,13 @@ PHOENIX_KIT_BILLING_PATH=../phoenix_kit_billing mix test
 PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
 ```
 
+Repo-local aliases:
+
+- `mix quality` — `format` + `credo --strict` + `dialyzer` (applies formatting).
+- `mix quality.ci` — `format --check-formatted` + `credo --strict` + `dialyzer`: it CHECKS formatting rather than applying it, so run `mix format` first.
+- `mix test.reset` — drops the test database and recreates it.
+- `mix test.setup` — `ecto.create` on the test repo, the alias equivalent of `createdb`.
+
 ## Conventions
 
 - **Module key** is `"shop"` in every callback. Tab ids are prefixed
@@ -131,7 +138,8 @@ PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
   `PhoenixKitEcommerce.Policy` (security policy),
   `PhoenixKitEcommerce.Vocabulary` (catalog vocabulary),
   `PhoenixKitEcommerce` itself (`shipping_skip_mode/0`,
-  `shipping_selection_position/0`, `notify_event?/1`). The wrapper is the
+  `shipping_selection_position/0`, `notify_event?/1`,
+  `enforce_product_currency?/0`). The wrapper is the
   single source of truth for the default, so the admin UI and the enforcement
   point cannot disagree; every policy reader fails *closed* on a
   settings-layer error and tolerates a malformed stored value by falling back
@@ -365,7 +373,8 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_inventory_tracking` — track product inventory (default: `true`)
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
-  currency does not match the shop's (default: `false`)
+  currency does not match the shop's (default: `false`). Read through
+  `enforce_product_currency?/0`.
 
 **Storefront display**
 

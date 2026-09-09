@@ -12,9 +12,8 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
-  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitBilling.Currency
-  alias PhoenixKitEcommerce.SlugResolver
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Translations
 
   # ---------------------------------------------------------------------------
@@ -192,10 +191,15 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   """
   @spec tags_visible?(String.t() | nil) :: boolean()
   def tags_visible?(language) when is_binary(language) do
-    # A page carries a dialect ("en-US"), the setting holds a base code
-    # ("en") — compare them the way slugs are compared.
-    SlugResolver.normalize_language_public(language) ==
-      SlugResolver.normalize_language_public(Translations.default_language())
+    # Compare bases, not dialects. The page language is resolved to a
+    # canonical dialect (`"en"` → `"en-US"`) while the configured default
+    # is stored verbatim (`"en"`, `"en-GB"`, `"en-US"` are all legitimate).
+    # Dialect equality hid tags on a shop whose default is a non-canonical
+    # dialect (`en-GB` vs the page's `en-US`). Same-base secondary dialects
+    # (`en-GB` visitor on an `en-US`-default shop) also show tags — they
+    # are untranslated default-language text either way.
+    DialectMapper.extract_base(language) ==
+      DialectMapper.extract_base(Translations.default_language())
   end
 
   def tags_visible?(_language), do: false
@@ -518,7 +522,10 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
     if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) and
          can_manage_catalog?(socket) do
-      mod.assign_admin_edit(socket, path, label)
+      # `permission: "shop"` so an admin who can reach the admin area
+      # through some other module (Publishing, etc.) does not see an
+      # Edit link into ecommerce they cannot actually open.
+      mod.assign_admin_edit(socket, path, label: label, permission: "shop")
     else
       socket
     end

@@ -20,8 +20,8 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.ShopConfig
-  alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Test.Repo
+  alias PhoenixKitEcommerce.Web.Helpers
 
   defp admin_edit_href(view) do
     view
@@ -184,6 +184,31 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
 
       assert href =~ "/admin/catalogue/items/#{product.uuid}/edit"
       assert href =~ "return_to=%2Fen%2Fshop%2Fproduct%2Fx"
+    end
+
+    test "admin Edit survives shop_show_cart_bar being off", %{
+      conn: conn,
+      path: path,
+      product: product
+    } do
+      PhoenixKit.Settings.update_setting("shop_show_cart_bar", "false")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+
+      on_exit(fn ->
+        PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
+        PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+      end)
+
+      conn = put_test_scope(conn, fake_scope())
+      {:ok, view, html} = live(conn, path)
+
+      assert html =~ "Edit Product"
+      refute html =~ ">Cart<"
+
+      href = admin_edit_href(view)
+
+      assert href =~ "/admin/shop/products/#{product.uuid}/edit"
+      assert href =~ "return_to=", "the editor must know where to send the visitor back to"
     end
   end
 end

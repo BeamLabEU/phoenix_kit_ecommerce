@@ -122,6 +122,60 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
       assert no_shop_status.uuid in Enum.map(results, & &1.uuid)
       refute inactive_item.uuid in Enum.map(results, & &1.uuid)
     end
+
+    test "exclude_hidden_categories: true keeps position/name ordering (no DISTINCT ON uuid)",
+         %{catalogue: catalogue} do
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Shown", catalogue_uuid: catalogue.uuid})
+
+      later =
+        create_item(catalogue, %{
+          name: "Zebra",
+          position: 2,
+          category_uuid: category.uuid,
+          base_price: Decimal.new("1.00"),
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      earlier =
+        create_item(catalogue, %{
+          name: "Apple",
+          position: 1,
+          category_uuid: category.uuid,
+          base_price: Decimal.new("1.00"),
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      names =
+        Query.list_items(status: "active", exclude_hidden_categories: true)
+        |> Enum.map(& &1.name)
+
+      assert names == [earlier.name, later.name]
+    end
+
+    test "filters by product_type with the same physical default as View.product_view/2", %{
+      catalogue: catalogue
+    } do
+      physical =
+        create_item(catalogue, %{
+          name: "Mug",
+          base_price: Decimal.new("1.00"),
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      digital =
+        create_item(catalogue, %{
+          name: "PDF",
+          base_price: Decimal.new("1.00"),
+          data: %{"ecommerce" => %{"shop_status" => "active", "product_type" => "digital"}}
+        })
+
+      names =
+        Query.list_items(status: "active", product_type: "physical") |> Enum.map(& &1.name)
+
+      assert physical.name in names
+      refute digital.name in names
+    end
   end
 
   describe "price_range/1 and vendor_counts/1" do
@@ -140,6 +194,59 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
 
       assert Query.price_range() == {Decimal.new("10.00"), Decimal.new("30.00")}
       assert [%{value: "Acme", count: 2}] = Query.vendor_counts()
+    end
+
+    test "an item with no shop_status is counted, matching the listing fallback", %{
+      catalogue: catalogue
+    } do
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Counted", catalogue_uuid: catalogue.uuid})
+
+      create_item(catalogue, %{
+        name: "No Shop Status",
+        base_price: Decimal.new("12.00"),
+        category_uuid: category.uuid
+      })
+
+      assert Query.product_counts_by_category()[category.uuid] == 1
+      assert Query.price_range() == {Decimal.new("12.00"), Decimal.new("12.00")}
+    end
+
+    test "exclude_hidden_categories drops hidden-category items from vendor counts and price_range",
+         %{catalogue: catalogue} do
+      {:ok, hidden} =
+        Catalogue.create_category(%{
+          name: "Hidden",
+          catalogue_uuid: catalogue.uuid,
+          data: %{"ecommerce" => %{"shop_status" => "hidden"}}
+        })
+
+      {:ok, shown} =
+        Catalogue.create_category(%{
+          name: "Shown",
+          catalogue_uuid: catalogue.uuid,
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      create_item(catalogue, %{
+        name: "Hidden Item",
+        base_price: Decimal.new("99.00"),
+        category_uuid: hidden.uuid,
+        data: %{"ecommerce" => %{"shop_status" => "active", "vendor" => "HiddenCo"}}
+      })
+
+      create_item(catalogue, %{
+        name: "Shown Item",
+        base_price: Decimal.new("10.00"),
+        category_uuid: shown.uuid,
+        data: %{"ecommerce" => %{"shop_status" => "active", "vendor" => "ShownCo"}}
+      })
+
+      assert Query.price_range(exclude_hidden_categories: true) ==
+               {Decimal.new("10.00"), Decimal.new("10.00")}
+
+      assert [%{value: "ShownCo", count: 1}] =
+               Query.vendor_counts(exclude_hidden_categories: true)
     end
   end
 
