@@ -542,8 +542,9 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   Pass it back in as `opts[:url_index]` when syncing many products in a
   row: the index is one query over every active file in Storage, and
   rebuilding it per product turns a catalogue-wide media sync into one
-  full scan per item. `merge_url_index/2` folds the files a product just
-  downloaded into it, so later products in the same run still reuse them.
+  full scan per item. `sync_images/3`'s own result carries `:url_index`
+  merged with the files that product just downloaded, so later products
+  in the same run still reuse them.
   """
   @spec build_url_index() :: %{optional(String.t()) => String.t()}
   def build_url_index do
