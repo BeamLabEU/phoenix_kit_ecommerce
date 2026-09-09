@@ -147,7 +147,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   end
 
   @doc """
-  Compact "browse / cart" bar for storefront pages.
+  Compact cart-side actions for storefront pages, rendered on the same row
+  as the page's breadcrumbs.
 
   The storefront used to ship its own top-level layout carrying a cart
   link, a language switcher and a home link. Rendering inside the HOST's
@@ -157,6 +158,10 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   with any host chrome rather than competing with it), server-rendered,
   and switchable off via `shop_show_cart_bar` by hosts that carry their
   own.
+
+  It carries no "Shop" link: every page that renders it also renders
+  breadcrumbs, whose first crumb is that same link, and two of them side
+  by side only cost a row of vertical space.
   """
   attr :language, :string, required: true
   attr :cart_count, :integer, default: 0
@@ -172,40 +177,30 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
     ~H"""
     <div
       :if={show_cart_bar?() or not is_nil(@admin_edit_url)}
-      class={["flex items-center justify-between gap-4 mb-6", @class]}
+      class={["flex items-center gap-2", @class]}
     >
-      <.link
-        :if={show_cart_bar?()}
-        navigate={Shop.catalog_url(@language)}
-        class="btn btn-ghost btn-sm gap-2"
-      >
-        <.icon name="hero-building-storefront" class="w-4 h-4" />
-        {gettext("Shop")}
+      <%!-- Admin edit sits with the page's other navigation rather than
+            beside the page heading, where it changed how the heading itself
+            was laid out for an admin. It stays independent of
+            `shop_show_cart_bar`: a host that hides the Shop/Cart links
+            because its own header already carries them still needs the
+            product/category Edit link. --%>
+      <.link :if={@admin_edit_url} navigate={@admin_edit_url} class="btn btn-outline btn-sm gap-2">
+        <.icon name="hero-pencil-square" class="w-4 h-4" />
+        {@admin_edit_label || gettext("Edit")}
       </.link>
 
-      <div class="flex items-center gap-2 ml-auto">
-        <%!-- Admin edit is independent of `shop_show_cart_bar`: hosts that
-              hide the Shop/Cart links (their header already has them)
-              still need the product/category Edit link. --%>
-        <.link
-          :if={@admin_edit_url}
-          navigate={@admin_edit_url}
-          class="btn btn-outline btn-sm gap-2"
-        >
-          <.icon name="hero-pencil-square" class="w-4 h-4" />
-          {@admin_edit_label || gettext("Edit")}
-        </.link>
-
-        <.link
-          :if={show_cart_bar?()}
-          navigate={Shop.cart_url(@language)}
-          class="btn btn-outline btn-sm gap-2"
-        >
-          <.icon name="hero-shopping-cart" class="w-4 h-4" />
-          {gettext("Cart")}
-          <span :if={@cart_count > 0} class="badge badge-primary badge-sm">{@cart_count}</span>
-        </.link>
-      </div>
+      <%!-- The bar carried its own "Shop" link until the breadcrumbs moved
+            onto this same row, where the first crumb already links there. --%>
+      <.link
+        :if={show_cart_bar?()}
+        navigate={Shop.cart_url(@language)}
+        class="btn btn-outline btn-sm gap-2"
+      >
+        <.icon name="hero-shopping-cart" class="w-4 h-4" />
+        {gettext("Cart")}
+        <span :if={@cart_count > 0} class="badge badge-primary badge-sm">{@cart_count}</span>
+      </.link>
     </div>
     """
   end
