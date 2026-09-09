@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.5.1 - 2026-09-09
+
+### Added
+
+- **Shopify currency guard (per-domain-currency design §7.5).** The
+  Shopify sync now looks up the connected store's own currency once per
+  batch and refuses to write `:price`/`:compare_at_price` — or refuses a
+  whole create, or a whole variant/option-modifier sync — when it
+  disagrees with the shop's base currency; a non-price field on the same
+  change still applies. A failed lookup fails open and logs at `error`
+  (never silently disables the guard); a real mismatch logs at
+  `warning`. Newly-created catalogue items are labelled with the base
+  currency. (#47)
+- **Shopify image sync reuses files shop-wide, not per product.** A live
+  run against 665 products re-downloaded 582 already-stored images
+  because the "already downloaded?" check only looked at files linked to
+  the one product being synced; Shopify shops commonly reuse the exact
+  same image across an entire product line. The lookup now matches any
+  active Storage file in the shop by its download source URL, built once
+  per sync run rather than once per product. (#47)
+
+### Fixed
+
+- **Shopify `body_html` is converted to Markdown on the create path
+  too**, matching the update path — a freshly created catalogue item no
+  longer prints literal `**` from unconverted HTML. (#47)
+
 ## 0.5.0 - 2026-09-08
 
 PRs #32–#46 plus the post-merge review in
