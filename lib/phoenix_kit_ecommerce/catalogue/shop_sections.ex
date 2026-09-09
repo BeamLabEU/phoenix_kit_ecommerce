@@ -272,7 +272,13 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   def category(assigns) do
     ecommerce = Map.get(assigns[:data] || %{}, "ecommerce", %{})
     form = assigns[:form]
-    item_options = Query.category_item_image_options(category_uuid(assigns[:category]))
+
+    # Cached per category for the life of the LiveView process: this is a
+    # function component inside a form whose `phx-change="validate"` fires
+    # on every keystroke, so querying here meant a database round trip per
+    # character typed into any field on the page. The candidate list only
+    # changes when the category's items do, which a form edit never does.
+    item_options = cached_item_options(assigns[:category])
 
     assigns =
       assigns
@@ -350,6 +356,24 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   # list.
   defp category_uuid(%{uuid: uuid}) when is_binary(uuid), do: uuid
   defp category_uuid(_), do: nil
+
+  # Keyed by category uuid in the process dictionary: a function component
+  # has no assigns of its own to memoise into, and this runs inside the
+  # LiveView process, which is per-connection and dies with the page.
+  defp cached_item_options(category) do
+    uuid = category_uuid(category)
+    key = {__MODULE__, :item_options, uuid}
+
+    case Process.get(key) do
+      nil ->
+        options = Query.category_item_image_options(uuid)
+        Process.put(key, options)
+        options
+
+      cached ->
+        cached
+    end
+  end
 
   # Reads errors `Ecto.Changeset.add_error/4`-tagged with
   # `extension: "ecommerce", field: field` off the `:data` field's errors
