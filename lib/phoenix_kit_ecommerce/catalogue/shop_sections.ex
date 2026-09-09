@@ -17,8 +17,11 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   use Gettext, backend: PhoenixKitEcommerce.Gettext
 
   import PhoenixKitWeb.Components.Core.Checkbox
+  import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Input
   import PhoenixKitWeb.Components.Core.Select
+
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
 
   attr :form, :any, default: nil
   attr :item, :any, default: nil
@@ -269,10 +272,12 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   def category(assigns) do
     ecommerce = Map.get(assigns[:data] || %{}, "ecommerce", %{})
     form = assigns[:form]
+    item_options = Query.category_item_image_options(category_uuid(assigns[:category]))
 
     assigns =
       assigns
       |> assign(:ecommerce, ecommerce)
+      |> assign(:item_options, item_options)
       |> assign(:shop_status_errors, field_errors(form, :shop_status))
       |> assign(:image_uuid_errors, field_errors(form, :image_uuid))
       |> assign(:featured_item_uuid_errors, field_errors(form, :featured_item_uuid))
@@ -305,22 +310,46 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
               label={gettext("Category image (Storage uuid)")}
               errors={@image_uuid_errors}
             />
+            <label class="label">
+              <span class="fieldset-label text-base-content/50">
+                {gettext("Takes priority over the featured item's image below.")}
+              </span>
+            </label>
           </div>
 
-          <div class="fieldset w-full">
-            <.input
-              name="category[ecommerce][featured_item_uuid]"
-              value={Map.get(@ecommerce, "featured_item_uuid")}
-              type="text"
-              label={gettext("Featured item (image fallback)")}
-              errors={@featured_item_uuid_errors}
-            />
+          <div class="fieldset w-full md:col-span-2">
+            <%= if @item_options != [] do %>
+              <.select
+                name="category[ecommerce][featured_item_uuid]"
+                value={Map.get(@ecommerce, "featured_item_uuid")}
+                prompt={gettext("Auto-detect (first item with an image)")}
+                label={gettext("Featured item (image fallback)")}
+                options={@item_options}
+                errors={@featured_item_uuid_errors}
+              />
+            <% else %>
+              <label class="label">
+                <span class="fieldset-legend font-medium">{gettext("Featured item (image fallback)")}</span>
+              </label>
+              <div class="text-sm text-base-content/50 py-2">
+                <.icon name="hero-information-circle" class="w-4 h-4 inline mr-1" />
+                {gettext(
+                  "No items with images in this category. Add item images to enable this option."
+                )}
+              </div>
+            <% end %>
           </div>
         </div>
       </div>
     </div>
     """
   end
+
+  # A `:new` category (not yet saved) is a bare struct with `uuid: nil` —
+  # no items can be attached to it yet, so the picker has nothing to
+  # list.
+  defp category_uuid(%{uuid: uuid}) when is_binary(uuid), do: uuid
+  defp category_uuid(_), do: nil
 
   # Reads errors `Ecto.Changeset.add_error/4`-tagged with
   # `extension: "ecommerce", field: field` off the `:data` field's errors
