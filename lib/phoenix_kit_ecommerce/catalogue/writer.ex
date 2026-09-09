@@ -43,8 +43,8 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
-  alias PhoenixKitEcommerce.HtmlToMarkdown
   alias PhoenixKitEcommerce.Catalogue.ValueResolver
+  alias PhoenixKitEcommerce.HtmlToMarkdown
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
   alias PhoenixKitEcommerce.Services.ImageDownloader
@@ -688,6 +688,19 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     %{
       "shop_status" => shopify_shop_status(shopify_product["status"]),
       "currency" => base_currency_code(),
+      "vendor" => shopify_product["vendor"],
+      "tags" => shopify_product["tags"],
+      "compare_at_price" =>
+        shopify_product["variants"]
+        |> List.wrap()
+        |> Enum.map(& &1["compare_at_price"])
+        |> Enum.map(&parse_shopify_price/1)
+        |> Enum.reject(&is_nil/1)
+        |> case do
+          [] -> nil
+          prices -> Enum.max(prices, Decimal)
+        end
+        |> decimal_param(),
       "shopify" => %{
         "handle" => shopify_product["handle"],
         "product_id" => shopify_product["id"] && to_string(shopify_product["id"])
@@ -759,9 +772,8 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
   defp min_variant_price(variants) when is_list(variants) and variants != [] do
     variants
-    |> Enum.map(& &1["price"])
+    |> Enum.map(&parse_shopify_price(&1["price"]))
     |> Enum.reject(&is_nil/1)
-    |> Enum.map(&Decimal.new/1)
     |> case do
       [] -> nil
       prices -> Enum.min(prices, Decimal)
@@ -769,4 +781,15 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   end
 
   defp min_variant_price(_variants), do: nil
+
+  defp parse_shopify_price(%Decimal{} = decimal), do: decimal
+
+  defp parse_shopify_price(price) when is_binary(price) do
+    case Decimal.parse(price) do
+      {decimal, ""} -> decimal
+      _ -> nil
+    end
+  end
+
+  defp parse_shopify_price(_price), do: nil
 end

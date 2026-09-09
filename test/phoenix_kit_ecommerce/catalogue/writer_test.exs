@@ -113,7 +113,26 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
       assert item.data["ecommerce"]["shopify"]["product_id"] == "555123"
     end
 
-    test "stores body_html as Markdown, like the update path does" do
+    test "converts body_html to Markdown and does not raise on a junk variant price" do
+      shopify_product = %{
+        "handle" => "html-widget",
+        "title" => "HTML Widget",
+        "id" => 555_124,
+        "vendor" => "Acme",
+        "tags" => "red, blue",
+        "status" => "active",
+        "body_html" => "<p>Hello <strong>there</strong>.</p>",
+        "variants" => [%{"price" => "n/a"}, %{"price" => "12.50"}]
+      }
+
+      assert {:ok, item} = Writer.create_from_shopify(shopify_product, "en")
+      assert item.description == "Hello **there**."
+      assert Decimal.equal?(item.base_price, Decimal.new("12.50"))
+      assert item.data["ecommerce"]["vendor"] == "Acme"
+      assert item.data["ecommerce"]["tags"] == ["red", "blue"]
+    end
+
+    test "stores a multi-paragraph body_html as Markdown, like the update path does" do
       # Shopify always sends raw HTML. The storefront renders the stored
       # description as Markdown, so an HTML block would print the `**`
       # inside it literally — and the item would read as permanently

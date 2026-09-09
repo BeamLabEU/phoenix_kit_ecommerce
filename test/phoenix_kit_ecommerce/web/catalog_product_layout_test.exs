@@ -1,10 +1,12 @@
 defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
   @moduledoc """
-  Pins the storefront product page layout after the description moved out
-  of the buy box: the purchase controls come BEFORE the description in the
-  document, and the description (Markdown as well as raw-ish HTML, both
-  through the same sanitizing `<.markdown>`), the `body_html`, the
-  specifications and the collapsed category panel all still render.
+  Pins the storefront product page layout. The gallery, the buy box and the
+  description are three sibling grid items: on a wide screen the description
+  sits under the gallery in the left column, and on the single column a phone
+  gets they stack gallery -> buy box -> description, so the purchase controls
+  still come BEFORE the description in the document. The description (Markdown
+  as well as raw-ish HTML, both through the same sanitizing `<.markdown>`), the
+  `body_html`, the specifications and the category filter all still render.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
@@ -36,7 +38,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
     )
   end
 
-  test "buy box precedes the description; Markdown and body_html both render below", %{
+  test "the buy box precedes the description, which is placed under the gallery", %{
     conn: conn
   } do
     {:ok, product} =
@@ -51,8 +53,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
     description_at = :binary.match(html, "Short <strong>bold</strong> intro") |> elem(0)
     body_at = :binary.match(html, "Long supplier text") |> elem(0)
 
+    # Document order is what a phone stacks, so the purchase controls stay
+    # ahead of the description — the defect #44 fixed. The description is
+    # still under the gallery on a wide screen: it is a sibling grid item
+    # placed in the gallery's column, one row down.
     assert add_to_cart_at < description_at,
-           "the Add to Cart button must come before the description in the document"
+           "Add to Cart must precede the description, which is what a phone stacks"
+
+    assert html =~ ~s(<section class="md:col-start-1 md:row-start-2">),
+           "the description must be placed in the gallery's column, one row down"
 
     assert description_at < body_at
     assert html =~ "<li>point one</li>"
@@ -76,7 +85,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
     refute html =~ ~s(<div class="mt-4">)
   end
 
-  test "the category panel renders collapsed under the product and honours the setting", %{
+  test "the category filter renders in the buy-box column and honours the setting", %{
     conn: conn
   } do
     {:ok, category} =
@@ -89,13 +98,20 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
     {:ok, product} = create_product(%{"category_uuid" => category.uuid})
 
     {:ok, _view, html} = live(conn, "/shop/product/#{product.slug[lang()]}")
-    assert html =~ ~s(<details class="collapse collapse-arrow)
+    assert html =~ ~s(id="product-category-filter")
     assert html =~ "Layout Cat"
+
+    # It sits below the cart button, in the same column — not in a panel at
+    # the foot of the page.
+    cart = :binary.match(html, "add_to_cart") |> elem(0)
+    filter = :binary.match(html, ~s(id="product-category-filter")) |> elem(0)
+    assert cart < filter
+    refute html =~ ~s(<details class="collapse collapse-arrow)
 
     PhoenixKit.Settings.update_setting("shop_sidebar_show_categories", "false")
     on_exit(fn -> PhoenixKit.Settings.update_setting("shop_sidebar_show_categories", "true") end)
 
     {:ok, _view, html} = live(conn, "/shop/product/#{product.slug[lang()]}")
-    refute html =~ ~s(<details class="collapse collapse-arrow)
+    refute html =~ ~s(id="product-category-filter")
   end
 end

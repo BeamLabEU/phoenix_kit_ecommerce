@@ -194,11 +194,6 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
       started_at = start_progress(kind, total)
       opts = Keyword.put(opts, :currency_verdict, currency_verdict_for(kind, opts))
 
-      # `raw_errors` stays newest-first (plain prepend) for the whole
-      # loop — reversing it into display order happens exactly once,
-      # in `maybe_save_progress/5`/at the end, never on a value that
-      # was already reversed on a previous iteration (that would
-      # scramble the order past the second error).
       # One shop-wide "source URL -> file uuid" index for the whole run.
       # `Writer.sync_images/3` matches against it and hands back the same
       # index plus whatever this product downloaded, so a picture shared
@@ -206,21 +201,32 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
       # would mean one full scan of every stored file per item.
       url_index = if kind == "images", do: Writer.build_url_index(), else: %{}
 
-      {done, raw_errors, _url_index} =
-        products
-        |> Enum.with_index(1)
-        |> Enum.reduce({0, [], url_index}, fn {product, position},
-                                              {_done, raw_errors, url_index} ->
-          {raw_errors, url_index} =
-            process_product(kind, product, index, actor_uuid, opts, raw_errors, url_index)
+      try do
+        # `raw_errors` stays newest-first (plain prepend) for the whole
+        # loop — reversing it into display order happens exactly once,
+        # in `maybe_save_progress/5`/at the end, never on a value that
+        # was already reversed on a previous iteration (that would
+        # scramble the order past the second error).
+        {done, raw_errors, _url_index} =
+          products
+          |> Enum.with_index(1)
+          |> Enum.reduce({0, [], url_index}, fn {product, position},
+                                                {_done, raw_errors, url_index} ->
+            {raw_errors, url_index} =
+              process_product(kind, product, index, actor_uuid, opts, raw_errors, url_index)
 
-          maybe_save_progress(kind, total, position, raw_errors, started_at)
-          {position, raw_errors, url_index}
-        end)
+            maybe_save_progress(kind, total, position, raw_errors, started_at)
+            {position, raw_errors, url_index}
+          end)
 
-      errors = Enum.reverse(raw_errors)
-      finish_progress(kind, total, done, errors, started_at, nil)
-      {:ok, %{total: total, done: done, errors: errors}}
+        errors = Enum.reverse(raw_errors)
+        finish_progress(kind, total, done, errors, started_at, nil)
+        {:ok, %{total: total, done: done, errors: errors}}
+      rescue
+        exception ->
+          fail_progress(kind, Exception.message(exception))
+          reraise exception, __STACKTRACE__
+      end
     else
       {:error, reason} = error ->
         fail_progress(kind, reason)
@@ -335,14 +341,20 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         started_at = start_progress("collections", 1)
         run_opts = Keyword.put(opts, :catalogue_uuid, catalogue_uuid)
 
-        case CollectionSync.run(run_opts) do
-          {:ok, result} ->
-            finish_progress("collections", 1, 1, [], started_at, result)
-            {:ok, result}
+        try do
+          case CollectionSync.run(run_opts) do
+            {:ok, result} ->
+              finish_progress("collections", 1, 1, [], started_at, result)
+              {:ok, result}
 
-          {:error, reason} = error ->
-            fail_progress("collections", reason)
-            error
+            {:error, reason} = error ->
+              fail_progress("collections", reason)
+              error
+          end
+        rescue
+          exception ->
+            fail_progress("collections", Exception.message(exception))
+            reraise exception, __STACKTRACE__
         end
 
       {:error, reason} = error ->

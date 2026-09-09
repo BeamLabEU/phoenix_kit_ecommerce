@@ -113,5 +113,29 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
              |> element(~s{a[href="/en/admin/shop/products/#{product.uuid}/edit"]})
              |> has_element?()
     end
+
+    test "admin Edit survives shop_show_cart_bar being off", %{
+      conn: conn,
+      path: path,
+      product: product
+    } do
+      PhoenixKit.Settings.update_setting("shop_show_cart_bar", "false")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+
+      on_exit(fn ->
+        PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
+        PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+      end)
+
+      conn = put_test_scope(conn, fake_scope())
+      {:ok, view, html} = live(conn, path)
+
+      assert html =~ "Edit Product"
+      refute html =~ ">Cart<"
+
+      assert view
+             |> element(~s{a[href="/en/admin/shop/products/#{product.uuid}/edit"]})
+             |> has_element?()
+    end
   end
 end
