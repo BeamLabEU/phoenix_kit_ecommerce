@@ -108,6 +108,17 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
       refute html =~ "Edit Category"
     end
 
+    test "an admin without shop.manage_catalog is shown no link", %{conn: conn, path: path} do
+      # The product page has the same test. This one exists because the
+      # gate is per call site now, so "the product page is covered" stops
+      # being an argument about the category page.
+      conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
+
+      {:ok, _view, html} = live(conn, path)
+
+      refute html =~ "Edit Category"
+    end
+
     test "admin visitor sees an Edit Category link to the matching admin page", %{
       conn: conn,
       path: path,

@@ -557,10 +557,13 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   back to — both catalogue forms validate it (`safe_return_to/1`) and use
   it for their exit, so "edit, save, back to the page I was on" works
   without reaching for the browser's back button. It is the page's
-  canonical URL rather than the exact one the visitor typed: these links
-  are built in `mount/3`, while core assigns `:url_path` from
-  `handle_params`, which runs later — so query state (a filter, a page
-  number) is not carried back.
+  canonical URL rather than the exact one the visitor typed, and query
+  state (a filter, a page number) is not carried back. Two reasons, and
+  the second is the one that matters: these links are built in `mount/3`,
+  while core assigns `:url_path` from its `handle_params` hook, which
+  runs later — but `:url_path` is a path, parsed out of the URL with the
+  query discarded, so building the link later would not carry the query
+  either.
 
   Falls back to the legacy shop path when the catalogue source is off or
   the catalogue module isn't loaded at all (it is an optional dependency).

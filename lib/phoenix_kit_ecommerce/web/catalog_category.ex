@@ -98,10 +98,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         localized_name = Translations.get(category, :name, current_language)
         localized_description = Translations.get(category, :description, current_language)
 
-        # Get current path for language switcher
-        current_path =
-          socket.assigns[:url_path] ||
-            "/shop/category/#{Translations.get(category, :slug, current_language)}"
+        # Current path for the language switcher. Built here in `mount/3`,
+        # so core's `:url_path` (assigned from its `handle_params` hook) is
+        # not available yet — the canonical path is what this can use, the
+        # same as the product page.
+        current_path = "/shop/category/#{Translations.get(category, :slug, current_language)}"
 
         seo = SEOHelpers.category_seo(category, current_language)
 
