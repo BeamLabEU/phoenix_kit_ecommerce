@@ -114,4 +114,30 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductLayoutTest do
     {:ok, _view, html} = live(conn, "/shop/product/#{product.slug[lang()]}")
     refute html =~ ~s(id="product-category-filter")
   end
+
+  describe "the top row" do
+    test "breadcrumbs and the cart share one row, and the bar carries no Shop link", %{
+      conn: conn
+    } do
+      {:ok, product} = create_product(%{})
+
+      {:ok, _view, html} = live(conn, "/shop/product/#{product.slug[lang()]}")
+
+      # One row: the breadcrumbs open it, the cart link closes it, and the
+      # page heading comes after both.
+      crumbs = :binary.match(html, ~s(class="breadcrumbs text-sm")) |> elem(0)
+      cart = :binary.match(html, "/cart") |> elem(0)
+      heading = :binary.match(html, ~s(class="text-3xl font-bold)) |> elem(0)
+
+      assert crumbs < cart
+      assert cart < heading
+
+      # The bar used to carry its own "Shop" link beside the crumb that
+      # already links there; only the crumb is left.
+      assert html
+             |> String.split(~s(class="breadcrumbs))
+             |> hd()
+             |> String.contains?("hero-building-storefront") == false
+    end
+  end
 end
