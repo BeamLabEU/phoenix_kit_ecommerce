@@ -1402,7 +1402,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       refute html =~ "Load more"
     end
 
-    # `bump_page/3` still clamps against the CURRENT count rather than the
+    # `grow_section/2` still clamps against the CURRENT count rather than the
     # raw stored page: 51 rows, load twice (25 -> 50 -> 51), apply the
     # lone 51st — 50 remain, so the stored page 3 is out of range and the
     # loaded set must settle at everything that is left rather than

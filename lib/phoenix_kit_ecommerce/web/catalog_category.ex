@@ -94,8 +94,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         # Check if user is authenticated
         authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
-        # Get localized category content
-        localized_name = Translations.get(category, :name, current_language)
+        # Get localized category content. `get_display/3` (not `get/3`):
+        # this is the storefront page, so the `shop_name_prefixes` setting
+        # applies to the name — description is untouched.
+        localized_name = Translations.get_display(category, :name, current_language)
         localized_description = Translations.get(category, :description, current_language)
 
         # Current path for the language switcher. Built here in `mount/3`,
@@ -292,6 +294,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   end
 
   @impl true
+  def handle_event("clear_filter", %{"key" => key}, socket) do
+    active_filters = FilterHelpers.clear_filter(socket.assigns.active_filters, key)
+    path = build_filter_path(socket.assigns, active_filters)
+    {:noreply, push_patch(socket, to: path)}
+  end
+
+  @impl true
   def handle_event("toggle_filter", %{"key" => key, "val" => value}, socket) do
     active_filters = FilterHelpers.toggle_filter_value(socket.assigns.active_filters, key, value)
     path = build_filter_path(socket.assigns, active_filters)
@@ -338,12 +347,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           <div class="breadcrumbs text-sm">
           <ul>
             <li>
-              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+              <%!-- The house marks this crumb as the way back to the shop's
+                    front page, so it reads as a destination rather than
+                    just the first word of a trail. --%>
+              <.link
+                navigate={Shop.catalog_url(@current_language) <> @filter_qs}
+                class="inline-flex items-center gap-1"
+              >
+                <.icon name="hero-home" class="w-4 h-4" />
                 {gettext("Shop")}
               </.link>
             </li>
             <%= if @category.parent do %>
-              <% parent_name = Translations.get(@category.parent, :name, @current_language) %>
+              <% parent_name = Translations.get_display(@category.parent, :name, @current_language) %>
               <li>
                 <.link navigate={Shop.category_url(@category.parent, @current_language) <> @filter_qs}>
                   {parent_name}

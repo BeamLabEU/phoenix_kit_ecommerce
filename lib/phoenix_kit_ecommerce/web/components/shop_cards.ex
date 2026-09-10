@@ -30,13 +30,16 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   def product_card(assigns) do
     assigns =
       assigns
-      |> assign(:product_title, Translations.get(assigns.product, :title, assigns.language))
+      |> assign(
+        :product_title,
+        Translations.get_display(assigns.product, :title, assigns.language)
+      )
       |> assign(:product_url, Shop.product_url(assigns.product, assigns.language))
       |> assign(:product_image_url, Helpers.first_image(assigns.product))
       |> assign(
         :category_name,
         if(assigns.show_category && assigns.product.category,
-          do: Translations.get(assigns.product.category, :name, assigns.language),
+          do: Translations.get_display(assigns.product.category, :name, assigns.language),
           else: nil
         )
       )

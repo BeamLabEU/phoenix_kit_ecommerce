@@ -104,7 +104,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
 
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
 
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
@@ -320,7 +320,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     filter_qs = FilterHelpers.build_query_string(active_filters, enabled_filters)
 
     # Get localized content
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
     localized_description = Translations.get(product, :description, current_language)
     localized_body = Translations.get(product, :body_html, current_language)
     current_path = Shop.product_url(product, current_language)
@@ -689,8 +689,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   defp build_cart_display_name(product, _price_affecting_specs, selected_specs) do
-    # Get localized title (use default language for cart display)
-    title = Translations.get(product, :title, Translations.default_language())
+    # Get localized title (use default language for cart display). The
+    # "Added to cart" flash is storefront-only and ephemeral (never
+    # persisted) - get_display/3 applies here, unlike the STORED
+    # `cart_item.product_title` snapshot, which stays raw.
+    title = Translations.get_display(product, :title, Translations.default_language())
 
     if map_size(selected_specs) > 0 do
       specs_str = selected_specs |> Map.values() |> Enum.join(", ")
@@ -754,12 +757,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           <div class="breadcrumbs text-sm">
             <ul>
               <li>
-                <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
+                <%!-- The house marks this crumb as the way back to the shop's
+                      front page, so it reads as a destination rather than
+                      just the first word of a trail. --%>
+                <.link
+                  navigate={Shop.catalog_url(@current_language) <> @filter_qs}
+                  class="inline-flex items-center gap-1"
+                >
+                  <.icon name="hero-home" class="w-4 h-4" />
                   {gettext("Shop")}
                 </.link>
               </li>
               <%= if @product.category do %>
-                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+                <% cat_name = Translations.get_display(@product.category, :name, @current_language) %>
                 <li>
                   <.link navigate={
                     Shop.category_url(@product.category, @current_language) <> @filter_qs
@@ -1112,7 +1122,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <% end %>
 
               <%= if @product.category do %>
-                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+                <% cat_name = Translations.get_display(@product.category, :name, @current_language) %>
                 <div>
                   <span class="text-base-content/60">{gettext("Category:")}</span>
                   <.link
@@ -1636,7 +1646,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp do_refresh_product(socket, product) do
     current_language = socket.assigns.current_language
     selectable_specs = Shop.get_selectable_specs(product)
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
 
     selected_specs = retained_specs(socket.assigns.selected_specs, selectable_specs, product)
 
