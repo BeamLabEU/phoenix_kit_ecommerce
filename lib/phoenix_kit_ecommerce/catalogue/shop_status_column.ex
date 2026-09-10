@@ -8,14 +8,61 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   `shop_status` are two independent signals — an item can be a live
   catalogue entry that is deliberately not for sale — and only the
   catalogue's own `status` showed on screen, so an item could be
-  invisible on the storefront for a reason the admin screen never
-  surfaced. This column does NOT synchronize the two (that would
-  destroy the distinction the owner wants to keep); it shows both, and
-  calls out the one disagreement that actually matters: when exactly
-  one of "catalogue active" / "shop active" holds, the item is NOT
-  visible on the storefront (`ProductSource.Catalogue.Query`'s
-  `active_visibility/1` requires both literally `"active"`) for a
-  reason that isn't obvious from either field alone.
+  invisible on the storefront (or, worse, reachable when it shouldn't
+  be — see below) for a reason the admin screen never surfaced. This
+  column does NOT synchronize the two (that would destroy the
+  distinction the owner wants to keep); it shows both, and warns only
+  on the one combination that is an actual hazard, not merely a
+  disagreement.
+
+  ## Why item and category are two different rules (`item_columns/0`
+  ## vs. `category_columns/0` return DIFFERENT column definitions)
+
+  Items and categories share neither their `shop_status` value domain
+  nor their storefront-visibility rule:
+
+    * Item `shop_status` — `draft` / `active` / `archived`
+      (`PhoenixKitEcommerce.Catalogue.ItemCommerce`). Listing visibility
+      (`ProductSource.Catalogue.Query.active_visibility/1`) requires
+      `item.status == "active"` AND `COALESCE(shop_status, 'active') ==
+      "active"` — an absent `shop_status` defaults to whatever
+      `item.status` already says (`View.product_status/2`'s exact
+      fallback), so it never disagrees with the catalogue by itself.
+    * Category `shop_status` — `active` / `unlisted` / `hidden`
+      (`CategoryCommerce`). Only `hidden` removes a category's items
+      from listings (`Query.exclude_hidden_categories/2`); `unlisted`
+      only hides the category's own nav entry — its page and items stay
+      directly reachable (`CatalogCategory.do_mount/3` only redirects on
+      `"hidden"`). An absent `shop_status` defaults UNCONDITIONALLY to
+      `"active"` (`View.category_view/2`: `Map.get(ecommerce,
+      "shop_status") || "active"` — no fallback to `c.status` at all).
+
+  ## The one case that warrants a warning
+
+  `ProductSource.Catalogue.Query.active_visibility/1` (the LISTING
+  query) unconditionally requires the catalogue's own status to be
+  right (`item.status == "active"` / `c.status != "deleted"`) — no
+  `shop_status` value overrides that. But the DIRECT product/category
+  page (`CatalogProduct.do_mount/3`, `CatalogCategory.do_mount/3`) does
+  NOT re-check the catalogue status the same way: it derives its own
+  visibility from `View.product_status/2` / `View.category_view/2`,
+  and BOTH of those let an EXPLICIT `shop_status == "active"` win
+  outright, regardless of what the catalogue's own status says. So an
+  item with `item.status != "active"` but `shop_status == "active"` (or
+  a category with `c.status == "deleted"` but `shop_status ==
+  "active"`) is excluded from every listing/count/facet — invisible to
+  browsing — while still reachable, and purchasable, through its direct
+  URL. That is a real leak, not a cosmetic mismatch, and is the ONLY
+  combination this column flags.
+
+  Every other disagreement — catalogue active while the shop says
+  `draft`/`archived` (items) or `unlisted`/`hidden` (categories) — is
+  simply how the owner deliberately keeps something out of the shop
+  while it stays a live catalogue entry, and renders with no warning.
+  An absent `shop_status` is shown as the value it effectively resolves
+  to (per the fallbacks above), marked "(default)" rather than as an
+  alarming "Unknown" — it is not a misconfiguration, just a namespace
+  the Shop section has never written.
 
   Reached only through `PhoenixKitEcommerce.Catalogue.Extension`'s
   `item_columns/0`/`category_columns/0` — see that module's moduledoc
@@ -27,60 +74,131 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   dependency, or the extension-column slot it implements, is present at
   all.
 
-  One column definition serves both `item_columns/0` and
-  `category_columns/0` — `record.status` and
-  `data["ecommerce"]["shop_status"]` mean the same thing (an "active"
-  state gating storefront visibility) on both item and category
-  records; see `PhoenixKitEcommerce.Catalogue.ItemCommerce` and
-  `PhoenixKitEcommerce.Catalogue.CategoryCommerce`.
+  ## Badge colours
+
+  Core's `PhoenixKitWeb.Components.Core.Badge.status_badge/1` has no
+  case for `unlisted`/`hidden`/an unrecognized value — all three fall
+  through to the same grey `badge-ghost`, which would render three
+  semantically different category shop-statuses identically. Rather
+  than edit core, this module picks its own explicit badge class per
+  status (see `item_shop_badge/1`, `category_shop_badge/1`,
+  `catalogue_badge/1`) instead of delegating to `status_badge/1`.
   """
 
   use Phoenix.Component
   use Gettext, backend: PhoenixKitEcommerce.Gettext
 
-  import PhoenixKitWeb.Components.Core.Badge
   import PhoenixKitWeb.Components.Core.Icon
 
-  @unknown "unknown"
+  @item_shop_statuses ~w(draft active archived)
+  @category_shop_statuses ~w(active unlisted hidden)
 
   @doc "The `item_columns/0` entry — see this module's moduledoc."
   @spec item_columns() :: [map()]
-  def item_columns, do: [column()]
+  def item_columns, do: [%{id: "shop_status", label: &label/0, render: &render_item/1}]
 
   @doc "The `category_columns/0` entry — see this module's moduledoc."
   @spec category_columns() :: [map()]
-  def category_columns, do: [column()]
-
-  defp column, do: %{id: "shop_status", label: &label/0, render: &render/1}
+  def category_columns, do: [%{id: "shop_status", label: &label/0, render: &render_category/1}]
 
   defp label, do: gettext("Shop status")
 
-  # `record` is the catalogue item or category struct the table is
-  # rendering a row for (duck-typed: only `.status`/`.data` are read).
-  #
-  # `contradiction` is exactly one of "catalogue active" / "shop active"
-  # holding — the storefront requires BOTH to be literally `"active"`
-  # (`ProductSource.Catalogue.Query.active_visibility/1`), so whenever
-  # they disagree the item is invisible for a reason that isn't obvious
-  # from either field alone; when they agree (both active, or both not)
-  # there's nothing to call out.
-  defp render(record) do
-    catalogue_status = record |> Map.get(:status) |> normalize()
-    shop_status = record |> shop_status_raw() |> normalize()
+  # ============================================================
+  # Items
+  # ============================================================
+
+  # `record` is the catalogue item struct the table is rendering a row
+  # for (duck-typed: only `.status`/`.data` are read).
+  defp render_item(record) do
+    catalogue_status = record |> Map.get(:status) |> normalize_catalogue_status()
     catalogue_active? = catalogue_status == "active"
-    shop_active? = shop_status == "active"
+    raw_shop = record |> shop_status_raw() |> normalize_shop(@item_shop_statuses)
+
+    {shop_key, shop_default?} =
+      case raw_shop do
+        nil -> {if(catalogue_active?, do: "active", else: "archived"), true}
+        value -> {value, false}
+      end
+
+    # The one hazard this column exists to catch — see moduledoc "The
+    # one case that warrants a warning". An absent `shop_status`
+    # resolving to "active" only ever happens when `catalogue_active?`
+    # is already true (the fallback mirrors `View.product_status/2`),
+    # so it can never itself trigger this — only an EXPLICIT "active"
+    # shop status against a non-active catalogue status can.
+    contradiction = raw_shop == "active" and not catalogue_active?
 
     cell(%{
+      catalogue: catalogue_badge(catalogue_status),
+      shop: item_shop_badge(shop_key, shop_default?),
       catalogue_status: catalogue_status,
-      shop_status: shop_status,
-      contradiction: catalogue_active? != shop_active?
+      shop_status: raw_shop || "default",
+      contradiction: contradiction
     })
   end
 
-  # Absent :data, a nil/non-map :data, an absent/non-map "ecommerce"
+  defp item_shop_badge("active", false), do: {gettext("Active"), "badge-success", false}
+  defp item_shop_badge("active", true), do: {gettext("Active"), "badge-ghost", true}
+  defp item_shop_badge("draft", false), do: {gettext("Draft"), "badge-warning", false}
+  defp item_shop_badge("archived", false), do: {gettext("Archived"), "badge-ghost", false}
+  defp item_shop_badge("archived", true), do: {gettext("Archived"), "badge-ghost", true}
+
+  # ============================================================
+  # Categories
+  # ============================================================
+
+  # `record` is the catalogue category struct the table is rendering a
+  # row for.
+  defp render_category(record) do
+    catalogue_status = record |> Map.get(:status) |> normalize_catalogue_status()
+    catalogue_ok? = catalogue_status != "deleted"
+    raw_shop = record |> shop_status_raw() |> normalize_shop(@category_shop_statuses)
+
+    {shop_key, shop_default?} =
+      case raw_shop do
+        nil -> {"active", true}
+        value -> {value, false}
+      end
+
+    # Mirrors `render_item/1`'s hazard exactly, for the category side:
+    # an absent `shop_status` defaults UNCONDITIONALLY to "active"
+    # (`View.category_view/2` — no fallback to `c.status`), so — unlike
+    # items — this CAN combine with a non-ok catalogue status. Either
+    # way, "shop believes it's live" against "catalogue says otherwise"
+    # is the leak (`CatalogCategory.do_mount/3` only redirects on the
+    # literal `shop_status == "hidden"`, never on `c.status`).
+    contradiction = shop_key == "active" and not catalogue_ok?
+
+    cell(%{
+      catalogue: catalogue_badge(catalogue_status),
+      shop: category_shop_badge(shop_key, shop_default?),
+      catalogue_status: catalogue_status,
+      shop_status: raw_shop || "default",
+      contradiction: contradiction
+    })
+  end
+
+  defp category_shop_badge("active", false), do: {gettext("Active"), "badge-success", false}
+  defp category_shop_badge("active", true), do: {gettext("Active"), "badge-ghost", true}
+  defp category_shop_badge("unlisted", false), do: {gettext("Unlisted"), "badge-warning", false}
+  defp category_shop_badge("hidden", false), do: {gettext("Hidden"), "badge-error", false}
+
+  # ============================================================
+  # Shared
+  # ============================================================
+
+  # The catalogue's OWN status: item `active`/`inactive`/`discontinued`/
+  # `deleted`, category `active`/`deleted`. One mapping covers both —
+  # the two domains don't collide on any value.
+  defp catalogue_badge("active"), do: {gettext("Active"), "badge-success", false}
+  defp catalogue_badge("inactive"), do: {gettext("Inactive"), "badge-ghost", false}
+  defp catalogue_badge("discontinued"), do: {gettext("Discontinued"), "badge-warning", false}
+  defp catalogue_badge("deleted"), do: {gettext("Deleted"), "badge-error", false}
+  defp catalogue_badge(_unknown), do: {gettext("Unknown"), "badge-ghost", false}
+
+  # Absent `:data`, a nil/non-map `:data`, an absent/non-map "ecommerce"
   # namespace, an absent "shop_status" key, or a non-binary value all
-  # fall through to `nil` here — `normalize/1` turns that into the
-  # `"unknown"` ghost badge rather than ever guessing "active".
+  # fall through to `nil` here.
   defp shop_status_raw(record) do
     with data when is_map(data) <- Map.get(record, :data),
          ecommerce when is_map(ecommerce) <- Map.get(data, "ecommerce"),
@@ -91,9 +209,25 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
     end
   end
 
-  defp normalize(value) when is_binary(value) and value != "", do: value
-  defp normalize(_), do: @unknown
+  # Catalogue `status` display: always a real string (`"unknown"` for a
+  # nil/non-binary/blank value), since `data-catalogue-status` needs one
+  # to render at all — `catalogue_badge/1`'s catch-all already treats
+  # `"unknown"` (or any other unrecognized string) the same way.
+  defp normalize_catalogue_status(value) when is_binary(value) and value != "", do: value
+  defp normalize_catalogue_status(_), do: "unknown"
 
+  # A raw value that isn't one of `kind`'s known statuses (absent,
+  # non-binary, or simply not recognized) is treated exactly like an
+  # absent one — the per-record-type fallback in `render_item/1` /
+  # `render_category/1` decides what to show and whether it counts as
+  # "active" for the warning, matching how `View.product_status/2` /
+  # `View.category_view/2` themselves treat an unrecognized value.
+  defp normalize_shop(value, kind) do
+    if value in kind, do: value, else: nil
+  end
+
+  attr :catalogue, :any, required: true
+  attr :shop, :any, required: true
   attr :catalogue_status, :string, required: true
   attr :shop_status, :string, required: true
   attr :contradiction, :boolean, required: true
@@ -103,6 +237,18 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   # on one page load — an id scoped only by the record would duplicate.
   # `data-*` carries everything a test (or future JS) needs instead.
   defp cell(assigns) do
+    {catalogue_label, catalogue_class, _catalogue_default?} = assigns.catalogue
+    {shop_label, shop_class, shop_default?} = assigns.shop
+
+    assigns =
+      Map.merge(assigns, %{
+        catalogue_label: catalogue_label,
+        catalogue_class: catalogue_class,
+        shop_label: shop_label,
+        shop_class: shop_class,
+        shop_default?: shop_default?
+      })
+
     ~H"""
     <div
       class={["flex items-center gap-1 flex-wrap", @contradiction && "ring-1 ring-warning rounded px-1"]}
@@ -112,8 +258,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
       data-contradiction={to_string(@contradiction)}
       title={@contradiction && contradiction_title()}
     >
-      <.status_badge status={@catalogue_status} size={:xs} />
-      <.status_badge status={@shop_status} size={:xs} />
+      <span class={["badge badge-xs h-auto", @catalogue_class]}>{@catalogue_label}</span>
+      <span class={["badge badge-xs h-auto", @shop_class]}>
+        {@shop_label}<span :if={@shop_default?} class="opacity-70"> ({gettext("default")})</span>
+      </span>
       <.icon :if={@contradiction} name="hero-exclamation-triangle" class="w-4 h-4 text-warning shrink-0" />
     </div>
     """
@@ -121,7 +269,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
 
   defp contradiction_title do
     gettext(
-      "Catalogue status and shop status disagree — this item is not visible on the storefront."
+      "The shop reports this as active while the catalogue does not — it is excluded from listings but may still be reachable by direct link."
     )
   end
 end

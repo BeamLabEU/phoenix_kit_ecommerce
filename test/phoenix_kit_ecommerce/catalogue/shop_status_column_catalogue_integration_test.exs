@@ -68,6 +68,28 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
   test "render/1 against a real PhoenixKitCatalogue.Schemas.Item renders the contradiction cell" do
     %{render: render} = PhoenixKitCatalogue.Extensions.columns(:detail_items) |> find_column()
 
+    # The corrected hazard case (see ShopStatusColumn moduledoc /
+    # ShopStatusColumnTest): the shop reports "active" while the
+    # catalogue's own status says otherwise — reachable by direct link
+    # despite being excluded from every listing.
+    item =
+      struct!(PhoenixKitCatalogue.Schemas.Item,
+        status: "discontinued",
+        data: %{"ecommerce" => %{"shop_status" => "active"}}
+      )
+
+    html = render.(item) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
+
+    assert html =~ ~s(data-catalogue-status="discontinued")
+    assert html =~ ~s(data-shop-status="active")
+    assert html =~ ~s(data-contradiction="true")
+    assert html =~ "hero-exclamation-triangle"
+    refute html =~ ~s( id=")
+  end
+
+  test "render/1 against a real item with a deliberate hold-back (active/draft) renders no warning" do
+    %{render: render} = PhoenixKitCatalogue.Extensions.columns(:detail_items) |> find_column()
+
     item =
       struct!(PhoenixKitCatalogue.Schemas.Item,
         status: "active",
@@ -76,11 +98,8 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     html = render.(item) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
-    assert html =~ ~s(data-catalogue-status="active")
-    assert html =~ ~s(data-shop-status="draft")
-    assert html =~ ~s(data-contradiction="true")
-    assert html =~ "hero-exclamation-triangle"
-    refute html =~ ~s( id=")
+    assert html =~ ~s(data-contradiction="false")
+    refute html =~ "hero-exclamation-triangle"
   end
 
   test "render/1 against a real PhoenixKitCatalogue.Schemas.Category renders the agreement cell" do
@@ -106,6 +125,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     html = render.(item) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
-    assert html =~ ~s(data-shop-status="unknown")
+    assert html =~ ~s(data-shop-status="default")
+    assert html =~ ~s(data-contradiction="false")
   end
 end
