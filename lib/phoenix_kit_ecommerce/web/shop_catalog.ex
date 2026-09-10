@@ -390,7 +390,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                         <%= if cat_image do %>
                           <img
                             src={cat_image}
-                            alt={Translations.get(cat, :name, @current_language)}
+                            alt={Translations.get_display(cat, :name, @current_language)}
                             class="w-full h-full object-cover"
                           />
                         <% else %>
@@ -401,7 +401,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                       </figure>
                       <div class="card-body p-3 text-center">
                         <h3 class="text-sm font-semibold line-clamp-2">
-                          {Translations.get(cat, :name, @current_language)}
+                          {Translations.get_display(cat, :name, @current_language)}
                         </h3>
                       </div>
                     </.link>

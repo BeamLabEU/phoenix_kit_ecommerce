@@ -137,6 +137,33 @@ defmodule PhoenixKitEcommerce.Translations do
   end
 
   @doc """
+  Storefront-only wrapper around `get/3`: runs the resolved value through
+  `PhoenixKitEcommerce.NamePrefix.strip/1`, which hides a shop-configured
+  vocabulary prefix ("3D Printed Costume Masks" -> "Costume Masks") when
+  the `shop_name_prefixes` setting names one — a no-op by default.
+
+  Call this ONLY for a display field on a genuine public storefront
+  page (`:title` on a product, `:name` on a category). Never call it for
+  `:slug` — slugs are URLs and must never be rewritten — and never from
+  an admin surface, a Shopify sync path, or a persisted snapshot (a cart
+  or order line's stored `product_title`): an operator editing a
+  category must see what is actually stored, the sync must compare and
+  write the raw Shopify-sourced value, and a receipt must show what the
+  shopper actually saw at the time, not today's setting.
+
+  ## Examples
+
+      iex> Translations.get_display(category, :name, "en")
+      "Costume Masks"
+  """
+  @spec get_display(struct(), atom(), String.t()) :: any()
+  def get_display(entity, field, language) do
+    entity
+    |> get(field, language)
+    |> PhoenixKitEcommerce.NamePrefix.strip()
+  end
+
+  @doc """
   Gets the localized slug with fallback.
 
   Convenience function for URL slug retrieval.

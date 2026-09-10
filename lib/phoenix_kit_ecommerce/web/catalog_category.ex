@@ -94,8 +94,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         # Check if user is authenticated
         authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
-        # Get localized category content
-        localized_name = Translations.get(category, :name, current_language)
+        # Get localized category content. `get_display/3` (not `get/3`):
+        # this is the storefront page, so the `shop_name_prefixes` setting
+        # applies to the name — description is untouched.
+        localized_name = Translations.get_display(category, :name, current_language)
         localized_description = Translations.get(category, :description, current_language)
 
         # Current path for the language switcher. Built here in `mount/3`,
@@ -343,7 +345,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               </.link>
             </li>
             <%= if @category.parent do %>
-              <% parent_name = Translations.get(@category.parent, :name, @current_language) %>
+              <% parent_name = Translations.get_display(@category.parent, :name, @current_language) %>
               <li>
                 <.link navigate={Shop.category_url(@category.parent, @current_language) <> @filter_qs}>
                   {parent_name}
