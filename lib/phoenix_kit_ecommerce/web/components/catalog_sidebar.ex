@@ -98,7 +98,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                 </.link>
               </li>
               <%= for cat <- @categories do %>
-                <% cat_name = Translations.get(cat, :name, @current_language) %>
+                <% cat_name = Translations.get_display(cat, :name, @current_language) %>
                 <li>
                   <.link
                     navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
@@ -171,7 +171,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
               </.link>
             </li>
             <%= for cat <- @categories do %>
-              <% cat_name = Translations.get(cat, :name, @current_language) %>
+              <% cat_name = Translations.get_display(cat, :name, @current_language) %>
               <li>
                 <.link
                   navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
