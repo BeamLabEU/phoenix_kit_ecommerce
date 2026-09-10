@@ -170,6 +170,11 @@ msgid "Actions"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:77
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:167
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:168
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:215
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:216
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:227
 #: lib/phoenix_kit_ecommerce/web/carts.ex:144
 #: lib/phoenix_kit_ecommerce/web/categories.ex:307
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:893
@@ -272,6 +277,8 @@ msgid "Analyze & Configure"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:78
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:170
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:171
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:894
 #: lib/phoenix_kit_ecommerce/web/products.ex:320
 #, elixir-autogen, elixir-format
@@ -877,6 +884,7 @@ msgid "Downloadable products"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:76
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:169
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:892
 #: lib/phoenix_kit_ecommerce/web/products.ex:319
 #, elixir-autogen, elixir-format
@@ -1169,6 +1177,7 @@ msgstr ""
 msgid "Handle"
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:218
 #: lib/phoenix_kit_ecommerce/web/categories.ex:309
 #, elixir-autogen, elixir-format
 msgid "Hidden"
@@ -2356,6 +2365,7 @@ msgstr ""
 msgid "Unlimited"
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:217
 #: lib/phoenix_kit_ecommerce/web/categories.ex:308
 #, elixir-autogen, elixir-format
 msgid "Unlisted"
@@ -4747,7 +4757,9 @@ msgid "Requires shipping"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:73
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:293
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:77
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:305
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:131
 #, elixir-autogen, elixir-format
 msgid "Shop status"
 msgstr ""
@@ -4908,6 +4920,36 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:498
 #, elixir-autogen, elixir-format
 msgid "Could not update %{title}'s %{field}: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:228
+#, elixir-autogen, elixir-format
+msgid "Inactive"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:229
+#, elixir-autogen, elixir-format
+msgid "Discontinued"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:230
+#, elixir-autogen, elixir-format
+msgid "Deleted"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:231
+#, elixir-autogen, elixir-format
+msgid "Unknown"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:297
+#, elixir-autogen, elixir-format
+msgid "default"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:305
+#, elixir-autogen, elixir-format
+msgid "The shop reports this as active while the catalogue does not — it is excluded from listings but may still be reachable by direct link."
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:874
