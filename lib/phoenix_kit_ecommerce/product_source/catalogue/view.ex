@@ -524,17 +524,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   defp to_decimal(value) when is_number(value), do: Decimal.new(to_string(value))
   defp to_decimal(_), do: nil
 
-  # The shop's base currency code when the facade exposes it (currency
-  # work, `get_base_currency/0`); "USD" only as the last resort so a
-  # catalogue item without an explicit currency never disagrees with the
-  # shop's configured base.
+  # The shop's base currency code when the facade exposes it. Nil — not
+  # `"USD"` — when nothing is configured: a last-resort dollar stamp is
+  # exactly the silent-default PR #31 removed from Product/Cart.
   defp base_currency_code do
-    if function_exported?(PhoenixKitEcommerce, :get_base_currency, 0),
-      do: currency_code(apply(PhoenixKitEcommerce, :get_base_currency, [])),
-      else: "USD"
+    if function_exported?(PhoenixKitEcommerce, :get_base_currency, 0) do
+      currency_code(PhoenixKitEcommerce.get_base_currency())
+    end
   end
 
   defp currency_code(%{code: code}) when is_binary(code), do: code
-  defp currency_code(code) when is_binary(code), do: code
-  defp currency_code(_), do: "USD"
+  defp currency_code(_), do: nil
 end

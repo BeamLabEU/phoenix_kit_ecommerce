@@ -12,8 +12,8 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
 
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
-  alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @impl true

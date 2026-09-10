@@ -20,8 +20,8 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.ShopConfig
-  alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Test.Repo
+  alias PhoenixKitEcommerce.Web.Helpers
 
   defp admin_edit_href(view) do
     view
@@ -81,6 +81,19 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
       assert html =~ "Manage Shop"
       assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
     end
+
+    test "an admin with base shop but not manage_catalog still gets it", %{conn: conn} do
+      # `/admin/shop` is the shop dashboard, which asks for base `"shop"`.
+      # The catalog gate belongs on the links that open a catalog editor;
+      # applied here it would hide a link to a page this visitor can open
+      # by typing the URL — the link and its target must not disagree.
+      conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
+
+      {:ok, view, html} = live(conn, "/shop")
+
+      assert html =~ "Manage Shop"
+      assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
+    end
   end
 
   describe "category page (/shop/category/:slug)" do
@@ -90,6 +103,17 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
     end
 
     test "anonymous visitor gets no admin edit assign or link", %{conn: conn, path: path} do
+      {:ok, _view, html} = live(conn, path)
+
+      refute html =~ "Edit Category"
+    end
+
+    test "an admin without shop.manage_catalog is shown no link", %{conn: conn, path: path} do
+      # The product page has the same test. This one exists because the
+      # gate is per call site now, so "the product page is covered" stops
+      # being an argument about the category page.
+      conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
+
       {:ok, _view, html} = live(conn, path)
 
       refute html =~ "Edit Category"
@@ -184,6 +208,31 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
 
       assert href =~ "/admin/catalogue/items/#{product.uuid}/edit"
       assert href =~ "return_to=%2Fen%2Fshop%2Fproduct%2Fx"
+    end
+
+    test "admin Edit survives shop_show_cart_bar being off", %{
+      conn: conn,
+      path: path,
+      product: product
+    } do
+      PhoenixKit.Settings.update_setting("shop_show_cart_bar", "false")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+
+      on_exit(fn ->
+        PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
+        PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+      end)
+
+      conn = put_test_scope(conn, fake_scope())
+      {:ok, view, html} = live(conn, path)
+
+      assert html =~ "Edit Product"
+      refute html =~ ">Cart<"
+
+      href = admin_edit_href(view)
+
+      assert href =~ "/admin/shop/products/#{product.uuid}/edit"
+      assert href =~ "return_to=", "the editor must know where to send the visitor back to"
     end
   end
 

@@ -175,16 +175,28 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
   def storefront_bar(assigns) do
     ~H"""
-    <div :if={show_cart_bar?()} class={["flex items-center gap-2", @class]}>
+    <div
+      :if={show_cart_bar?() or not is_nil(@admin_edit_url)}
+      class={["flex items-center gap-2", @class]}
+    >
       <%!-- Admin edit sits with the page's other navigation rather than
             beside the page heading, where it changed how the heading itself
-            was laid out for an admin. --%>
+            was laid out for an admin. It stays independent of
+            `shop_show_cart_bar`: a host that hides the Shop/Cart links
+            because its own header already carries them still needs the
+            product/category Edit link. --%>
       <.link :if={@admin_edit_url} navigate={@admin_edit_url} class="btn btn-outline btn-sm gap-2">
         <.icon name="hero-pencil-square" class="w-4 h-4" />
         {@admin_edit_label || gettext("Edit")}
       </.link>
 
-      <.link navigate={Shop.cart_url(@language)} class="btn btn-outline btn-sm gap-2">
+      <%!-- The bar carried its own "Shop" link until the breadcrumbs moved
+            onto this same row, where the first crumb already links there. --%>
+      <.link
+        :if={show_cart_bar?()}
+        navigate={Shop.cart_url(@language)}
+        class="btn btn-outline btn-sm gap-2"
+      >
         <.icon name="hero-shopping-cart" class="w-4 h-4" />
         {gettext("Cart")}
         <span :if={@cart_count > 0} class="badge badge-primary badge-sm">{@cart_count}</span>

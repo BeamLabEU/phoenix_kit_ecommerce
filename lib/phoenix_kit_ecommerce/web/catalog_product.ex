@@ -149,7 +149,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       )
       |> assign(
         :current_path,
-        socket.assigns[:url_path] || Shop.product_url(product, current_language)
+        Shop.product_url(product, current_language)
       )
       |> assign(:categories, Shop.list_active_categories(preload: [:featured_product]))
       |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
@@ -166,7 +166,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Helpers.admin_edit_path(
           :item,
           product.uuid,
-          socket.assigns[:url_path] || Shop.product_url(product, current_language)
+          Shop.product_url(product, current_language)
         ),
         gettext("Edit Product")
       )
@@ -323,7 +323,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     localized_title = Translations.get(product, :title, current_language)
     localized_description = Translations.get(product, :description, current_language)
     localized_body = Translations.get(product, :body_html, current_language)
-    current_path = socket.assigns[:url_path] || Shop.product_url(product, current_language)
+    current_path = Shop.product_url(product, current_language)
 
     # Subscribe to updates
     if connected?(socket) do
@@ -361,6 +361,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:calculated_price, calculated_price)
       |> assign(:missing_required_specs, missing_required_specs)
       |> assign(:current_path, current_path)
+      |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:categories, all_categories)
       |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
       |> assign(:filter_qs, filter_qs)
@@ -376,7 +377,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         Helpers.admin_edit_path(
           :item,
           product.uuid,
-          socket.assigns[:url_path] || Shop.product_url(product, current_language)
+          Shop.product_url(product, current_language)
         ),
         gettext("Edit Product")
       )
@@ -550,8 +551,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:adding_to_cart, false)
          |> assign(:quantity, 1)
          |> assign(:cart_item, updated_cart_item)
-         |> put_flash(:info, message)
-         |> push_event("cart_updated", %{})}
+         |> assign(:cart_count, updated_cart.items_count)
+         |> put_flash(:info, message)}
 
       {:error, :shop_disabled} ->
         {:noreply,
@@ -1009,30 +1010,47 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                         <.icon name="hero-plus" class="w-4 h-4" />
                       </button>
                     </div>
-                    <span class="text-base-content/60">×</span>
-                    <span class="text-base-content/60">
-                      {PriceDisplay.render(nil, @currency, :selected,
-                        amount:
-                          current_display_price(@product, @calculated_price, @price_affecting_specs)
-                      )}
-                    </span>
-                    <span class="text-base-content/60">=</span>
-                    <span class="text-xl font-bold text-primary">
-                      {format_price(
-                        line_total(
-                          Currency.present(
+                    <%= if PriceDisplay.on_request?(@product) do %>
+                      <span class="text-base-content/60">
+                        {PriceDisplay.render(@product, @currency, :selected,
+                          amount:
                             current_display_price(
                               @product,
                               @calculated_price,
                               @price_affecting_specs
+                            )
+                        )}
+                      </span>
+                    <% else %>
+                      <span class="text-base-content/60">×</span>
+                      <span class="text-base-content/60">
+                        {PriceDisplay.render(@product, @currency, :selected,
+                          amount:
+                            current_display_price(
+                              @product,
+                              @calculated_price,
+                              @price_affecting_specs
+                            )
+                        )}
+                      </span>
+                      <span class="text-base-content/60">=</span>
+                      <span class="text-xl font-bold text-primary">
+                        {format_price(
+                          line_total(
+                            Currency.present(
+                              current_display_price(
+                                @product,
+                                @calculated_price,
+                                @price_affecting_specs
+                              ),
+                              @currency
                             ),
-                            @currency
+                            @quantity
                           ),
-                          @quantity
-                        ),
-                        @currency
-                      )}
-                    </span>
+                          @currency
+                        )}
+                      </span>
+                    <% end %>
                   </div>
                 </fieldset>
 
@@ -1572,7 +1590,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
   @impl true
   def handle_info({:currencies_changed, _code}, socket) do
-    {:noreply, Helpers.refresh_display_currency(socket)}
+    # Rate edits only need a re-present of the loaded amounts. A base-
+    # currency reprice rewrites `product.price` in the table, so the
+    # loaded struct has to be re-fetched or the page keeps showing the
+    # pre-reprice number (and add-to-cart would charge the new one).
+    socket = Helpers.refresh_display_currency(socket)
+
+    {:noreply,
+     if socket.assigns[:product] do
+       refresh_product(socket)
+     else
+       socket
+     end}
   end
 
   # Catch-all: an unrecognised message must not take the LiveView down.
@@ -1592,7 +1621,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # "active" sends the shopper back to the catalog instead of a crash or a
   # stale purchasable page.
   defp refresh_product(socket) do
-    product = Shop.get_product(socket.assigns.product.uuid, preload: [:category])
+    product =
+      Shop.get_product(socket.assigns.product.uuid,
+        preload: [:category],
+        language: socket.assigns.current_language
+      )
 
     # The SAME rule mount applies - `publicly_visible?/1` also rejects a
     # product whose category is hidden. Checking only the product's own

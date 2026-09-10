@@ -58,7 +58,8 @@ defmodule PhoenixKitEcommerce.Catalogue.CategoryCommerce do
     |> changeset(merged)
     |> case do
       %Ecto.Changeset{valid?: true} = changeset ->
-        {:ok, changeset |> apply_changes() |> to_storage_map()}
+        storage = changeset |> apply_changes() |> to_storage_map()
+        {:ok, Map.merge(current || %{}, storage)}
 
       %Ecto.Changeset{valid?: false} = changeset ->
         {:error, error_list(changeset)}

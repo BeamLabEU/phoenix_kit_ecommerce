@@ -144,7 +144,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
           <div class="fieldset w-full">
             <.input
               name="item[ecommerce][currency]"
-              value={Map.get(@ecommerce, "currency", "USD")}
+              value={currency_input_value(@ecommerce)}
               type="text"
               maxlength="3"
               label={gettext("Currency")}
@@ -264,7 +264,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     """
   end
 
+  attr :form, :any, default: nil
   attr :category, :any, default: nil
+  attr :data, :map, default: %{}
+  attr :current_language, :string, default: nil
 
   @doc """
   Shop section for the category form. `assigns` carries `:form`,
@@ -449,4 +452,25 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   end
 
   defp field_errors(_form, _field), do: []
+
+  # Prefill from the stored value, else the shop's base currency, else
+  # blank. Never `"USD"`: an unconfigured shop must not silently stamp
+  # dollars onto a new item (PR #31).
+  defp currency_input_value(ecommerce) do
+    case Map.get(ecommerce || %{}, "currency") do
+      code when is_binary(code) and code != "" -> code
+      _ -> default_currency_code()
+    end
+  end
+
+  defp default_currency_code do
+    case PhoenixKitEcommerce.get_base_currency() do
+      %{code: code} when is_binary(code) -> code
+      _ -> ""
+    end
+  rescue
+    _ -> ""
+  catch
+    :exit, _ -> ""
+  end
 end

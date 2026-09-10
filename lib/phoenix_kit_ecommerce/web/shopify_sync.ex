@@ -224,7 +224,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # upstream in phoenix_kit#798; collapse these back into one event with
   # a value once this package's floor carries it.)
   def handle_event("load_more_rows:" <> field_str, _params, socket) do
-    {:noreply, bump_page(socket, field_str, 1)}
+    {:noreply, grow_section(socket, field_str)}
   end
 
   # --- Request phase: validate the click, stash what it would do in
@@ -480,17 +480,33 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
            )
          )}
 
-      {:error, _changeset} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           gettext("Could not update %{title}'s %{field}.",
-             title: change.title,
-             field: field_label(field)
-           )
-         )}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, apply_error_flash(reason, change.title, field))}
     end
+  end
+
+  # `{:currency_mismatch, shop, base}` (`Sync.apply_change/3`'s own
+  # error, per-domain-currency design §7.5) is the one failure reason
+  # worth naming specifically: "sync failed" tells an operator nothing
+  # actionable, while naming the two currencies that disagree tells them
+  # exactly what changed and where to look. Anything else (a changeset
+  # error, in practice) keeps the pre-existing generic wording — this
+  # page has never surfaced changeset field errors here, and that stays
+  # unchanged; only the reason this module can name in one sentence
+  # gets a sentence.
+  defp apply_error_flash({:currency_mismatch, shop_currency, base_currency}, title, field) do
+    gettext(
+      "Could not update %{title}'s %{field}: the store is now in %{shop_currency} " <>
+        "while this shop's base currency is %{base_currency}.",
+      title: title,
+      field: field_label(field),
+      shop_currency: shop_currency,
+      base_currency: base_currency
+    )
+  end
+
+  defp apply_error_flash(_reason, title, field) do
+    gettext("Could not update %{title}'s %{field}.", title: title, field: field_label(field))
   end
 
   defp apply_section_changes(socket, field) do
@@ -692,22 +708,22 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     if MapSet.member?(set, item), do: MapSet.delete(set, item), else: MapSet.put(set, item)
   end
 
-  defp bump_page(socket, field_str, delta) do
+  defp grow_section(socket, field_str) do
     case to_field(field_str) do
       nil ->
         socket
 
       field ->
-        # The CLAMPED current page, not the raw stored one: applying a
-        # section's last row shrinks its count, which can snap the
-        # DISPLAYED page back (`current_page/3`'s own clamp) while the
-        # STORED value stays at the now-out-of-range page it was on.
-        # Reading raw here would then compute the next page relative to
-        # a page the operator was never actually looking at, and a Prev
-        # click right after such an apply would silently move the
-        # stored value without moving the display — a no-op the operator
-        # has no way to explain. See the regression test for the exact
-        # 51-row repro.
+        # Grow from the CLAMPED page, not the raw stored one. Applying a
+        # section's last row shrinks its count, and `build_section/2`
+        # clamps what it renders, so the stored value can sit past the
+        # end of a section the operator is no longer looking at. Growing
+        # from the clamp keeps the stored page within one chunk of what
+        # actually exists instead of letting it drift further out with
+        # every click. Rendering clamps either way, so this is a bound on
+        # the state rather than a fix for something visible: with rows
+        # taken as `page * @per_page`, an overshoot saturates at the list
+        # length and shows the same thing.
         count = field_change_count(socket, field)
         current = current_page(socket.assigns.page, field, count)
 
@@ -717,7 +733,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         # across pages. Paging away must not leave a modal open that could
         # still confirm into a write for rows no longer on screen.
         socket
-        |> assign(:page, Map.put(socket.assigns.page, field, current + delta))
+        |> assign(:page, Map.put(socket.assigns.page, field, current + 1))
         |> assign(:pending, nil)
     end
   end
@@ -895,9 +911,6 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       bulk_eligible_count: length(eligible),
       bulk_excluded_count: length(excluded),
       expanded?: expanded?,
-      page: page,
-      per_page: @per_page,
-      total_pages: total_pages(count),
       rows: rows
     }
   end

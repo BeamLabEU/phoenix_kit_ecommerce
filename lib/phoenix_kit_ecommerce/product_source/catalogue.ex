@@ -161,12 +161,20 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   end
 
   defp aggregate_single_filter(%{"type" => "price_range"}, scope) do
-    {min_price, max_price} = get_price_range_for(category_uuid: scope[:category_uuid])
+    {min_price, max_price} =
+      get_price_range_for(
+        category_uuid: scope[:category_uuid],
+        exclude_hidden_categories: scope[:exclude_hidden_categories]
+      )
+
     %{min: min_price, max: max_price}
   end
 
   defp aggregate_single_filter(%{"type" => "vendor"}, scope) do
-    Query.vendor_counts(category_uuid: scope[:category_uuid])
+    Query.vendor_counts(
+      category_uuid: scope[:category_uuid],
+      exclude_hidden_categories: scope[:exclude_hidden_categories]
+    )
   end
 
   # `attribute_set` facets, backed by `Query.attribute_set_counts/2`.
