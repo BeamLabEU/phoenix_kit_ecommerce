@@ -9,19 +9,22 @@
 
 ## Summary
 
-A large, multi-commit PR bundling: the storefront product-page layout reshuffle
-(65/35 gallery columns, buy-box-before-description on phone), a shared top row of
-breadcrumbs + actions across three storefront pages, admin "Edit" links on the
-storefront and admin list/detail pages that resolve through the catalogue editor
-(`Helpers.admin_edit_path/3`, gated on `shop.manage_catalog`, carrying `return_to`),
-Shopify sync's list pagination switching from a hand-rolled pager to core's
-`load_more` per section, and the headline fix: category featured-item images broke
-silently after the move to `phoenix_kit_catalogue` because `category_view/2` never
-populated the `:featured_product` association `Category.get_image_url/2`'s fallback
-reads. `Query.resolve_category_images/1` now resolves it for a batch of categories
-in at most two item queries plus one shared catalogue lookup, and the category
-form's featured-item picker moved from a raw UUID field to a details-dropdown of
-thumbnails, cached per category in the LiveView process.
+Builds directly on **PR #48** (`e1516e2`, merged immediately before this one —
+the storefront layout reshuffle, the shared breadcrumb/actions row,
+`Helpers.admin_edit_path/3` and the `load_more` sync pagination all originate
+there, not here; #48 is outside this review's assigned scope but its own commit
+message is reused verbatim in this PR's squashed commit body, which reads as if
+#49 introduced that work — it didn't, see the attribution notes below). This
+PR's own delta: extends the admin edit links (`shop.manage_catalog`-gated,
+carrying `return_to`) to more admin list/detail pages, adds a per-filter clear
+button and a house icon on the Shop breadcrumb, and the headline fix — category
+featured-item images broke silently after the move to `phoenix_kit_catalogue`
+because `category_view/2` never populated the `:featured_product` association
+`Category.get_image_url/2`'s fallback reads. `Query.resolve_category_images/1`
+now resolves it for a batch of categories in at most two item queries plus one
+shared catalogue lookup, and the category form's featured-item picker moved
+from a raw UUID field to a details-dropdown of thumbnails, cached per category
+in the LiveView process.
 
 ## Verification
 
@@ -64,6 +67,14 @@ thumbnails, cached per category in the LiveView process.
 **File:** lib/phoenix_kit_ecommerce/web/helpers.ex, `catalogue_edit_path/2` (lines 585-586 pre-fix)
 **Confidence:** 100/100
 
+**Attribution correction:** `admin_edit_path/3` and `catalogue_edit_path/2` were
+actually introduced by **PR #48** (`e1516e2`, the immediate prerequisite this PR
+builds on), not by #49 itself — #49 only extends the same helper's edit-link
+usage to more admin pages. #48 is outside this review's assigned scope (#49–#53),
+but since the bug ships unreleased regardless of which PR introduced it, and
+blocks this repo's own `mix precommit` gate, it's fixed here rather than left for
+a separate #48 review that wasn't requested.
+
 `admin_edit_path/3` calls `PhoenixKitCatalogue.Paths.item_edit/1`/`category_edit/1`
 only after its own `Code.ensure_loaded?(PhoenixKitCatalogue.Paths)` runtime guard —
 correct at runtime — but the module never got the
@@ -104,6 +115,11 @@ matching the documented convention.
 ### 3. [BUG - MEDIUM] Four tests assert catalogue-only behavior without a `:catalogue` tag — guaranteed failures on a plain checkout — FIXED
 **File:** test/phoenix_kit_ecommerce/web/storefront_admin_edit_test.exs (4 tests)
 **Confidence:** 100/100
+
+**Attribution:** 2 of the 4 tests ("...opens the catalogue category/item editor")
+were added by **PR #48** (see the attribution note on Issue #1); the other 2
+("the products/categories list edits in the catalogue…") were added by #49
+itself. Fixed together since both PRs ship unreleased in the same batch.
 
 "with the catalogue source on, the link opens the catalogue category/item editor"
 (category page + product page describe blocks) and "the products/categories list
