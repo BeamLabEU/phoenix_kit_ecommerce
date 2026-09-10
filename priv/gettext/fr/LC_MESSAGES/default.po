@@ -4757,6 +4757,7 @@ msgstr "Nécessite une livraison :"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:73
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:290
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:56
 #, elixir-autogen, elixir-format
 msgid "Shop status"
 msgstr "Statut de la boutique"
@@ -4913,3 +4914,8 @@ msgstr "Descriptions complètes"
 #, elixir-autogen, elixir-format
 msgid "by %{vendor}"
 msgstr "par %{vendor}"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:123
+#, elixir-autogen, elixir-format
+msgid "Catalogue status and shop status disagree — this item is not visible on the storefront."
+msgstr "Le statut du catalogue et le statut de la boutique ne concordent pas — cet article n'est pas visible sur la boutique."
