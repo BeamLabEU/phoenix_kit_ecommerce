@@ -16,7 +16,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
   # adapter test — see Global Constraints in the block-3 plan.
   @moduletag :catalogue
 
+  alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
 
   # `View.product_view/2`/`category_view/2` fall back to two live reads
@@ -335,7 +337,6 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
           "ecommerce" => %{
             "shop_status" => "active",
             "option_schema" => [%{"key" => "size"}],
-            "image_uuid" => "cat-img-uuid",
             "featured_item_uuid" => "feat-item-uuid"
           }
         }
@@ -368,10 +369,29 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
       assert view.status == "active"
       assert view.position == 2
       assert view.option_schema == [%{"key" => "size"}]
-      assert view.image_uuid == "cat-img-uuid"
+      refute view.image_uuid
       assert view.featured_product_uuid == "feat-item-uuid"
       assert view.metadata == %{}
       assert view.storefront_filters == %{}
+    end
+
+    test "the catalogue's own featured image is the category's picture" do
+      # A category in the catalogue has a featured image and a picker for
+      # it; that is where an operator manages the picture, so the shop
+      # reads it rather than asking for the same thing twice.
+      view =
+        build_category(%{"featured_image_uuid" => "catalogue-picked-uuid"})
+        |> View.category_view()
+
+      assert view.image_uuid == "catalogue-picked-uuid"
+    end
+
+    test "a category with no picture in the catalogue has none" do
+      # There is no shop-side copy of the uuid to fall back to: the
+      # catalogue's own field is the only place it lives.
+      view = build_category() |> View.category_view()
+
+      refute view.image_uuid
     end
 
     test "status defaults to active when shop_status is absent" do
@@ -391,6 +411,41 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
       assert category_view(category).storefront_filters == %{
                "price" => %{"enabled" => false}
              }
+    end
+
+    test "opts[:featured_image_uuid] is wrapped as :featured_product, the shape get_image_url/2's priority-2 step already reads" do
+      category = build_category(%{"ecommerce" => %{"image_uuid" => nil}})
+
+      view = category_view(category, featured_image_uuid: "resolved-img-uuid")
+
+      assert %Product{featured_image_uuid: "resolved-img-uuid"} = view.featured_product
+
+      assert Category.get_image_url(view) ==
+               Category.get_image_url(%Category{
+                 featured_product: %Product{featured_image_uuid: "resolved-img-uuid"}
+               })
+
+      assert Category.get_image_url(view) != nil
+    end
+
+    test "no :featured_image_uuid opt leaves :featured_product nil (no image, not NotLoaded)" do
+      category = build_category(%{"ecommerce" => %{"image_uuid" => nil}})
+
+      view = category_view(category)
+
+      assert view.featured_product == nil
+      assert Category.get_image_url(view) == nil
+    end
+
+    test "the catalogue's own picture wins over a resolved featured item image" do
+      category = build_category(%{"featured_image_uuid" => "catalogue-picked-uuid"})
+
+      view = category_view(category, featured_image_uuid: "resolved-img-uuid")
+
+      assert view.image_uuid == "catalogue-picked-uuid"
+
+      assert Category.get_image_url(view) ==
+               Category.get_image_url(%Category{image_uuid: "catalogue-picked-uuid"})
     end
   end
 
