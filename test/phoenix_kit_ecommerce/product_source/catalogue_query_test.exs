@@ -212,6 +212,36 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
       assert Query.price_range() == {Decimal.new("12.00"), Decimal.new("12.00")}
     end
 
+    # Regression: `filter_by_status(query, "active")` (backs `list_items/1`)
+    # and `active_visibility/1` (backs `product_counts_by_category/0`,
+    # `price_range/1`, `vendor_counts/1`, the facet counters) both claim to
+    # express the SAME "storefront-visible" rule and must agree on every
+    # item, including one with no `shop_status` at all — a real shape
+    # (10 of the owner's 20 catalogue categories have no `ecommerce` block
+    # either). They once diverged: `active_visibility/1` tested a literal
+    # `shop_status = 'active'` with no `COALESCE`, so an absent shop_status
+    # counted as active in the listing but NOT active in the counts/facets.
+    # Fixed upstream (`Fix post-merge review findings`, 0.5.0), pinned here
+    # so a future edit to either function that reintroduces the divergence
+    # fails a test rather than only showing up as a live count mismatch.
+    test "filter_by_status(\"active\") and active_visibility/1 agree on an item with no shop_status",
+         %{catalogue: catalogue} do
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Agreement", catalogue_uuid: catalogue.uuid})
+
+      create_item(catalogue, %{
+        name: "No Shop Status Block",
+        base_price: Decimal.new("7.00"),
+        status: "active",
+        category_uuid: category.uuid
+      })
+
+      assert Enum.map(Query.list_items(status: "active"), & &1.name) ==
+               ["No Shop Status Block"]
+
+      assert Query.product_counts_by_category()[category.uuid] == 1
+    end
+
     test "exclude_hidden_categories drops hidden-category items from vendor counts and price_range",
          %{catalogue: catalogue} do
       {:ok, hidden} =
