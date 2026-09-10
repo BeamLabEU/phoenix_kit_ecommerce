@@ -118,6 +118,28 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
     refute html =~ "hero-exclamation-triangle"
   end
 
+  test "render/1 against a real deleted/unlisted category WARNS — the category gate is a block-list of just \"hidden\"" do
+    %{render: render} =
+      PhoenixKitCatalogue.Extensions.columns(:detail_categories) |> find_column()
+
+    # Regression coverage for the gap a prior review found: a category
+    # rule modelled on the item page's ALLOW-list (only "active"
+    # passes) wrongly said "no warning" here, because "unlisted" isn't
+    # "active" either. `CatalogCategory.do_mount/3` is a BLOCK-list —
+    # it only redirects on "hidden" — so this soft-deleted category is
+    # still reachable by direct link.
+    category =
+      struct!(PhoenixKitCatalogue.Schemas.Category,
+        status: "deleted",
+        data: %{"ecommerce" => %{"shop_status" => "unlisted"}}
+      )
+
+    html = render.(category) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
+
+    assert html =~ ~s(data-contradiction="true")
+    assert html =~ "hero-exclamation-triangle"
+  end
+
   test "a real item with no ecommerce namespace at all (never touched by the Shop section) does not raise" do
     %{render: render} = PhoenixKitCatalogue.Extensions.columns(:detail_items) |> find_column()
 

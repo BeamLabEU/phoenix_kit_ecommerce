@@ -32,37 +32,64 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
       (`CategoryCommerce`). Only `hidden` removes a category's items
       from listings (`Query.exclude_hidden_categories/2`); `unlisted`
       only hides the category's own nav entry — its page and items stay
-      directly reachable (`CatalogCategory.do_mount/3` only redirects on
-      `"hidden"`). An absent `shop_status` defaults UNCONDITIONALLY to
-      `"active"` (`View.category_view/2`: `Map.get(ecommerce,
-      "shop_status") || "active"` — no fallback to `c.status` at all).
+      directly reachable. An absent `shop_status` defaults
+      UNCONDITIONALLY to `"active"` (`View.category_view/2`:
+      `Map.get(ecommerce, "shop_status") || "active"` — no fallback to
+      `c.status` at all).
 
-  ## The one case that warrants a warning
+  ## The one case that warrants a warning — and why items and
+  ## categories check it DIFFERENTLY
 
   `ProductSource.Catalogue.Query.active_visibility/1` (the LISTING
   query) unconditionally requires the catalogue's own status to be
   right (`item.status == "active"` / `c.status != "deleted"`) — no
   `shop_status` value overrides that. But the DIRECT product/category
-  page (`CatalogProduct.do_mount/3`, `CatalogCategory.do_mount/3`) does
-  NOT re-check the catalogue status the same way: it derives its own
-  visibility from `View.product_status/2` / `View.category_view/2`,
-  and BOTH of those let an EXPLICIT `shop_status == "active"` win
-  outright, regardless of what the catalogue's own status says. So an
-  item with `item.status != "active"` but `shop_status == "active"` (or
-  a category with `c.status == "deleted"` but `shop_status ==
-  "active"`) is excluded from every listing/count/facet — invisible to
-  browsing — while still reachable, and purchasable, through its direct
-  URL. That is a real leak, not a cosmetic mismatch, and is the ONLY
-  combination this column flags.
+  page does NOT re-check the catalogue status the same way, and the
+  two pages gate oppositely:
+
+    * `CatalogProduct.do_mount/3` is an ALLOW-list of one value: it
+      redirects on any resolved status `!= "active"`
+      (`View.product_status/2` lets an EXPLICIT `shop_status ==
+      "active"` win outright regardless of `item.status`). So the
+      reachable-despite-a-bad-catalogue-status case is exactly
+      `shop_status == "active"`.
+    * `CatalogCategory.do_mount/3` is a BLOCK-list of one value: it
+      redirects ONLY when the resolved status
+      (`View.category_view/2`'s `shop_status || "active"`, again no
+      deference to `c.status`) is literally `"hidden"` — `"active"` AND
+      `"unlisted"` both fall through to rendering the page. So the
+      reachable-despite-a-bad-catalogue-status case here is
+      `shop_status != "hidden"`, a strictly LARGER set than "active"
+      alone: a soft-deleted (`c.status == "deleted"`) category whose
+      `shop_status` is merely `"unlisted"` (not explicitly `"active"`)
+      is STILL reachable by direct link, because `"unlisted" !=
+      "hidden"` is all `do_mount/3` checks.
+
+  Either way: whatever the catalogue side excludes it, is excluded from
+  every listing/count/facet, while still reachable — and purchasable —
+  through its direct URL. That is a real leak, not a cosmetic mismatch,
+  and is the ONLY thing this column warns on: `render_item/1` compares
+  `shop_key == "active"` against the catalogue side; `render_category/1`
+  compares `shop_key != "hidden"` — deliberately NOT the same predicate
+  shape, because the pages themselves are not the same shape.
 
   Every other disagreement — catalogue active while the shop says
-  `draft`/`archived` (items) or `unlisted`/`hidden` (categories) — is
-  simply how the owner deliberately keeps something out of the shop
-  while it stays a live catalogue entry, and renders with no warning.
-  An absent `shop_status` is shown as the value it effectively resolves
-  to (per the fallbacks above), marked "(default)" rather than as an
-  alarming "Unknown" — it is not a misconfiguration, just a namespace
-  the Shop section has never written.
+  `draft`/`archived` (items) or `hidden` (categories) — is simply how
+  the owner deliberately keeps something out of the shop while it
+  stays a live catalogue entry, and renders with no warning. An absent
+  `shop_status` is shown as the value it effectively resolves to (per
+  the fallbacks above), marked "(default)" rather than as an alarming
+  "Unknown" — it is not a misconfiguration, just a namespace the Shop
+  section has never written.
+
+  One consequence worth naming explicitly: because the category gate
+  is a block-list, a category the catalogue has soft-deleted stays
+  reachable unless its `shop_status` happens to be `"hidden"` —
+  `"unlisted"` (or simply never having been touched — the
+  unconditional-active default) is not enough to hide it. That is the
+  same CLASS of leak `phoenix_kit_ecommerce` PR #53 fixes on the item
+  side (tightening `item.status` deference); this column does not fix
+  it for categories — it only makes it visible.
 
   Reached only through `PhoenixKitEcommerce.Catalogue.Extension`'s
   `item_columns/0`/`category_columns/0` — see that module's moduledoc
@@ -160,14 +187,21 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
         value -> {value, false}
       end
 
-    # Mirrors `render_item/1`'s hazard exactly, for the category side:
-    # an absent `shop_status` defaults UNCONDITIONALLY to "active"
-    # (`View.category_view/2` — no fallback to `c.status`), so — unlike
-    # items — this CAN combine with a non-ok catalogue status. Either
-    # way, "shop believes it's live" against "catalogue says otherwise"
-    # is the leak (`CatalogCategory.do_mount/3` only redirects on the
-    # literal `shop_status == "hidden"`, never on `c.status`).
-    contradiction = shop_key == "active" and not catalogue_ok?
+    # NOT a mirror of `render_item/1`'s predicate — the two pages gate
+    # oppositely. `CatalogProduct.do_mount/3` is an ALLOW-list: only a
+    # resolved status of "active" passes, so items compare `shop_key ==
+    # "active"`. `CatalogCategory.do_mount/3` is a BLOCK-list: it
+    # redirects only on the resolved status being literally "hidden"
+    # (`catalog_category.ex:53-58, 210-215`) — "active" AND "unlisted"
+    # both fall through to rendering the page. So the set that's
+    # reachable despite a non-ok catalogue status is "anything but
+    # hidden", not just "active": a `shop_key == "active"` predicate
+    # here silently missed `deleted` + `unlisted` (soft-deleted, but
+    # resolved status "unlisted" != "hidden", so the page still
+    # renders). An absent `shop_status` still defaults UNCONDITIONALLY
+    # to "active" (`View.category_view/2` — no fallback to `c.status`),
+    # so it can combine with a non-ok catalogue status same as before.
+    contradiction = shop_key != "hidden" and not catalogue_ok?
 
     cell(%{
       catalogue: catalogue_badge(catalogue_status),

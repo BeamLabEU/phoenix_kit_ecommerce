@@ -281,6 +281,28 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
     end
   end
 
+  describe "items: exhaustive matrix over the real value sets" do
+    # 4 catalogue statuses × 4 shop-status values (nil = absent) = 16
+    # rows — every value either domain can actually hold
+    # (`ItemCommerce.@statuses`, `Schemas.Item.@statuses`), not a
+    # hand-picked subset. Catches the exact class of gap the category
+    # side had: a rule modelled on the wrong page's gate silently
+    # missing one row.
+    test "contradiction fires exactly on shop==active with catalogue!=active, never otherwise" do
+      for catalogue_status <- ~w(active inactive discontinued deleted),
+          shop_raw <- [nil, "draft", "active", "archived"] do
+        data = if shop_raw, do: %{"ecommerce" => %{"shop_status" => shop_raw}}, else: %{}
+        html = render_item_cell(%{status: catalogue_status, data: data})
+
+        expected = shop_raw == "active" and catalogue_status != "active"
+
+        assert contradiction_attr(html) == to_string(expected),
+               "catalogue=#{inspect(catalogue_status)} shop=#{inspect(shop_raw)}: " <>
+                 "expected contradiction=#{expected}, got #{contradiction_attr(html)}"
+      end
+    end
+  end
+
   # ============================================================
   # Categories — defensive reads
   # ============================================================
@@ -385,6 +407,43 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
 
       refute html =~ "hero-exclamation-triangle"
       assert contradiction_attr(html) == "false"
+    end
+
+    test "deleted/unlisted — WARNS: the category page's gate is a block-list of just \"hidden\", so this soft-deleted category is still reachable" do
+      # `CatalogCategory.do_mount/3` only redirects on the resolved
+      # status literally being "hidden" — "unlisted" (and "active")
+      # both fall through to rendering the page. A category rule
+      # modelled on the item page's ALLOW-list gate (only "active"
+      # passes) missed this: "unlisted" isn't "active" either, so an
+      # allow-list-shaped predicate wrongly said "no warning" here.
+      html =
+        render_category_cell(%{
+          status: "deleted",
+          data: %{"ecommerce" => %{"shop_status" => "unlisted"}}
+        })
+
+      assert html =~ "hero-exclamation-triangle"
+      assert contradiction_attr(html) == "true"
+    end
+  end
+
+  describe "categories: exhaustive matrix over the real value sets" do
+    # 2 catalogue statuses × 4 shop-status values (nil = absent) = 8
+    # rows — every value either domain can actually hold
+    # (`Schemas.Category.@statuses`, `CategoryCommerce.@statuses`).
+    test "contradiction fires exactly on shop!=hidden with catalogue==deleted, never otherwise" do
+      for catalogue_status <- ~w(active deleted),
+          shop_raw <- [nil, "active", "unlisted", "hidden"] do
+        data = if shop_raw, do: %{"ecommerce" => %{"shop_status" => shop_raw}}, else: %{}
+        html = render_category_cell(%{status: catalogue_status, data: data})
+
+        effective_shop = shop_raw || "active"
+        expected = effective_shop != "hidden" and catalogue_status == "deleted"
+
+        assert contradiction_attr(html) == to_string(expected),
+               "catalogue=#{inspect(catalogue_status)} shop=#{inspect(shop_raw)}: " <>
+                 "expected contradiction=#{expected}, got #{contradiction_attr(html)}"
+      end
     end
   end
 
