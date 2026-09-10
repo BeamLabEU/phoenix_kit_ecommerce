@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
@@ -401,6 +402,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                       </thead>
                       <tbody>
                         <%= for item <- @cart.items do %>
+                          <% display_title = NamePrefix.strip(item.product_title) %>
                           <tr>
                             <td>
                               <div class="flex items-center gap-4">
@@ -412,7 +414,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                     >
                                       <img
                                         src={item.product_image}
-                                        alt={item.product_title}
+                                        alt={display_title}
                                         class="w-full h-full object-cover"
                                       />
                                     </.link>
@@ -420,7 +422,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                     <div class="w-16 h-16 bg-base-200 rounded-lg overflow-hidden flex-shrink-0">
                                       <img
                                         src={item.product_image}
-                                        alt={item.product_title}
+                                        alt={display_title}
                                         class="w-full h-full object-cover"
                                       />
                                     </div>
@@ -446,10 +448,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                         navigate={product_item_url(item, @current_language)}
                                         class="hover:text-primary transition-colors"
                                       >
-                                        {item.product_title}
+                                        {display_title}
                                       </.link>
                                     <% else %>
-                                      {item.product_title}
+                                      {display_title}
                                     <% end %>
                                   </div>
                                   <%= if item.product_sku do %>

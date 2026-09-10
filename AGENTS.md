@@ -380,13 +380,18 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 **Storefront display**
 
 - `shop_name_prefixes` — comma-separated prefixes ("3D Printed"), empty by
-  default. Read through `PhoenixKitEcommerce.NamePrefix`, never directly.
-  Strips a matching prefix from a product/category name at DISPLAY time
-  only, on storefront pages only (`Translations.get_display/3`) — the
-  stored name is never rewritten, so a re-sync from Shopify (which owns
-  these names) can never be silently overwritten by, or diverge from, a
-  cosmetic rename. Admin edit pages and the Shopify diff/apply path
-  always read the raw stored value.
+  default (longest configured prefix wins on overlap). Read through
+  `PhoenixKitEcommerce.NamePrefix`, never directly. Strips a matching
+  prefix from a product/category name at DISPLAY time only — the stored
+  name (and a cart/order line's snapshotted `product_title`/`"name"`) is
+  never rewritten, so a re-sync from Shopify (which owns these names)
+  can never be silently overwritten by, or diverge from, a cosmetic
+  rename. Applied on every storefront page a shopper sees a name on,
+  browse through order confirmation and their own order history alike
+  (`Translations.get_display/3` for a live product/category read,
+  `NamePrefix.strip/1` directly on a cart/order line's snapshot string).
+  Admin edit pages and the Shopify diff/apply path always read the raw
+  stored value.
 - `shop_category_name_display` — `"truncate"` (default) or `"wrap"`
 - `shop_category_icon_mode` — `"none"` (default), icon rendering mode
 - `shop_sidebar_show_categories` — show the category sidebar (default: `true`)

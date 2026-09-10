@@ -2,13 +2,15 @@ defmodule PhoenixKitEcommerce.NamePrefixTest do
   @moduledoc """
   `shop_name_prefixes` hides a redundant vocabulary prefix ("3D Printed
   Costume Masks" -> "Costume Masks") from storefront-displayed names.
-  Display-time only, and only ever reached through
-  `Translations.get_display/3` — this file covers the string-stripping
-  rules and the setting's own fail-safe defaults; the fact that admin
-  pages, slugs and the Shopify sync path never see a stripped value is
-  covered where those paths are exercised (`translations_display_test.exs`,
-  the `catalog_*`/`shop_catalog` LiveView tests, `product_diff_test.exs`,
-  `collection_sync_test.exs`).
+  Display-time only, reached either through `Translations.get_display/3`
+  (a live `%Product{}`/`%Category{}` read) or directly, on a cart/order
+  line's snapshotted title string, from the pages that render one — this
+  file covers the string-stripping rules and the setting's own fail-safe
+  defaults; the fact that admin pages, slugs, persisted snapshots and the
+  Shopify sync path never see a stripped value written anywhere is
+  covered where those paths are exercised
+  (`translations_display_test.exs`, `name_prefix_storefront_test.exs`,
+  `product_diff_name_prefix_test.exs`, `collection_sync_name_prefix_test.exs`).
   """
   use PhoenixKitEcommerce.DataCase, async: false
 
@@ -58,12 +60,22 @@ defmodule PhoenixKitEcommerce.NamePrefixTest do
       assert NamePrefix.strip("3D PRINTED Costume Masks") == "Costume Masks"
     end
 
-    for sep <- ["-", "–", "|", ":"] do
+    # Iterates the module's OWN separator list (NamePrefix.separators/0)
+    # rather than a hardcoded copy here, so adding or removing a
+    # separator in the source can't silently go untested.
+    for sep <- PhoenixKitEcommerce.NamePrefix.separators() do
       test "strips the prefix followed by separator #{inspect(sep)} and its whitespace" do
         assert NamePrefix.strip("3D Printed #{unquote(sep)} Costume Masks") == "Costume Masks"
         # No space before the separator either.
         assert NamePrefix.strip("3D Printed#{unquote(sep)} Costume Masks") == "Costume Masks"
       end
+    end
+
+    test "the separator list carries exactly the separators this feature supports" do
+      # Pinned so a change to NamePrefix.separators/0 is a deliberate,
+      # reviewed edit — including the em-dash, which a shop's own
+      # "3D Printed — Costume Masks" copy-paste style can carry.
+      assert NamePrefix.separators() == ["-", "–", "—", "|", ":"]
     end
 
     test "does not strip when the prefix appears mid-name, not at the start" do
@@ -94,11 +106,27 @@ defmodule PhoenixKitEcommerce.NamePrefixTest do
   end
 
   describe "strip/1 — multiple configured prefixes" do
-    test "the first matching configured prefix wins" do
+    test "each configured prefix strips its own matching name" do
       set("3D Printed, Hand Made")
       assert NamePrefix.strip("3D Printed Costume Masks") == "Costume Masks"
       assert NamePrefix.strip("Hand Made Soap") == "Soap"
       assert NamePrefix.strip("Vintage Lamp") == "Vintage Lamp"
+    end
+
+    # Deliberate change from an earlier first-match-wins behavior, pinned
+    # by an earlier review round: first-match left the dangling fragment
+    # "Printed Costume Masks" when both "3D" and "3D Printed" were
+    # configured. The LONGEST applicable prefix always wins now,
+    # regardless of configuration order — there is no shop-visible upside
+    # to matching the shorter one first.
+    test "the LONGEST applicable prefix wins on overlap, not the first configured" do
+      set("3D, 3D Printed")
+      assert NamePrefix.strip("3D Printed Costume Masks") == "Costume Masks"
+    end
+
+    test "longest-match wins regardless of which order the prefixes are configured in" do
+      set("3D Printed, 3D")
+      assert NamePrefix.strip("3D Printed Costume Masks") == "Costume Masks"
     end
   end
 end

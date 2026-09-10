@@ -8,18 +8,31 @@ defmodule PhoenixKitEcommerce.NamePrefix do
 
   ## Display-time only
 
-  The stored name/title is never rewritten. Category and product names
-  in this shop come from Shopify collection/product titles and are
-  re-synced from Shopify on every sync run — a persisted rename would
-  either be silently overwritten on the next sync, or would have to be
-  excluded from sync, which then hides real upstream renames. Stripping
-  at read time needs no coordination with the sync at all: `strip/1`
-  is a pure string function, called ONLY from
-  `PhoenixKitEcommerce.Translations.get_display/3`, which is itself
-  called only from storefront render paths. Nothing in the Shopify
-  diff/apply path (`PhoenixKitEcommerce.Shopify.ProductDiff`,
-  `PhoenixKitEcommerce.Shopify.CollectionSync`) or in an admin edit
-  form calls it — both read the raw stored value exactly as before.
+  No STORED value is ever rewritten — not a product/category's own
+  name, and not a cart or order line's snapshotted `product_title`/
+  `"name"`. Category and product names in this shop come from Shopify
+  collection/product titles and are re-synced from Shopify on every sync
+  run — a persisted rename would either be silently overwritten on the
+  next sync, or would have to be excluded from sync, which then hides
+  real upstream renames. A cart/order line's snapshot exists so a later
+  price or catalogue change can't retroactively alter what the shopper
+  was shown (the same principle as its snapshotted price); rewriting
+  that stored string would defeat the snapshot for no reason, since a
+  pure display-time strip achieves the same visible result.
+
+  `strip/1` is a pure string function with no persistence and no
+  Shopify reach, called from two places: `PhoenixKitEcommerce.
+  Translations.get_display/3` (for a live `%Product{}`/`%Category{}`
+  read on a storefront page) and directly, on a cart/order line's
+  snapshotted title string, from the storefront pages that render one
+  (cart, checkout, order confirmation, the customer's own order
+  history) — see `Translations.get_display/3`'s doc for why the
+  snapshot itself stays untouched while its on-page rendering doesn't.
+  Nothing in the Shopify diff/apply path
+  (`PhoenixKitEcommerce.Shopify.ProductDiff`,
+  `PhoenixKitEcommerce.Shopify.CollectionSync`), an admin edit form, or
+  any write path calls it — all of those read or persist the raw stored
+  value exactly as before.
 
   A library cannot ship one shop's vocabulary, so this is a setting
   rather than a hardcoded literal — read through this wrapper, never
@@ -31,11 +44,19 @@ defmodule PhoenixKitEcommerce.NamePrefix do
 
   @setting "shop_name_prefixes"
   @default ""
-  @separators ["-", "–", "|", ":"]
+  @separators ["-", "–", "—", "|", ":"]
 
   @doc "The setting key, so the settings UI and tests do not re-spell it."
   @spec setting_key() :: String.t()
   def setting_key, do: @setting
+
+  @doc """
+  The separators `strip/1` consumes after a matched prefix, so a test can
+  iterate the real list rather than a second, independently-maintained
+  copy that could silently drop an entry the source still recognizes.
+  """
+  @spec separators() :: [String.t()]
+  def separators, do: @separators
 
   @doc "The configured prefixes to hide, trimmed and with blanks dropped."
   @spec prefixes() :: [String.t()]
@@ -46,9 +67,15 @@ defmodule PhoenixKitEcommerce.NamePrefix do
   end
 
   @doc """
-  Strips the first configured prefix that matches the START of `name`,
+  Strips the LONGEST configured prefix that matches the START of `name`,
   case-insensitively, consuming any following whitespace and then an
-  optional `-`/`–`/`|`/`:` separator plus its whitespace.
+  optional `-`/`–`/`—`/`|`/`:` separator plus its whitespace.
+
+  Longest, not first-configured: with `"3D, 3D Printed"` configured, a
+  first-match-wins rule would strip only `"3D"` from `"3D Printed Costume
+  Masks"` and leave the dangling fragment `"Printed Costume Masks"`. There
+  is no shop-visible upside to first-match, so the more specific (longer)
+  prefix always wins regardless of configuration order.
 
   Leaves `name` untouched when:
     * no configured prefix matches
@@ -64,14 +91,23 @@ defmodule PhoenixKitEcommerce.NamePrefix do
   def strip(name) when is_binary(name) do
     case prefixes() do
       [] -> name
-      configured -> strip_first(name, configured) || name
+      configured -> strip_longest(name, configured) || name
     end
   end
 
   def strip(other), do: other
 
-  defp strip_first(name, prefixes) do
-    Enum.find_value(prefixes, &strip_one(name, &1))
+  defp strip_longest(name, prefixes) do
+    prefixes
+    |> Enum.map(&{&1, strip_one(name, &1)})
+    |> Enum.reject(fn {_prefix, result} -> is_nil(result) end)
+    |> case do
+      [] ->
+        nil
+
+      matches ->
+        matches |> Enum.max_by(fn {prefix, _result} -> String.length(prefix) end) |> elem(1)
+    end
   end
 
   defp strip_one(_name, ""), do: nil
