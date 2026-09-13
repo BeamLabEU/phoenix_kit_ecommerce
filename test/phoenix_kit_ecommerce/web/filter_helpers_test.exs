@@ -143,4 +143,52 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpersTest do
       assert FilterHelpers.parse_filter_params(params, [@attribute_set_filter]) == active
     end
   end
+
+  # Raw URL params reach `parse_filter_params/2` straight from every
+  # storefront mount, so Plug's nested-param shapes (`?vendor[x]=y` is a
+  # map, `?price_min[]=1` a list) must be ignored, never raised on.
+  describe "parse_filter_params/2 with crafted (non-string) param shapes" do
+    @vendor_filter %{
+      "key" => "vendor",
+      "type" => "vendor",
+      "label" => "Vendor",
+      "enabled" => true,
+      "position" => 3
+    }
+
+    test "a map where a comma list is expected (?vendor[x]=y) is ignored" do
+      params = %{"vendor" => %{"x" => "y"}}
+      assert FilterHelpers.parse_filter_params(params, [@vendor_filter]) == %{}
+    end
+
+    test "a list keeps only its binary entries (?vendor[]=a&vendor[][k]=v)" do
+      params = %{"vendor" => ["a", %{"k" => "v"}, 1]}
+      assert FilterHelpers.parse_filter_params(params, [@vendor_filter]) == %{"vendor" => ["a"]}
+
+      assert FilterHelpers.parse_filter_params(%{"vendor" => [%{"k" => "v"}]}, [@vendor_filter]) ==
+               %{}
+    end
+
+    test "a list or map where a price bound is expected (?price_min[]=1) is ignored" do
+      assert FilterHelpers.parse_filter_params(%{"price_min" => ["1"]}, [@price_filter]) == %{}
+
+      assert FilterHelpers.parse_filter_params(%{"price_min" => %{"a" => "1"}}, [@price_filter]) ==
+               %{}
+
+      # A valid bound beside a crafted one still parses.
+      assert FilterHelpers.parse_filter_params(
+               %{"price_min" => ["1"], "price_max" => "20"},
+               [@price_filter]
+             ) == %{"price" => %{min: nil, max: Decimal.new("20")}}
+    end
+
+    test "a map where a search term is expected is ignored" do
+      assert FilterHelpers.parse_filter_params(%{"search" => %{"a" => "b"}}, [@search_filter]) ==
+               %{}
+    end
+
+    test "update_price_filter/4 tolerates list and map bounds" do
+      assert FilterHelpers.update_price_filter(%{}, "price", ["1"], %{"a" => "2"}) == %{}
+    end
+  end
 end

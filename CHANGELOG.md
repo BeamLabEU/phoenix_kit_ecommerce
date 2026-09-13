@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+Week review of 0.5.0–0.5.3 (PRs #32–#55); findings and resolutions in
+`dev_docs/pull_requests/2026/week-2026-09-13-review/CLAUDE_REVIEW.md`.
+
+### Fixed
+
+- **An open cart is rebased after a base-currency change.** New
+  `rebase_cart/1` runs before add-to-cart, rate refresh, guest merge and
+  conversion, so a cart frozen against the old base can no longer receive
+  a new-base line unconverted (same-currency cart) or double-converted
+  (foreign-currency cart). Drift reports nothing for a stale cart.
+- **Shipping methods are listed in the cart's currency.** Cart and
+  checkout showed base-currency amounts under the cart's symbol, and the
+  FREE badge compared a display subtotal to a base threshold; both now go
+  through `present_shipping_method/2`.
+- **A crafted storefront query string no longer 500s.** `?vendor[x]=y` and
+  `?price_min[]=1` crashed every catalog, category and product mount.
+- **Catalogue search matches translated names**, and the admin category
+  search works on the catalogue source (it was a silent no-op).
+- **Shopify variants sync passes the acting user to attribute-set
+  creation**; entities requires a creator, so every set creation failed
+  against the current catalogue.
+- **`HtmlToMarkdown` keeps `&lt;`/`&gt;` encoded in text** — an escaped
+  `<script>` example no longer becomes a raw HTML block — and drops
+  `javascript:` links to plain text.
+- **Image importer: DNS-rebinding guard and streamed size cap.** The
+  validated address is pinned for the connection (hostname kept for
+  SNI/verification); `content-length` is checked before the body and the
+  download halts at the limit instead of buffering first.
+- **Media sync isolates a crashing product** instead of failing the run and
+  retrying from the first product; an image with no `src` is recorded, not
+  raised.
+- **Base-currency reprice no longer broadcasts per product from inside
+  billing's transaction.**
+- Admin status filter agrees with the storefront on retired catalogue items
+  with a stale `shop_status`; numeric `price_modifiers` leaves are
+  stringified (and validated) rather than silently treated as zero; legacy
+  facet SQL honours the schema prefix; retired-category "still reachable"
+  warning removed from the shop-status column; settings whitelist for
+  category display/icon modes; a non-additive Shopify variant matrix now
+  records a per-product warning instead of under-pricing silently.
+- **Test harness applies entities' and catalogue's migration chains** when
+  the catalogue path bridge is on; the 136 `:catalogue`-tagged tests failed
+  on setup (`undefined_column: slug`) before this.
+- Gettext catalogues re-extracted; every ru/et/de/fr entry translated.
+
+### Changed
+
+- **⚠️ `phoenix_kit` floor `~> 2.15` → `~> 2.16`.** The cart-freeze columns
+  are core's V186, first shipped in 2.16.0; 2.15.x (V183) raised
+  `undefined_column` on every cart write. Existing lockfiles already
+  resolve 2.22.x, so only a host pinned to 2.15 is affected.
+- Storefront pages re-fetch products once per rate batch (coalesced 250 ms)
+  instead of once per changed currency; name-prefix stripping reads the
+  setting once per render instead of once per name; Shopify sync page
+  caches row diffs instead of recomputing them on every render; checkout
+  conversion validates catalogue lines in one query.
+- `fx_rate_drift_alert_pct` is read as `shop_fx_rate_drift_alert_pct`; the
+  old key still applies while the new one is unset.
+- Oban queue documented correctly as `shop_imports` (README, AGENTS.md,
+  install task); AGENTS.md dependency, tree and settings sections brought up
+  to date; 0.5.0 entry now records the floor raises it shipped.
+
 ## 0.5.3 - 2026-09-10
 
 PRs #54–#55.
@@ -225,6 +287,15 @@ PRs #32–#46 plus the post-merge review in
 
 ### Changed
 
+- **⚠️ Dependency floors raised.** `phoenix_kit` `~> 2.6` → `~> 2.15`
+  (`Cart`/`CartItem` cast the `base_currency`/`exchange_rate`/
+  `base_unit_price` columns core's currency-freeze migration adds; below
+  it every cart write raises `undefined_column`) and `phoenix_kit_billing`
+  `~> 0.7` → `~> 0.13` (`Currency.present/3` with a frozen `:rate`,
+  `effective_rate/2`, `resolve_display_currency/1`). A host pinned below
+  either gets an unsolvable dependency set from `mix deps.get`. New
+  runtime dependency `mdex ~> 0.13` (Markdown rendering of synced
+  descriptions). (#33, #38, #42)
 - Settings toggle and option rows sit on a plain flex layout instead of
   daisyUI `label`/`fieldset-legend` (which styled nothing under v5).
   (#37)

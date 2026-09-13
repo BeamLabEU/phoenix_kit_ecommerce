@@ -225,4 +225,43 @@ defmodule PhoenixKitEcommerce.ProductSourceTest do
                Category.get_image_url(category, size: "small")
     end
   end
+
+  describe "Legacy.aggregate_filter_values/1 metadata_option facets (raw SQL)" do
+    # The facet query is hand-written SQL that names the products table
+    # itself (it cannot inherit the schema's `@schema_prefix`), so this
+    # pins that the qualified name it builds actually executes — under a
+    # prefixed install the old bare name hit the `rescue` and returned
+    # `[]`, which looked exactly like "no options".
+    test "counts distinct option values from metadata._option_values" do
+      create_product!("Small", %{"metadata" => %{"_option_values" => %{"size" => ["S", "M"]}}})
+      create_product!("Medium", %{"metadata" => %{"_option_values" => %{"size" => ["M"]}}})
+
+      create_product!("Drafted", %{
+        "status" => "draft",
+        "metadata" => %{"_option_values" => %{"size" => ["XL"]}}
+      })
+
+      filter = %{"type" => "metadata_option", "key" => "size", "option_key" => "size"}
+
+      assert %{"size" => facets} = Legacy.aggregate_filter_values(filters: [filter])
+
+      assert Enum.sort_by(facets, & &1.value) == [
+               %{value: "M", count: 2},
+               %{value: "S", count: 1}
+             ]
+    end
+
+    test "a :filters list is used as given instead of re-reading the storefront config" do
+      create_product!("Only", %{"metadata" => %{"_option_values" => %{"size" => ["S"]}}})
+
+      assert Legacy.aggregate_filter_values(filters: []) == %{}
+
+      assert %{"size" => [%{value: "S", count: 1}]} =
+               Legacy.aggregate_filter_values(
+                 filters: [
+                   %{"type" => "metadata_option", "key" => "size", "option_key" => "size"}
+                 ]
+               )
+    end
+  end
 end

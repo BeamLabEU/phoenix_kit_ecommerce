@@ -196,6 +196,46 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
     end
   end
 
+  # One product whose image download RAISES, sandwiched between two
+  # healthy ones — the raise must become that product's own error entry
+  # and the products after it must still be processed.
+  defmodule CrashingImagesStub do
+    @moduledoc false
+
+    def fetch_products(_integration_uuid, _opts) do
+      {:ok,
+       [
+         %{
+           "id" => 111,
+           "handle" => "before-crash",
+           "images" => [%{"id" => 501, "src" => "https://cdn.example/a.jpg", "position" => 1}]
+         },
+         %{
+           "id" => 222,
+           "handle" => "crashes",
+           "images" => [
+             %{"id" => 601, "src" => "https://cdn.example/raises.jpg", "position" => 1}
+           ]
+         },
+         %{
+           "id" => 333,
+           "handle" => "after-crash",
+           "images" => [%{"id" => 701, "src" => "https://cdn.example/b.jpg", "position" => 1}]
+         }
+       ]}
+    end
+  end
+
+  defp crashing_downloader(user_uuid) do
+    fn
+      "https://cdn.example/raises.jpg", _downloader_user_uuid, _opts ->
+        raise "downloader exploded"
+
+      url, downloader_user_uuid, _opts ->
+        store_fixture_file(url, downloader_user_uuid || user_uuid)
+    end
+  end
+
   # ============================================================
   # "variants" — client stub
   # ============================================================
@@ -308,6 +348,44 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert progress["result"] == nil
     end
 
+    # The moduledoc's promise — one bad product must not stop the rest —
+    # covers a RAISE out of the writer, not only an `{:error, _}`: before
+    # `process_product/7` rescued per product, one crash failed the whole
+    # run and Oban retried it from product 1.
+    test "images: a product whose writer raises is recorded as its own error and the run continues",
+         %{catalogue: catalogue} do
+      import ExUnit.CaptureLog
+
+      user = fixture_user()
+      before = create_item(catalogue.uuid, "Before", %{"product_id" => "111"})
+      crashes = create_item(catalogue.uuid, "Crashes", %{"product_id" => "222"})
+      after_crash = create_item(catalogue.uuid, "After", %{"product_id" => "333"})
+
+      {result, log} =
+        with_log(fn ->
+          Worker.run("images", user.uuid,
+            client: CrashingImagesStub,
+            downloader: crashing_downloader(user.uuid),
+            integration_uuid: "test-integration"
+          )
+        end)
+
+      assert {:ok, %{total: 3, done: 3, errors: [error]}} = result
+      assert error["product"] == "crashes"
+      assert error["reason"] =~ "downloader exploded"
+      assert log =~ "crashes"
+      assert log =~ "downloader exploded"
+
+      assert [_uuid] = reload(before).data["media_order"]
+      assert [_uuid] = reload(after_crash).data["media_order"]
+      assert reload(crashes).data["media_order"] in [nil, []]
+
+      progress = Worker.get_progress()
+      assert progress["done"] == 3
+      assert progress["finished_at"] != nil
+      assert [%{"product" => "crashes"}] = progress["errors"]
+    end
+
     test "variants: attaches an attribute set to the matched item", %{catalogue: catalogue} do
       AttributeSets.register_deletion_guard()
       PhoenixKit.Settings.update_setting("entities_enabled", "true")
@@ -324,8 +402,10 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
           }
         })
 
+      actor = fixture_user()
+
       assert {:ok, %{total: 1, done: 1, errors: []}} =
-               Worker.run("variants", nil,
+               Worker.run("variants", actor.uuid,
                  client: VariantsStub,
                  integration_uuid: "test-integration"
                )
@@ -336,6 +416,37 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert progress["kind"] == "variants"
       assert progress["finished_at"] != nil
       assert progress["errors"] == []
+    end
+
+    # The set/value creator comes from the job's `actor_uuid`; a `nil` one
+    # is not replaced with an invented system uuid — the entities layer's
+    # own creator constraint is recorded as that product's error and the
+    # run completes.
+    test "variants: a nil actor records the creator error per product instead of failing the run",
+         %{catalogue: catalogue} do
+      AttributeSets.register_deletion_guard()
+      PhoenixKit.Settings.update_setting("entities_enabled", "true")
+      on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
+
+      item =
+        create_item(catalogue.uuid, "Two-Option Mug", %{"handle" => "two-option-mug"}, %{
+          data: %{
+            "_primary_language" => "en",
+            "ecommerce" => %{
+              "shop_status" => "active",
+              "shopify" => %{"handle" => "two-option-mug"}
+            }
+          }
+        })
+
+      assert {:ok, %{total: 1, done: 1, errors: [%{"product" => "two-option-mug"}]}} =
+               Worker.run("variants", nil,
+                 client: VariantsStub,
+                 integration_uuid: "test-integration"
+               )
+
+      assert AttributeSets.list_attachments(item.uuid) == []
+      assert Worker.get_progress()["finished_at"] != nil
     end
 
     test "variants: a shop-currency mismatch skips every product, writes no price_modifiers, and reports the refusal",

@@ -84,7 +84,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     assert html =~ ~s(data-catalogue-status="discontinued")
     assert html =~ ~s(data-shop-status="active")
-    assert html =~ ~s(data-contradiction="false")
+    refute html =~ "data-contradiction"
     refute html =~ "hero-exclamation-triangle"
     refute html =~ ~s( id=")
   end
@@ -100,7 +100,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     html = render.(item) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
-    assert html =~ ~s(data-contradiction="false")
+    refute html =~ "data-contradiction"
     refute html =~ "hero-exclamation-triangle"
   end
 
@@ -116,20 +116,19 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     html = render.(category) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
-    assert html =~ ~s(data-contradiction="false")
+    refute html =~ "data-contradiction"
     refute html =~ "hero-exclamation-triangle"
   end
 
-  test "render/1 against a real deleted/unlisted category WARNS — the category gate is a block-list of just \"hidden\"" do
+  test "render/1 against a real deleted/unlisted category shows both raw values and never warns" do
     %{render: render} =
       PhoenixKitCatalogue.Extensions.columns(:detail_categories) |> find_column()
 
-    # Regression coverage for the gap a prior review found: a category
-    # rule modelled on the item page's ALLOW-list (only "active"
-    # passes) wrongly said "no warning" here, because "unlisted" isn't
-    # "active" either. `CatalogCategory.do_mount/3` is a BLOCK-list —
-    # it only redirects on "hidden" — so this soft-deleted category is
-    # still reachable by direct link.
+    # This combination used to warn as "reachable by direct link";
+    # `View.category_status/2` now forces "hidden" for a
+    # catalogue-deleted category regardless of the stored shop_status
+    # (see `catalog_category_catalogue_status_test.exs`), so the page
+    # redirects and the column only surfaces the disagreement.
     category =
       struct!(PhoenixKitCatalogue.Schemas.Category,
         status: "deleted",
@@ -138,8 +137,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
 
     html = render.(category) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
-    assert html =~ ~s(data-contradiction="true")
-    assert html =~ "hero-exclamation-triangle"
+    assert html =~ ~s(data-catalogue-status="deleted")
+    assert html =~ ~s(data-shop-status="unlisted")
+    refute html =~ "data-contradiction"
+    refute html =~ "hero-exclamation-triangle"
   end
 
   test "a real item with no ecommerce namespace at all (never touched by the Shop section) does not raise" do
@@ -150,6 +151,6 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
     html = render.(item) |> HtmlSafe.to_iodata() |> IO.iodata_to_binary()
 
     assert html =~ ~s(data-shop-status="default")
-    assert html =~ ~s(data-contradiction="false")
+    refute html =~ "data-contradiction"
   end
 end

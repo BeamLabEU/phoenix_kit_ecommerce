@@ -87,23 +87,33 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
   # counts its own invocations via an Agent — a genuine stand-in for
   # `ImageDownloader.download_and_store/3`, not a mock of the writer's
   # own behaviour.
-  defp counting_downloader(user_uuid, fail_urls \\ []) do
+  # `unique_bytes: true` gives every download distinct content. Core's
+  # Storage dedups a stored file on its per-user checksum, so a re-download
+  # of the same URL with the same fixture bytes hands back the EXISTING
+  # file row — including one that has since been trashed — which is the
+  # wrong thing to prove when the test is about falling through to a
+  # fresh file.
+  defp counting_downloader(user_uuid, fail_urls \\ [], opts \\ []) do
     {:ok, counter} = Agent.start_link(fn -> 0 end)
+    unique? = Keyword.get(opts, :unique_bytes, false)
 
     downloader = fn url, downloader_user_uuid, _opts ->
       if url in fail_urls do
         {:error, :not_found}
       else
         Agent.update(counter, &(&1 + 1))
-        store_fixture_file(url, downloader_user_uuid || user_uuid)
+        store_fixture_file(url, downloader_user_uuid || user_uuid, body_suffix(unique?))
       end
     end
 
     {downloader, counter}
   end
 
-  defp store_fixture_file(url, user_uuid) do
-    body = "fixture-bytes-#{url}"
+  defp body_suffix(true), do: "-#{System.unique_integer([:positive])}"
+  defp body_suffix(false), do: ""
+
+  defp store_fixture_file(url, user_uuid, suffix \\ "") do
+    body = "fixture-bytes-#{url}#{suffix}"
     tmp = Path.join(System.tmp_dir!(), "writer_images_test_#{System.unique_integer([:positive])}")
     File.write!(tmp, body)
 
@@ -488,6 +498,65 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
       new_uuid = final.data["ecommerce"]["shopify"]["image_ids"]["301"]
       assert new_uuid
       assert final.data["media_order"] == [image_a, new_uuid, image_b]
+    end
+
+    # Path (a) — reuse by known Shopify image id — used to trust the stored
+    # uuid blindly, unlike path (b) which only ever indexes ACTIVE files. A
+    # file trashed since the last sync must not be re-attached; the image
+    # falls through to (b)/(c) and is downloaded again.
+    test "a known image id whose file is no longer active falls through to a fresh download", %{
+      item: item,
+      user_uuid: user_uuid
+    } do
+      {:ok, stale_uuid} = store_fixture_file("https://cdn.example/first.jpg", user_uuid)
+      {:ok, _trashed} = Storage.update_file(Storage.get_file(stale_uuid), %{status: "trashed"})
+
+      {:ok, item} =
+        Catalogue.update_item(item, %{
+          data: put_in(item.data, ["ecommerce", "shopify", "image_ids"], %{"101" => stale_uuid})
+        })
+
+      product = %{
+        "id" => 888,
+        "images" => [%{"id" => 101, "src" => "https://cdn.example/first.jpg", "position" => 1}]
+      }
+
+      {downloader, counter} = counting_downloader(user_uuid, [], unique_bytes: true)
+
+      assert {:ok, %{downloaded: 1, reused: 0, attached: 1, errors: []}} =
+               Writer.sync_images(item, product, downloader: downloader, user_uuid: user_uuid)
+
+      assert Agent.get(counter, & &1) == 1
+
+      updated = Catalogue.get_item!(item.uuid)
+      new_uuid = updated.data["ecommerce"]["shopify"]["image_ids"]["101"]
+      assert new_uuid != stale_uuid
+      assert updated.data["media_order"] == [new_uuid]
+    end
+
+    # A Shopify image with no `src` (seen mid-upload) used to reach the
+    # downloader as `nil` and raise out of the whole product; now it is
+    # this image's own recorded error and the rest of the product syncs.
+    test "an image without a src is skipped with a recorded error, not raised", %{
+      item: item,
+      user_uuid: user_uuid
+    } do
+      product = %{
+        "id" => 888,
+        "images" => [
+          %{"id" => 901, "src" => nil, "position" => 1},
+          %{"id" => 101, "src" => "https://cdn.example/first.jpg", "position" => 2}
+        ]
+      }
+
+      {downloader, _counter} = counting_downloader(user_uuid)
+
+      assert {:ok, %{downloaded: 1, reused: 0, attached: 1, errors: [{"901", :missing_src}]}} =
+               Writer.sync_images(item, product, downloader: downloader, user_uuid: user_uuid)
+
+      updated = Catalogue.get_item!(item.uuid)
+      refute Map.has_key?(updated.data["ecommerce"]["shopify"]["image_ids"], "901")
+      assert [_uuid] = updated.data["media_order"]
     end
 
     test "no user_uuid given inserts files under the default (first-admin) actor", %{

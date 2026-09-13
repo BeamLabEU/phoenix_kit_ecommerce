@@ -158,6 +158,31 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
     |> Phoenix.Component.assign(:currency, code)
   end
 
+  @doc """
+  Coalesces the product RELOAD a `{:currencies_changed, _}` broadcast asks
+  for into one `:fx_reload` message per burst.
+
+  Billing broadcasts once per currency per rate refresh, and a base
+  change touches every row — so a storefront tab that re-queried its
+  products on every message ran N full catalog queries for one event,
+  on every open tab at once. The cheap part (`refresh_display_currency/1`,
+  re-marking `@currency` so loaded prices re-present) stays immediate;
+  the re-fetch is deferred by `delay_ms` and scheduled at most once while
+  `:fx_reload_pending` is set. The page's `handle_info(:fx_reload, _)`
+  clause clears the flag (`fx_reload_done/1`) and does the reload.
+  """
+  def schedule_fx_reload(socket, delay_ms \\ 250) do
+    if socket.assigns[:fx_reload_pending] do
+      socket
+    else
+      Process.send_after(self(), :fx_reload, delay_ms)
+      Phoenix.Component.assign(socket, :fx_reload_pending, true)
+    end
+  end
+
+  @doc "Clears the `schedule_fx_reload/2` flag; call first in `handle_info(:fx_reload, _)`."
+  def fx_reload_done(socket), do: Phoenix.Component.assign(socket, :fx_reload_pending, false)
+
   # ---------------------------------------------------------------------------
   # Current user
   # ---------------------------------------------------------------------------

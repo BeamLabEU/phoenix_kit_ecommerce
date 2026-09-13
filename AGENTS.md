@@ -12,14 +12,19 @@ and checkout hands off to `phoenix_kit_billing` for orders and payment. It
 ships admin LiveViews for the whole workflow plus the public storefront
 pages.
 
-- **Depends on:** `phoenix_kit` `~> 2.15` (Hex), `phoenix_kit_billing`
-  `~> 0.11` (hard), `phoenix_kit_ai` `~> 0.18` (optional — only the
+- **Depends on:** `phoenix_kit` `~> 2.16` (Hex), `phoenix_kit_billing`
+  `~> 0.13` (hard), `phoenix_kit_ai` `~> 0.18` (optional — only the
   AI-translate UI and adapter use it and both compile out when it is
   absent). Also `phoenix`, `phoenix_live_view ~> 1.1`, `ecto_sql ~> 3.12`,
-  `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `gettext ~> 1.0`.
-  There is deliberately **no** dep on `phoenix_kit_catalogue`: the catalogue
-  extension slot is reached duck-typed, so nothing here calls
-  `PhoenixKitCatalogue` directly.
+  `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `mdex`,
+  `gettext ~> 1.0`. There is deliberately **no** dep on
+  `phoenix_kit_catalogue`: the extension slot is discovered duck-typed, and
+  the code that does call `PhoenixKitCatalogue.*` directly (the
+  `ProductSource.Catalogue` adapter, `Catalogue.Writer`, the Shopify
+  variants/collections/media sync) only runs behind `Code.ensure_loaded?/1`
+  once a host declares the dep, with `@compile {:no_warn_undefined, …}` and
+  matching `.dialyzer_ignore.exs` entries. Its `:catalogue`-tagged tests
+  need the test-only path bridge in `mix.exs` (`catalogue_test_deps/0`).
 - **Consumed by:** no sibling declares a dependency on this module. Core
   reaches the old `PhoenixKit.Modules.Shop.*` namespace through the
   transitional shims in `lib/phoenix_kit_ecommerce/compat/`, and
@@ -150,8 +155,11 @@ Repo-local aliases:
   stored `unit_price` (typically `0`) and renders "0.00" where the customer
   agreed to "price on request".
 - **Money is `Decimal`.** Never floats for currency.
-- **Async work is Oban.** CSV import and image migration run as workers
-  (queues `shop_import`, `shop_images`); never spawn a bare `Task`.
+- **Async work is Oban.** CSV import, image migration and the Shopify
+  media/variants/collections sync run as workers, all on the single
+  `shop_imports` queue — a host that configures no such queue leaves
+  every job `available` forever while the UI reports "queued"; never
+  spawn a bare `Task`.
 - **Schemas:** UUIDv7 primary keys (`@primary_key {:uuid, UUIDv7,
   autogenerate: true}`, `uuid_generate_v7()` in DDL — never
   `gen_random_uuid()`), and every table-backed schema declares
@@ -172,7 +180,7 @@ Repo-local aliases:
   failures never crash the caller) and the default metadata (`module: "shop"`,
   `actor_role`); the actor comes from `socket.assigns[:phoenix_kit_current_scope]`.
   Rows carry no PII.
-- **The core pin floor is two-segment (`~> 2.15`) on purpose.** The
+- **The core pin floor is two-segment (`~> 2.16`) on purpose.** The
   three-segment form (`~> 2.6.4`) expands to `< 2.7.0` and breaks CONSUMERS —
   a host on a newer core minor gets an unsolvable dependency set — while
   nothing in this repo's own run notices, which is why a test guards it.
@@ -190,8 +198,12 @@ Repo-local aliases:
   core's baseline alone is missing columns billing's `Currency` schema selects.
   The symptom is an `undefined_column` on `rounding_rule` raised from a
   currency read, hundreds of tests deep and nowhere near anything about
-  currencies. `test_helper.exs` runs core's chain, then billing's, then this
-  module's, in that order.
+  currencies. `test_helper.exs` runs core's chain, then this module's,
+  then billing's — and, when the catalogue path bridge is resolved,
+  entities' and catalogue's. The catalogue pair matters the same way:
+  core's baseline creates `phoenix_kit_cat_*` in their V1 shape, catalogue's
+  own V2 adds the `slug` column its schemas insert, so a database without
+  that chain fails every `:catalogue` test with `undefined_column: slug`.
 - **Raising a dependency requirement means updating `mix.lock` in the same
   change.** A requirement bumped without it leaves the repo refusing to
   compile ("lock mismatch: the dependency is out of date") until someone runs
@@ -241,11 +253,16 @@ lib/phoenix_kit_ecommerce/
 │                     # Shopify + Prom.ua + generic formats, transformer, filter
 ├── shopify/          # Shopify integration: provider, admin/storefront clients,
 │                     # source, sync, product + text diffs
+├── product_source.ex # Legacy | Catalogue adapter switch (shop_product_source)
+├── product_source/   # Legacy (shop tables) and Catalogue (query + view) adapters
 ├── catalogue/        # duck-typed phoenix_kit_catalogue extension slot:
-│                     # Extension, ItemCommerce, CategoryCommerce, ShopSections
+│                     # Extension, ItemCommerce, CategoryCommerce, ShopSections,
+│                     # ShopStatusColumn, Writer (Shopify -> catalogue),
+│                     # ValueResolver, SetSlug
 ├── compat/           # transitional PhoenixKit.Modules.Shop.* delegate shims
 ├── services/         # image download + batch image migration
-├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker
+├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
+│                     # ShopifyMediaSyncWorker
 ├── mix_tasks/        # install, deduplicate_products
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
@@ -259,6 +276,8 @@ lib/phoenix_kit_ecommerce/
 ├── localized_slug.ex # slug projections
 ├── slug_resolver.ex  # multi-language slug lookup across products and categories
 ├── html_text.ex      # description sanitizing
+├── html_to_markdown.ex # Shopify body_html -> Markdown on sync
+├── name_prefix.ex    # display-time storefront name-prefix stripping
 ├── ai_translatable.ex# duck-typed phoenix_kit_ai translation adapter
 ├── gettext.ex        # PhoenixKitEcommerce.Gettext backend
 └── migrations.ex     # module-owned migration chain
@@ -371,7 +390,12 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 **Behaviour**
 
 - `shop_enabled` — module master switch (default: `false`)
-- `shop_inventory_tracking` — track product inventory (default: `true`)
+- `shop_inventory_tracking` — legacy; no longer exposed on the settings
+  page and read only into the unused `config.inventory_tracking`
+- `shop_product_source` — `"legacy"` (default) or `"catalogue"`; stored in
+  `phoenix_kit_shop_config`, not `PhoenixKit.Settings`. Read through
+  `PhoenixKitEcommerce.ProductSource.current/0`, which fails closed to
+  Legacy when `phoenix_kit_catalogue` is not loaded.
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
@@ -559,7 +583,8 @@ without `Utils.Slug` transliteration).
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
-`dependency_floor_test.exs` (the core migration version the floor promises),
+`phoenix_kit_ecommerce/dependency_floor_test.exs` (the core migration
+version the floor promises),
 and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 `PhoenixKit.SchemaPrefix`). Dialyzer suppressions live in
 `.dialyzer_ignore.exs`.

@@ -261,7 +261,8 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   """
   @spec check_one(String.t(), String.t(), keyword()) ::
           {:ok, %{changes: [Change.t()], source: :admin}}
-          | {:error, :not_found | :not_linked | :not_found_in_shopify | term()}
+          | {:error,
+             :not_found | :not_linked | :invalid_product_id | :not_found_in_shopify | term()}
   def check_one(integration_uuid, item_uuid, opts \\ []) do
     base_locale = Keyword.get_lazy(opts, :base_locale, &Translations.default_language/0)
     admin_options = Keyword.get(opts, :admin_options, [])
@@ -290,10 +291,16 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
     end
   end
 
+  # `:invalid_product_id` — the stored `metadata["_shopify"]["product_id"]`
+  # is not a numeric Shopify id (`AdminClient.fetch_product/3` refuses to
+  # put it in a URL path) — is surfaced as-is: it is a data problem on
+  # the local product, distinct from `:not_linked` (no id at all) and
+  # from `:not_found_in_shopify` (a valid id the store no longer has).
   defp fetch_one_shopify_product(integration_uuid, product_id, admin_options) do
     case AdminClient.fetch_product(integration_uuid, product_id, admin_options) do
       {:ok, shopify_product} -> {:ok, shopify_product}
       {:error, :not_found} -> {:error, :not_found_in_shopify}
+      {:error, :invalid_product_id} -> {:error, :invalid_product_id}
       {:error, reason} -> {:error, reason}
     end
   end

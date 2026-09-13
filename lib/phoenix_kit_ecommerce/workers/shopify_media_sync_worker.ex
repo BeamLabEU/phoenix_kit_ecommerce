@@ -199,7 +199,10 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
       # index plus whatever this product downloaded, so a picture shared
       # across a product line is fetched once — rebuilding it per product
       # would mean one full scan of every stored file per item.
-      url_index = if kind == "images", do: Writer.build_url_index(), else: %{}
+      reuse_index =
+        if kind == "images",
+          do: Writer.build_reuse_index(),
+          else: %{url_index: %{}, active_uuids: MapSet.new()}
 
       try do
         # `raw_errors` stays newest-first (plain prepend) for the whole
@@ -207,16 +210,16 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         # in `maybe_save_progress/5`/at the end, never on a value that
         # was already reversed on a previous iteration (that would
         # scramble the order past the second error).
-        {done, raw_errors, _url_index} =
+        {done, raw_errors, _reuse_index} =
           products
           |> Enum.with_index(1)
-          |> Enum.reduce({0, [], url_index}, fn {product, position},
-                                                {_done, raw_errors, url_index} ->
-            {raw_errors, url_index} =
-              process_product(kind, product, index, actor_uuid, opts, raw_errors, url_index)
+          |> Enum.reduce({0, [], reuse_index}, fn {product, position},
+                                                  {_done, raw_errors, reuse_index} ->
+            {raw_errors, reuse_index} =
+              process_product(kind, product, index, actor_uuid, opts, raw_errors, reuse_index)
 
             maybe_save_progress(kind, total, position, raw_errors, started_at)
-            {position, raw_errors, url_index}
+            {position, raw_errors, reuse_index}
           end)
 
         errors = Enum.reverse(raw_errors)
@@ -234,20 +237,57 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
     end
   end
 
-  defp process_product(kind, product, index, actor_uuid, opts, errors, url_index) do
+  # One product, fully isolated: a writer's `{:error, _}` AND anything it
+  # raises or exits with (an Ecto constraint raise, a `Map.fetch!` on an
+  # unexpected payload shape, a guard on a malformed image) become that
+  # product's own error entry, and the loop moves on. Without the
+  # rescue, one bad product escaped `run_products/3`'s outer `rescue`,
+  # marked the whole run failed, and Oban retried from product 1 — the
+  # opposite of what the moduledoc promises ("one bad product must not
+  # stop the other ~664").
+  defp process_product(kind, product, index, actor_uuid, opts, errors, reuse_index) do
     case find_item(index, product) do
       {:ok, item} ->
-        case apply_writer(kind, item, product, actor_uuid, opts, url_index) do
-          {:ok, result} ->
-            {merge_writer_errors(errors, product, result), Map.get(result, :url_index, url_index)}
-
-          {:error, reason} ->
-            {[product_error(product, reason) | errors], url_index}
-        end
+        apply_writer_isolated(kind, item, product, actor_uuid, opts, errors, reuse_index)
 
       :error ->
-        {[product_error(product, "no_matching_item") | errors], url_index}
+        {[product_error(product, "no_matching_item") | errors], reuse_index}
     end
+  end
+
+  defp apply_writer_isolated(kind, item, product, actor_uuid, opts, errors, reuse_index) do
+    case apply_writer(kind, item, product, actor_uuid, opts, reuse_index) do
+      {:ok, result} ->
+        {merge_writer_errors(errors, product, result), next_reuse_index(reuse_index, result)}
+
+      {:error, reason} ->
+        {[product_error(product, reason) | errors], reuse_index}
+    end
+  rescue
+    exception ->
+      log_product_crash(kind, product, Exception.message(exception), __STACKTRACE__)
+      {[product_error(product, Exception.message(exception)) | errors], reuse_index}
+  catch
+    :exit, reason ->
+      message = "exit: " <> inspect(reason)
+      log_product_crash(kind, product, message, __STACKTRACE__)
+      {[product_error(product, message) | errors], reuse_index}
+  end
+
+  defp log_product_crash(kind, product, message, stacktrace) do
+    key = product["handle"] || product_id_string(product) || "unknown"
+
+    Logger.error(
+      "Shopify media sync (#{kind}): product #{key} crashed — #{message}\n" <>
+        Exception.format_stacktrace(stacktrace)
+    )
+  end
+
+  defp next_reuse_index(reuse_index, result) do
+    %{
+      url_index: Map.get(result, :url_index, reuse_index.url_index),
+      active_uuids: Map.get(result, :active_uuids, reuse_index.active_uuids)
+    }
   end
 
   # `Writer.sync_images/3` reports a per-image download failure INSIDE its
@@ -255,32 +295,45 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   # failure (see its moduledoc: "a download failure skips that image ...
   # rather than aborting the whole product's images"). Without this, an
   # operator watching progress would never see that a specific image
-  # failed to download; `sync_variants/2`'s result has no `:errors` key at
-  # all, so the fallback clause below is what every other kind hits.
-  defp merge_writer_errors(errors, product, %{errors: inner_errors}) when inner_errors != [] do
+  # failed to download. `sync_variants/3` reports non-additive price
+  # matrices the same way, under `:warnings` (see `VariantMapper`'s
+  # moduledoc) — recorded here so the run never reads as clean when a
+  # variant was written under-priced.
+  defp merge_writer_errors(errors, product, result) do
     key = product["handle"] || product_id_string(product) || "unknown"
 
-    Enum.reduce(inner_errors, errors, fn {image_id, reason}, acc ->
-      [%{"product" => key, "reason" => "image #{image_id}: #{error_reason_string(reason)}"} | acc]
+    errors =
+      Enum.reduce(Map.get(result, :errors, []), errors, fn {image_id, reason}, acc ->
+        [
+          %{"product" => key, "reason" => "image #{image_id}: #{error_reason_string(reason)}"}
+          | acc
+        ]
+      end)
+
+    Enum.reduce(Map.get(result, :warnings, []), errors, fn warning, acc ->
+      [%{"product" => key, "reason" => "warning: #{warning}"} | acc]
     end)
   end
 
-  defp merge_writer_errors(errors, _product, _result), do: errors
-
-  defp apply_writer("images", item, product, actor_uuid, opts, url_index) do
+  defp apply_writer("images", item, product, actor_uuid, opts, reuse_index) do
     downloader = Keyword.get(opts, :downloader, &image_downloader/3)
 
     Writer.sync_images(item, product,
       downloader: downloader,
       user_uuid: actor_uuid,
-      url_index: url_index
+      url_index: reuse_index.url_index,
+      active_uuids: reuse_index.active_uuids
     )
   end
 
-  defp apply_writer("variants", item, product, _actor_uuid, opts, _url_index) do
+  # `actor_uuid` is the creator of any attribute set/value this product
+  # makes `Writer.sync_variants/3` create (entities' `created_by_uuid` is
+  # NOT NULL); a `nil` actor lets that constraint error surface as this
+  # product's own error rather than inventing a system uuid here.
+  defp apply_writer("variants", item, product, actor_uuid, opts, _reuse_index) do
     case Keyword.fetch!(opts, :currency_verdict) do
       :match ->
-        Writer.sync_variants(item, product)
+        Writer.sync_variants(item, product, actor_uuid: actor_uuid)
 
       {:mismatch, shop_currency, base_currency} ->
         {:error, {:currency_mismatch, shop_currency, base_currency}}

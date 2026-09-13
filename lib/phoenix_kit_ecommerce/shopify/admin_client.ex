@@ -68,13 +68,29 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     * `:req_options` — as `fetch_products/2`.
   """
   @spec fetch_product(String.t(), String.t() | integer(), keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, map()} | {:error, :invalid_product_id | term()}
   def fetch_product(integration_uuid, product_id, opts \\ []) do
-    with {:ok, {shop_domain, req}} <-
+    with {:ok, product_id} <- numeric_id(product_id, :invalid_product_id),
+         {:ok, {shop_domain, req}} <-
            resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
       fetch_one(req, product_url(shop_domain, product_id), @max_retries)
     end
   end
+
+  # Shopify ids are numeric. An id is interpolated straight into the URL
+  # path, so anything else — `"555/../shop"`, `"555?x=1"`, `""` — would
+  # rewrite the request rather than name a product. A stored id is
+  # trusted no more than a typed one; both go through this.
+  defp numeric_id(id, _error) when is_integer(id) and id >= 0, do: {:ok, id}
+
+  defp numeric_id(id, error) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} when n >= 0 -> {:ok, n}
+      _ -> {:error, error}
+    end
+  end
+
+  defp numeric_id(_id, error), do: {:error, error}
 
   @doc """
   Fetches the connected store's own `shop.json` — its name, domain, and
@@ -151,9 +167,10 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   Same as `fetch_collections/1`.
   """
   @spec fetch_collection_product_ids(String.t() | integer(), keyword()) ::
-          {:ok, [term()]} | {:error, term()}
+          {:ok, [term()]} | {:error, :invalid_collection_id | term()}
   def fetch_collection_product_ids(collection_id, opts \\ []) do
-    with {:ok, integration_uuid} <- fetch_integration_uuid(opts),
+    with {:ok, collection_id} <- numeric_id(collection_id, :invalid_collection_id),
+         {:ok, integration_uuid} <- fetch_integration_uuid(opts),
          {:ok, {shop_domain, req}} <-
            resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
       url = collection_products_url(shop_domain, collection_id)

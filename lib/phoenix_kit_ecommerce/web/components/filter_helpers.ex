@@ -31,7 +31,8 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
     category = Keyword.get(opts, :category)
     language = Keyword.get(opts, :language)
     filters = Shop.get_enabled_storefront_filters(category, language)
-    filter_values = Shop.aggregate_filter_values(opts)
+    # The adapter would otherwise resolve this same list a second time.
+    filter_values = Shop.aggregate_filter_values(Keyword.put(opts, :filters, filters))
     {filters, filter_values}
   end
 
@@ -62,11 +63,16 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
 
   defp parse_single_filter(%{"type" => type, "key" => key}, params)
        when type in ["vendor", "metadata_option", "attribute_set"] do
+    # Raw URL params: Plug parses `?vendor[x]=y` into a map and
+    # `?vendor[]=a` into a list that may hold nested maps. Anything that
+    # isn't a comma list or a flat list of binaries is ignored rather than
+    # raised on — a crafted URL must never 500 a storefront page.
     case params[key] do
       nil -> nil
       "" -> nil
       value when is_binary(value) -> String.split(value, ",", trim: true)
-      values when is_list(values) -> values
+      values when is_list(values) -> presence_list(Enum.filter(values, &is_binary/1))
+      _ -> nil
     end
   end
 
@@ -296,8 +302,14 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
     end
   end
 
-  defp parse_decimal(val) when is_number(val), do: Decimal.new(val)
+  defp parse_decimal(val) when is_integer(val), do: Decimal.new(val)
+  defp parse_decimal(val) when is_float(val), do: Decimal.from_float(val)
   defp parse_decimal(%Decimal{} = val), do: val
+  # `?price_min[]=1` arrives as a list, `?price_min[x]=1` as a map.
+  defp parse_decimal(_), do: nil
+
+  defp presence_list([]), do: nil
+  defp presence_list(values), do: values
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, val), do: Keyword.put(opts, key, val)

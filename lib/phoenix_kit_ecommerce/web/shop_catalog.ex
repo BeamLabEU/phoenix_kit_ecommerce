@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -168,10 +169,18 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     end
   end
 
-  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices. The
+  # re-mark of `@currency` is immediate; the product re-fetch (needed when
+  # a base-currency reprice rewrote `product.price`) is coalesced into one
+  # `:fx_reload` per burst — billing broadcasts once per currency.
   @impl true
   def handle_info({:currencies_changed, _code}, socket) do
-    socket = Helpers.refresh_display_currency(socket)
+    {:noreply, socket |> Helpers.refresh_display_currency() |> Helpers.schedule_fx_reload()}
+  end
+
+  @impl true
+  def handle_info(:fx_reload, socket) do
+    socket = Helpers.fx_reload_done(socket)
 
     {:noreply,
      if socket.assigns[:products] do
@@ -267,6 +276,12 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   @impl true
   def render(assigns) do
+    # One settings read per render, threaded into every name shown on the
+    # page: `NamePrefix.prefixes/0` is a GenServer round-trip on core's
+    # settings cache, and a grid of cards plus category tiles would
+    # otherwise repeat it per name.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <%!-- Page container. `shop_layout` renders the slot bare into the HOST's
@@ -400,7 +415,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                         <%= if cat_image do %>
                           <img
                             src={cat_image}
-                            alt={Translations.get_display(cat, :name, @current_language)}
+                            alt={Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes)}
                             class="w-full h-full object-cover"
                           />
                         <% else %>
@@ -411,7 +426,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                       </figure>
                       <div class="card-body p-3 text-center">
                         <h3 class="text-sm font-semibold line-clamp-2">
-                          {Translations.get_display(cat, :name, @current_language)}
+                          {Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes)}
                         </h3>
                       </div>
                     </.link>
@@ -457,6 +472,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                     language={@current_language}
                     filter_qs={@filter_qs}
                     show_category={true}
+                    name_prefixes={@name_prefixes}
                   />
                 <% end %>
               </div>

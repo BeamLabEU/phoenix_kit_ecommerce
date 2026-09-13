@@ -269,6 +269,51 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
              }
     end
 
+    test "numeric price_modifiers amounts are rendered as strings, so Options treats them as price-affecting" do
+      # `Options.parse_modifier_value/1` accepts only binaries; a JSON
+      # number stored by a catalogue writer would otherwise make the
+      # option silently non-price-affecting.
+      item =
+        build_item(%{
+          "ecommerce" => %{
+            "price_modifiers" => %{
+              "size" => %{
+                "5-inches-13-cm" => 9,
+                "4-inches-10-cm" => 2.5
+              }
+            }
+          }
+        })
+
+      product = product_view(item, sets: @sets)
+
+      assert product.metadata["_price_modifiers"] == %{
+               "size" => %{"5 inches (13 cm)" => "9", "4 inches (10 cm)" => "2.5"}
+             }
+
+      # Both now parse as the Decimals `Options` applies — a JSON number
+      # never reached its binary-only `parse_modifier_value/1`.
+      assert {%Decimal{}, ""} = Decimal.parse("9")
+      assert {%Decimal{}, ""} = Decimal.parse("2.5")
+    end
+
+    test "a typed modifier map with a numeric value is normalized the same way" do
+      item =
+        build_item(%{
+          "ecommerce" => %{
+            "price_modifiers" => %{
+              "size" => %{"5-inches-13-cm" => %{"type" => "percent", "value" => 10}}
+            }
+          }
+        })
+
+      product = product_view(item, sets: @sets)
+
+      assert product.metadata["_price_modifiers"] == %{
+               "size" => %{"5 inches (13 cm)" => %{"type" => "percent", "value" => "10"}}
+             }
+    end
+
     test "omits _option_values/_price_modifiers when there are no attachments" do
       item = build_item()
 

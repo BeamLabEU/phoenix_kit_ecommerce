@@ -81,4 +81,28 @@ defmodule PhoenixKitEcommerce.TranslationsDisplayTest do
       assert Translations.get(product, :slug, "en") == "3d-printed-costume-masks"
     end
   end
+
+  describe "get_display/4 with :prefixes" do
+    test "uses the precomputed list instead of reading the setting" do
+      set_prefix("")
+      product = %Product{title: %{"en" => "3D Printed Costume Masks"}}
+
+      assert Translations.get_display(product, :title, "en", prefixes: ["3D Printed"]) ==
+               "Costume Masks"
+
+      # Without the option the (empty) setting still rules.
+      assert Translations.get_display(product, :title, "en") == "3D Printed Costume Masks"
+    end
+
+    test "an explicit empty list disables stripping even when the setting names a prefix" do
+      set_prefix("3D Printed")
+      product = %Product{title: %{"en" => "3D Printed Costume Masks"}}
+
+      assert Translations.get_display(product, :title, "en", prefixes: []) ==
+               "3D Printed Costume Masks"
+
+      assert Translations.get_display(product, :title, "en", prefixes: NamePrefix.prefixes()) ==
+               "Costume Masks"
+    end
+  end
 end

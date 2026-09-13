@@ -149,7 +149,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
 
   @impl PhoenixKitEcommerce.ProductSource
   def aggregate_filter_values(opts \\ []) do
-    filters = PhoenixKitEcommerce.get_enabled_storefront_filters()
+    # `:filters` — the caller's already-resolved enabled filter list
+    # (`FilterHelpers.load_filter_data/1`) — skips a second resolution;
+    # absent, the global list is read as before.
+    filters =
+      Keyword.get_lazy(opts, :filters, &PhoenixKitEcommerce.get_enabled_storefront_filters/0)
+
     category_uuid = Keyword.get(opts, :category_uuid)
 
     Enum.reduce(filters, %{}, fn filter, acc ->
@@ -194,10 +199,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
 
   defp aggregate_single_filter(%{"type" => "metadata_option", "option_key" => key}, category_uuid)
        when is_binary(key) do
-    # Query distinct option values from metadata->'_option_values'->key JSONB array
+    # Query distinct option values from metadata->'_option_values'->key JSONB array.
+    # Raw SQL bypasses `use PhoenixKit.SchemaPrefix`, so the table is
+    # qualified by hand — a prefixed install otherwise hit the rescue
+    # below and rendered no facets at all.
     sql = """
     SELECT val AS value, COUNT(DISTINCT p.uuid) AS count
-    FROM phoenix_kit_shop_products p,
+    FROM #{products_table()} p,
          jsonb_array_elements_text(COALESCE(p.metadata->'_option_values'->$1, '[]'::jsonb)) AS val
     WHERE p.status = 'active'
     #{if category_uuid, do: "AND p.category_uuid = $2", else: ""}
@@ -225,6 +233,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
   end
 
   defp aggregate_single_filter(_filter, _category_uuid), do: []
+
+  # The products table as the `Product` schema itself targets it: its
+  # compile-time `@schema_prefix` (core's `PhoenixKit.SchemaPrefix`),
+  # quoted, or the bare source under the default `public` install.
+  defp products_table do
+    source = Product.__schema__(:source)
+
+    case Product.__schema__(:prefix) do
+      prefix when is_binary(prefix) and prefix != "" -> ~s("#{prefix}"."#{source}")
+      _ -> ~s("#{source}")
+    end
+  end
 
   defp maybe_filter_category(query, nil), do: query
   defp maybe_filter_category(query, uuid), do: where(query, [p], p.category_uuid == ^uuid)
@@ -306,28 +326,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
     end)
   end
 
-  # Max length for a user-supplied search term. Anything longer is
-  # truncated: ILIKE against unindexed JSONB expansions is linear in both
-  # pattern and row count, so an unbounded public `?search=` param would be
-  # a cheap seq-scan amplifier.
-  @max_search_term_length 100
-
-  # Builds a safe `%term%` ILIKE pattern from raw user input: caps the
-  # length, strips NUL bytes (Postgres rejects them in text params), and
-  # escapes LIKE metacharacters so `%`, `_`, and `\` match literally —
-  # a search for "100%" must not match every "100", and SKUs routinely
-  # contain underscores.
-  defp search_like_pattern(search) do
-    escaped =
-      search
-      |> String.replace(<<0>>, "")
-      |> String.slice(0, @max_search_term_length)
-      |> String.replace("\\", "\\\\")
-      |> String.replace("%", "\\%")
-      |> String.replace("_", "\\_")
-
-    "%#{escaped}%"
-  end
+  # Shared with the catalogue adapter — see `ProductSource.search_like_pattern/1`.
+  defp search_like_pattern(search),
+    do: PhoenixKitEcommerce.ProductSource.search_like_pattern(search)
 
   defp filter_by_product_search(query, nil), do: query
   defp filter_by_product_search(query, ""), do: query

@@ -574,12 +574,15 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               <div class="text-sm text-base-content/50">{estimate}</div>
                             <% end %>
                           </div>
+                          <%!-- `method.price` and the free threshold are BASE
+                               amounts; the cart is in its own currency. --%>
+                          <% presented = Shop.present_shipping_method(@cart, method) %>
                           <div class="text-right">
-                            <%= if ShippingMethod.free_for?(method, @cart.subtotal || Decimal.new("0")) do %>
+                            <%= if presented.free? do %>
                               <span class="badge badge-success">{gettext("FREE")}</span>
                             <% else %>
                               <span class="font-semibold">
-                                {format_price(method.price, @currency)}
+                                {format_price(presented.price, @currency)}
                               </span>
                             <% end %>
                           </div>

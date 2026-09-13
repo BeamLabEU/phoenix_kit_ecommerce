@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
@@ -27,19 +28,33 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   attr :filter_qs, :string, default: ""
   attr :show_category, :boolean, default: false
 
+  attr :name_prefixes, :list,
+    default: nil,
+    doc:
+      "`NamePrefix.prefixes/0`, computed once by the grid rendering many cards; " <>
+        "`nil` (a lone card) reads the setting itself"
+
   def product_card(assigns) do
+    # A grid of cards must not read the prefix setting once per card —
+    # the caller passes the list it resolved once; a lone card resolves
+    # its own.
+    prefixes = assigns.name_prefixes || NamePrefix.prefixes()
+
     assigns =
       assigns
       |> assign(
         :product_title,
-        Translations.get_display(assigns.product, :title, assigns.language)
+        Translations.get_display(assigns.product, :title, assigns.language, prefixes: prefixes)
       )
       |> assign(:product_url, Shop.product_url(assigns.product, assigns.language))
       |> assign(:product_image_url, Helpers.first_image(assigns.product))
       |> assign(
         :category_name,
         if(assigns.show_category && assigns.product.category,
-          do: Translations.get_display(assigns.product.category, :name, assigns.language),
+          do:
+            Translations.get_display(assigns.product.category, :name, assigns.language,
+              prefixes: prefixes
+            ),
           else: nil
         )
       )
@@ -177,9 +192,12 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   attr :admin_edit_label, :string, default: nil
 
   def storefront_bar(assigns) do
+    # One settings read per render, not one per `:if` that consults it.
+    assigns = assign(assigns, :show_cart_bar, show_cart_bar?())
+
     ~H"""
     <div
-      :if={show_cart_bar?() or not is_nil(@admin_edit_url)}
+      :if={@show_cart_bar or not is_nil(@admin_edit_url)}
       class={["flex items-center gap-2", @class]}
     >
       <%!-- Admin edit sits with the page's other navigation rather than
@@ -196,7 +214,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
       <%!-- The bar carried its own "Shop" link until the breadcrumbs moved
             onto this same row, where the first crumb already links there. --%>
       <.link
-        :if={show_cart_bar?()}
+        :if={@show_cart_bar}
         navigate={Shop.cart_url(@language)}
         class="btn btn-outline btn-sm gap-2"
       >

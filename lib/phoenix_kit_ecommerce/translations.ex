@@ -165,16 +165,31 @@ defmodule PhoenixKitEcommerce.Translations do
   WRITE, and any value compared against or sent to Shopify, must stay
   raw.
 
+  ## Options
+
+    * `:prefixes` — a precomputed `NamePrefix.prefixes/0` list. Every
+      call without it reads the setting through core's settings cache
+      (a process round-trip), so a template rendering a LIST of
+      products or categories resolves the list once and passes it to
+      every `get_display/4` call inside the loop.
+
   ## Examples
 
       iex> Translations.get_display(category, :name, "en")
       "Costume Masks"
+
+      iex> prefixes = NamePrefix.prefixes()
+      iex> Translations.get_display(category, :name, "en", prefixes: prefixes)
+      "Costume Masks"
   """
-  @spec get_display(struct(), atom(), String.t()) :: any()
-  def get_display(entity, field, language) do
-    entity
-    |> get(field, language)
-    |> PhoenixKitEcommerce.NamePrefix.strip()
+  @spec get_display(struct(), atom(), String.t(), keyword()) :: any()
+  def get_display(entity, field, language, opts \\ []) do
+    value = get(entity, field, language)
+
+    case Keyword.fetch(opts, :prefixes) do
+      {:ok, prefixes} -> PhoenixKitEcommerce.NamePrefix.strip(value, prefixes)
+      :error -> PhoenixKitEcommerce.NamePrefix.strip(value)
+    end
   end
 
   @doc """

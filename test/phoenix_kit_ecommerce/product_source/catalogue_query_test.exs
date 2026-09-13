@@ -61,6 +61,80 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
       assert Enum.map(results, & &1.name) == ["Red Vase"]
     end
 
+    test "search matches a non-primary language bucket's _name / _description, like the legacy adapter",
+         %{catalogue: catalogue} do
+      create_item(catalogue, %{
+        name: "Red Vase",
+        base_price: Decimal.new("10.00"),
+        status: "active",
+        data: %{
+          "_primary_language" => "en-US",
+          "en-US" => %{"_name" => "Red Vase", "_description" => "A red vase"},
+          "fr-FR" => %{"_name" => "Vase Rouge", "_description" => "Un vase en céramique"},
+          "ecommerce" => %{"shop_status" => "active"}
+        }
+      })
+
+      create_item(catalogue, %{
+        name: "Green Bowl",
+        base_price: Decimal.new("20.00"),
+        status: "active",
+        data: %{
+          "_primary_language" => "en-US",
+          "en-US" => %{"_name" => "Green Bowl"},
+          "ecommerce" => %{"shop_status" => "active"}
+        }
+      })
+
+      assert Enum.map(Query.list_items(search: "rouge"), & &1.name) == ["Red Vase"]
+      assert Enum.map(Query.list_items(search: "céramique"), & &1.name) == ["Red Vase"]
+      # Scalar top-level keys (`_primary_language`) are skipped, never matched on.
+      assert Query.list_items(search: "en-US") == []
+      # LIKE metacharacters stay literal.
+      assert Query.list_items(search: "%") == []
+    end
+
+    test "status: \"archived\" returns a retired item with a stale shop_status: active, matching View.product_status/2",
+         %{catalogue: catalogue} do
+      retired =
+        create_item(catalogue, %{
+          name: "Retired",
+          base_price: Decimal.new("10.00"),
+          status: "discontinued",
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      create_item(catalogue, %{
+        name: "Live",
+        base_price: Decimal.new("10.00"),
+        status: "active",
+        data: %{"ecommerce" => %{"shop_status" => "active"}}
+      })
+
+      create_item(catalogue, %{
+        name: "Drafted",
+        base_price: Decimal.new("10.00"),
+        status: "active",
+        data: %{"ecommerce" => %{"shop_status" => "draft"}}
+      })
+
+      assert Enum.map(Query.list_items(status: "archived"), & &1.name) == ["Retired"]
+      assert Enum.map(Query.list_items(status: "draft"), & &1.name) == ["Drafted"]
+      assert Enum.map(Query.list_items(status: "active"), & &1.name) == ["Live"]
+
+      assert View.product_view(retired, sets: [], base_currency: "USD", languages: []).status ==
+               "archived"
+    end
+
+    test "a pre-resolved catalogue_uuid is used as-is, nil included", %{catalogue: catalogue} do
+      create_item(catalogue, %{name: "Ours", base_price: Decimal.new("1.00")})
+
+      assert Enum.map(Query.list_items(catalogue_uuid: catalogue.uuid), & &1.name) == ["Ours"]
+      assert Query.list_items(catalogue_uuid: nil) == []
+      assert Query.list_items_with_count(catalogue_uuid: nil) == {[], 0}
+      assert Query.list_categories(catalogue_uuid: nil) == []
+    end
+
     test "filters by price range and vendor", %{catalogue: catalogue} do
       create_item(catalogue, %{
         name: "Cheap",
@@ -98,7 +172,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
         })
       end
 
-      assert Query.count_items(status: "active") == 5
+      assert {_, 5} = Query.list_items_with_count(status: "active")
 
       {page1, total} = Query.list_items_with_count(status: "active", page: 1, per_page: 2)
       assert total == 5
@@ -339,6 +413,27 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
              |> Enum.sort() == Enum.sort([active.name, unlisted.name])
 
       refute hidden.name in Enum.map(Query.list_categories(status: "active"), & &1.name)
+    end
+
+    test "search matches the primary name and any language bucket's _name (admin category search box)",
+         %{catalogue: catalogue} do
+      {:ok, _} =
+        Catalogue.create_category(%{
+          name: "Vases",
+          catalogue_uuid: catalogue.uuid,
+          data: %{
+            "_primary_language" => "en-US",
+            "en-US" => %{"_name" => "Vases"},
+            "fr-FR" => %{"_name" => "Vases en céramique"}
+          }
+        })
+
+      {:ok, _} = Catalogue.create_category(%{name: "Shelving", catalogue_uuid: catalogue.uuid})
+
+      assert Enum.map(Query.list_categories(search: "vase"), & &1.name) == ["Vases"]
+      assert Enum.map(Query.list_categories(search: "céramique"), & &1.name) == ["Vases"]
+      assert Query.list_categories(search: "%") == []
+      assert length(Query.list_categories(search: "")) == 2
     end
 
     test "a category with no shop_status defaults to active", %{catalogue: catalogue} do
