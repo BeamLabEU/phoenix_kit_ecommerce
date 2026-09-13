@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.5.4 - 2026-09-13
+
 Week review of 0.5.0–0.5.3 (PRs #32–#55); findings and resolutions in
 `dev_docs/pull_requests/2026/week-2026-09-13-review/CLAUDE_REVIEW.md`.
 
