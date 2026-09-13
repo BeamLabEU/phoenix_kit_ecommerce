@@ -37,6 +37,12 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate get_display_currency_code(), to: PhoenixKitEcommerce
   defdelegate get_base_currency(), to: PhoenixKitEcommerce
   defdelegate enforce_product_currency?(), to: PhoenixKitEcommerce
+  defdelegate currency_for_code(code), to: PhoenixKitEcommerce
+  defdelegate fx_rate_drift_alert_pct(), to: PhoenixKitEcommerce
+
+  defdelegate reprice_for_base_change(old_base_code, new_base_code, multiplier),
+    to: PhoenixKitEcommerce
+
   defdelegate get_default_language(), to: PhoenixKitEcommerce
 
   # URLs
@@ -130,6 +136,9 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate update_cart_item(item, quantity), to: PhoenixKitEcommerce
   defdelegate clear_cart(cart), to: PhoenixKitEcommerce
   defdelegate merge_guest_cart(session_id, user), to: PhoenixKitEcommerce
+  defdelegate refresh_cart_rate(cart), to: PhoenixKitEcommerce
+  defdelegate cart_rate_drift(cart), to: PhoenixKitEcommerce
+  defdelegate rebase_cart(cart), to: PhoenixKitEcommerce
   defdelegate set_cart_shipping(cart, method_uuid, cost), to: PhoenixKitEcommerce
   defdelegate set_cart_shipping_country(cart, country_code), to: PhoenixKitEcommerce
   defdelegate set_cart_payment_option(cart, payment_option_uuid), to: PhoenixKitEcommerce
@@ -147,6 +156,7 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate get_shipping_method!(id), to: PhoenixKitEcommerce
   defdelegate get_shipping_method_by_slug(slug), to: PhoenixKitEcommerce
   defdelegate get_available_shipping_methods(cart), to: PhoenixKitEcommerce
+  defdelegate present_shipping_method(cart, method), to: PhoenixKitEcommerce
   defdelegate change_shipping_method(method, attrs \\ %{}), to: PhoenixKitEcommerce
   defdelegate create_shipping_method(attrs), to: PhoenixKitEcommerce
   defdelegate update_shipping_method(method, attrs), to: PhoenixKitEcommerce

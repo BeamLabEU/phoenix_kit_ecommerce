@@ -168,6 +168,20 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCheckOneTest do
     end
   end
 
+  describe "check_one/3 — malformed link" do
+    test "a stored product_id that is not a numeric Shopify id surfaces as :invalid_product_id" do
+      uuid = connect_shopify()
+
+      product =
+        create_product(%{"metadata" => %{"_shopify" => %{"product_id" => "555/../shop"}}})
+
+      Req.Test.stub(@stub, fn _conn -> flunk("no request should be made") end)
+
+      assert {:error, :invalid_product_id} =
+               Sync.check_one(uuid, product.uuid, check_one_opts())
+    end
+  end
+
   describe "check_one/3 — local product not found" do
     test "an unknown uuid" do
       uuid = connect_shopify()

@@ -39,6 +39,27 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerceTest do
     end
   end
 
+  describe "cast/2 price_modifiers validation" do
+    test "accepts decimal strings and numeric leaves" do
+      modifiers = %{"size" => %{"large" => "5.00", "small" => 0, "xl" => 2.5}}
+      assert {:ok, stored} = ItemCommerce.cast(%{"price_modifiers" => modifiers}, %{})
+      assert stored["price_modifiers"] == modifiers
+    end
+
+    test "rejects a non-numeric amount and names the option key" do
+      modifiers = %{"size" => %{"large" => "five"}, "color" => %{"red" => "1"}}
+      assert {:error, errors} = ItemCommerce.cast(%{"price_modifiers" => modifiers}, %{})
+      assert [{:price_modifiers, message}] = errors
+      assert message =~ "size"
+      refute message =~ "color"
+    end
+
+    test "rejects a value that is not a per-slug map" do
+      assert {:error, errors} = ItemCommerce.cast(%{"price_modifiers" => %{"size" => "5"}}, %{})
+      assert Keyword.has_key?(errors, :price_modifiers)
+    end
+  end
+
   describe "cast/2 round trip" do
     test "an empty map applies the documented defaults" do
       assert {:ok, map} = ItemCommerce.cast(%{}, %{})

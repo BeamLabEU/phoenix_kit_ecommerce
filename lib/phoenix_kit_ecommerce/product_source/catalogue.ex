@@ -33,11 +33,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def list_products(opts \\ []) do
+    opts = with_catalogue(opts)
     opts |> Query.list_items() |> build_products(opts)
   end
 
   @impl PhoenixKitEcommerce.ProductSource
   def list_products_with_count(opts \\ []) do
+    opts = with_catalogue(opts)
     {items, total} = Query.list_items_with_count(opts)
     {build_products(items, opts), total}
   end
@@ -51,7 +53,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   def get_product(id, opts \\ [])
 
   def get_product(id, opts) when is_binary(id) do
-    case Query.get_item(id) do
+    opts = with_catalogue(opts)
+
+    case Query.get_item(id, opts) do
       nil -> nil
       item -> build_product(item, opts)
     end
@@ -61,18 +65,21 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def get_product_by_slug_localized(slug, language, opts \\ []) do
+    opts = with_catalogue(opts)
+
     with {:ok, item} <-
-           fetch_scoped(Catalogue.get_item_by_slug(slug, language, catalogue_opts(opts))) do
+           fetch_scoped(Catalogue.get_item_by_slug(slug, language, catalogue_opts(opts)), opts) do
       {:ok, build_product(item, opts)}
     end
   end
 
   @impl PhoenixKitEcommerce.ProductSource
   def get_product_by_any_slug(slug, opts \\ []) do
+    opts = with_catalogue(opts)
     lang = Translations.default_language()
     catalogue_opts = catalogue_opts(opts) |> Keyword.put(:any_lang, true)
 
-    case fetch_scoped(Catalogue.get_item_by_slug(slug, lang, catalogue_opts)) do
+    case fetch_scoped(Catalogue.get_item_by_slug(slug, lang, catalogue_opts), opts) do
       {:ok, item, matched_lang} -> {:ok, build_product(item, opts), matched_lang}
       {:error, :not_found} -> {:error, :not_found}
     end
@@ -84,10 +91,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def list_categories(opts \\ []) do
+    opts = with_catalogue(opts)
     categories = Query.list_categories(opts)
     # One batch resolution for the whole page of categories — never one
     # query per category (see `Query.resolve_category_images/1`'s doc).
-    images_by_uuid = Query.resolve_category_images(categories)
+    images_by_uuid = Query.resolve_category_images(categories, opts)
     Enum.map(categories, &build_category(&1, opts, images_by_uuid))
   end
 
@@ -95,9 +103,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   def get_category(id, opts \\ [])
 
   def get_category(id, opts) when is_binary(id) do
-    case Query.get_category(id) do
+    opts = with_catalogue(opts)
+
+    case Query.get_category(id, opts) do
       nil -> nil
-      category -> build_category(category, opts, Query.resolve_category_images([category]))
+      category -> build_category(category, opts, Query.resolve_category_images([category], opts))
     end
   end
 
@@ -105,18 +115,24 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   @impl PhoenixKitEcommerce.ProductSource
   def get_category_by_slug_localized(slug, language, opts \\ []) do
+    opts = with_catalogue(opts)
+
     with {:ok, category} <-
-           fetch_scoped(Catalogue.get_category_by_slug(slug, language, catalogue_opts(opts))) do
+           fetch_scoped(
+             Catalogue.get_category_by_slug(slug, language, catalogue_opts(opts)),
+             opts
+           ) do
       {:ok, build_category(category, opts)}
     end
   end
 
   @impl PhoenixKitEcommerce.ProductSource
   def get_category_by_any_slug(slug, opts \\ []) do
+    opts = with_catalogue(opts)
     lang = Translations.default_language()
     catalogue_opts = catalogue_opts(opts) |> Keyword.put(:any_lang, true)
 
-    case fetch_scoped(Catalogue.get_category_by_slug(slug, lang, catalogue_opts)) do
+    case fetch_scoped(Catalogue.get_category_by_slug(slug, lang, catalogue_opts), opts) do
       {:ok, category, matched_lang} -> {:ok, build_category(category, opts), matched_lang}
       {:error, :not_found} -> {:error, :not_found}
     end
@@ -139,16 +155,31 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     # key that only exists on the category (Task 2, 2026-09-06 plan)
     # must still get its facet counted here, not just appear in the
     # sidebar's filter list with an empty "No options available".
+    #
+    # `:filters` — the already-resolved enabled filter list — is accepted
+    # so a caller that just loaded it (`FilterHelpers.load_filter_data/1`)
+    # doesn't make this function resolve the same list a second time.
     language = Keyword.get(opts, :language)
 
     filters =
-      PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category), language)
+      Keyword.get_lazy(opts, :filters, fn ->
+        PhoenixKitEcommerce.get_enabled_storefront_filters(Keyword.get(opts, :category), language)
+      end)
 
+    # Resolved ONCE per call and threaded into every facet query: the
+    # catalogue uuid (a config read + catalogue listing) and, only when
+    # some filter needs it, the attribute-set list.
     scope = [
       category_uuid: Keyword.get(opts, :category_uuid),
       language: language,
-      exclude_hidden_categories: Keyword.get(opts, :exclude_hidden_categories, false)
+      exclude_hidden_categories: Keyword.get(opts, :exclude_hidden_categories, false),
+      catalogue_uuid: resolved_catalogue_uuid(opts)
     ]
+
+    scope =
+      if Enum.any?(filters, &(&1["type"] in ["attribute_set", "metadata_option"])),
+        do: Keyword.put(scope, :sets, Query.list_sets()),
+        else: scope
 
     Enum.reduce(filters, %{}, fn filter, acc ->
       Map.put(acc, filter["key"], aggregate_single_filter(filter, scope))
@@ -164,7 +195,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     {min_price, max_price} =
       get_price_range_for(
         category_uuid: scope[:category_uuid],
-        exclude_hidden_categories: scope[:exclude_hidden_categories]
+        exclude_hidden_categories: scope[:exclude_hidden_categories],
+        catalogue_uuid: scope[:catalogue_uuid]
       )
 
     %{min: min_price, max: max_price}
@@ -173,7 +205,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   defp aggregate_single_filter(%{"type" => "vendor"}, scope) do
     Query.vendor_counts(
       category_uuid: scope[:category_uuid],
-      exclude_hidden_categories: scope[:exclude_hidden_categories]
+      exclude_hidden_categories: scope[:exclude_hidden_categories],
+      catalogue_uuid: scope[:catalogue_uuid]
     )
   end
 
@@ -192,7 +225,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
         Query.attribute_set_counts(slug,
           category_uuid: scope[:category_uuid],
           language: scope[:language],
-          exclude_hidden_categories: scope[:exclude_hidden_categories]
+          exclude_hidden_categories: scope[:exclude_hidden_categories],
+          catalogue_uuid: scope[:catalogue_uuid],
+          sets: scope[:sets]
         )
 
       _ ->
@@ -206,7 +241,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
         Query.attribute_set_counts(slug,
           category_uuid: scope[:category_uuid],
           language: scope[:language],
-          exclude_hidden_categories: scope[:exclude_hidden_categories]
+          exclude_hidden_categories: scope[:exclude_hidden_categories],
+          catalogue_uuid: scope[:catalogue_uuid],
+          sets: scope[:sets]
         )
 
       _ ->
@@ -322,7 +359,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
       |> Enum.map(& &1.category_uuid)
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
-      |> Query.list_categories_by_uuids()
+      |> Query.list_categories_by_uuids(opts)
       |> Map.new(&{&1.uuid, View.category_view(&1)})
     end
   end
@@ -331,7 +368,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   defp single_category(item, opts) do
     if preload_category?(opts) do
-      case Query.get_category(item.category_uuid) do
+      case Query.get_category(item.category_uuid, opts) do
         nil -> nil
         category -> View.category_view(category)
       end
@@ -361,7 +398,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
 
   defp resolve_parent(category, opts) do
     if preload_parent?(opts) do
-      case Query.get_category(category.parent_uuid) do
+      case Query.get_category(category.parent_uuid, opts) do
         nil -> nil
         parent -> View.category_view(parent)
       end
@@ -379,8 +416,19 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   # their own, so forwarding it verbatim would trigger a wasted (if
   # harmless, for those two names) extra `Repo.preload` inside catalogue,
   # and a genuinely ecommerce-only preload name would raise there. Never
-  # forward it.
-  defp catalogue_opts(opts), do: Keyword.delete(opts, :preload)
+  # forward it — nor the adapter-internal keys this module threads
+  # through `opts` (`:catalogue_uuid`, `:sets`, `:filters`).
+  defp catalogue_opts(opts), do: Keyword.drop(opts, [:preload, :catalogue_uuid, :sets, :filters])
+
+  # Resolves the shop's catalogue ONCE per facade call and threads it
+  # through `opts` so every `Query` function this call composes reads
+  # it instead of re-resolving (`Query.catalogue_uuid/0`'s doc). A caller
+  # that already resolved it (`nil` included) keeps its value.
+  defp with_catalogue(opts),
+    do: Keyword.put_new_lazy(opts, :catalogue_uuid, &Query.catalogue_uuid/0)
+
+  defp resolved_catalogue_uuid(opts),
+    do: opts |> with_catalogue() |> Keyword.fetch!(:catalogue_uuid)
 
   defp category_for(_item, nil), do: nil
   defp category_for(item, categories_by_uuid), do: Map.get(categories_by_uuid, item.category_uuid)
@@ -389,14 +437,16 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   # shop reads only the one configured catalogue (`Query.catalogue_uuid/0`),
   # so a hit belonging to a different catalogue (equipment, stock — the
   # owner's other catalogues per the design doc) must miss here exactly
-  # like a truly unknown slug.
-  defp fetch_scoped({:ok, %{catalogue_uuid: catalogue_uuid}} = result) do
-    if catalogue_uuid == Query.catalogue_uuid(), do: result, else: {:error, :not_found}
+  # like a truly unknown slug. `opts` carries the catalogue already
+  # resolved by `with_catalogue/1`; an unresolvable catalogue (`nil`)
+  # matches nothing, since every real row has one.
+  defp fetch_scoped({:ok, %{catalogue_uuid: catalogue_uuid}} = result, opts) do
+    if catalogue_uuid == resolved_catalogue_uuid(opts), do: result, else: {:error, :not_found}
   end
 
-  defp fetch_scoped({:ok, %{catalogue_uuid: catalogue_uuid}, _lang} = result) do
-    if catalogue_uuid == Query.catalogue_uuid(), do: result, else: {:error, :not_found}
+  defp fetch_scoped({:ok, %{catalogue_uuid: catalogue_uuid}, _lang} = result, opts) do
+    if catalogue_uuid == resolved_catalogue_uuid(opts), do: result, else: {:error, :not_found}
   end
 
-  defp fetch_scoped({:error, :not_found} = error), do: error
+  defp fetch_scoped({:error, :not_found} = error, _opts), do: error
 end

@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.5.3"
+  @version "0.5.4"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -102,19 +102,19 @@ defmodule PhoenixKitEcommerce.MixProject do
 
   defp deps do
     [
-      # 2.15 is a hard floor, not a preference (raised from 2.6 for
+      # 2.16 is a hard floor, not a preference (raised from 2.6 for
       # per-domain-currency Э1-E1, plan §0.3/§8.5). `Cart`/`CartItem` cast
       # `base_currency`/`exchange_rate`/`base_unit_price` — columns core's
-      # V185 adds. Below V185 those `ADD COLUMN`s do not exist and every
-      # cart/cart-item write raises `Postgrex.Error` (`undefined_column`)
-      # instead of quietly dropping the field, since these are real table
-      # columns cast/3 tries to persist, not attrs the schema merely
-      # declares. 2.6 remains true too: ShippingMethod.changeset/2 calls
-      # `Slug.put_slug/3` (2.4.0), and Product/Category name V171's
-      # projection pkeys (2.6.0) — both still required, now subsumed by
-      # the higher floor. Exact number confirmed at PR time once core's
-      # V185 branch is the one actually released against.
-      pk_dep(:phoenix_kit, "~> 2.15"),
+      # V186 adds, and 2.16.0 is the first release that ships V186 (2.15.x
+      # tops out at V183; the plan's "V185" was the pre-release number).
+      # Below V186 those `ADD COLUMN`s do not exist and every cart/cart-item
+      # write raises `Postgrex.Error` (`undefined_column`) instead of
+      # quietly dropping the field, since these are real table columns
+      # cast/3 tries to persist, not attrs the schema merely declares. 2.6
+      # remains true too: ShippingMethod.changeset/2 calls `Slug.put_slug/3`
+      # (2.4.0), and Product/Category name V171's projection pkeys (2.6.0) —
+      # both still required, now subsumed by the higher floor.
+      pk_dep(:phoenix_kit, "~> 2.16"),
 
       # Gettext for per-module i18n of sidebar tab labels.
       {:gettext, "~> 1.0"},

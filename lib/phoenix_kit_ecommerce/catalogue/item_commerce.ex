@@ -76,7 +76,46 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
     |> validate_number(:download_limit, greater_than: 0)
     |> validate_number(:download_expiry_days, greater_than: 0)
     |> validate_length(:currency, is: 3)
+    |> validate_change(:price_modifiers, &validate_price_modifiers/2)
   end
+
+  # `price_modifiers` is `option_key -> value_slug -> amount`, where every
+  # leaf must parse as a Decimal. The option layer (`MetadataValidator`)
+  # parses leaves with `Decimal.parse/1` and silently falls back to 0 on
+  # junk, so an unvalidated `"abc"` would not crash — it would sell the
+  # option at base price with no signal. Reject it here instead, at the
+  # one place the namespace is written. Numeric JSON leaves (a host
+  # migration script writing `5` rather than `"5"`) are accepted: the
+  # reader stringifies them (`View.labels_for_amounts/2`).
+  defp validate_price_modifiers(:price_modifiers, modifiers) when is_map(modifiers) do
+    bad =
+      for {option_key, by_slug} <- modifiers,
+          leaf <- leaves(by_slug),
+          not decimal_leaf?(leaf),
+          do: option_key
+
+    case Enum.uniq(bad) do
+      [] -> []
+      keys -> [price_modifiers: "has a non-numeric amount under #{Enum.join(keys, ", ")}"]
+    end
+  end
+
+  defp validate_price_modifiers(:price_modifiers, _other),
+    do: [price_modifiers: "must be a map of option_key -> value_slug -> amount"]
+
+  defp leaves(by_slug) when is_map(by_slug), do: Map.values(by_slug)
+  # A non-map value under an option key is itself one bad leaf.
+  defp leaves(other), do: [{:not_a_map, other}]
+
+  defp decimal_leaf?(%Decimal{}), do: true
+  defp decimal_leaf?(n) when is_integer(n), do: true
+  defp decimal_leaf?(n) when is_float(n), do: true
+
+  defp decimal_leaf?(s) when is_binary(s) do
+    match?({%Decimal{}, ""}, Decimal.parse(String.trim(s)))
+  end
+
+  defp decimal_leaf?(_), do: false
 
   @doc """
   Merges `params` (submitted form/API values, or `nil`) over `current`

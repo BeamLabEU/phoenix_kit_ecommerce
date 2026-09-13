@@ -40,9 +40,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   @doc """
   The uuid of the one catalogue the shop reads, or `nil` when it can't
   be resolved (not yet bootstrapped, or the configured name matches
-  none). Resolved by name on every call — the shop has one catalogue,
-  so this is one small `SELECT` against a handful of rows, not a
-  per-request bottleneck.
+  none). Resolved by name — a config read plus `Catalogue.list_catalogues/0`
+  — so every public function here accepts a pre-resolved value as
+  `opts[:catalogue_uuid]` (`nil` included, meaning "resolved, none")
+  and only falls back to this when the caller passed nothing;
+  `ProductSource.Catalogue` resolves it once per facade call and
+  threads it through, so a listing page pays for this once, not once
+  per query it composes.
   """
   @spec catalogue_uuid() :: Ecto.UUID.t() | nil
   def catalogue_uuid do
@@ -56,6 +60,31 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end
   end
 
+  # `Keyword.fetch/2`, not `Keyword.get/2`: a caller that resolved the
+  # catalogue and found NONE passes `catalogue_uuid: nil`, which must
+  # short-circuit to "no catalogue" rather than trigger a second lookup.
+  defp resolve_catalogue_uuid(opts) do
+    case Keyword.fetch(opts, :catalogue_uuid) do
+      {:ok, uuid} -> uuid
+      :error -> catalogue_uuid()
+    end
+  end
+
+  @doc false
+  # Every attribute-set blueprint, resolved ONCE per facade call and
+  # threaded through as `opts[:sets]` — `filter_by_metadata/3` and
+  # `attribute_set_counts/2` otherwise listed the sets again for every
+  # filter they touched. `[]` when the entities layer is unavailable, so
+  # a facet or filter degrades to "no match" rather than raising.
+  @spec list_sets() :: [map()]
+  def list_sets do
+    Catalogue.AttributeSets.list_sets()
+  rescue
+    _ -> []
+  end
+
+  defp resolve_sets(opts), do: Keyword.get_lazy(opts, :sets, &list_sets/0)
+
   # ============================================================
   # Items
   # ============================================================
@@ -63,7 +92,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   @doc "Lists items matching `opts`, ordered by `position, name`."
   @spec list_items(keyword()) :: [CatItem.t()]
   def list_items(opts \\ []) do
-    case catalogue_uuid() do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         []
 
@@ -80,7 +109,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   @doc "`list_items/1` plus the total count before pagination is applied."
   @spec list_items_with_count(keyword()) :: {[CatItem.t()], non_neg_integer()}
   def list_items_with_count(opts \\ []) do
-    case catalogue_uuid() do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         {[], 0}
 
@@ -102,26 +131,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end
   end
 
-  @doc "Count of items matching `opts` (no pagination applied)."
-  @spec count_items(keyword()) :: non_neg_integer()
-  def count_items(opts \\ []) do
-    case catalogue_uuid() do
-      nil ->
-        0
-
-      uuid ->
-        CatItem
-        |> where([i], i.catalogue_uuid == ^uuid)
-        |> apply_item_filters(opts)
-        |> repo().aggregate(:count)
-    end
-  end
-
   @doc "Fetches one item by uuid, scoped to the shop catalogue. `nil` on a miss."
-  @spec get_item(String.t()) :: CatItem.t() | nil
-  def get_item(uuid) when is_binary(uuid) do
+  @spec get_item(String.t(), keyword()) :: CatItem.t() | nil
+  def get_item(uuid, opts \\ [])
+
+  def get_item(uuid, opts) when is_binary(uuid) do
     if UUIDUtils.valid?(uuid) do
-      case catalogue_uuid() do
+      case resolve_catalogue_uuid(opts) do
         nil -> nil
         catalogue_uuid -> repo().get_by(CatItem, uuid: uuid, catalogue_uuid: catalogue_uuid)
       end
@@ -130,7 +146,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end
   end
 
-  def get_item(_), do: nil
+  def get_item(_, _opts), do: nil
 
   @doc """
   Fetches items by uuid, order preserved, missing uuids dropped, scoped
@@ -174,9 +190,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   with no category are excluded, same as
   `ProductSource.Legacy.product_counts_by_category/0`.
   """
-  @spec product_counts_by_category() :: %{String.t() => non_neg_integer()}
-  def product_counts_by_category do
-    case catalogue_uuid() do
+  @spec product_counts_by_category(keyword()) :: %{String.t() => non_neg_integer()}
+  def product_counts_by_category(opts \\ []) do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         %{}
 
@@ -199,7 +215,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   @doc "Min/max `base_price` over active items, optionally scoped to a category."
   @spec price_range(keyword()) :: {Decimal.t() | nil, Decimal.t() | nil}
   def price_range(opts \\ []) do
-    case catalogue_uuid() do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         {nil, nil}
 
@@ -208,7 +224,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
           CatItem
           |> where([i], i.catalogue_uuid == ^uuid)
           |> active_visibility()
-          |> maybe_filter_category(Keyword.get(opts, :category_uuid))
+          |> filter_by_category(Keyword.get(opts, :category_uuid))
           |> exclude_hidden_categories(Keyword.get(opts, :exclude_hidden_categories, false))
 
         {repo().aggregate(query, :min, :base_price), repo().aggregate(query, :max, :base_price)}
@@ -223,7 +239,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   """
   @spec vendor_counts(keyword()) :: [%{value: String.t(), count: non_neg_integer()}]
   def vendor_counts(opts \\ []) do
-    case catalogue_uuid() do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         []
 
@@ -232,7 +248,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
         |> where([i], i.catalogue_uuid == ^uuid)
         |> active_visibility()
         |> where([i], fragment("COALESCE(?->'ecommerce'->>'vendor', '') != ''", i.data))
-        |> maybe_filter_category(Keyword.get(opts, :category_uuid))
+        |> filter_by_category(Keyword.get(opts, :category_uuid))
         |> exclude_hidden_categories(Keyword.get(opts, :exclude_hidden_categories, false))
         |> group_by([i], fragment("?->'ecommerce'->>'vendor'", i.data))
         |> select([i], %{
@@ -257,7 +273,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   (drop items whose category's `shop_status` is `"hidden"`), `:language`
   (prefer `data[language]["_title"]` over the value's bare `title` —
   the picker/sidebar's fuller per-language resolution is Block 5's
-  remaining work; this covers the plain value label).
+  remaining work; this covers the plain value label), `:catalogue_uuid`
+  and `:sets` (pre-resolved by the caller — see `catalogue_uuid/0` and
+  `list_sets/0`).
 
   A value with no `published` `EntityData` row for the requested slug
   never appears — `draft`/`archived` values (Block 5's resolver creates
@@ -270,14 +288,14 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
           %{slug: String.t(), label: String.t(), count: non_neg_integer()}
         ]
   def attribute_set_counts(set_slug, opts \\ []) when is_binary(set_slug) do
-    with catalogue_uuid when not is_nil(catalogue_uuid) <- catalogue_uuid(),
-         set_uuid when not is_nil(set_uuid) <- set_uuid_for_key(set_slug) do
+    with catalogue_uuid when not is_nil(catalogue_uuid) <- resolve_catalogue_uuid(opts),
+         set_uuid when not is_nil(set_uuid) <- set_uuid_for_key(set_slug, resolve_sets(opts)) do
       language = Keyword.get(opts, :language)
 
       CatItem
       |> where([i], i.catalogue_uuid == ^catalogue_uuid)
       |> active_visibility()
-      |> maybe_filter_category(Keyword.get(opts, :category_uuid))
+      |> filter_by_category(Keyword.get(opts, :category_uuid))
       |> exclude_hidden_categories(Keyword.get(opts, :exclude_hidden_categories, false))
       |> join(:inner, [i], a in ItemAttributeSet,
         on: a.item_uuid == i.uuid and a.set_uuid == ^set_uuid
@@ -358,7 +376,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   """
   @spec set_label(String.t(), String.t()) :: String.t() | nil
   def set_label(set_slug, language) when is_binary(set_slug) and is_binary(language) do
-    case set_uuid_for_key(set_slug) do
+    case set_uuid_for_key(set_slug, list_sets()) do
       nil -> nil
       set_uuid -> set_display_name(set_uuid, language)
     end
@@ -420,10 +438,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   # Categories
   # ============================================================
 
-  @doc "Lists the shop catalogue's categories."
+  @doc """
+  Lists the shop catalogue's categories. Options: `:status`/`:parent_uuid`
+  (see `apply_category_filters/2`), `:search` (the admin category search
+  box — matches the primary `name` and every language bucket's `_name`),
+  `:catalogue_uuid` (pre-resolved).
+  """
   @spec list_categories(keyword()) :: [CatCategory.t()]
   def list_categories(opts \\ []) do
-    case catalogue_uuid() do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         []
 
@@ -437,10 +460,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   end
 
   @doc "Fetches one category by uuid, scoped to the shop catalogue."
-  @spec get_category(String.t()) :: CatCategory.t() | nil
-  def get_category(uuid) when is_binary(uuid) do
+  @spec get_category(String.t(), keyword()) :: CatCategory.t() | nil
+  def get_category(uuid, opts \\ [])
+
+  def get_category(uuid, opts) when is_binary(uuid) do
     if UUIDUtils.valid?(uuid) do
-      case catalogue_uuid() do
+      case resolve_catalogue_uuid(opts) do
         nil -> nil
         catalogue_uuid -> repo().get_by(CatCategory, uuid: uuid, catalogue_uuid: catalogue_uuid)
       end
@@ -449,14 +474,16 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end
   end
 
-  def get_category(_), do: nil
+  def get_category(_, _opts), do: nil
 
   @doc "Fetches categories by uuid, scoped to the shop catalogue. Missing uuids dropped."
-  @spec list_categories_by_uuids([String.t()]) :: [CatCategory.t()]
-  def list_categories_by_uuids([]), do: []
+  @spec list_categories_by_uuids([String.t()], keyword()) :: [CatCategory.t()]
+  def list_categories_by_uuids(uuids, opts \\ [])
 
-  def list_categories_by_uuids(uuids) when is_list(uuids) do
-    case catalogue_uuid() do
+  def list_categories_by_uuids([], _opts), do: []
+
+  def list_categories_by_uuids(uuids, opts) when is_list(uuids) do
+    case resolve_catalogue_uuid(opts) do
       nil ->
         []
 
@@ -493,17 +520,20 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   `image_uuid`, if any — priority 1 — is a category-view concern, not
   this function's).
   """
-  @spec resolve_category_images([CatCategory.t()]) :: %{Ecto.UUID.t() => Ecto.UUID.t()}
-  def resolve_category_images([]), do: %{}
+  @spec resolve_category_images([CatCategory.t()], keyword()) ::
+          %{Ecto.UUID.t() => Ecto.UUID.t()}
+  def resolve_category_images(categories, opts \\ [])
 
-  def resolve_category_images(categories) when is_list(categories) do
+  def resolve_category_images([], _opts), do: %{}
+
+  def resolve_category_images(categories, opts) when is_list(categories) do
     {explicit, auto} = Enum.split_with(categories, &explicit_featured_item_uuid/1)
 
     # Resolved once and threaded through: both halves need the shop's
     # catalogue, and `catalogue_uuid/0` re-reads a setting and lists
     # catalogues on every call — a mixed page paid that twice over plus
     # the reads inside `list_items_by_uuids/1`.
-    catalogue_uuid = catalogue_uuid()
+    catalogue_uuid = resolve_catalogue_uuid(opts)
 
     Map.merge(
       resolve_explicit_images(explicit, catalogue_uuid),
@@ -635,7 +665,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     |> filter_by_search(Keyword.get(opts, :search))
     |> filter_by_price_range(Keyword.get(opts, :price_min), Keyword.get(opts, :price_max))
     |> filter_by_vendors(Keyword.get(opts, :vendors))
-    |> filter_by_metadata(Keyword.get(opts, :metadata_filters))
+    |> filter_by_metadata(Keyword.get(opts, :metadata_filters), opts)
   end
 
   # Mirrors `View.product_status/2`'s fallback: with no `shop_status`
@@ -652,14 +682,20 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     )
   end
 
+  # `item.status` is checked FIRST, exactly as `View.product_status/2`
+  # does: a retired item keeps whatever stale `shop_status` it had, and
+  # the view renders it "archived" regardless — so the admin's
+  # `status: "archived"` filter must return it too, and `status:
+  # "draft"` must not. A plain `COALESCE(shop_status, CASE item.status)`
+  # let the stale override win and the two disagreed.
   defp filter_by_status(query, status) do
     where(
       query,
       [i],
       fragment(
-        "COALESCE(?->'ecommerce'->>'shop_status', CASE WHEN ? = 'active' THEN 'active' ELSE 'archived' END) = ?",
-        i.data,
+        "(CASE WHEN ? <> 'active' THEN 'archived' ELSE COALESCE(?->'ecommerce'->>'shop_status', 'active') END) = ?",
         i.status,
+        i.data,
         ^status
       )
     )
@@ -692,9 +728,6 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp filter_by_category(query, nil), do: query
   defp filter_by_category(query, uuid), do: where(query, [i], i.category_uuid == ^uuid)
 
-  defp maybe_filter_category(query, nil), do: query
-  defp maybe_filter_category(query, uuid), do: where(query, [i], i.category_uuid == ^uuid)
-
   # Same subquery as `exclude_hidden_categories/2`. The previous
   # `left_join` + `distinct: i.uuid` compiled to `DISTINCT ON (uuid)`
   # and made Ecto prepend `uuid` to `ORDER BY`, so every listing with
@@ -726,12 +759,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   # `values` first. Matches on the item's attached-set row via `set_uuid`
   # (`sets_by_key/1` resolves `key` to a set uuid) and its
   # `data["selected_value_slugs"]` overlapping the requested slugs.
-  defp filter_by_metadata(query, nil), do: query
-  defp filter_by_metadata(query, []), do: query
+  defp filter_by_metadata(query, nil, _opts), do: query
+  defp filter_by_metadata(query, [], _opts), do: query
 
-  defp filter_by_metadata(query, filters) when is_list(filters) do
+  defp filter_by_metadata(query, filters, opts) when is_list(filters) do
+    # One set listing for every filter in this call, not one per filter.
+    sets = resolve_sets(opts)
+
     Enum.reduce(filters, query, fn %{key: key, values: slugs}, q ->
-      case set_uuid_for_key(key) do
+      case set_uuid_for_key(key, sets) do
         nil ->
           q
 
@@ -752,34 +788,30 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end)
   end
 
-  defp set_uuid_for_key(key) do
-    Catalogue.AttributeSets.list_sets()
+  defp set_uuid_for_key(key, sets) do
+    sets
     |> Enum.find(&(&1.name == key or &1.name == "catalogue_set_" <> key))
     |> case do
       %{uuid: uuid} -> uuid
       _ -> nil
     end
-  rescue
-    _ -> nil
   end
 
-  @max_search_term_length 100
-
-  defp search_like_pattern(search) do
-    escaped =
-      search
-      |> String.replace(<<0>>, "")
-      |> String.slice(0, @max_search_term_length)
-      |> String.replace("\\", "\\\\")
-      |> String.replace("%", "\\%")
-      |> String.replace("_", "\\_")
-
-    "%#{escaped}%"
-  end
+  # Shared with the legacy adapter — see `ProductSource.search_like_pattern/1`.
+  defp search_like_pattern(search),
+    do: PhoenixKitEcommerce.ProductSource.search_like_pattern(search)
 
   defp filter_by_search(query, nil), do: query
   defp filter_by_search(query, ""), do: query
 
+  # Matches the primary `name`/`description` columns, the `tags` list,
+  # and — like `Legacy.filter_by_product_search/2`'s `jsonb_each_text`
+  # over every localized field — every language bucket's `_name` and
+  # `_description` in `data` (`data["fr-FR"]["_name"]`, …), so a shopper
+  # searching in a non-primary language finds the translated title.
+  # `jsonb_typeof(...) = 'object'` skips scalar top-level keys
+  # (`_primary_language`, `featured_image_uuid`, …) so `->>` never sees a
+  # non-object.
   defp filter_by_search(query, search) do
     term = search_like_pattern(search)
 
@@ -787,12 +819,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
       query,
       [i],
       fragment(
-        "(? ILIKE ? OR COALESCE(?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'ecommerce'->'tags', '[]'::jsonb)) AS tag WHERE tag ILIKE ?))",
+        "(? ILIKE ? OR COALESCE(?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'ecommerce'->'tags', '[]'::jsonb)) AS tag WHERE tag ILIKE ?) OR EXISTS (SELECT 1 FROM jsonb_each(?) AS lang(key, value) WHERE jsonb_typeof(lang.value) = 'object' AND (COALESCE(lang.value->>'_name', '') ILIKE ? OR COALESCE(lang.value->>'_description', '') ILIKE ?)))",
         i.name,
         ^term,
         i.description,
         ^term,
         i.data,
+        ^term,
+        i.data,
+        ^term,
         ^term
       )
     )
@@ -806,6 +841,30 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     query
     |> filter_by_category_status(Keyword.get(opts, :status, :skip))
     |> filter_by_parent_uuid(Keyword.get(opts, :parent_uuid, :skip))
+    |> filter_by_category_search(Keyword.get(opts, :search))
+  end
+
+  defp filter_by_category_search(query, nil), do: query
+  defp filter_by_category_search(query, ""), do: query
+
+  # The admin category search box (`list_categories_with_count/1`'s
+  # `:search`) — the legacy adapter searches every language of the
+  # category's `name` map; here that is the primary `name` column plus
+  # every language bucket's `_name`, escaped the same way as items.
+  defp filter_by_category_search(query, search) do
+    term = search_like_pattern(search)
+
+    where(
+      query,
+      [c],
+      fragment(
+        "(? ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_each(?) AS lang(key, value) WHERE jsonb_typeof(lang.value) = 'object' AND COALESCE(lang.value->>'_name', '') ILIKE ?))",
+        c.name,
+        ^term,
+        c.data,
+        ^term
+      )
+    )
   end
 
   defp filter_by_category_status(query, :skip), do: query

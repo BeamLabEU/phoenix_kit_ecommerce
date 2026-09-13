@@ -22,6 +22,8 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   """
 
   use Ecto.Schema
+
+  @type t :: %__MODULE__{}
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
