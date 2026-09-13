@@ -11,9 +11,9 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   invisible on the storefront (or, worse, reachable when it shouldn't
   be — see below) for a reason the admin screen never surfaced. This
   column does NOT synchronize the two (that would destroy the
-  distinction the owner wants to keep); it shows both, and warns only
-  on the one combination that is an actual hazard, not merely a
-  disagreement.
+  distinction the owner wants to keep); it shows both, side by side,
+  and never warns — see "No warnings" below for why there is no
+  combination left that is an actual hazard.
 
   ## Why item and category are two different rules (`item_columns/0`
   ## vs. `category_columns/0` return DIFFERENT column definitions)
@@ -37,45 +37,40 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
       `Map.get(ecommerce, "shop_status") || "active"` — no fallback to
       `c.status` at all).
 
-  ## The one case that warrants a warning — categories only
+  ## No warnings — the reachability leak is closed on both sides
 
-  `ProductSource.Catalogue.Query.active_visibility/1` (the LISTING
-  query) unconditionally requires the catalogue's own status to be
-  right (`item.status == "active"` / `c.status != "deleted"`) — no
-  `shop_status` value overrides that.
+  An earlier version of this column warned on the one combination
+  that was a real hazard: the shop reporting something as visible
+  while the catalogue had retired or soft-deleted it, so that it was
+  excluded from every listing, count and facet
+  (`ProductSource.Catalogue.Query.active_visibility/1` unconditionally
+  requires `item.status == "active"` / `c.status != "deleted"`) yet
+  still reachable by direct link, because the single-record pages
+  resolved the status from `shop_status` alone.
 
-  On the CATEGORY side, the direct page does NOT defer to the
-  catalogue status the same way: `CatalogCategory.do_mount/3` is a
-  BLOCK-list of one value — it redirects ONLY when the resolved status
-  (`View.category_view/2`) is literally `"hidden"` — `"active"` AND
-  `"unlisted"` both fall through to rendering the page. So a
-  soft-deleted (`c.status == "deleted"`) category whose `shop_status`
-  is merely `"unlisted"` (not explicitly `"active"`) can still be
-  reachable by direct link whenever `View.category_view/2` doesn't
-  force it to `"hidden"` for that deleted status — `"unlisted" !=
-  "hidden"` is all `do_mount/3` checks. `render_category/1` compares
-  `shop_key != "hidden"` against the catalogue side to catch exactly
-  this.
+  That leak is now closed at the source for both record types, so
+  there is nothing left to warn about:
 
-  On the ITEM side this class of leak is now closed at the source:
-  `View.product_status/2` checks `item.status` FIRST and forces
-  `"archived"` on any non-active catalogue status, regardless of what
-  `shop_status` says (`phoenix_kit_ecommerce` PR #53) — so
-  `CatalogProduct.do_mount/3`, which redirects on any resolved status
-  `!= "active"`, can no longer be fooled by an explicit `shop_status:
-  "active"` left over on a retired item. An item can still show a
-  catalogue/shop DISAGREEMENT (e.g. `discontinued` catalogue status
-  with a stale `shop_status: "active"`), but that disagreement is no
-  longer a reachability hazard, so `render_item/1` never warns on it —
-  see the comment there. Only the raw values are shown, for the
-  admin's own information.
+    * Items — `View.product_status/2` checks `item.status` FIRST and
+      forces `"archived"` on any non-active catalogue status regardless
+      of `shop_status` (`phoenix_kit_ecommerce` PR #53), so
+      `CatalogProduct.do_mount/3` (which redirects on any resolved
+      status `!= "active"`) cannot be fooled by a stale explicit
+      `shop_status: "active"`.
+    * Categories — `View.category_status/2` forces `"hidden"` for a
+      catalogue-deleted category no matter what `shop_status` says
+      (commit af9308b; `catalog_category_catalogue_status_test.exs`
+      proves the page redirects), so `CatalogCategory.do_mount/3`'s
+      block-list gate (redirect only on literal `"hidden"`) is reached
+      with the forced value, never the stale one.
 
-  Every disagreement that isn't the category leak above — catalogue
-  active while the shop says `draft`/`archived` (items) or `hidden`
-  (categories), or any item-side catalogue/shop mismatch now that #53
-  closed the item leak — is simply how the owner deliberately keeps
-  something out of the shop while it stays a live catalogue entry (or
-  is display-only information), and renders with no warning. An absent
+  What remains is a catalogue/shop DISAGREEMENT (a `discontinued` item
+  with `shop_status: "active"`; a `deleted` category with `"unlisted"`)
+  — display-only information the admin may want to see, but not a
+  hazard, and every other disagreement (catalogue active while the shop
+  says `draft`/`archived`/`hidden`/`unlisted`) is simply how the owner
+  deliberately keeps something out of the shop while it stays a live
+  catalogue entry. All of them render with no warning. An absent
   `shop_status` is shown as the value it effectively resolves to (per
   the fallbacks above), marked "(default)" rather than as an alarming
   "Unknown" — it is not a misconfiguration, just a namespace the Shop
@@ -104,8 +99,6 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
 
   use Phoenix.Component
   use Gettext, backend: PhoenixKitEcommerce.Gettext
-
-  import PhoenixKitWeb.Components.Core.Icon
 
   @item_shop_statuses ~w(draft active archived)
   @category_shop_statuses ~w(active unlisted hidden)
@@ -137,24 +130,15 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
         value -> {value, false}
       end
 
-    # Never warns: since PR #53, `View.product_status/2` checks
-    # `item.status` FIRST and forces "archived" on any non-active
-    # catalogue status no matter what `shop_status` says, so
-    # `CatalogProduct.do_mount/3` (which redirects on any resolved
-    # status != "active") can no longer be fooled by a stale explicit
-    # `shop_status: "active"` — the reachability leak this predicate
-    # used to catch is closed at the source. A catalogue/shop
-    # disagreement can still be shown here (raw_shop vs
-    # catalogue_status), it just isn't a hazard worth a warning icon
-    # any more — see moduledoc.
-    contradiction = false
-
+    # Never warns — see the moduledoc's "No warnings" section: since PR
+    # #53 `View.product_status/2` forces "archived" on any non-active
+    # catalogue status, so a stale explicit `shop_status: "active"` is
+    # display-only information, not a reachability hazard.
     cell(%{
       catalogue: catalogue_badge(catalogue_status),
       shop: item_shop_badge(shop_key, shop_default?),
       catalogue_status: catalogue_status,
-      shop_status: raw_shop || "default",
-      contradiction: contradiction
+      shop_status: raw_shop || "default"
     })
   end
 
@@ -172,7 +156,6 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   # row for.
   defp render_category(record) do
     catalogue_status = record |> Map.get(:status) |> normalize_catalogue_status()
-    catalogue_ok? = catalogue_status != "deleted"
     raw_shop = record |> shop_status_raw() |> normalize_shop(@category_shop_statuses)
 
     {shop_key, shop_default?} =
@@ -181,28 +164,17 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
         value -> {value, false}
       end
 
-    # NOT a mirror of `render_item/1`'s predicate — the two pages gate
-    # oppositely. `CatalogProduct.do_mount/3` is an ALLOW-list: only a
-    # resolved status of "active" passes, so items compare `shop_key ==
-    # "active"`. `CatalogCategory.do_mount/3` is a BLOCK-list: it
-    # redirects only on the resolved status being literally "hidden"
-    # (`catalog_category.ex:53-58, 210-215`) — "active" AND "unlisted"
-    # both fall through to rendering the page. So the set that's
-    # reachable despite a non-ok catalogue status is "anything but
-    # hidden", not just "active": a `shop_key == "active"` predicate
-    # here silently missed `deleted` + `unlisted` (soft-deleted, but
-    # resolved status "unlisted" != "hidden", so the page still
-    # renders). An absent `shop_status` still defaults UNCONDITIONALLY
-    # to "active" (`View.category_view/2` — no fallback to `c.status`),
-    # so it can combine with a non-ok catalogue status same as before.
-    contradiction = shop_key != "hidden" and not catalogue_ok?
-
+    # Never warns — see the moduledoc's "No warnings" section:
+    # `View.category_status/2` forces "hidden" for a catalogue-deleted
+    # category regardless of `shop_status`, so `deleted` + `active`/
+    # `unlisted`/absent is display-only information, not a reachable
+    # page. The raw shop value is still shown (never the forced one) so
+    # the admin sees what the Shop section actually stored.
     cell(%{
       catalogue: catalogue_badge(catalogue_status),
       shop: category_shop_badge(shop_key, shop_default?),
       catalogue_status: catalogue_status,
-      shop_status: raw_shop || "default",
-      contradiction: contradiction
+      shop_status: raw_shop || "default"
     })
   end
 
@@ -258,7 +230,6 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
   attr :shop, :any, required: true
   attr :catalogue_status, :string, required: true
   attr :shop_status, :string, required: true
-  attr :contradiction, :boolean, required: true
 
   # No `id` attribute anywhere below: the SAME call renders the row's
   # desktop-table cell AND its mobile-card fact, both present in the DOM
@@ -279,25 +250,16 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumn do
 
     ~H"""
     <div
-      class={["flex items-center gap-1 flex-wrap", @contradiction && "ring-1 ring-warning rounded px-1"]}
+      class="flex items-center gap-1 flex-wrap"
       data-shop-status-cell
       data-catalogue-status={@catalogue_status}
       data-shop-status={@shop_status}
-      data-contradiction={to_string(@contradiction)}
-      title={@contradiction && contradiction_title()}
     >
       <span class={["badge badge-xs h-auto", @catalogue_class]}>{@catalogue_label}</span>
       <span class={["badge badge-xs h-auto", @shop_class]}>
         {@shop_label}<span :if={@shop_default?} class="opacity-70"> ({gettext("default")})</span>
       </span>
-      <.icon :if={@contradiction} name="hero-exclamation-triangle" class="w-4 h-4 text-warning shrink-0" />
     </div>
     """
-  end
-
-  defp contradiction_title do
-    gettext(
-      "The shop reports this as active while the catalogue does not — it is excluded from listings but may still be reachable by direct link."
-    )
   end
 end

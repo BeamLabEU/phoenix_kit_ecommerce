@@ -1593,11 +1593,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
   @impl true
   def handle_info({:currencies_changed, _code}, socket) do
-    # Rate edits only need a re-present of the loaded amounts. A base-
-    # currency reprice rewrites `product.price` in the table, so the
-    # loaded struct has to be re-fetched or the page keeps showing the
-    # pre-reprice number (and add-to-cart would charge the new one).
-    socket = Helpers.refresh_display_currency(socket)
+    # Rate edits only need a re-present of the loaded amounts, done here
+    # at once. A base-currency reprice rewrites `product.price` in the
+    # table, so the loaded struct has to be re-fetched or the page keeps
+    # showing the pre-reprice number (and add-to-cart would charge the new
+    # one) — that re-fetch is coalesced into one `:fx_reload` per burst,
+    # since billing broadcasts once per currency it touched.
+    {:noreply, socket |> Helpers.refresh_display_currency() |> Helpers.schedule_fx_reload()}
+  end
+
+  @impl true
+  def handle_info(:fx_reload, socket) do
+    socket = Helpers.fx_reload_done(socket)
 
     {:noreply,
      if socket.assigns[:product] do

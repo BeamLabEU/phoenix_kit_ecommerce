@@ -43,8 +43,8 @@ db_name =
   Application.get_env(:phoenix_kit_ecommerce, TestRepo, [])[:database] ||
     "phoenix_kit_ecommerce_test"
 
-# The preflight ships in core, and this module's core floor (`~> 2.0`)
-# predates it — so it is used when the running core has it, and otherwise
+# The preflight ships in core, and older cores this helper has run against
+# predate it — so it is used when the running core has it, and otherwise
 # this falls through to exactly the previous behaviour.
 db_check =
   if Code.ensure_loaded?(PhoenixKit.TestSupport.PostgresPreflight) do
@@ -88,14 +88,6 @@ repo_available =
       # re-applies any newly-shipped Vxxx migrations on every boot.
       PhoenixKit.Migration.ensure_current(TestRepo, log: false)
 
-      # ...then billing's chain, because this module reads and writes
-      # billing's schemas directly (checkout converts a cart through them).
-      # Billing owns `phoenix_kit_currencies` from its own V2 on, so a
-      # database built from core's baseline alone is missing columns its
-      # `Currency` schema selects, and every currency read fails with an
-      # `undefined_column` far from anything about currencies.
-      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
-
       # ...then the module-owned chain on top. V1 was purely adoptive over
       # core's baseline, so skipping it changed nothing; V2 is not — it
       # drops the `DEFAULT 'USD'` core declares on the four `currency`
@@ -106,14 +98,29 @@ repo_available =
       # them is idempotent.
       Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
-      # ...and billing's own chain. `phoenix_kit_currencies` is created by
-      # CORE's migrations, but billing (floor raised to "~> 0.11" for
-      # per-domain-currency) OWNS extending it — `rounding_rule`,
-      # `rate_updated_at`, the partial default-currency index — via its own
-      # versioned chain, never core's. Without this, a freshly fetched
-      # billing (0.11+) raises `undefined_column: rounding_rule` on every
-      # currency read, since core's schema never grows that column itself.
+      # ...and billing's own chain, because this module reads and writes
+      # billing's schemas directly (checkout converts a cart through them).
+      # `phoenix_kit_currencies` is created by CORE's migrations, but
+      # billing (floor raised to "~> 0.11" for per-domain-currency) OWNS
+      # extending it — `rounding_rule`, `rate_updated_at`, the partial
+      # default-currency index — via its own versioned chain, never core's.
+      # Without this, a freshly fetched billing (0.11+) raises
+      # `undefined_column: rounding_rule` on every currency read, since
+      # core's schema never grows that column itself.
       Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
+      # ...and, when the test-only catalogue bridge is resolved (see
+      # mix.exs's `catalogue_test_deps/0`), the entities and catalogue
+      # chains — in that order, the same way catalogue's own test helper
+      # runs them. Core's baseline creates the `phoenix_kit_cat_*` tables
+      # in their V1 shape only; catalogue's V2 adds the per-language `slug`
+      # column its `Item`/`Category` schemas insert, so a database built
+      # without this chain fails every `:catalogue` test with
+      # `undefined_column: slug` from inside `create_item/2`.
+      if Code.ensure_loaded?(PhoenixKitCatalogue.Migrations) do
+        Enum.each(PhoenixKitEntities.Migrations.up_statements("public"), &TestRepo.query!/1)
+        Enum.each(PhoenixKitCatalogue.Migrations.up_statements("public"), &TestRepo.query!/1)
+      end
 
       Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
       true

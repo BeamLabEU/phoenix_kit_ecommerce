@@ -80,4 +80,41 @@ defmodule PhoenixKitEcommerce.CartMergeFxTest do
     assert Decimal.equal?(item.unit_price, Decimal.new("138.00"))
     assert Decimal.equal?(item.base_unit_price, Decimal.new("138.00"))
   end
+
+  test "a same-currency guest line frozen at a DIFFERENT rate is restamped at the user cart's rate" do
+    {:ok, user} =
+      Auth.register_user(%{
+        email: "merge-#{System.unique_integer([:positive])}@example.com",
+        password: "ValidPassword123!"
+      })
+
+    # User cart froze EUR at 0.909091 ...
+    Currency.put_request_currency("EUR")
+    {:ok, user_cart} = Shop.create_cart(user_uuid: user.uuid)
+    assert Decimal.equal?(user_cart.exchange_rate, Decimal.new("0.909091"))
+
+    # ... then the rate moved, and the guest cart froze EUR at 0.95.
+    {:ok, _} =
+      PhoenixKitBilling.update_currency(PhoenixKitBilling.get_currency_by_code("EUR"), %{
+        exchange_rate: "0.95"
+      })
+
+    session_id = "guest-#{System.unique_integer([:positive])}"
+    {:ok, guest} = Shop.create_cart(session_id: session_id)
+    assert Decimal.equal?(guest.exchange_rate, Decimal.new("0.95"))
+    {:ok, product} = Shop.create_product(product_attrs())
+    {:ok, guest} = Shop.add_to_cart(guest, product, 1)
+    assert Decimal.equal?(hd(guest.items).unit_price, Decimal.new("131.10"))
+    Currency.put_request_currency(nil)
+
+    assert {:ok, merged} = Shop.merge_guest_cart(session_id, user.uuid)
+    assert merged.currency == "EUR"
+    assert Decimal.equal?(merged.exchange_rate, Decimal.new("0.909091"))
+    [item] = merged.items
+    # Same currency, but NOT a verbatim 131.10: re-snapshotted from base at
+    # the user cart's own frozen rate.
+    assert Decimal.equal?(item.unit_price, Decimal.new("125.45"))
+    assert Decimal.equal?(item.base_unit_price, Decimal.new("138.00"))
+    assert Decimal.equal?(merged.subtotal, Decimal.new("125.45"))
+  end
 end

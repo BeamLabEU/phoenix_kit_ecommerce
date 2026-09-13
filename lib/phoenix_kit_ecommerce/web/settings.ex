@@ -1072,7 +1072,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
-  defp gated_event("save_name_prefixes", %{"prefixes" => raw}, socket) do
+  defp gated_event("save_name_prefixes", %{"prefixes" => raw}, socket) when is_binary(raw) do
     # Normalize (trim, drop blanks, re-join) before saving, so the stored
     # value and what's displayed back to the admin agree rather than
     # echoing stray commas/whitespace the admin typed.
@@ -1100,6 +1100,11 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
     end
+  end
+
+  # `?prefixes[]=x` / a missing field: the value must be a plain string.
+  defp gated_event("save_name_prefixes", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 
   defp gated_event("toggle_notify_cart_first_item", _params, socket) do
@@ -1286,7 +1291,12 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
-  defp gated_event("update_category_display", %{"display" => display}, socket) do
+  # Only the two values the sidebar reads (`CatalogSidebar`'s
+  # `category_name_wrap`); anything else the client sends is refused
+  # rather than stored, so the setting can never hold a value no reader
+  # understands.
+  defp gated_event("update_category_display", %{"display" => display}, socket)
+       when display in ~w(truncate wrap) do
     case Settings.update_setting("shop_category_name_display", display) do
       {:ok, _} ->
         {:noreply,
@@ -1298,6 +1308,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
         {:noreply,
          put_flash(socket, :error, gettext("Failed to update category display setting"))}
     end
+  end
+
+  defp gated_event("update_category_display", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 
   defp gated_event("toggle_sidebar_categories", _params, socket) do
@@ -1344,7 +1358,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
-  defp gated_event("update_category_icon", %{"mode" => mode}, socket) do
+  # The modes `CatalogSidebar.sidebar_cat_icon/1` renders (`none`,
+  # `folder`, `category`) — the same whitelist the radio group offers.
+  defp gated_event("update_category_icon", %{"mode" => mode}, socket)
+       when mode in ~w(none folder category) do
     case Settings.update_setting("shop_category_icon_mode", mode) do
       {:ok, _} ->
         {:noreply,
@@ -1355,6 +1372,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update category icon setting"))}
     end
+  end
+
+  defp gated_event("update_category_icon", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 
   defp gated_event("toggle_storefront_filter", %{"key" => key}, socket) do

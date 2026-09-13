@@ -7,7 +7,7 @@ defmodule PhoenixKitEcommerce.ProductSource do
   tables, unchanged) and, once `phoenix_kit_catalogue` is present,
   `PhoenixKitEcommerce.ProductSource.Catalogue` (reads catalogue items
   and returns hand-built `%Product{}`/`%Category{}` view-structs so the
-  facade, guards, `CartItem`, `Options` and sitemap need no changes).
+  facade, guards, `CartItem`, `Options` and `SeoHelpers` need no changes).
 
   `current/0` picks the adapter at runtime; `PhoenixKitEcommerce`'s
   public read functions delegate to it so callers never choose an
@@ -49,11 +49,17 @@ defmodule PhoenixKitEcommerce.ProductSource do
   the stored key.
 
   Reads the config on every call rather than caching it here:
-  `PhoenixKitEcommerce.get_config/1` is a plain `repo().get/2` against
-  `phoenix_kit_shop_config` (no ETS/settings-cache layer sits in front
-  of it today), so this is a real extra query per call — accepted so
-  that the switch takes effect without a restart, rather than adding
-  process state here that could make it lag behind the stored value.
+  `PhoenixKitEcommerce.get_config/1` is a plain primary-key
+  `repo().get/2` against `phoenix_kit_shop_config` (no ETS/settings-cache
+  layer sits in front of it — the key lives in the shop config table,
+  not in `PhoenixKit.Settings`, and every writer, the test suite
+  included, updates that row directly), so this is one point read per
+  facade call. Accepted so that the switch takes effect without a
+  restart: a per-process memo would go stale in a long-lived LiveView
+  process, and a node-wide cache has no invalidation hook because the
+  row is written without going through this module. The `Code.
+  ensure_loaded?/1` guard runs FIRST so a host without the optional
+  `phoenix_kit_catalogue` dependency never pays for the read at all.
   """
   def current do
     if Code.ensure_loaded?(PhoenixKitCatalogue) and
@@ -62,5 +68,31 @@ defmodule PhoenixKitEcommerce.ProductSource do
     else
       @legacy_module
     end
+  end
+
+  # Max length for a user-supplied search term. Anything longer is
+  # truncated: ILIKE against unindexed JSONB expansions is linear in both
+  # pattern and row count, so an unbounded public `?search=` param would be
+  # a cheap seq-scan amplifier.
+  @max_search_term_length 100
+
+  @doc false
+  # Builds a safe `%term%` ILIKE pattern from raw user input: caps the
+  # length, strips NUL bytes (Postgres rejects them in text params), and
+  # escapes LIKE metacharacters so `%`, `_`, and `\` match literally —
+  # a search for "100%" must not match every "100", and SKUs routinely
+  # contain underscores. Shared by both adapters so the two can never
+  # drift on what a search term is allowed to mean.
+  @spec search_like_pattern(String.t()) :: String.t()
+  def search_like_pattern(search) when is_binary(search) do
+    escaped =
+      search
+      |> String.replace(<<0>>, "")
+      |> String.slice(0, @max_search_term_length)
+      |> String.replace("\\", "\\\\")
+      |> String.replace("%", "\\%")
+      |> String.replace("_", "\\_")
+
+    "%#{escaped}%"
   end
 end

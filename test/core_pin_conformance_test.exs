@@ -12,13 +12,13 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
   outright, with no degraded mode. Nothing else in this repo's own test run
   would notice, which is why the check is a test rather than a convention.
 
-  What this does NOT forbid is raising the two-segment FLOOR. `~> 2.15` still
+  What this does NOT forbid is raising the two-segment FLOOR. `~> 2.16` still
   admits every later 2.x. The floor tracks the oldest core that has every
   API this module calls: `Slug.put_slug/3` (2.4.0), V171's shop slug
   projection pkeys (2.6.0), and — raised for per-domain-currency Э1-E1 —
-  V185's `base_currency`/`exchange_rate`/`base_unit_price` columns on
-  `phoenix_kit_shop_carts`/`phoenix_kit_shop_cart_items` (2.15, pending
-  release; see `dependency_floor_test.exs`). A floor left below that lets
+  V186's `base_currency`/`exchange_rate`/`base_unit_price` columns on
+  `phoenix_kit_shop_carts`/`phoenix_kit_shop_cart_items` (first shipped in
+  core 2.16.0 — 2.15.x tops out at V183; see `dependency_floor_test.exs`). A floor left below that lets
   `mix deps.get` resolve a core without those columns and moves the
   failure to the host — a raw `Postgrex.Error` (`undefined_column`) on
   every cart write, not a compile error. Raise this alongside `mix.exs`
@@ -28,10 +28,12 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
   a V135 floor and this module is verified only against that baseline.
   """
 
-  # Floor: core 2.15 (V185's cart/order freeze columns, raised from 2.6's
+  # Floor: core 2.16 (V186's cart/order freeze columns, raised from 2.6's
   # `Slug.put_slug/3` + V171 projection pkeys). Everything above it,
   # forever, must stay admitted — that is the two-segment invariant.
-  @must_admit ["2.15.0", "2.15.1", "2.16.0", "2.20.4"]
+  # 2.15.x is rejected on purpose: it ships V183 at most, so the columns
+  # this floor exists to guarantee are missing there.
+  @must_admit ["2.16.0", "2.20.4", "2.22.15"]
   @must_reject [
     "1.7.189",
     "1.7.236",
@@ -41,6 +43,8 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
     "2.6.0",
     "2.9.4",
     "2.14.2",
+    "2.15.0",
+    "2.15.1",
     "3.0.0"
   ]
 

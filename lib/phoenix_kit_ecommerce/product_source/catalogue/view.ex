@@ -428,10 +428,26 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
     Enum.reduce(slug_amounts || %{}, %{}, fn {slug, amount}, acc ->
       case Map.get(labels_by_value, slug) do
         nil -> acc
-        label -> Map.put(acc, label, amount)
+        label -> Map.put(acc, label, normalize_amount(amount))
       end
     end)
   end
+
+  # `Options.has_nonzero_modifiers?/1` / `parse_modifier_value/1` accept
+  # only BINARY amounts (`"9.00"`, or `%{"type" => _, "value" => "9.00"}`),
+  # so a modifier a catalogue writer stored as a JSON number would make
+  # the option silently non-price-affecting. Numbers are rendered the way
+  # an admin would have typed them — `Decimal.to_string/2`'s `:normal`
+  # form, never scientific notation, so `"9.0"` stays parseable.
+  defp normalize_amount(amount) when is_integer(amount), do: Integer.to_string(amount)
+
+  defp normalize_amount(amount) when is_float(amount),
+    do: amount |> Decimal.from_float() |> Decimal.to_string(:normal)
+
+  defp normalize_amount(%{"value" => value} = amount) when is_number(value),
+    do: %{amount | "value" => normalize_amount(value)}
+
+  defp normalize_amount(amount), do: amount
 
   defp value_labels(set, language) do
     set

@@ -1499,7 +1499,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                     <div class="text-sm text-base-content/60">{method.description}</div>
                   <% end %>
                 </div>
-                <div class="font-semibold">{format_price(method.price, @currency)}</div>
+                <%!-- `method.price` is a BASE amount; the cart is in its own
+                     currency, so present it through the cart's frozen rate. --%>
+                <% presented = Shop.present_shipping_method(@cart, method) %>
+                <div class="font-semibold">
+                  <%= if presented.free? do %>
+                    <span class="badge badge-success">{gettext("FREE")}</span>
+                  <% else %>
+                    {format_price(presented.price, @currency)}
+                  <% end %>
+                </div>
               </label>
             </div>
             <div class="flex items-center gap-3 mt-6">

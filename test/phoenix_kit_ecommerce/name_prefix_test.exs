@@ -129,4 +129,33 @@ defmodule PhoenixKitEcommerce.NamePrefixTest do
       assert NamePrefix.strip("3D Printed Costume Masks") == "Costume Masks"
     end
   end
+
+  describe "strip/2 (precomputed prefixes)" do
+    test "strips with the list it is given and never reads the setting" do
+      set("")
+      assert NamePrefix.strip("3D Printed Costume Masks", ["3D Printed"]) == "Costume Masks"
+      assert NamePrefix.strip("3D Printed Costume Masks", []) == "3D Printed Costume Masks"
+    end
+
+    test "agrees with strip/1 for the configured list" do
+      set("3D, 3D Printed")
+      prefixes = NamePrefix.prefixes()
+
+      for name <- [
+            "3D Printed Costume Masks",
+            "3D - Vases",
+            "3D Printed",
+            "Plain",
+            "3D Printedstuff"
+          ] do
+        assert NamePrefix.strip(name, prefixes) == NamePrefix.strip(name)
+      end
+    end
+
+    test "a malformed prefixes argument means no stripping" do
+      assert NamePrefix.strip("3D Printed Masks", "3D Printed") == "3D Printed Masks"
+      assert NamePrefix.strip("3D Printed Masks", [nil, 1]) == "3D Printed Masks"
+      assert NamePrefix.strip(nil, ["3D Printed"]) == nil
+    end
+  end
 end

@@ -227,6 +227,29 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert {:ok, %{"id" => 555}} = AdminClient.fetch_product(uuid, "555", req_options())
     end
 
+    # The id lands in the URL path verbatim, so anything but digits could
+    # rewrite the request. Refused before any request is made (the stub
+    # would fail the test if it were reached).
+    test "refuses a non-numeric product id without making a request" do
+      uuid = connect_shopify()
+      Req.Test.stub(@stub, fn _conn -> flunk("no request should be made") end)
+
+      for bad <- ["555/../shop", "555?x=1", "", "abc", "-1", nil, 1.5] do
+        assert {:error, :invalid_product_id} = AdminClient.fetch_product(uuid, bad, req_options())
+      end
+    end
+
+    test "refuses a non-numeric collection id in fetch_collection_product_ids/2" do
+      uuid = connect_shopify()
+      Req.Test.stub(@stub, fn _conn -> flunk("no request should be made") end)
+
+      assert {:error, :invalid_collection_id} =
+               AdminClient.fetch_collection_product_ids(
+                 "1/products",
+                 [integration_uuid: uuid] ++ req_options()
+               )
+    end
+
     test "returns :unauthorized on a 401 response" do
       uuid = connect_shopify()
 

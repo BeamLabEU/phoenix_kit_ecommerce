@@ -16,21 +16,21 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
   (`draft` is the schema default for an item never pushed to the shop;
   `hidden`/`unlisted` categories the owner chose on purpose) — a warning
   that fires on the majority of rows teaches the owner to ignore it.
-  The corrected rule (see the module's moduledoc) warns ONLY when the
-  shop reports something as active that the catalogue does not — the
-  one combination that is reachable by direct URL/link
-  (`CatalogProduct.do_mount/3` / `CatalogCategory.do_mount/3`) despite
-  being excluded from every listing, count and facet. The reverse
-  (catalogue active, shop draft/archived/unlisted/hidden) is how the
-  owner deliberately keeps something out of the shop and renders with
-  no warning. This file replaces the old (bugged) `active+draft ==
-  contradiction` test — see `shop_status_column_test.exs` git history
-  for what it said before.
+  A corrected rule then warned ONLY when the shop reported something
+  as visible that the catalogue did not — the one combination that was
+  reachable by direct URL/link despite being excluded from every
+  listing, count and facet. That leak is now closed at the source for
+  BOTH record types (`View.product_status/2` since PR #53,
+  `View.category_status/2` since af9308b — see
+  `catalog_category_catalogue_status_test.exs`), so the column shows
+  the two raw values side by side and never warns: this file pins that
+  NO combination of catalogue/shop status renders a warning, on either
+  side.
 
   Assertions read the cell's own `data-catalogue-status="..."` /
-  `data-shop-status="..."` / `data-contradiction="..."` attributes
-  instead of matching badge text, since two badges' rendered labels can
-  otherwise collide in one cell's HTML.
+  `data-shop-status="..."` attributes instead of matching badge text,
+  since two badges' rendered labels can otherwise collide in one cell's
+  HTML.
   """
 
   use ExUnit.Case, async: true
@@ -111,9 +111,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
     value
   end
 
-  defp contradiction_attr(html) do
-    [_, value] = Regex.run(~r/data-contradiction="([^"]*)"/, html)
-    value
+  # The warning had three renderings: the icon, a `data-contradiction`
+  # attribute and a `title=` hint. None may come back.
+  defp warns?(html) do
+    html =~ "hero-exclamation-triangle" or html =~ "data-contradiction" or html =~ ~s( title=")
   end
 
   # ============================================================
@@ -205,7 +206,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "active/draft — deliberate hold-back, renders plainly, NO warning (was the old bug)" do
@@ -216,7 +217,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
       assert shop_status_attr(html) == "draft"
     end
 
@@ -228,14 +229,14 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "active/absent — absent defaults to active (matches catalogue), no warning" do
       html = render_item_cell(%{status: "active", data: %{}})
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
       assert shop_status_attr(html) == "default"
     end
 
@@ -247,14 +248,14 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "inactive/absent — absent defaults to archived (matches catalogue), no warning" do
       html = render_item_cell(%{status: "inactive", data: %{}})
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
       assert shop_status_attr(html) == "default"
     end
 
@@ -266,7 +267,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "inactive/active — disagreement shown, but NO warning: #53 closed this leak" do
@@ -277,7 +278,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
   end
 
@@ -295,9 +296,9 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         data = if shop_raw, do: %{"ecommerce" => %{"shop_status" => shop_raw}}, else: %{}
         html = render_item_cell(%{status: catalogue_status, data: data})
 
-        assert contradiction_attr(html) == "false",
+        refute warns?(html),
                "catalogue=#{inspect(catalogue_status)} shop=#{inspect(shop_raw)}: " <>
-                 "expected contradiction=false, got #{contradiction_attr(html)}"
+                 "expected no warning"
       end
     end
   end
@@ -336,7 +337,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
   # Categories — the corrected warning rule
   # ============================================================
 
-  describe "categories: only 'shop active, catalogue deleted' warns" do
+  describe "categories: never warn — View.category_status/2 forces hidden on a deleted category" do
     test "active/active — agree, no warning" do
       html =
         render_category_cell(%{
@@ -345,7 +346,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "active/hidden — deliberate hold-back (owner merged this away), no warning" do
@@ -356,7 +357,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
       assert shop_status_attr(html) == "hidden"
     end
 
@@ -368,32 +369,36 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
     test "active/absent — absent defaults to active, agrees with catalogue, no warning" do
       html = render_category_cell(%{status: "active", data: %{}})
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
-    test "deleted/active — WARNS: excluded from listings, reachable by direct link" do
+    test "deleted/active — disagreement shown, NO warning: the page redirects (af9308b)" do
+      # `View.category_status/2` forces "hidden" for a catalogue-deleted
+      # category no matter what `shop_status` says, so this stale
+      # "active" is display-only information — the raw value is still
+      # what the cell shows, never the forced one.
       html =
         render_category_cell(%{
           status: "deleted",
           data: %{"ecommerce" => %{"shop_status" => "active"}}
         })
 
-      assert html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "true"
+      refute warns?(html)
+      assert catalogue_status_attr(html) == "deleted"
+      assert shop_status_attr(html) == "active"
     end
 
-    test "deleted/absent — WARNS: shop defaults to active unconditionally, catalogue is deleted" do
+    test "deleted/absent — shop defaults to active, catalogue is deleted, NO warning" do
       html = render_category_cell(%{status: "deleted", data: %{}})
 
-      assert html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "true"
+      refute warns?(html)
       assert shop_status_attr(html) == "default"
     end
 
@@ -405,24 +410,22 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
         })
 
       refute html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "false"
+      refute warns?(html)
     end
 
-    test "deleted/unlisted — WARNS: the category page's gate is a block-list of just \"hidden\", so this soft-deleted category is still reachable" do
-      # `CatalogCategory.do_mount/3` only redirects on the resolved
-      # status literally being "hidden" — "unlisted" (and "active")
-      # both fall through to rendering the page. A category rule
-      # modelled on the item page's ALLOW-list gate (only "active"
-      # passes) missed this: "unlisted" isn't "active" either, so an
-      # allow-list-shaped predicate wrongly said "no warning" here.
+    test "deleted/unlisted — NO warning: do_mount/3's block-list gate sees the forced \"hidden\"" do
+      # `CatalogCategory.do_mount/3` redirects only on a resolved status
+      # of literally "hidden" — and `View.category_status/2` resolves a
+      # catalogue-deleted category to exactly that regardless of the
+      # stored "unlisted", so the page is not reachable.
       html =
         render_category_cell(%{
           status: "deleted",
           data: %{"ecommerce" => %{"shop_status" => "unlisted"}}
         })
 
-      assert html =~ "hero-exclamation-triangle"
-      assert contradiction_attr(html) == "true"
+      refute warns?(html)
+      assert shop_status_attr(html) == "unlisted"
     end
   end
 
@@ -430,18 +433,19 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
     # 2 catalogue statuses × 4 shop-status values (nil = absent) = 8
     # rows — every value either domain can actually hold
     # (`Schemas.Category.@statuses`, `CategoryCommerce.@statuses`).
-    test "contradiction fires exactly on shop!=hidden with catalogue==deleted, never otherwise" do
+    test "no combination warns on the category side either" do
       for catalogue_status <- ~w(active deleted),
           shop_raw <- [nil, "active", "unlisted", "hidden"] do
         data = if shop_raw, do: %{"ecommerce" => %{"shop_status" => shop_raw}}, else: %{}
         html = render_category_cell(%{status: catalogue_status, data: data})
 
-        effective_shop = shop_raw || "active"
-        expected = effective_shop != "hidden" and catalogue_status == "deleted"
-
-        assert contradiction_attr(html) == to_string(expected),
+        refute warns?(html),
                "catalogue=#{inspect(catalogue_status)} shop=#{inspect(shop_raw)}: " <>
-                 "expected contradiction=#{expected}, got #{contradiction_attr(html)}"
+                 "expected no warning"
+
+        # Both raw signals are still surfaced for the admin.
+        assert catalogue_status_attr(html) == catalogue_status
+        assert shop_status_attr(html) == (shop_raw || "default")
       end
     end
   end
@@ -474,19 +478,14 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnTest do
   end
 
   # ============================================================
-  # Contradiction hint translation
+  # The "(default)" marker still translates
   # ============================================================
 
-  describe "the contradiction hint" do
+  describe "the (default) marker" do
     test "resolves through PhoenixKitEcommerce.Gettext" do
-      # Item-side contradiction never fires any more (PR #53 closed that
-      # leak at the source — see `render_item/1`), so only a category
-      # record can still exercise the warning hint.
-      record = %{status: "deleted", data: %{"ecommerce" => %{"shop_status" => "active"}}}
-
       Gettext.put_locale(PhoenixKitEcommerce.Gettext, "de")
-      html = render_category_cell(record)
-      assert html =~ ~s(title="Der Shop meldet diesen Eintrag als aktiv)
+      html = render_category_cell(%{status: "active", data: %{}})
+      assert html =~ "(Standard)"
     after
       Gettext.put_locale(PhoenixKitEcommerce.Gettext, "en")
     end

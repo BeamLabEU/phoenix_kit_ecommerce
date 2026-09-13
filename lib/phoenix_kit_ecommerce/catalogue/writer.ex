@@ -195,40 +195,60 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   `data["ecommerce"]["shopify"]["set_slugs"]`) that this product no
   longer has options for is detached and dropped from both that list and
   `price_modifiers`.
+
+  `opts[:actor_uuid]` is forwarded to `AttributeSets.create_set/2` and
+  `ValueResolver.resolve_many/3` (→ `create_value/3`) as the creator of
+  any set or value this sync has to create: entities' `created_by_uuid`
+  is NOT NULL, so without it the first unknown option fails to create
+  and that error is what this function returns — deliberately not
+  papered over with an invented system uuid.
+
+  The result's `:warnings` lists any variant whose Shopify price is not
+  what the written per-option modifiers reconstruct (see
+  `VariantMapper.build/1`'s moduledoc): the modifiers are still written,
+  since they are the best additive fit, but the caller must surface the
+  mismatch rather than let an under-priced matrix pass silently.
   """
-  @spec sync_variants(Item.t(), map()) ::
-          {:ok, %{sets: non_neg_integer(), values_created: non_neg_integer()}}
+  @spec sync_variants(Item.t(), map(), keyword()) ::
+          {:ok,
+           %{sets: non_neg_integer(), values_created: non_neg_integer(), warnings: [String.t()]}}
           | {:error, :catalogue_source_inactive | term()}
-  def sync_variants(item, shopify_product) when is_map(item) and is_map(shopify_product) do
+  def sync_variants(item, shopify_product, opts \\ [])
+      when is_map(item) and is_map(shopify_product) and is_list(opts) do
     if ProductSource.current() == ProductSource.Catalogue do
-      do_sync_variants(item, shopify_product)
+      do_sync_variants(item, shopify_product, opts)
     else
       {:error, :catalogue_source_inactive}
     end
   end
 
-  defp do_sync_variants(item, shopify_product) do
-    %{sets: mapped_sets, modifiers: modifiers} = VariantMapper.build(shopify_product)
+  defp do_sync_variants(item, shopify_product, opts) do
+    %{sets: mapped_sets, modifiers: modifiers, warnings: warnings} =
+      VariantMapper.build(shopify_product)
+
+    create_opts = Keyword.take(opts, [:actor_uuid])
 
     mapped_sets
     |> Enum.reduce_while({:ok, [], 0}, fn set, {:ok, acc, created_total} ->
-      case sync_one_set(item, set, Map.get(modifiers, set.slug, %{})) do
+      case sync_one_set(item, set, Map.get(modifiers, set.slug, %{}), create_opts) do
         {:ok, result} -> {:cont, {:ok, [result | acc], created_total + result.created}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
     |> case do
       {:ok, results, values_created} ->
-        finalize_variant_sync(item, Enum.reverse(results), values_created)
+        with {:ok, summary} <- finalize_variant_sync(item, Enum.reverse(results), values_created) do
+          {:ok, Map.put(summary, :warnings, warnings)}
+        end
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp sync_one_set(item, %{name: name, slug: slug, values: values}, modifiers_by_label) do
-    with {:ok, set} <- find_or_create_set(name, slug),
-         {:ok, value_slugs, created} <- resolve_values(slug, values),
+  defp sync_one_set(item, %{name: name, slug: slug, values: values}, modifiers_by_label, opts) do
+    with {:ok, set} <- find_or_create_set(name, slug, opts),
+         {:ok, value_slugs, created} <- resolve_values(slug, values, opts),
          {:ok, _attachment} <- AttributeSets.attach_set(item.uuid, set.uuid),
          :ok <- AttributeSets.set_attachment_selection(item.uuid, set.uuid, value_slugs) do
       {:ok,
@@ -240,15 +260,15 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     end
   end
 
-  defp find_or_create_set(name, slug) do
+  defp find_or_create_set(name, slug, opts) do
     case PhoenixKitEntities.get_entity_by_name("catalogue_set_" <> slug) do
-      nil -> AttributeSets.create_set(%{name: name, slug: slug, kind: "fixed"})
+      nil -> AttributeSets.create_set(%{name: name, slug: slug, kind: "fixed"}, opts)
       entity -> {:ok, entity}
     end
   end
 
-  defp resolve_values(slug, values) do
-    resolved = ValueResolver.resolve_many(slug, values)
+  defp resolve_values(slug, values, opts) do
+    resolved = ValueResolver.resolve_many(slug, values, opts)
 
     Enum.reduce_while(values, {:ok, [], 0}, fn label, {:ok, slugs, created} ->
       case Map.fetch!(resolved, label) do
@@ -406,16 +426,26 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       get_in(item.data || %{}, ["ecommerce", "shopify", "image_ids"]) || %{}
 
     # A caller syncing the whole catalogue passes ONE index in (see
-    # `build_url_index/0`) so the shop-wide lookup costs one query per
+    # `build_reuse_index/0`) so the shop-wide lookup costs one query per
     # run rather than one per product; a single-item caller omits it and
-    # gets a freshly built one.
-    url_index = Keyword.get(opts, :url_index) || build_url_index()
+    # gets a freshly built one. `active_uuids` comes from the SAME query
+    # (every active file with a download source) — a known image id
+    # whose file has since been deleted/deactivated must not be reused
+    # as if it were still there, so path (a) below checks membership and
+    # falls through to (b)/(c) otherwise.
+    {url_index, active_uuids} = reuse_index_from(opts)
 
     images = (shopify_product["images"] || []) |> Enum.sort_by(&(&1["position"] || 0))
 
     {image_ids, file_uuids, downloaded, reused, errors, fresh_urls} =
       Enum.reduce(images, {%{}, [], 0, 0, [], %{}}, fn image, acc ->
-        resolve_image(image, known_image_ids, url_index, downloader, user_uuid, acc)
+        resolve_image(
+          image,
+          {known_image_ids, url_index, active_uuids},
+          downloader,
+          user_uuid,
+          acc
+        )
       end)
 
     # Order is already Shopify position order; dedupe defensively so a
@@ -436,15 +466,30 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
          # The index the caller passed in, plus what this product just
          # downloaded — a catalogue-wide run threads this into the next
          # product so a shared image is fetched once, not once per item.
-         url_index: Map.merge(url_index, fresh_urls)
+         url_index: Map.merge(url_index, fresh_urls),
+         active_uuids: MapSet.union(active_uuids, MapSet.new(Map.values(fresh_urls)))
        }}
     end
   end
 
-  defp resolve_image(image, known_image_ids, url_index, downloader, user_uuid, acc) do
+  defp reuse_index_from(opts) do
+    case {Keyword.get(opts, :url_index), Keyword.get(opts, :active_uuids)} do
+      {nil, _} ->
+        %{url_index: url_index, active_uuids: active_uuids} = build_reuse_index()
+        {url_index, active_uuids}
+
+      {url_index, nil} ->
+        {url_index, build_reuse_index().active_uuids}
+
+      {url_index, active_uuids} ->
+        {url_index, active_uuids}
+    end
+  end
+
+  defp resolve_image(image, indexes, downloader, user_uuid, acc) do
     id = to_string(image["id"])
 
-    case reused_file_uuid(id, image["src"], known_image_ids, url_index) do
+    case reused_file_uuid(id, image["src"], indexes) do
       {:ok, uuid} ->
         put_resolved(acc, id, uuid, :reused)
 
@@ -453,15 +498,29 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     end
   end
 
-  # (a) an id already synced before; (b) failing that, a linked file
-  # whose download source matches this image's `src` (query stripped).
-  # Both are provable bindings to THIS Shopify image — never a guess
-  # from list position.
-  defp reused_file_uuid(id, src, known_image_ids, url_index) do
+  # (a) an id already synced before — only while that file is still an
+  # active Storage row; (b) failing that, a linked file whose download
+  # source matches this image's `src` (query stripped). Both are provable
+  # bindings to THIS Shopify image — never a guess from list position.
+  defp reused_file_uuid(id, src, {known_image_ids, url_index, active_uuids}) do
     case Map.fetch(known_image_ids, id) do
-      {:ok, uuid} -> {:ok, uuid}
-      :error -> Map.fetch(url_index, normalize_image_url(src))
+      {:ok, uuid} ->
+        if MapSet.member?(active_uuids, uuid),
+          do: {:ok, uuid},
+          else: Map.fetch(url_index, normalize_image_url(src))
+
+      :error ->
+        Map.fetch(url_index, normalize_image_url(src))
     end
+  end
+
+  # A Shopify image with no usable `src` (seen in the wild as `src: nil`
+  # on a payload mid-upload) is recorded as this image's error and
+  # skipped — handing `nil` to the downloader raised out of the whole
+  # product, and from there out of the worker's run.
+  defp download_image(id, src, _downloader, _user_uuid, acc)
+       when not is_binary(src) or src == "" do
+    put_error(acc, id, :missing_src)
   end
 
   defp download_image(id, src, downloader, user_uuid, acc) do
@@ -552,12 +611,27 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   in the same run still reuse them.
   """
   @spec build_url_index() :: %{optional(String.t()) => String.t()}
-  def build_url_index do
-    from(f in StorageFile,
-      where: f.status == "active" and fragment("?->>'source_url' IS NOT NULL", f.metadata)
-    )
-    |> RepoHelper.repo().all()
-    |> source_url_index()
+  def build_url_index, do: build_reuse_index().url_index
+
+  @doc """
+  `build_url_index/0` plus the set of uuids of those same active files —
+  one query for both. Pass the pair back in as `opts[:url_index]` and
+  `opts[:active_uuids]`; `sync_images/3`'s result carries both, merged
+  with whatever that product just downloaded, for the next product in
+  the run.
+  """
+  @spec build_reuse_index() :: %{
+          url_index: %{optional(String.t()) => String.t()},
+          active_uuids: MapSet.t(String.t())
+        }
+  def build_reuse_index do
+    files =
+      from(f in StorageFile,
+        where: f.status == "active" and fragment("?->>'source_url' IS NOT NULL", f.metadata)
+      )
+      |> RepoHelper.repo().all()
+
+    %{url_index: source_url_index(files), active_uuids: MapSet.new(files, & &1.uuid)}
   end
 
   # Indexes files by their (query-stripped) download source URL. When

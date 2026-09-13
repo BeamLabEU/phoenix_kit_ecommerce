@@ -80,12 +80,12 @@ defmodule PhoenixKitEcommerce.DependencyFloorTest do
     assert function_exported?(Currency, :effective_rate, 2)
   end
 
-  test "the phoenix_kit floor ships V185's cart/order freeze columns" do
+  test "the phoenix_kit floor ships V186's cart/order freeze columns" do
     # Cart/CartItem cast base_currency/exchange_rate/base_unit_price —
-    # real table columns core's V185 adds, not attrs the schema merely
-    # declares. Below V185 the ALTER TABLEs never ran, so every
-    # cart/cart-item write in Э1-E1 raises Postgrex.Error
+    # real table columns core's V186 adds (first released in 2.16.0), not
+    # attrs the schema merely declares. Below V186 the ALTER TABLEs never
+    # ran, so every cart/cart-item write in Э1-E1 raises Postgrex.Error
     # (undefined_column) at the database, not a dropped-attr no-op.
-    assert CoreMigrations.current_version() >= 185
+    assert CoreMigrations.current_version() >= 186
   end
 end

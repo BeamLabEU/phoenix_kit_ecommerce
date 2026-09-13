@@ -42,4 +42,18 @@ defmodule PhoenixKitEcommerce.Web.SettingsNamePrefixesTest do
 
     assert NamePrefix.prefixes() == []
   end
+
+  test "a non-string prefixes value is refused, not stored", %{conn: conn} do
+    PhoenixKit.Settings.update_setting(NamePrefix.setting_key(), "3D Printed")
+    {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+    html = render_submit(view, "save_name_prefixes", %{"prefixes" => ["x", "y"]})
+
+    assert html =~ "Invalid value"
+    assert NamePrefix.prefixes() == ["3D Printed"]
+
+    html = render_submit(view, "save_name_prefixes", %{})
+    assert html =~ "Invalid value"
+    assert NamePrefix.prefixes() == ["3D Printed"]
+  end
 end

@@ -31,7 +31,24 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
   `Decimal.new("0.00")` (equal minima, not a rounded near-zero) as long
   as Shopify's own price strings carry two decimals, which
   `Decimal.sub/2` preserves.
+
+  ## Non-additive matrices are reported, not hidden
+
+  Per-option modifiers can only ever express an ADDITIVE price matrix:
+  the storefront prices a selection as `base + Σ modifier(value)`. A
+  Shopify matrix that is not additive — S/L × Red/Blue at 10/12/15/20
+  gives S:0, L:5, Red:0, Blue:2 and predicts 17 for L-Blue, where
+  Shopify charges 20 — is silently under-priced by that reconstruction.
+  `build/1` therefore re-derives every priced variant's price from the
+  modifiers it just computed and lists each mismatch in `:warnings`
+  (one human-readable line per variant, naming the product), logging
+  each at `:warning` as well. The modifiers are still returned — they
+  are the best additive fit — but a caller writing them must surface the
+  warnings (the media sync worker records them on the run's per-product
+  errors) rather than let the write pass as clean.
   """
+
+  require Logger
 
   alias PhoenixKitEcommerce.Catalogue.SetSlug
 
@@ -43,14 +60,19 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
           values: [String.t()],
           position: pos_integer()
         }
-  @type t :: %{sets: [set()], modifiers: %{String.t() => %{String.t() => Decimal.t()}}}
+  @type t :: %{
+          sets: [set()],
+          modifiers: %{String.t() => %{String.t() => Decimal.t()}},
+          warnings: [String.t()]
+        }
 
   @doc """
-  Builds `%{sets: [...], modifiers: %{set_slug => %{label => Decimal}}}`
-  from `shopify_product`'s `"options"` and `"variants"`. Both keys
-  default to `[]` when absent (a payload with no options at all — every
-  variant on the default "Title" option — yields `sets: [], modifiers:
-  %{}`).
+  Builds `%{sets: [...], modifiers: %{set_slug => %{label => Decimal}},
+  warnings: [...]}` from `shopify_product`'s `"options"` and
+  `"variants"`. Both keys default to `[]` when absent (a payload with no
+  options at all — every variant on the default "Title" option — yields
+  `sets: [], modifiers: %{}, warnings: []`). See the moduledoc for what
+  `:warnings` carries.
   """
   @spec build(map()) :: t()
   def build(shopify_product) when is_map(shopify_product) do
@@ -58,11 +80,12 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
     variants = List.wrap(shopify_product["variants"])
     min_all_price = variants |> variant_prices() |> decimal_min()
 
-    {sets, modifiers} =
+    {sets, modifiers, fields} =
       options
       |> Enum.with_index(1)
       |> Enum.reject(fn {option, _fallback_position} -> default_option?(option) end)
-      |> Enum.reduce({[], %{}}, fn {option, fallback_position}, {sets_acc, modifiers_acc} ->
+      |> Enum.reduce({[], %{}, []}, fn {option, fallback_position},
+                                       {sets_acc, modifiers_acc, fields_acc} ->
         position = option["position"] || fallback_position
         name = option["name"]
         slug = SetSlug.normalise(name)
@@ -73,10 +96,60 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
 
         set = %{name: name, slug: slug, values: values, position: position}
 
-        {[set | sets_acc], Map.put(modifiers_acc, slug, value_modifiers)}
+        {[set | sets_acc], Map.put(modifiers_acc, slug, value_modifiers),
+         [{slug, field} | fields_acc]}
       end)
 
-    %{sets: Enum.reverse(sets), modifiers: modifiers}
+    warnings = additive_mismatches(shopify_product, variants, modifiers, fields, min_all_price)
+
+    %{sets: Enum.reverse(sets), modifiers: modifiers, warnings: warnings}
+  end
+
+  # Reconstructs each priced variant's price as `min_all + Σ its option
+  # modifiers` and reports every variant Shopify prices differently. A
+  # variant whose option field is missing contributes 0 for that option,
+  # matching what the storefront does for an unselected option.
+  defp additive_mismatches(_product, _variants, _modifiers, [], _min_all_price), do: []
+  defp additive_mismatches(_product, _variants, _modifiers, _fields, nil), do: []
+
+  defp additive_mismatches(product, variants, modifiers, fields, min_all_price) do
+    product_label = product["handle"] || product["id"] || product["title"] || "unknown"
+
+    Enum.flat_map(variants, fn variant ->
+      predicted = predicted_price(variant, modifiers, fields, min_all_price)
+
+      case variant_price(variant) do
+        nil -> []
+        actual -> mismatch_for(product_label, variant, actual, predicted)
+      end
+    end)
+  end
+
+  defp predicted_price(variant, modifiers, fields, min_all_price) do
+    Enum.reduce(fields, min_all_price, fn {slug, field}, sum ->
+      Decimal.add(sum, get_in(modifiers, [slug, variant[field]]) || Decimal.new(0))
+    end)
+  end
+
+  defp mismatch_for(product_label, variant, actual, predicted) do
+    if Decimal.eq?(predicted, actual),
+      do: [],
+      else: [mismatch_warning(product_label, variant, actual, predicted)]
+  end
+
+  defp mismatch_warning(product_label, variant, actual, predicted) do
+    variant_label = variant["title"] || variant["id"] || inspect(variant_option_values(variant))
+
+    message =
+      "variant #{variant_label}: Shopify price #{Decimal.to_string(actual)} is not additive " <>
+        "over its options (per-option modifiers reconstruct #{Decimal.to_string(predicted)})"
+
+    Logger.warning("Shopify variant sync: product #{product_label}, #{message}")
+    message
+  end
+
+  defp variant_option_values(variant) do
+    ~w(option1 option2 option3) |> Enum.map(&variant[&1]) |> Enum.reject(&is_nil/1)
   end
 
   defp default_option?(%{"name" => name}) when name in @default_option_names, do: true

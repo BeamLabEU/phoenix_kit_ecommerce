@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
@@ -236,10 +237,18 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     end
   end
 
-  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices. The
+  # re-mark of `@currency` is immediate; the product re-fetch (needed when
+  # a base-currency reprice rewrote `product.price`) is coalesced into one
+  # `:fx_reload` per burst — billing broadcasts once per currency.
   @impl true
   def handle_info({:currencies_changed, _code}, socket) do
-    socket = Helpers.refresh_display_currency(socket)
+    {:noreply, socket |> Helpers.refresh_display_currency() |> Helpers.schedule_fx_reload()}
+  end
+
+  @impl true
+  def handle_info(:fx_reload, socket) do
+    socket = Helpers.fx_reload_done(socket)
 
     {:noreply,
      if socket.assigns[:category] && socket.assigns[:products] do
@@ -336,6 +345,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
 
   @impl true
   def render(assigns) do
+    # One settings read per render, threaded into every name shown on the
+    # page: `NamePrefix.prefixes/0` is a GenServer round-trip on core's
+    # settings cache, and a grid of cards plus category tiles would
+    # otherwise repeat it per name.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <%!-- `pt-0`: the host layout already pads the top of every page. --%>
@@ -359,7 +374,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
               </.link>
             </li>
             <%= if @category.parent do %>
-              <% parent_name = Translations.get_display(@category.parent, :name, @current_language) %>
+              <% parent_name = Translations.get_display(@category.parent, :name, @current_language, prefixes: @name_prefixes) %>
               <li>
                 <.link navigate={Shop.category_url(@category.parent, @current_language) <> @filter_qs}>
                   {parent_name}
@@ -482,6 +497,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                       currency={@currency}
                       language={@current_language}
                       filter_qs={@filter_qs}
+                      name_prefixes={@name_prefixes}
                     />
                   <% end %>
                 </div>

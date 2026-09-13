@@ -22,11 +22,32 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   nested inside a `<li>`, rendered as an indented sub-list), `table`
   (`thead`/`tbody`/`tfoot`/`tr`/`td`/`th`), `strong`/`b`, `em`/`i`, `a`,
   `img`, plus a transparent `div` wrapper and HTML entity decoding
-  (`&amp;`, `&nbsp;`, `&quot;`, `&#39;`, numeric character references).
+  (`&nbsp;`, `&quot;`, `&#39;`, numeric character references).
   `<script>`, `<style>`, `<noscript>` and `<template>` elements are
   dropped entirely, content included, rather than leaking their raw
   text. A bare `<`/`>` that isn't part of a real tag (e.g. "5 < 10") is
   left as plain text instead of being parsed as a tag boundary.
+
+  The three markup-significant entities — `&lt;`, `&gt;` and `&amp;`
+  (and their numeric forms `&#60;`/`&#x3c;`, `&#62;`/`&#x3e;`,
+  `&#38;`/`&#x26;`, which are normalised to the named form) — are kept
+  ENCODED in emitted text. CommonMark decodes entities in text itself,
+  so the rendered result is identical, but decoding them here would turn
+  a seller's escaped `&lt;script&gt;` example into a raw HTML block in
+  the stored Markdown: `<script>` stripping above only ever sees real
+  tags, and the storefront's Markdown renderer emits raw HTML blocks
+  as-is, so under `shop_allow_raw_html_descriptions` the example would
+  execute. Keeping them encoded also keeps `convert/1` idempotent (a
+  second pass never sees a tag that wasn't there) and a literal
+  `&lt;b&gt;` example stays visible text rather than rendering bold.
+  Attribute values (`href`, `src`, `alt`) are decoded fully, since they
+  are URLs/plain strings, not Markdown text.
+
+  An `<a>` whose `href` scheme is not `http`, `https`, `mailto` or `tel`
+  (or a relative path) — `javascript:`, `data:`, `vbscript:`, … — is
+  emitted as its text alone, without the link: the href is copied
+  verbatim into `[text](href)` and the renderer would hand it to the
+  browser unchanged.
   Text with no HTML tag at all is returned byte-for-byte unchanged, which
   is what makes `convert/1` idempotent — converting an already-converted
   (or always-plain) value is a no-op. Markdown already present in text
@@ -214,7 +235,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       # for a missing one.
       [dq, sq, uq] = value_groups ++ List.duplicate("", 3 - length(value_groups))
       value = Enum.find([dq, sq, uq], "", &(&1 != ""))
-      Map.put_new(acc, String.downcase(key), decode_entities(value))
+      Map.put_new(acc, String.downcase(key), decode_attribute_entities(value))
     end)
   end
 
@@ -481,16 +502,44 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   end
 
   defp render_inline_node({:element, "a", attrs, children}) do
-    "[" <> render_inline(children) <> "](" <> Map.get(attrs, "href", "") <> ")"
+    href = Map.get(attrs, "href", "")
+
+    if safe_href?(href) do
+      "[" <> render_inline(children) <> "](" <> href <> ")"
+    else
+      render_inline(children)
+    end
   end
 
   defp render_inline_node({:element, "img", attrs, _children}) do
-    "![" <> Map.get(attrs, "alt", "") <> "](" <> Map.get(attrs, "src", "") <> ")"
+    "![" <>
+      encode_markup_chars(Map.get(attrs, "alt", "")) <> "](" <> Map.get(attrs, "src", "") <> ")"
   end
 
   # Any other/unknown tag (e.g. a stray `<span>`) is unwrapped — its
   # content is kept, the tag itself is dropped.
   defp render_inline_node({:element, _other, _attrs, children}), do: render_inline(children)
+
+  # Browsers strip ASCII whitespace and control characters from a URL
+  # before reading its scheme, so `" java\tscript:alert(1)"` is a
+  # `javascript:` URL to them — the same characters are removed here
+  # before the scheme is inspected, or the guard could be walked around
+  # with a tab. An empty href or one with no scheme at all (a relative
+  # path, `#anchor`, `?query`) is kept: it can only ever point within
+  # the storefront's own origin.
+  @safe_schemes ~w(http https mailto tel)
+
+  defp safe_href?(href) do
+    cleaned =
+      href
+      |> String.replace(~r/[\s\x00-\x1f\x7f]+/u, "")
+      |> String.downcase()
+
+    case Regex.run(~r/^([a-z][a-z0-9+.\-]*):/, cleaned) do
+      [_, scheme] -> scheme in @safe_schemes
+      nil -> true
+    end
+  end
 
   defp collapse_blank_lines(text), do: Regex.replace(~r/\n{3,}/, text, "\n\n")
 
@@ -513,15 +562,37 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
   # can leave hugging a `<br>`- or block-boundary-derived newline.
   defp trim_line_edges(text), do: Regex.replace(~r/[ \t]*\n[ \t]*/, text, "\n")
 
+  # Text-node decoding. `&lt;`/`&gt;`/`&amp;` are deliberately NOT
+  # decoded (see the moduledoc): the numeric forms of those three
+  # codepoints are normalised to the named entity instead of a literal
+  # character, and everything else decodes as usual.
   defp decode_entities(text) do
     text
     |> String.replace("&nbsp;", " ")
     |> String.replace("&quot;", "\"")
     |> String.replace(~r/&(?:#39|apos);/, "'")
+    |> decode_numeric_entities()
+  end
+
+  # Attribute values are URLs and plain strings, never Markdown text, so
+  # they decode completely — `href="?a=1&amp;b=2"` must become a real
+  # `&` in the link target. `&amp;` goes last so `&amp;lt;` decodes to
+  # the literal text `&lt;`, not to `<`.
+  defp decode_attribute_entities(value) do
+    value
+    |> decode_entities()
     |> String.replace("&lt;", "<")
     |> String.replace("&gt;", ">")
-    |> decode_numeric_entities()
     |> String.replace("&amp;", "&")
+  end
+
+  # The inverse of `decode_attribute_entities/1` for a decoded string
+  # that is about to be emitted INTO Markdown text (an image's `alt`).
+  defp encode_markup_chars(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
   end
 
   defp decode_numeric_entities(text) do
@@ -537,6 +608,10 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdown do
       end)
     )
   end
+
+  defp codepoint_to_string(?<), do: "&lt;"
+  defp codepoint_to_string(?>), do: "&gt;"
+  defp codepoint_to_string(?&), do: "&amp;"
 
   defp codepoint_to_string(codepoint)
        when is_integer(codepoint) and codepoint >= 0 and codepoint <= 0x10FFFF and

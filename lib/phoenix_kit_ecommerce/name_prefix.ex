@@ -86,16 +86,33 @@ defmodule PhoenixKitEcommerce.NamePrefix do
       Printed" keeps its full name rather than rendering blank)
 
   Any non-binary (`nil` included) passes through unchanged.
+
+  `strip/1` reads the setting (`prefixes/0`) on every call — a cached
+  read, but one that goes through core's settings-cache process, so a
+  page rendering a hundred names serializes a hundred round-trips
+  through it. A component rendering a LIST computes `prefixes/0` once
+  and calls `strip/2` with it instead.
   """
   @spec strip(any()) :: any()
-  def strip(name) when is_binary(name) do
-    case prefixes() do
+  def strip(name) when is_binary(name), do: strip(name, prefixes())
+  def strip(other), do: other
+
+  @doc """
+  `strip/1` with the configured prefix list already in hand — the form
+  every per-row render should use (see `strip/1`). `prefixes` is what
+  `prefixes/0` returns; anything else (a malformed value) is treated as
+  "no prefixes", so the name renders exactly as stored.
+  """
+  @spec strip(any(), [String.t()] | any()) :: any()
+  def strip(name, prefixes) when is_binary(name) and is_list(prefixes) do
+    case Enum.filter(prefixes, &is_binary/1) do
       [] -> name
       configured -> strip_longest(name, configured) || name
     end
   end
 
-  def strip(other), do: other
+  def strip(name, _prefixes) when is_binary(name), do: name
+  def strip(other, _prefixes), do: other
 
   defp strip_longest(name, prefixes) do
     prefixes

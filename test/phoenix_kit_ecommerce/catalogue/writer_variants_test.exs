@@ -1,11 +1,13 @@
 defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
   @moduledoc """
-  `PhoenixKitEcommerce.Catalogue.Writer.sync_variants/2` (Block 7 Task 2,
+  `PhoenixKitEcommerce.Catalogue.Writer.sync_variants/3` (Block 7 Task 2,
   `docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`):
   Shopify options/variants attached to a catalogue item as attribute
   sets, unknown option values created as `draft`, slug-keyed price
   modifiers written to `data["ecommerce"]["price_modifiers"]`, and a
-  second run against the same payload staying idempotent.
+  second run against the same payload staying idempotent. Every call
+  passes `actor_uuid:` — entities' `created_by_uuid` is NOT NULL, so a
+  set/value created on behalf of the sync needs a real creator.
 
   Needs `phoenix_kit_catalogue` AND `phoenix_kit_entities` loaded (with
   their migrations applied to the test DB) — excluded via
@@ -38,6 +40,8 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
       set_product_source("legacy")
     end)
 
+    actor = fixture_user()
+
     {:ok, catalogue} =
       Catalogue.create_catalogue(%{name: "writer-variants-#{System.unique_integer([:positive])}"})
 
@@ -56,7 +60,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
         }
       })
 
-    %{item: item}
+    %{item: item, actor_uuid: actor.uuid}
   end
 
   defp set_product_source(value) do
@@ -95,22 +99,25 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     }
   end
 
-  describe "sync_variants/2 — legacy source" do
-    test "is a no-op returning :catalogue_source_inactive", %{item: item} do
-      assert Writer.sync_variants(item, two_option_product()) ==
+  describe "sync_variants/3 — legacy source" do
+    test "is a no-op returning :catalogue_source_inactive", %{item: item, actor_uuid: actor_uuid} do
+      assert Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid) ==
                {:error, :catalogue_source_inactive}
     end
   end
 
-  describe "sync_variants/2 — catalogue source" do
+  describe "sync_variants/3 — catalogue source" do
     setup do
       set_product_source("catalogue")
       :ok
     end
 
-    test "attaches one set per option, creating every unknown value as draft", %{item: item} do
-      assert {:ok, %{sets: 2, values_created: 5}} =
-               Writer.sync_variants(item, two_option_product())
+    test "attaches one set per option, creating every unknown value as draft", %{
+      item: item,
+      actor_uuid: actor_uuid
+    } do
+      assert {:ok, %{sets: 2, values_created: 5, warnings: []}} =
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       attachments = AttributeSets.list_attachments(item.uuid)
       assert length(attachments) == 2
@@ -126,9 +133,10 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     end
 
     test "writes slug-keyed price modifiers, the cheapest value at each option is \"0.00\"", %{
-      item: item
+      item: item,
+      actor_uuid: actor_uuid
     } do
-      {:ok, _} = Writer.sync_variants(item, two_option_product())
+      {:ok, _} = Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       updated = Catalogue.get_item!(item.uuid)
       modifiers = updated.data["ecommerce"]["price_modifiers"]
@@ -146,9 +154,10 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     end
 
     test "records the attached set slugs under data.ecommerce.shopify.set_slugs", %{
-      item: item
+      item: item,
+      actor_uuid: actor_uuid
     } do
-      {:ok, _} = Writer.sync_variants(item, two_option_product())
+      {:ok, _} = Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       updated = Catalogue.get_item!(item.uuid)
       assert Enum.sort(updated.data["ecommerce"]["shopify"]["set_slugs"]) == ["color", "size"]
@@ -158,8 +167,11 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
       assert updated.data["ecommerce"]["shopify"]["product_id"] == "999"
     end
 
-    test "selects values in Shopify's variant-first-appearance order", %{item: item} do
-      {:ok, _} = Writer.sync_variants(item, two_option_product())
+    test "selects values in Shopify's variant-first-appearance order", %{
+      item: item,
+      actor_uuid: actor_uuid
+    } do
+      {:ok, _} = Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       size_set = PhoenixKitEntities.get_entity_by_name("catalogue_set_size")
       values = AttributeSets.list_values(size_set)
@@ -174,13 +186,14 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     end
 
     test "a second run against the same payload creates no new values and stays attached", %{
-      item: item
+      item: item,
+      actor_uuid: actor_uuid
     } do
       assert {:ok, %{sets: 2, values_created: 5}} =
-               Writer.sync_variants(item, two_option_product())
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       assert {:ok, %{sets: 2, values_created: 0}} =
-               Writer.sync_variants(item, two_option_product())
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       assert length(AttributeSets.list_attachments(item.uuid)) == 2
 
@@ -189,9 +202,12 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     end
 
     test "detaches a set the product no longer has options for, and drops it from set_slugs", %{
-      item: item
+      item: item,
+      actor_uuid: actor_uuid
     } do
-      {:ok, material_set} = AttributeSets.create_set(%{name: "Material", kind: "fixed"})
+      {:ok, material_set} =
+        AttributeSets.create_set(%{name: "Material", kind: "fixed"}, actor_uuid: actor_uuid)
+
       {:ok, _} = AttributeSets.attach_set(item.uuid, material_set.uuid)
 
       {:ok, item} =
@@ -199,7 +215,8 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
           data: put_in(item.data, ["ecommerce", "shopify", "set_slugs"], ["material"])
         })
 
-      assert {:ok, %{sets: 2}} = Writer.sync_variants(item, two_option_product())
+      assert {:ok, %{sets: 2}} =
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       attachments = AttributeSets.list_attachments(item.uuid)
       refute Enum.any?(attachments, &(&1.set_uuid == material_set.uuid))
@@ -209,7 +226,10 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
       refute Map.has_key?(updated.data["ecommerce"]["price_modifiers"], "material")
     end
 
-    test "preserves a price modifier for a set this sync run never touched", %{item: item} do
+    test "preserves a price modifier for a set this sync run never touched", %{
+      item: item,
+      actor_uuid: actor_uuid
+    } do
       # An operator-authored modifier for a set Shopify has never driven
       # (not in `set_slugs`, so `sync_variants/2` never attaches or
       # detaches it) — `finalize_variant_sync/3` must write only the
@@ -223,7 +243,8 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
             })
         })
 
-      assert {:ok, %{sets: 2}} = Writer.sync_variants(item, two_option_product())
+      assert {:ok, %{sets: 2}} =
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
 
       updated = Catalogue.get_item!(item.uuid)
       assert updated.data["ecommerce"]["price_modifiers"]["brand"] == %{"acme" => "1.50"}
@@ -231,13 +252,18 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
       assert Map.has_key?(updated.data["ecommerce"]["price_modifiers"], "color")
     end
 
-    test "a product with only Shopify's default option attaches no sets", %{item: item} do
+    test "a product with only Shopify's default option attaches no sets", %{
+      item: item,
+      actor_uuid: actor_uuid
+    } do
       product = %{
         "options" => [%{"name" => "Title", "position" => 1, "values" => ["Default Title"]}],
         "variants" => [%{"option1" => "Default Title", "price" => "9.99"}]
       }
 
-      assert {:ok, %{sets: 0, values_created: 0}} = Writer.sync_variants(item, product)
+      assert {:ok, %{sets: 0, values_created: 0}} =
+               Writer.sync_variants(item, product, actor_uuid: actor_uuid)
+
       assert AttributeSets.list_attachments(item.uuid) == []
     end
   end

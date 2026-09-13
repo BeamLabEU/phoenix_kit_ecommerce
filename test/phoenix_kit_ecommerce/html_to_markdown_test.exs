@@ -71,8 +71,7 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
                "### Title\n\nBody."
     end
 
-    test "HTML entities decode: &amp; &nbsp; &quot; &#39; and numeric refs" do
-      assert HtmlToMarkdown.convert("<p>A &amp; B</p>") == "A & B"
+    test "HTML entities decode: &nbsp; &quot; &#39; and numeric refs" do
       assert HtmlToMarkdown.convert("<p>A&nbsp;B</p>") == "A B"
       assert HtmlToMarkdown.convert("<p>She said &quot;hi&quot;</p>") == ~s(She said "hi")
       assert HtmlToMarkdown.convert("<p>It&#39;s here</p>") == "It's here"
@@ -83,6 +82,83 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
     test "an invalid numeric entity is dropped rather than crashing convert/1" do
       assert HtmlToMarkdown.convert("<p>Bad &#xD800; entity</p>") == "Bad  entity"
       assert HtmlToMarkdown.convert("<p>Too big &#x110000;</p>") == "Too big"
+    end
+
+    test "&amp; stays encoded in text (CommonMark decodes it at render time)" do
+      assert HtmlToMarkdown.convert("<p>A &amp; B</p>") == "A &amp; B"
+      assert HtmlToMarkdown.convert("<p>A &#38; B &#x26; C</p>") == "A &amp; B &amp; C"
+    end
+
+    test "an attribute value decodes fully, including &amp;" do
+      assert HtmlToMarkdown.convert(~s(<p><a href="https://example.com/?a=1&amp;b=2">x</a></p>)) ==
+               "[x](https://example.com/?a=1&b=2)"
+    end
+
+    test "an image alt containing markup characters is re-encoded, not emitted raw" do
+      assert HtmlToMarkdown.convert(
+               ~s(<p><img src="https://example.com/x.png" alt="a &lt;b&gt; c"></p>)
+             ) ==
+               "![a &lt;b&gt; c](https://example.com/x.png)"
+    end
+  end
+
+  describe "convert/1 - escaped markup in text is never turned into real markup" do
+    test "an escaped <script> example stays escaped text, not a raw HTML block" do
+      html = "<p>Example: &lt;script&gt;alert(1)&lt;/script&gt;</p>"
+      converted = HtmlToMarkdown.convert(html)
+
+      assert converted == "Example: &lt;script&gt;alert(1)&lt;/script&gt;"
+      refute converted =~ "<script"
+      assert HtmlToMarkdown.convert(converted) == converted
+    end
+
+    test "numeric forms of < and > are normalised to the named entity, not decoded" do
+      assert HtmlToMarkdown.convert("<p>&#60;b&#62;bold&#x3c;/b&#x3E;</p>") ==
+               "&lt;b&gt;bold&lt;/b&gt;"
+    end
+
+    test "a literal &lt;b&gt; example renders as visible text, not bold" do
+      assert HtmlToMarkdown.convert("<p>Write &lt;b&gt; for bold</p>") ==
+               "Write &lt;b&gt; for bold"
+    end
+
+    test "&amp;lt; stays the literal text &lt; after rendering (double-encoded input)" do
+      assert HtmlToMarkdown.convert("<p>&amp;lt;</p>") == "&amp;lt;"
+    end
+  end
+
+  describe "convert/1 - unsafe link schemes" do
+    test "a javascript: href drops the link and keeps the text" do
+      assert HtmlToMarkdown.convert(~s|<p><a href="javascript:alert(1)">click</a></p>|) ==
+               "click"
+    end
+
+    test "scheme matching is case-insensitive and ignores whitespace/control characters" do
+      assert HtmlToMarkdown.convert(~s|<p><a href="  JavaScript:alert(1)">click</a></p>|) ==
+               "click"
+
+      assert HtmlToMarkdown.convert(~s|<p><a href="java\tscript:alert(1)">click</a></p>|) ==
+               "click"
+
+      assert HtmlToMarkdown.convert("<p><a href=\"javascript:alert(1)\">click</a></p>") ==
+               "click"
+    end
+
+    test "data: and vbscript: hrefs drop the link" do
+      assert HtmlToMarkdown.convert(~s(<p><a href="data:text/html,x">click</a></p>)) == "click"
+      assert HtmlToMarkdown.convert(~s(<p><a href="vbscript:x">click</a></p>)) == "click"
+    end
+
+    test "http, https, mailto, tel and relative hrefs keep the link" do
+      assert HtmlToMarkdown.convert(~s(<p><a href="HTTP://example.com">x</a></p>)) ==
+               "[x](HTTP://example.com)"
+
+      assert HtmlToMarkdown.convert(~s(<p><a href="mailto:a@b.c">x</a></p>)) ==
+               "[x](mailto:a@b.c)"
+
+      assert HtmlToMarkdown.convert(~s(<p><a href="tel:+123">x</a></p>)) == "[x](tel:+123)"
+      assert HtmlToMarkdown.convert(~s(<p><a href="/products/x">x</a></p>)) == "[x](/products/x)"
+      assert HtmlToMarkdown.convert(~s(<p><a href="#top">x</a></p>)) == "[x](#top)"
     end
   end
 
@@ -228,11 +304,11 @@ defmodule PhoenixKitEcommerce.HtmlToMarkdownTest do
                "Weight > 3kg needs a pallet"
     end
 
-    test "&lt; and &gt; decode correctly alongside bare < and >" do
+    test "&lt; and &gt; stay encoded alongside bare < and > (CommonMark decodes them)" do
       html = "<p>Fits sizes 5 &lt; x &gt; 12, but also raw 5 < 10 and > 3 here</p>"
 
       assert HtmlToMarkdown.convert(html) ==
-               "Fits sizes 5 < x > 12, but also raw 5 < 10 and > 3 here"
+               "Fits sizes 5 &lt; x &gt; 12, but also raw 5 < 10 and > 3 here"
     end
 
     test "convert/1 is idempotent for text containing bare < and >" do

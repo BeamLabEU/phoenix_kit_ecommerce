@@ -136,8 +136,69 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
      |> assign(:expanded_sections, MapSet.new())
      |> assign(:expanded_rows, MapSet.new())
      |> assign(:page, %{})
+     |> assign(:diffs, %{})
      |> assign(:applied_any?, false)
      |> assign(:pending, nil)}
+  end
+
+  # `@diffs` — `%{{field, product_uuid} => %{summary: ..., words: ...}}`
+  # — memoizes `TextDiff.summary/2` (and `words/2` for an expanded row)
+  # for exactly the rows `build_section/2` will render: the loaded page
+  # of every EXPANDED text-field section. `render/1` only reads it.
+  #
+  # Computing summaries inside `render/1` meant a full Myers diff per
+  # loaded row on EVERY render — including each `{:media_sync_progress,
+  # _}` message the worker broadcasts every 20 products, which has
+  # nothing to do with the change list. At ~12 ms per rewritten
+  # body_html row (TextDiff's own measurement) and 25 rows per loaded
+  # page, a media sync run turned into hundreds of milliseconds of diff
+  # work per progress tick in the LiveView process. Now a summary is
+  # computed once, when the row first becomes visible, and reused until
+  # the change list is replaced; entries for rows no longer visible are
+  # dropped so an applied row's stale diff never lingers.
+  #
+  # Every handler that changes what is visible — `@changes`, `@page`,
+  # `@expanded_sections`, `@expanded_rows` — pipes through this.
+  defp refresh_diffs(socket) do
+    %{changes: changes, source: source, page: page, diffs: previous} = socket.assigns
+    expanded_sections = socket.assigns.expanded_sections
+    expanded_rows = socket.assigns.expanded_rows
+
+    diffs =
+      (changes || [])
+      |> visible_sections(source)
+      |> Enum.filter(fn {field, _} -> field in @text_fields and field in expanded_sections end)
+      |> Enum.flat_map(fn {field, field_changes} ->
+        loaded = current_page(page, field, length(field_changes)) * @per_page
+
+        field_changes
+        |> Enum.take(loaded)
+        |> Enum.map(&{field, &1})
+      end)
+      |> Map.new(fn {field, change} ->
+        key = {field, change.product_uuid}
+        %{current: current, incoming: incoming} = Map.fetch!(change.changes, field)
+        expanded? = MapSet.member?(expanded_rows, key)
+        {key, diff_entry(Map.get(previous, key), current || "", incoming || "", expanded?)}
+      end)
+
+    assign(socket, :diffs, diffs)
+  end
+
+  # A cached summary is kept; `words` is computed only once the row is
+  # expanded (and kept once computed — collapsing and re-expanding a row
+  # costs nothing).
+  defp diff_entry(nil, current, incoming, expanded?) do
+    %{
+      summary: TextDiff.summary(current, incoming),
+      words: expanded? && TextDiff.words(current, incoming)
+    }
+  end
+
+  defp diff_entry(%{words: words} = entry, current, incoming, expanded?) do
+    if expanded? and not is_list(words),
+      do: %{entry | words: TextDiff.words(current, incoming)},
+      else: entry
   end
 
   @impl true
@@ -161,6 +222,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
              expanded_sections: MapSet.new(),
              expanded_rows: MapSet.new(),
              page: %{},
+             diffs: %{},
              applied_any?: false,
              pending: nil
            )
@@ -203,7 +265,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
       field ->
         {:noreply,
-         assign(socket, :expanded_sections, toggle(socket.assigns.expanded_sections, field))}
+         socket
+         |> assign(:expanded_sections, toggle(socket.assigns.expanded_sections, field))
+         |> refresh_diffs()}
     end
   end
 
@@ -214,7 +278,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
       field ->
         {:noreply,
-         assign(socket, :expanded_rows, toggle(socket.assigns.expanded_rows, {field, uuid}))}
+         socket
+         |> assign(:expanded_rows, toggle(socket.assigns.expanded_rows, {field, uuid}))
+         |> refresh_diffs()}
     end
   end
 
@@ -372,6 +438,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remove_field_for(changes, succeeded, field))
+     |> refresh_diffs()
      |> flash_bulk_result(succeeded, failed, field)}
     |> clear_pending()
   end
@@ -400,6 +467,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remaining)
+     |> refresh_diffs()
      |> flash_everything_result(succeeded, failed)}
     |> clear_pending()
   end
@@ -439,22 +507,25 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         socket
       ) do
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        checking: false,
        changes: changes,
        source: source,
        fallback_reason: reason,
        total_shopify_products: total_shopify_products,
        matched_local_products: matched_local_products
-     )}
+     )
+     |> refresh_diffs()}
   end
 
   def handle_async(:check_diff, {:ok, {:error, reason}}, socket) do
-    {:noreply, assign(socket, checking: false, changes: nil, error: format_error(reason))}
+    {:noreply,
+     assign(socket, checking: false, changes: nil, diffs: %{}, error: format_error(reason))}
   end
 
   def handle_async(:check_diff, {:exit, reason}, socket) do
-    {:noreply, assign(socket, checking: false, changes: nil, error: inspect(reason))}
+    {:noreply, assign(socket, checking: false, changes: nil, diffs: %{}, error: inspect(reason))}
   end
 
   defp apply_row_change(socket, changes, change, field) do
@@ -471,6 +542,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         {:noreply,
          socket
          |> assign(:changes, remove_field_for(changes, [change], field))
+         |> refresh_diffs()
          |> assign(:applied_any?, true)
          |> put_flash(
            :info,
@@ -531,6 +603,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remove_field_for(changes, succeeded, field))
+     |> refresh_diffs()
      |> flash_bulk_result(succeeded, failed, field)}
   end
 
@@ -735,6 +808,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         socket
         |> assign(:page, Map.put(socket.assigns.page, field, current + 1))
         |> assign(:pending, nil)
+        |> refresh_diffs()
     end
   end
 
@@ -922,10 +996,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     %{eligible_count: length(eligible), excluded_count: length(excluded)}
   end
 
+  # Summaries/word-diffs come from `@diffs` (see `refresh_diffs/1`) —
+  # never computed here, since this runs on every render.
   defp build_row(change, field, assigns) do
     %{current: current, incoming: incoming} = Map.fetch!(change.changes, field)
     text? = field in @text_fields
-    expanded? = MapSet.member?(assigns.expanded_rows, {field, change.product_uuid})
+    key = {field, change.product_uuid}
+    expanded? = MapSet.member?(assigns.expanded_rows, key)
+    diff = text? && Map.get(assigns.diffs, key)
 
     %{
       change: change,
@@ -935,8 +1013,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       incoming: incoming,
       text?: text?,
       expanded?: expanded?,
-      summary: text? && TextDiff.summary(current || "", incoming || ""),
-      words: text? && expanded? && TextDiff.words(current || "", incoming || "")
+      summary: diff && diff.summary,
+      words: (expanded? && diff && diff.words) || false
     }
   end
 

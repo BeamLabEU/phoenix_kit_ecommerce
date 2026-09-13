@@ -8,16 +8,17 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
   directly — the ecommerce half is unit-tested independent of that
   transaction.
 
-  NOTE ON SCOPE: this checkout's `feature/currency-e3` branch (stacked on
-  e2, no e3 commits of its own yet) does not carry the catalogue product
-  source (`ProductSource` / `phoenix_kit_catalogue`). That work exists only
-  on `stand/catalogue-product-source+currency-e1`, never merged into the
-  e1->e2->e3 stack — confirmed by grepping this checkout's `lib/` (no
-  `ProductSource` symbol anywhere) and `mix.exs` (no `phoenix_kit_catalogue`
-  dependency). So this suite exercises only the LEGACY
-  `PhoenixKitEcommerce.Product` path. Catalogue-item repricing is simply
-  not implemented here; it needs its own coverage once that branch merges
-  into the currency stack.
+  NOTE ON SCOPE: only the LEGACY `PhoenixKitEcommerce.Product` store is
+  repriced. The catalogue product source
+  (`PhoenixKitEcommerce.ProductSource.Catalogue`, backed by
+  `phoenix_kit_catalogue`) is not repriced yet, and the function refuses
+  with `{:error, {:unsupported_product_source, _}}` while it is the active
+  source rather than doing a partial job. This suite runs against the
+  legacy source (the default); catalogue-item repricing needs its own
+  coverage once it is implemented.
+
+  Carts are left alone here by design; the lazy catch-up of a cart that
+  outlives the switch is `rebase_cart/1`, covered by `CartRebaseTest`.
 
   Legacy price modifiers do not live in one per-item field the way a
   catalogue item's `data["ecommerce"]["price_modifiers"]` reportedly would.

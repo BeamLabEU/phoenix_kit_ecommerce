@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
@@ -53,6 +54,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
       assigns
       |> assign(:has_active, FilterHelpers.has_active_filters?(assigns.active_filters))
       |> assign(:categories_open, true)
+      # Resolved once per render, not once per category entry in the tree.
+      |> assign(:name_prefixes, NamePrefix.prefixes())
 
     ~H"""
     <div class="space-y-1">
@@ -98,7 +101,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                 </.link>
               </li>
               <%= for cat <- @categories do %>
-                <% cat_name = Translations.get_display(cat, :name, @current_language) %>
+                <% cat_name =
+                  Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes) %>
                 <li>
                   <.link
                     navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
@@ -150,6 +154,9 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   attr :filter_qs, :string, default: ""
 
   def category_nav(assigns) do
+    # Resolved once per render, not once per category entry.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <%= if @categories != [] do %>
       <details open={@open} class="group">
@@ -171,7 +178,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
               </.link>
             </li>
             <%= for cat <- @categories do %>
-              <% cat_name = Translations.get_display(cat, :name, @current_language) %>
+              <% cat_name =
+                Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes) %>
               <li>
                 <.link
                   navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
