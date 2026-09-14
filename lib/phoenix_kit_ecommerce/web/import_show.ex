@@ -13,6 +13,8 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
+  import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @impl true
   def mount(%{"uuid" => uuid}, _session, socket) do
@@ -60,10 +62,6 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
     lang = Translations.default_language()
     Map.get(value, lang) || Map.get(value, "en") || Map.values(value) |> List.first() || "-"
   end
-
-  defp format_price(nil), do: "-"
-  defp format_price(%Decimal{} = price), do: Decimal.to_string(price)
-  defp format_price(price) when is_number(price), do: to_string(price)
 
   @impl true
   def render(assigns) do
@@ -179,7 +177,7 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
                         <td class="text-base-content/70 text-sm">
                           {get_localized(product.slug) || "-"}
                         </td>
-                        <td>{format_price(product.price)}</td>
+                        <td>{format_price(product.price, Shop.get_default_currency_code())}</td>
                         <td>
                           <div class="flex gap-1">
                             <.link
@@ -191,7 +189,7 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
                               <span class="sm:hidden whitespace-nowrap">{Gettext.gettext(PhoenixKitWeb.Gettext, "View")}</span>
                             </.link>
                             <.link
-                              navigate={Routes.path("/admin/shop/products/#{product.uuid}/edit")}
+                              navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
                               class="btn btn-xs btn-outline btn-info tooltip tooltip-bottom"
                               data-tip={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
                             >

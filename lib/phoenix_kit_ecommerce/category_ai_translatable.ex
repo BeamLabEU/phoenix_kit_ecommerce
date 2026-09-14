@@ -285,7 +285,8 @@ defmodule PhoenixKitEcommerce.CategoryAITranslatable do
   # helper for the full rationale.
   defp stampable_field_hashes(%Category{} = fresh, source_lang, lang, fields) do
     for schema_field <- fields,
-        source = fresh |> Map.get(schema_field, %{}) |> then(&(&1 || %{})) |> Map.get(source_lang),
+        source =
+          fresh |> Map.get(schema_field, %{}) |> then(&(&1 || %{})) |> Map.get(source_lang),
         is_binary(source) and String.trim(source) != "",
         translation = fresh |> Map.get(schema_field, %{}) |> then(&(&1 || %{})) |> Map.get(lang),
         is_binary(translation) and String.trim(translation) != "",

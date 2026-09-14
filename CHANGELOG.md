@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 0.5.0 - 2026-09-04
+## Unreleased
 
 ### Added
 
@@ -108,6 +108,456 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tick always leaves headroom for other background work; raise them
   together (batch × target languages = ceiling) when clearing a large
   backlog, and drop them back afterward.
+
+## 0.5.4 - 2026-09-13
+
+Week review of 0.5.0–0.5.3 (PRs #32–#55); findings and resolutions in
+`dev_docs/pull_requests/2026/week-2026-09-13-review/CLAUDE_REVIEW.md`.
+
+### Fixed
+
+- **An open cart is rebased after a base-currency change.** New
+  `rebase_cart/1` runs before add-to-cart, rate refresh, guest merge and
+  conversion, so a cart frozen against the old base can no longer receive
+  a new-base line unconverted (same-currency cart) or double-converted
+  (foreign-currency cart). Drift reports nothing for a stale cart.
+- **Shipping methods are listed in the cart's currency.** Cart and
+  checkout showed base-currency amounts under the cart's symbol, and the
+  FREE badge compared a display subtotal to a base threshold; both now go
+  through `present_shipping_method/2`.
+- **A crafted storefront query string no longer 500s.** `?vendor[x]=y` and
+  `?price_min[]=1` crashed every catalog, category and product mount.
+- **Catalogue search matches translated names**, and the admin category
+  search works on the catalogue source (it was a silent no-op).
+- **Shopify variants sync passes the acting user to attribute-set
+  creation**; entities requires a creator, so every set creation failed
+  against the current catalogue.
+- **`HtmlToMarkdown` keeps `&lt;`/`&gt;` encoded in text** — an escaped
+  `<script>` example no longer becomes a raw HTML block — and drops
+  `javascript:` links to plain text.
+- **Image importer: DNS-rebinding guard and streamed size cap.** The
+  validated address is pinned for the connection (hostname kept for
+  SNI/verification); `content-length` is checked before the body and the
+  download halts at the limit instead of buffering first.
+- **Media sync isolates a crashing product** instead of failing the run and
+  retrying from the first product; an image with no `src` is recorded, not
+  raised.
+- **Base-currency reprice no longer broadcasts per product from inside
+  billing's transaction.**
+- Admin status filter agrees with the storefront on retired catalogue items
+  with a stale `shop_status`; numeric `price_modifiers` leaves are
+  stringified (and validated) rather than silently treated as zero; legacy
+  facet SQL honours the schema prefix; retired-category "still reachable"
+  warning removed from the shop-status column; settings whitelist for
+  category display/icon modes; a non-additive Shopify variant matrix now
+  records a per-product warning instead of under-pricing silently.
+- **Test harness applies entities' and catalogue's migration chains** when
+  the catalogue path bridge is on; the 136 `:catalogue`-tagged tests failed
+  on setup (`undefined_column: slug`) before this.
+- Gettext catalogues re-extracted; every ru/et/de/fr entry translated.
+
+### Changed
+
+- **⚠️ `phoenix_kit` floor `~> 2.15` → `~> 2.16`.** The cart-freeze columns
+  are core's V186, first shipped in 2.16.0; 2.15.x (V183) raised
+  `undefined_column` on every cart write. Existing lockfiles already
+  resolve 2.22.x, so only a host pinned to 2.15 is affected.
+- Storefront pages re-fetch products once per rate batch (coalesced 250 ms)
+  instead of once per changed currency; name-prefix stripping reads the
+  setting once per render instead of once per name; Shopify sync page
+  caches row diffs instead of recomputing them on every render; checkout
+  conversion validates catalogue lines in one query.
+- `fx_rate_drift_alert_pct` is read as `shop_fx_rate_drift_alert_pct`; the
+  old key still applies while the new one is unset.
+- Oban queue documented correctly as `shop_imports` (README, AGENTS.md,
+  install task); AGENTS.md dependency, tree and settings sections brought up
+  to date; 0.5.0 entry now records the floor raises it shipped.
+
+## 0.5.3 - 2026-09-10
+
+PRs #54–#55.
+
+### Added
+
+- **Single-product Shopify check, domain layer.**
+  `AdminClient.fetch_product/3` does an unpaginated point fetch of one
+  Shopify product by id, and `Sync.check_one/3` resolves a local
+  product's Shopify link, fetches it, and diffs it with the same
+  `ProductDiff.diff/4` the full `check/2` sync uses — for a future
+  per-product admin panel that shouldn't have to pull the whole catalog
+  to check one item. (#55)
+- **`apply_change/3`/`apply_changes/3` accept `opts[:currency_verdict]`**,
+  a precomputed `currency_verdict/1` result, so a caller applying
+  several fields of one product in a single operator action pays for
+  the live Shopify currency lookup once instead of once per field.
+  Default behavior (no option given) is unchanged. (#55)
+
+### Fixed
+
+- **A `catalogue_view_test.exs` fixture was silently testing the wrong
+  code path** after `phoenix_kit_catalogue`'s `translated_description/2`
+  started reading the description column before the `_description`
+  data-bucket override at a record's own primary language. The fixture
+  now blanks the column so the body_html-derived fallback the test
+  names is what actually runs; no assertion changed. (#54)
+- **Stale gettext source references on "Shop status"** corrected across
+  all three catalogues. (#54)
+
+## 0.5.2 - 2026-09-10
+
+PRs #48–#53 plus the post-merge review sweep in
+`dev_docs/pull_requests/2026/{49..53}-*/CLAUDE_REVIEW.md`.
+
+### Added
+
+- **Storefront layout: shared breadcrumb/actions row, wider product
+  gallery.** The catalog, category and product pages share one row
+  (breadcrumbs left, cart and admin edit link right) instead of a bar
+  plus a separate breadcrumb row; the product gallery widens to 65% and
+  carries the description under it on wide screens while keeping the
+  buy box ahead of the description on a phone. (#48)
+- **Shopify sync admin page paginates with `load_more`, not a
+  hand-rolled pager**, so a section's client-side bulk selection
+  survives loading more rows instead of being replaced page by page.
+  (#48)
+- **Storefront and admin "Edit" links open the catalogue editor** (via
+  `Helpers.admin_edit_path/3`, `shop.manage_catalog`-gated, carrying
+  `return_to` so save-and-exit returns to the page/list the visitor came
+  from) once the catalogue product source is on, across the storefront
+  pages and the admin products/categories/import screens. (#48, #49)
+- **Per-filter clear button** on the storefront sidebar, and a house
+  icon on the Shop breadcrumb. (#49)
+- **Configurable storefront name prefix stripping** (`shop_name_prefixes`,
+  empty by default). A prefix like "3D Printed" is stripped from
+  product/category names at display time only (storefront, cart,
+  checkout, confirmation, order history) — the stored name a Shopify
+  re-sync owns is never rewritten. Longest-applicable prefix wins on
+  overlapping configuration. (#51)
+- **Catalogue admin: a "Shop status" column** on the item/category
+  lists, showing `data["ecommerce"]["shop_status"]` next to the
+  catalogue's own status, with a warning badge on the one combination
+  that is an actual reachability hazard (category only, as of this
+  release — see Fixed). (#52)
+
+### Fixed
+
+- **Category featured-item images** stopped resolving after the move to
+  `phoenix_kit_catalogue`: `category_view/2` never populated the
+  `:featured_product` association the image fallback chain reads. Now
+  resolved for a batch of categories in at most two queries. (#49)
+- **A Shopify sync at an item's primary language** wrote the new
+  title/body_html to the column but left a pre-existing primary-language
+  override bucket entry stale, so the sync appeared to do nothing. Now
+  writes through to both. (#50)
+- **A catalogue item retired via its own status** (`inactive` /
+  `discontinued` / `deleted`) stayed reachable and purchasable at its
+  storefront URL whenever a left-over `shop_status` said `active`.
+  Status derivation now checks the catalogue's own status first; a
+  `shop_status` can only restrict visibility further, never resurrect a
+  retired item. (#53)
+- **The same stale-status reachability bug on the category side**
+  (`category_view/2` never deferred to the catalogue's own category
+  status at all) — found in post-merge review of #53, fixed alongside
+  it: a catalogue-deleted category with a left-over non-hidden
+  `shop_status` stayed reachable at its category page URL.
+- **The catalogue admin's item-side "Shop status" warning badge**
+  (added in #52) became dead/incorrect the moment the #53 fix above
+  closed the reachability leak it existed to catch — it would have kept
+  firing on ordinary retired items. Removed; the category-side warning
+  (the leak that remains real) is unaffected.
+- **`mix compile --warnings-as-errors` (and `mix precommit`)** failed on
+  any checkout without the optional `phoenix_kit_catalogue` dependency
+  declared, from a missing duck-type compile guard on
+  `Web.Helpers.admin_edit_path/3` (introduced in #48).
+- **`mix test` failed to compile at all**, for the whole suite, on the
+  same kind of checkout, from a test file's `%PhoenixKitCatalogue.Schemas.Category{}`
+  struct literal (needs the struct resolvable at compile time) instead
+  of `struct!/2` (#49); and 4 tests asserting catalogue-only editor
+  behavior were missing a `:catalogue` tag, so they failed
+  deterministically without the optional dependency (#48, #49).
+
+## 0.5.1 - 2026-09-09
+
+### Added
+
+- **Shopify currency guard (per-domain-currency design §7.5).** The
+  Shopify sync now looks up the connected store's own currency once per
+  batch and refuses to write `:price`/`:compare_at_price` — or refuses a
+  whole create, or a whole variant/option-modifier sync — when it
+  disagrees with the shop's base currency; a non-price field on the same
+  change still applies. A failed lookup fails open and logs at `error`
+  (never silently disables the guard); a real mismatch logs at
+  `warning`. Newly-created catalogue items are labelled with the base
+  currency. (#47)
+- **Shopify image sync reuses files shop-wide, not per product.** A live
+  run against 665 products re-downloaded 582 already-stored images
+  because the "already downloaded?" check only looked at files linked to
+  the one product being synced; Shopify shops commonly reuse the exact
+  same image across an entire product line. The lookup now matches any
+  active Storage file in the shop by its download source URL, built once
+  per sync run rather than once per product. (#47)
+
+### Fixed
+
+- **Shopify `body_html` is converted to Markdown on the create path
+  too**, matching the update path — a freshly created catalogue item no
+  longer prints literal `**` from unconverted HTML. (#47)
+
+## 0.5.0 - 2026-09-08
+
+PRs #32–#46 plus the post-merge review in
+`dev_docs/pull_requests/2026/0.5.0-release-sweep/GROK_REVIEW.md`.
+
+### Added
+
+- **Opt-in catalogue product source.** `ProductSource` with Legacy (the
+  existing shop tables) and Catalogue adapters, switched by
+  `shop_product_source` in `phoenix_kit_shop_config`. Default remains
+  Legacy and fails closed when `phoenix_kit_catalogue` is not loaded.
+  Catalogue items are projected into `%Product{}`/`%Category{}`
+  view-structs so the storefront, cart and options never need to know
+  which adapter is active. (#34)
+- **Catalogue extension slot.** Duck-typed `catalogue_extensions/0`
+  discovery, `ItemCommerce`/`CategoryCommerce` embedded schemas owning
+  `data["ecommerce"]`, and Shop section components for catalogue item
+  and category forms. No hard `PhoenixKitCatalogue` dependency. (#32)
+- **Storefront filters and variant picker on catalogue attribute sets.**
+  Facet filtering over `attribute_set` (with `metadata_option` as an
+  alias), per-category `storefront_filters` overrides, per-language
+  set/value labels, and the shopper's language threaded into add-to-cart
+  so translated price modifiers apply. (#35)
+- **Per-domain currency.** Carts freeze display currency, base currency
+  and FX rate at creation; line prices snapshot through billing's
+  `present/3` at that frozen rate; shipping thresholds compare in base;
+  orders copy the same triple. Storefront LiveViews re-render on a rate
+  change; checkout flags a stale frozen rate; `compare_at` converts the
+  same way as the asking price. `reprice_for_base_change/3` rewrites
+  catalog amounts when the shop's base currency changes (legacy source
+  only; catalogue shops fail closed). (#33, #38, #39)
+- **Shopify media, variants and collections.** Images land in Storage;
+  product options/variants become catalogue attribute sets; collections
+  become categories with position. Runs as Oban jobs on `shop_imports`.
+  (#36)
+- **Shopify `body_html` is converted to Markdown at sync time**, so the
+  storefront Markdown renderer does not treat `<p>` blocks as opaque
+  HTML. (#42)
+- **Gated admin "Edit" links on storefront pages.** Shop index, category
+  and product pages call core's `AdminEditHelper.assign_admin_edit/3`
+  (via a guarded `maybe_assign_admin_edit/3`, so an older host core
+  without the helper degrades to no link) with `permission: "shop"`.
+  (#41, #46)
+- **Product page layout.** Two-column grid (gallery | buy box);
+  description, `body_html` and specifications sit under the gallery;
+  category navigation is a collapsed panel gated by
+  `shop_sidebar_show_categories`. (#44, #46)
+
+### Fixed
+
+- **Catalogue items no longer stamp `"USD"` by default.** `ItemCommerce`
+  and the Shop section prefill follow the shop's base currency (blank if
+  unset), matching the currency-hygiene contract from 0.4.3. (#32)
+- **Catalogue listing order, counts and facets agree.** Hidden-category
+  filtering no longer uses `DISTINCT ON (uuid)` (which ordered the
+  catalog by uuid); `active_visibility/1` uses the same `COALESCE` as
+  the listing; vendor counts and the price slider honour
+  `exclude_hidden_categories`. (#34, #35)
+- **Category option_schema price modifiers apply at add-to-cart** under
+  the catalogue source (reload now preloads `:category`). (#34, #35)
+- **Tags stay visible on a non-canonical default dialect** (`en-GB` vs
+  the page's `en-US`). Comparison is on language base, not dialect.
+  (#40)
+- **Guest-cart merge no longer copies display amounts across currencies.**
+  A leftover USD user cart plus a guest EUR cart restamps through base
+  at the user cart's frozen rate. (#33)
+- **Checkout shipping eligibility uses the same base subtotal as listing**,
+  so a method excluded from the offer list cannot sneak through
+  conversion on a non-base cart. (#33)
+- **Open storefront tabs reload products after a base-currency reprice**,
+  so the page cannot show the old amount while add-to-cart charges the
+  new one. (#38, #39)
+- **Emptying a cart after the currency table is cleared no longer
+  crashes** on `nil.code`. (#33)
+- **A product with no asking price no longer renders "100% OFF".** (#33)
+- **Product-page admin Edit survives `shop_show_cart_bar: false`.** The
+  cross-language mount assigns `:cart_count`; add-to-cart updates the
+  badge; on-request products no longer show `× 0.00 = 0.00`. (#41, #44,
+  #46)
+- **`create_from_shopify/2` converts `body_html` to Markdown** (the
+  update path already did) and no longer raises on a junk variant
+  price. (#36, #42)
+- **Image-URL HEAD checks re-validate every redirect hop**, matching GET.
+  Invalid HTML numeric entities no longer crash Shopify check. A crash
+  mid media-sync stamps `finished_at` so the button does not stay
+  disabled. (#36, #42)
+
+### Changed
+
+- **⚠️ Dependency floors raised.** `phoenix_kit` `~> 2.6` → `~> 2.15`
+  (`Cart`/`CartItem` cast the `base_currency`/`exchange_rate`/
+  `base_unit_price` columns core's currency-freeze migration adds; below
+  it every cart write raises `undefined_column`) and `phoenix_kit_billing`
+  `~> 0.7` → `~> 0.13` (`Currency.present/3` with a frozen `:rate`,
+  `effective_rate/2`, `resolve_display_currency/1`). A host pinned below
+  either gets an unsolvable dependency set from `mix deps.get`. New
+  runtime dependency `mdex ~> 0.13` (Markdown rendering of synced
+  descriptions). (#33, #38, #42)
+- Settings toggle and option rows sit on a plain flex layout instead of
+  daisyUI `label`/`fieldset-legend` (which styled nothing under v5).
+  (#37)
+- AGENTS.md follows the shared module skeleton; the lockfile is
+  buildable against Hex again. (#43, #45)
+
+## 0.4.3 - 2026-09-05
+
+PR #31 plus the post-merge review in
+`dev_docs/pull_requests/2026/31-currency-hygiene/CLAUDE_REVIEW.md`.
+
+### Added
+
+- **Carts and cart lines require a currency.** `Cart.changeset/2` and
+  `CartItem.changeset/2` validate `:currency` as required, and `Cart`,
+  `CartItem`, `Product` and `ShippingMethod` drop their `default: "USD"`
+  field default. `get_default_currency_code/0` returns `nil`, not `"USD"`,
+  when Billing has no default currency configured, so an empty currency
+  table produces a loud changeset error out of `create_cart/1` instead of a
+  cart silently denominated in dollars. (#31)
+- **The shop's base currency is substituted once, at creation.** A new
+  context-level fallback in `create_product/1` and
+  `create_shipping_method/1` fills in the default currency for callers that
+  omit it — the admin forms and the CSV/Shopify importer alike — matching
+  the incoming attrs map's key style (atom vs string) first, because
+  `Ecto.Changeset.cast/3` raises on a mixed-key map and the callers
+  disagree. A caller that passes `:currency` is never overridden. (#31)
+- **Migration chain V2: `DROP DEFAULT` on the four `currency` columns.**
+  Dropping the Elixir-side `default: "USD"` did not remove the literal —
+  core's baseline declares `DEFAULT 'USD'` on `phoenix_kit_shop_carts`,
+  `…_cart_items`, `…_products` and `…_shipping_methods`, and Ecto omits an
+  unchanged field from the `INSERT`, so Postgres substituted it: the struct
+  came back with `currency: nil` and the row said `"USD"`. V2 drops those
+  column defaults, so an insert that names no currency stores NULL.
+  Existing rows are untouched and `down/1` restores the defaults. This is
+  the chain's first deliberate divergence from core's shape. (#31)
+
+### Fixed
+
+- **The cart page no longer crashes when no default currency is
+  configured.** `create_cart/1` gained a failure mode with the new
+  `validate_required`, but its two storefront callers still hard-matched
+  `{:ok, cart}` — so a shop in that state answered every cart-page request,
+  and every add-to-cart, with a `MatchError`. Both now take the same "The
+  shop is currently unavailable" exit the disabled-shop gate takes. (#31)
+- **The shipping-method form's `"USD"` literals are gone**, in the hidden
+  input and in the text beside it; an unconfigured default currency now
+  reads "No default currency configured" and submits no currency. The
+  comment claiming `validate_length(:currency, is: 3)` would reject that is
+  corrected — `validate_length` skips `nil` and the hidden input's `""` is
+  an Ecto empty value, so the method is simply stored without a currency.
+  (#31)
+
+### Changed
+
+- The test harness applies the module-owned migration chain on top of
+  core's migrations. V1 was purely adoptive so skipping it changed nothing;
+  V2 is not, and a test database that never ran it would still hand out
+  `"USD"` behind the schemas' backs. `migrations_test.exs`'s
+  destructive-statement scan now matches `DROP` by the object kind that
+  follows it, so `DROP DEFAULT` passes while every DROP that can lose data
+  or structure is still refused. (#31)
+
+## 0.4.2 - 2026-09-05
+
+PR #30 plus the post-merge review in
+`dev_docs/pull_requests/2026/30-module-owned-v1-migration-chain/CLAUDE_REVIEW.md`.
+Ships 0.4.1 as well, which was never tagged or published to Hex.
+
+### Added
+
+- **The module owns its migration chain.** `PhoenixKitEcommerce.Migrations` is
+  an adoptive V1 over the ten shop tables core still creates in its V135
+  baseline (`phoenix_kit_shop_config`, `…_shipping_methods`, `…_categories`,
+  `…_products`, `…_product_slugs`, `…_category_slugs`, `…_carts`,
+  `…_cart_items`, `…_import_configs`, `…_import_logs`) plus the two
+  slug-projection functions and their triggers, registered via
+  `migration_module/0` so `mix phoenix_kit.status` and `mix phoenix_kit.update`
+  see it. V1 changes no shape — every statement is `CREATE … IF NOT EXISTS`,
+  `CREATE OR REPLACE` or a `DO $$ … IF NOT EXISTS … $$` guard — and the only
+  new object on an existing install is the `pke_schema:1` marker COMMENT on
+  `phoenix_kit_shop_config`. `down/1` unstamps that marker and drops nothing:
+  the tables are core-created and rolling this chain back must not destroy
+  data. (#30)
+
+### Fixed
+
+- **Prefixed (non-`public` schema) installs no longer get five duplicate unique
+  indexes.** Core names exactly five of the shop indexes with the schema name
+  embedded — the `*_uuid_idx` on `phoenix_kit_shop_cart_items`, `…_carts`,
+  `…_categories`, `…_products` and `…_shipping_methods` (`pn` in core's V135,
+  `__PK_NAME_EXEMPT__` in its expected-schema manifest) — and every other one
+  identically in every schema. The chain emitted all 39 bare, which is correct
+  under `public` (where the tests run) but under a prefix matches none of
+  core's five, so `CREATE UNIQUE INDEX IF NOT EXISTS` created a second
+  redundant unique index on each of those tables and drifted the schema from
+  core's manifest. The five now carry core's embedding, and tests pin both
+  sides of the rule. (#30)
+
+## 0.4.1 - 2026-09-05
+
+PRs #28 and #29 plus the post-merge reviews in
+`dev_docs/pull_requests/2026/28-default-language-snapshot-overwrite/CLAUDE_REVIEW.md`
+and `dev_docs/pull_requests/2026/29-slug-head-and-regenerate/CLAUDE_REVIEW.md`.
+
+### Fixed
+
+- **Editing a default-language field in the admin product or category form no
+  longer discards the edit.** `merge_translations_to_attrs/5` reduced over the
+  mount-time snapshot `build_translations_map/2` took — which carries the
+  default language — *after* writing the value the main form submitted, so the
+  old text was put straight back. The save reported success and the previous
+  content returned. A field that was empty at mount had no snapshot entry and
+  saved correctly, which is why the defect read as "creating works, correcting
+  does not". The reduce now skips the default language; the main form is its
+  only source. (#27, #28)
+- **Saving a product no longer wipes the default language's `body_html`,
+  `seo_title` and `seo_description`.** The product form has main-field inputs
+  for `title`, `slug` and `description` only — the other three are
+  translation-tab-only — so `build_localized_params/4` passed them as `nil`,
+  which `merge_field_value/4` read as "the user cleared it" and deleted. That
+  deletion used to be undone by the same snapshot re-merge #28 removed. `nil`
+  now means "not submitted" (a rendered input always posts a string, `""` when
+  emptied), and both forms build the default-language values with `Map.take/2`
+  so only fields the submission actually carried take part.
+- **An AI-translation slug collision is a changeset error again, not a crash.**
+  Both write paths in `AITranslatable` build their changeset with
+  `Ecto.Changeset.change/2`, which skips `Product.changeset/2` and its
+  `unique_constraint`, so V171's projection pkey raised out of the transaction.
+  `unique_slug/3`'s pre-check cannot prevent it: it matches the exact jsonb key
+  while the projection buckets by base language (`en-US` folds to `en`), and it
+  is a check-then-write across products. The pkey is now named on both paths.
+
+### Added
+
+- **`AITranslatable.regenerate_slug/3`** — an explicit, one-off repair path that
+  recomputes a language's slug from its current title even when a slug exists,
+  bypassing the write-once rule `put_translation/4` enforces for the translation
+  pipeline. Returns `{:error, :no_title}` when the language has no title and
+  `{:ok, %{old: slug, new: slug}}` unchanged when the recomputed slug matches.
+  `dry_run: true` returns the same result without writing or broadcasting, for
+  previewing a bulk repair. Callers own their own redirect bookkeeping — this
+  module has none.
+
+### Changed
+
+- **AI-translated product slugs are shaped from the title head.** `slug_base/3`
+  used to slugify the whole translated title (SEO segments included) and
+  hard-cut it at 80 characters, landing mid-word and making near-identical
+  prefixes collide. It now takes the first segment before a `|` or a spaced dash
+  (` - `, ` – `, ` — `), falls back to the full title when that head slugifies
+  to `""` (CJK, Arabic, emoji), caps at 60 on a word boundary, and carries the
+  default-language slug's numeric identity tail (`-<4+ digits>`, e.g. an
+  imported Shopify id) so a translated slug keeps the id its default-language
+  sibling has. Four-or-more digits, so `unique_slug/3`'s own `-2`/`-3` collision
+  suffixes are never promoted to an identity tail. Existing slugs are untouched
+  — generation is still write-once. (#29)
 
 ## 0.4.0 - 2026-09-02
 

@@ -18,10 +18,21 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
 
   Options:
   - `:category_uuid` - Scope aggregation to a category by UUID
+  - `:category` - The `%Category{}` being viewed (its `storefront_filters`
+    overrides the global filter config for `:filters` - see
+    `Shop.merge_storefront_filters/2`); `nil` for the global catalog page
+  - `:language` - Translates an `attribute_set`/`metadata_option`
+    filter's label to that language's attribute-set display name (see
+    `Shop.get_enabled_storefront_filters/2`), and picks the same
+    language's facet-value labels in `:filter_values` (forwarded to
+    `Shop.aggregate_filter_values/1` as part of `opts`)
   """
   def load_filter_data(opts \\ []) do
-    filters = Shop.get_enabled_storefront_filters()
-    filter_values = Shop.aggregate_filter_values(opts)
+    category = Keyword.get(opts, :category)
+    language = Keyword.get(opts, :language)
+    filters = Shop.get_enabled_storefront_filters(category, language)
+    # The adapter would otherwise resolve this same list a second time.
+    filter_values = Shop.aggregate_filter_values(Keyword.put(opts, :filters, filters))
     {filters, filter_values}
   end
 
@@ -51,12 +62,17 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   end
 
   defp parse_single_filter(%{"type" => type, "key" => key}, params)
-       when type in ["vendor", "metadata_option"] do
+       when type in ["vendor", "metadata_option", "attribute_set"] do
+    # Raw URL params: Plug parses `?vendor[x]=y` into a map and
+    # `?vendor[]=a` into a list that may hold nested maps. Anything that
+    # isn't a comma list or a flat list of binaries is ignored rather than
+    # raised on — a crafted URL must never 500 a storefront page.
     case params[key] do
       nil -> nil
       "" -> nil
       value when is_binary(value) -> String.split(value, ",", trim: true)
-      values when is_list(values) -> values
+      values when is_list(values) -> presence_list(Enum.filter(values, &is_binary/1))
+      _ -> nil
     end
   end
 
@@ -112,6 +128,15 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   defp apply_list_filter("metadata_option", filter, values, opts) do
     existing = Keyword.get(opts, :metadata_filters, [])
     meta = %{key: filter["option_key"] || filter["key"], values: values}
+    Keyword.put(opts, :metadata_filters, existing ++ [meta])
+  end
+
+  # Same shape as `metadata_option` (values are the attribute set's value
+  # SLUGS, not labels — see `Query.filter_by_metadata/2`), keyed by
+  # `set_slug` instead of `option_key`.
+  defp apply_list_filter("attribute_set", filter, values, opts) do
+    existing = Keyword.get(opts, :metadata_filters, [])
+    meta = %{key: filter["set_slug"] || filter["key"], values: values}
     Keyword.put(opts, :metadata_filters, existing ++ [meta])
   end
 
@@ -224,6 +249,17 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   end
 
   @doc """
+  Drops one filter entirely, leaving every other selection in place.
+
+  The sidebar's "Clear filters" button empties everything; this is the
+  per-filter counterpart, so narrowing by size and then starting the size
+  over does not also lose the colour the shopper picked.
+  """
+  def clear_filter(active_filters, filter_key) do
+    Map.delete(active_filters, filter_key)
+  end
+
+  @doc """
   Updates a text search filter.
   Returns updated active_filters map; a blank term removes the filter.
   """
@@ -266,8 +302,14 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
     end
   end
 
-  defp parse_decimal(val) when is_number(val), do: Decimal.new(val)
+  defp parse_decimal(val) when is_integer(val), do: Decimal.new(val)
+  defp parse_decimal(val) when is_float(val), do: Decimal.from_float(val)
   defp parse_decimal(%Decimal{} = val), do: val
+  # `?price_min[]=1` arrives as a list, `?price_min[x]=1` as a map.
+  defp parse_decimal(_), do: nil
+
+  defp presence_list([]), do: nil
+  defp presence_list(values), do: values
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, val), do: Keyword.put(opts, key, val)

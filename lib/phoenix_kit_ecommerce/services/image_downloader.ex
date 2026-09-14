@@ -44,6 +44,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   ## Options
 
     * `:timeout` - HTTP request timeout in milliseconds (default: 30_000)
+    * `:max_bytes` - size limit for the response body (default: 50 MB).
+      A `content-length` above it is refused before any body is read,
+      and a body that grows past it while streaming is halted where it
+      stands — the whole file is never buffered first.
+    * `:req_options` - extra `Req` options merged into every request
+      (tests inject a `plug:` adapter here)
 
   ## Examples
 
@@ -58,14 +64,22 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
           {:ok, String.t(), String.t(), non_neg_integer()} | {:error, atom() | String.t()}
   def download_image(url, opts \\ []) when is_binary(url) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
+    max_bytes = Keyword.get(opts, :max_bytes, @max_file_size)
 
-    with {:ok, url} <- validate_url(url),
-         {:ok, response} <- do_http_request(url, timeout),
+    request = %{
+      timeout: timeout,
+      max_bytes: max_bytes,
+      req_options: Keyword.get(opts, :req_options, [])
+    }
+
+    with {:ok, url, pin} <- validate_url(url),
+         {:ok, response} <- do_http_request(url, pin, request),
          {:ok, content_type} <- extract_content_type(response),
          :ok <- validate_content_type(content_type),
-         :ok <- validate_size(response.body),
-         {:ok, temp_path} <- write_temp_file(response.body, content_type) do
-      {:ok, temp_path, content_type, byte_size(response.body)}
+         :ok <- validate_size(response, max_bytes),
+         body = IO.iodata_to_binary(response.body),
+         {:ok, temp_path} <- write_temp_file(body, content_type) do
+      {:ok, temp_path, content_type, byte_size(body)}
     end
   end
 
@@ -298,8 +312,8 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   @spec valid_image_url?(String.t(), non_neg_integer()) :: boolean()
   defp valid_image_url?(url, timeout) when is_binary(url) do
     case validate_url(url) do
-      {:ok, url} ->
-        case Req.head(url, receive_timeout: timeout) do
+      {:ok, url, pin} ->
+        case head_request(url, pin, %{timeout: timeout, req_options: []}) do
           {:ok, %{status: status, headers: headers}} when status in 200..299 ->
             content_type = get_header_value(headers, "content-type")
             validate_content_type(content_type) == :ok
@@ -315,6 +329,10 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
 
   # Private functions
 
+  # Returns `{:ok, url, pin}`: `pin` is the ONE resolved public address
+  # the request must connect to (see `pinned_request/2`), or `nil` when
+  # no pinning is needed (a literal-IP host, or private networks are
+  # allowed by policy so there is nothing to defend).
   defp validate_url(url) do
     uri = URI.parse(url)
 
@@ -325,9 +343,6 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       is_nil(uri.host) or uri.host == "" ->
         {:error, :invalid_host}
 
-      not Policy.image_import_allow_private_networks?() and private_host?(uri.host) ->
-        {:error, :private_address_blocked}
-
       true ->
         # Upgrade HTTP to HTTPS for security
         url =
@@ -335,7 +350,20 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
             do: String.replace_prefix(url, "http://", "https://"),
             else: url
 
-        {:ok, url}
+        with {:ok, pin} <- pin_for(uri.host) do
+          {:ok, url, pin}
+        end
+    end
+  end
+
+  defp pin_for(host) do
+    if Policy.image_import_allow_private_networks?() do
+      {:ok, nil}
+    else
+      case resolve_public_address(host) do
+        {:ok, pin} -> {:ok, pin}
+        :error -> {:error, :private_address_blocked}
+      end
     end
   end
 
@@ -351,19 +379,40 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # public hostname with a private A record does not slip through.
   # Off by default only via `shop_image_import_allow_private_networks`,
   # for shops importing from a genuinely internal image host.
-  def private_host?(host) do
-    host = String.trim_trailing(host, ".")
+  def private_host?(host), do: resolve_public_address(host) == :error
 
-    case :inet.parse_address(String.to_charlist(host)) do
+  # Resolves `host` ONCE and hands back the address the connection must
+  # use: `{:ok, nil}` for a public literal (nothing to pin — the literal
+  # is the address), `{:ok, address}` for a name whose every answer is
+  # public, `:error` when any answer is private or the name does not
+  # resolve at all.
+  #
+  # Checking the name here and then letting the HTTP client resolve it
+  # AGAIN is a DNS-rebinding hole: a hostile resolver answers the guard's
+  # lookup with a public address and the client's lookup, a moment later,
+  # with 169.254.169.254. The address returned here is what the request
+  # actually connects to (`pinned_request/2`), so the guard and the
+  # connection can never disagree.
+  defp resolve_public_address(host) do
+    host = String.trim_trailing(host, ".")
+    charlist = String.to_charlist(host)
+
+    case :inet.parse_address(charlist) do
       {:ok, address} ->
-        private_address?(address)
+        if private_address?(address), do: :error, else: {:ok, nil}
 
       {:error, _} ->
         # Not a literal — resolve and check every answer. Fail CLOSED on a
         # resolution error: a name we cannot resolve is not a name we can
         # vouch for.
-        resolved_privately?(String.to_charlist(host))
+        charlist |> resolve_all() |> vouch_for_answers()
     end
+  end
+
+  defp vouch_for_answers([]), do: :error
+
+  defp vouch_for_answers(answers) do
+    if Enum.any?(answers, &private_address?/1), do: :error, else: {:ok, hd(answers)}
   end
 
   # BOTH address families are resolved, and the host is blocked if any
@@ -379,16 +428,44 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # Checking both is also strictly safer than checking one: a host with a
   # public A record and a private AAAA record was previously waved through
   # on the strength of the record the resolver happened to be asked for.
-  defp resolved_privately?(host) do
-    answers =
-      Enum.flat_map([:inet, :inet6], fn family ->
-        case :inet.getaddrs(host, family) do
-          {:ok, addresses} -> addresses
-          {:error, _} -> []
-        end
-      end)
+  defp resolve_all(host) do
+    Enum.flat_map([:inet, :inet6], fn family ->
+      case :inet.getaddrs(host, family) do
+        {:ok, addresses} -> addresses
+        {:error, _} -> []
+      end
+    end)
+  end
 
-    answers == [] or Enum.any?(answers, &private_address?/1)
+  @doc false
+  # Rewrites `url` to connect to the already-validated `address` while the
+  # ORIGINAL hostname keeps doing everything a hostname does: Mint's
+  # `:hostname` connect option (`connect_options: [hostname: host]`) is
+  # what it sends as TLS SNI and verifies the certificate against, and
+  # the explicit `host` header is what the origin routes on (Mint would
+  # otherwise derive it from the IP literal in the URL). The port is
+  # kept in the header only when it is not the scheme's default, which
+  # is what Mint's own default host header does.
+  #
+  # `nil` means "no pin" (see `validate_url/1`) and returns the URL and
+  # options untouched.
+  @spec pinned_request(String.t(), :inet.ip_address() | nil) :: {String.t(), keyword()}
+  def pinned_request(url, nil), do: {url, []}
+
+  def pinned_request(url, address) when is_tuple(address) do
+    # `URI.new!/1`, not `parse/1`: it leaves the deprecated `authority`
+    # field nil, so `to_string/1` rebuilds the authority from the pinned
+    # host rather than echoing the original one.
+    uri = URI.new!(url)
+    ip = address |> :inet.ntoa() |> to_string()
+    pinned_url = URI.to_string(%{uri | host: ip})
+
+    host_header =
+      if uri.port in [nil, URI.default_port(uri.scheme)],
+        do: uri.host,
+        else: "#{uri.host}:#{uri.port}"
+
+    {pinned_url, [connect_options: [hostname: uri.host], headers: [{"host", host_header}]]}
   end
 
   # IPv4-mapped and IPv4-compatible IPv6 forms decode to the same host.
@@ -433,13 +510,44 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # auto-follow — which is the tell that this was never intended.
   @max_redirects 5
 
-  defp do_http_request(url, timeout), do: do_http_request(url, timeout, @max_redirects)
+  defp do_http_request(url, pin, request), do: do_http_request(url, pin, request, @max_redirects)
 
-  defp do_http_request(_url, _timeout, 0), do: {:error, :too_many_redirects}
+  defp do_http_request(_url, _pin, _request, 0), do: {:error, :too_many_redirects}
 
-  defp do_http_request(url, timeout, hops_left) do
-    opts = [
-      receive_timeout: timeout,
+  defp do_http_request(url, pin, request, hops_left) do
+    {pinned_url, pin_opts} = pinned_request(url, pin)
+    opts = request_opts(request, pin_opts) ++ [into: body_collector(request.max_bytes)]
+
+    case Req.get(pinned_url, opts) do
+      {:ok, %{status: status} = response} when status in [301, 302, 303, 307, 308] ->
+        follow_redirect(response, url, request, hops_left, &do_http_request/4)
+
+      other ->
+        handle_http_response(other)
+    end
+  end
+
+  # HEAD preflight used to call `Req.head/2` with default redirect
+  # following, so only the first URL was private-range checked. Same hop
+  # loop as GET: `redirect: false`, re-validate every Location.
+  defp head_request(url, pin, request), do: head_request(url, pin, request, @max_redirects)
+  defp head_request(_url, _pin, _request, 0), do: {:error, :too_many_redirects}
+
+  defp head_request(url, pin, request, hops_left) do
+    {pinned_url, pin_opts} = pinned_request(url, pin)
+
+    case Req.head(pinned_url, request_opts(request, pin_opts)) do
+      {:ok, %{status: status} = response} when status in [301, 302, 303, 307, 308] ->
+        follow_redirect(response, url, request, hops_left, &head_request/4)
+
+      other ->
+        other
+    end
+  end
+
+  defp request_opts(request, pin_opts) do
+    base = [
+      receive_timeout: request.timeout,
       redirect: false,
       headers: [
         {"user-agent", "PhoenixKit/1.0 (Image Downloader)"},
@@ -447,16 +555,54 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       ]
     ]
 
-    case Req.get(url, opts) do
-      {:ok, %{status: status} = response} when status in [301, 302, 303, 307, 308] ->
-        follow_redirect(response, url, timeout, hops_left)
+    base
+    |> merge_req_opts(pin_opts)
+    |> merge_req_opts(request.req_options)
+  end
 
-      other ->
-        handle_http_response(other)
+  defp merge_req_opts(opts, extra) do
+    Keyword.merge(opts, extra, fn
+      :headers, existing, added -> existing ++ added
+      _key, _existing, added -> added
+    end)
+  end
+
+  # Streams the response body in, bounding it as it arrives. The body is
+  # accumulated as iodata under `response.body`; the byte count lives in
+  # `response.private` so the same collector serves every hop. The
+  # response is halted — the connection dropped, nothing more read — the
+  # moment either the declared `content-length` or the bytes actually
+  # received pass `max_bytes`: buffering the whole file first and
+  # checking its size afterwards let an oversized (or endless) response
+  # occupy memory up to whatever the origin felt like sending.
+  defp body_collector(max_bytes) do
+    fn {:data, chunk}, {req, resp} ->
+      received = Map.get(resp.private, :received_bytes, 0) + byte_size(chunk)
+      declared = declared_content_length(resp)
+
+      if received > max_bytes or (is_integer(declared) and declared > max_bytes) do
+        {:halt, {req, Req.Response.put_private(resp, :too_large, max(received, declared || 0))}}
+      else
+        resp =
+          resp
+          |> Req.Response.put_private(:received_bytes, received)
+          |> Map.update!(:body, &[&1, chunk])
+
+        {:cont, {req, resp}}
+      end
     end
   end
 
-  defp follow_redirect(response, from_url, timeout, hops_left) do
+  defp declared_content_length(%{headers: headers}) do
+    with value when is_binary(value) <- get_header_value(headers, "content-length"),
+         {length, ""} <- Integer.parse(String.trim(value)) do
+      length
+    else
+      _ -> nil
+    end
+  end
+
+  defp follow_redirect(response, from_url, request, hops_left, continue) do
     location =
       response.headers
       |> Map.new(fn {k, v} -> {String.downcase(k), v} end)
@@ -471,11 +617,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       location ->
         # Resolve relative Locations against the URL we just fetched, then
         # put the target through the SAME validation as the original —
-        # scheme, host, and the private-range check.
+        # scheme, host, and the private-range check — which also pins the
+        # hop's own resolved address, exactly like the first request.
         target = from_url |> URI.merge(location) |> URI.to_string()
 
         case validate_url(target) do
-          {:ok, safe_url} -> do_http_request(safe_url, timeout, hops_left - 1)
+          {:ok, safe_url, pin} -> continue.(safe_url, pin, request, hops_left - 1)
           {:error, _} = error -> error
         end
     end
@@ -548,13 +695,27 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     {:error, {:invalid_content_type, content_type}}
   end
 
-  defp validate_size(body) when byte_size(body) <= @max_file_size, do: :ok
+  # The streaming collector already halted an oversized body; this turns
+  # that mark (or a `content-length` past the limit on a response whose
+  # body never streamed at all) into the size error.
+  defp validate_size(response, max_bytes) do
+    declared = declared_content_length(response)
 
-  defp validate_size(body) do
-    size_mb = Float.round(byte_size(body) / 1024 / 1024, 2)
+    cond do
+      is_integer(response.private[:too_large]) ->
+        file_too_large(response.private[:too_large], max_bytes)
 
-    {:error,
-     {:file_too_large, "#{size_mb} MB exceeds limit of #{@max_file_size / 1024 / 1024} MB"}}
+      is_integer(declared) and declared > max_bytes ->
+        file_too_large(declared, max_bytes)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp file_too_large(bytes, max_bytes) do
+    size_mb = Float.round(bytes / 1024 / 1024, 2)
+    {:error, {:file_too_large, "#{size_mb} MB exceeds limit of #{max_bytes / 1024 / 1024} MB"}}
   end
 
   defp write_temp_file(body, content_type) do

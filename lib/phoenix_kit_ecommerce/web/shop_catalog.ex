@@ -6,7 +6,10 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
@@ -35,6 +38,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   end
 
   defp do_mount(params, _session, socket) do
+    if connected?(socket), do: Events.subscribe_currencies()
+
     # Determine language: use URL locale param if present, otherwise default
     # This ensures /shop always uses default language, not session
     current_language =
@@ -45,8 +50,15 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     per_page = 24
     page = Helpers.parse_page(params["page"])
 
-    # Load storefront filters
-    {enabled_filters, filter_values} = FilterHelpers.load_filter_data()
+    # Load storefront filters — `exclude_hidden_categories: true` matches
+    # the listing query just below so a hidden category's items can't
+    # inflate a facet count past what the shopper's result list shows.
+    {enabled_filters, filter_values} =
+      FilterHelpers.load_filter_data(
+        language: current_language,
+        exclude_hidden_categories: true
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
     filter_opts = FilterHelpers.build_query_opts(active_filters, enabled_filters)
 
@@ -56,14 +68,15 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
           status: "active",
           page: 1,
           per_page: page * per_page,
-          exclude_hidden_categories: true
+          exclude_hidden_categories: true,
+          language: current_language
         ] ++ filter_opts
       )
 
     total_pages = max(1, ceil(total / per_page))
     page = min(page, total_pages)
 
-    currency = Shop.get_default_currency()
+    currency = Shop.get_display_currency_code()
 
     # Check if user is authenticated
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
@@ -103,9 +116,13 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         :category_icon_mode,
         PhoenixKit.Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(
-        :show_categories_grid,
-        PhoenixKit.Settings.get_setting_cached("shop_sidebar_show_categories", "true") == "true"
+      |> assign(:show_categories_grid, Helpers.sidebar_categories_enabled?())
+      # `/admin/shop` is the shop DASHBOARD, gated on base `"shop"` — not
+      # a catalog editor. Gating this link on `shop.manage_catalog` would
+      # hide it from an admin (order desk, settings) who can still open
+      # the page it points to.
+      |> Helpers.maybe_assign_admin_edit(Routes.path("/admin/shop"), gettext("Manage Shop"),
+        permission: "shop"
       )
 
     {:ok, socket}
@@ -129,7 +146,8 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             status: "active",
             page: 1,
             per_page: effective_page * socket.assigns.per_page,
-            exclude_hidden_categories: true
+            exclude_hidden_categories: true,
+            language: socket.assigns.current_language
           ] ++ filter_opts
         )
 
@@ -151,6 +169,54 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     end
   end
 
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices. The
+  # re-mark of `@currency` is immediate; the product re-fetch (needed when
+  # a base-currency reprice rewrote `product.price`) is coalesced into one
+  # `:fx_reload` per burst — billing broadcasts once per currency.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, socket |> Helpers.refresh_display_currency() |> Helpers.schedule_fx_reload()}
+  end
+
+  @impl true
+  def handle_info(:fx_reload, socket) do
+    socket = Helpers.fx_reload_done(socket)
+
+    {:noreply,
+     if socket.assigns[:products] do
+       reload_catalog_products(socket)
+     else
+       socket
+     end}
+  end
+
+  # Catch-all: an unrecognised message must not take the LiveView down.
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp reload_catalog_products(socket) do
+    filter_opts =
+      FilterHelpers.build_query_opts(
+        socket.assigns.active_filters,
+        socket.assigns.enabled_filters
+      )
+
+    {products, total} =
+      Shop.list_products_with_count(
+        [
+          status: "active",
+          page: 1,
+          per_page: socket.assigns.page * socket.assigns.per_page,
+          exclude_hidden_categories: true,
+          language: socket.assigns.current_language
+        ] ++ filter_opts
+      )
+
+    socket
+    |> assign(:products, products)
+    |> assign(:total_products, total)
+  end
+
   @impl true
   def handle_event("filter_price", params, socket) do
     filter_key = params["filter_key"] || "price"
@@ -163,6 +229,13 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
         params["price_max"]
       )
 
+    path = build_filter_path(socket.assigns, active_filters)
+    {:noreply, push_patch(socket, to: path)}
+  end
+
+  @impl true
+  def handle_event("clear_filter", %{"key" => key}, socket) do
+    active_filters = FilterHelpers.clear_filter(socket.assigns.active_filters, key)
     path = build_filter_path(socket.assigns, active_filters)
     {:noreply, push_patch(socket, to: path)}
   end
@@ -203,15 +276,41 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   @impl true
   def render(assigns) do
+    # One settings read per render, threaded into every name shown on the
+    # page: `NamePrefix.prefixes/0` is a GenServer round-trip on core's
+    # settings cache, and a grid of cards plus category tiles would
+    # otherwise repeat it per name.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <%!-- Page container. `shop_layout` renders the slot bare into the HOST's
            app layout, so each public page brings its own wrapper; without it
            this page runs edge-to-edge on a host whose <main> has no padding.
            Matches catalog_category.ex. --%>
-      <div class="p-6 max-w-7xl mx-auto">
-        
-        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
+      <%!-- `pt-0`: the host layout already pads the top of every page. --%>
+      <div class="px-6 pt-0 pb-6 max-w-7xl mx-auto">
+        <%!-- One row under the site header. This page is the first crumb
+              itself, so the left side carries the shop's own name rather than
+              a link back to where the visitor already is. --%>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div class="breadcrumbs text-sm">
+            <ul>
+              <li class="font-medium inline-flex items-center gap-1">
+                <.icon name="hero-home" class="w-4 h-4" />
+                {gettext("Shop")}
+              </li>
+            </ul>
+          </div>
+
+          <ShopCards.storefront_bar
+            language={@current_language}
+            cart_count={@cart_count}
+            admin_edit_url={assigns[:admin_edit_url]}
+            admin_edit_label={assigns[:admin_edit_label]}
+          />
+        </div>
+
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
           <div class="text-center">
@@ -316,7 +415,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                         <%= if cat_image do %>
                           <img
                             src={cat_image}
-                            alt={Translations.get(cat, :name, @current_language)}
+                            alt={Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes)}
                             class="w-full h-full object-cover"
                           />
                         <% else %>
@@ -327,7 +426,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                       </figure>
                       <div class="card-body p-3 text-center">
                         <h3 class="text-sm font-semibold line-clamp-2">
-                          {Translations.get(cat, :name, @current_language)}
+                          {Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes)}
                         </h3>
                       </div>
                     </.link>
@@ -373,6 +472,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
                     language={@current_language}
                     filter_qs={@filter_qs}
                     show_category={true}
+                    name_prefixes={@name_prefixes}
                   />
                 <% end %>
               </div>
@@ -395,7 +495,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   end
 
   defp category_image(category) do
-    Shop.Category.get_image_url(category, size: "small")
+    Shop.category_image_url(category, size: "small")
   end
 
   # Build catalog path with filter params and optional page

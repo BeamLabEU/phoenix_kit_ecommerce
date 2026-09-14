@@ -17,8 +17,12 @@ defmodule PhoenixKitEcommerce.CartItem do
   - `product_slug` - Product slug snapshot
   - `product_sku` - Product SKU snapshot
   - `product_image` - Product image URL snapshot
-  - `unit_price` - Price per unit at time of adding (required)
-  - `compare_at_price` - Original price for showing discounts
+  - `unit_price` - Price per unit at time of adding (required), frozen in
+    the CART's own currency (§4.3.1, §4.4, §12.1)
+  - `compare_at_price` - Original price for showing discounts, frozen the
+    same way and at the same rate as `unit_price` (§4.3.1) — never a raw
+    base amount alongside an already-converted `unit_price`, or the
+    displayed discount misstates itself
   - `quantity` - Number of items (required, > 0)
   - `line_total` - Calculated: unit_price * quantity
   - `weight_grams` - Weight for shipping calculation
@@ -50,7 +54,16 @@ defmodule PhoenixKitEcommerce.CartItem do
     # Pricing (snapshot)
     field :unit_price, :decimal
     field :compare_at_price, :decimal
-    field :currency, :string, default: "USD"
+    field :currency, :string
+
+    # The same line, expressed in the shop's base currency (§4.4, §9.1 of
+    # the per-domain-currency spec) — kept for auditing, not for display:
+    # without it a support agent looking at a mispriced line cannot tell
+    # whether the cart's frozen rate, an option modifier, or rounding is
+    # at fault. Set once, at the same moment as `unit_price`, from
+    # `calculate_product_price/2`'s own (always-base) result — never
+    # converted, never re-derived from `unit_price` later.
+    field :base_unit_price, :decimal
 
     # Quantity
     field :quantity, :integer, default: 1
@@ -84,6 +97,7 @@ defmodule PhoenixKitEcommerce.CartItem do
       :product_sku,
       :product_image,
       :unit_price,
+      :base_unit_price,
       :compare_at_price,
       :currency,
       :quantity,
@@ -93,7 +107,7 @@ defmodule PhoenixKitEcommerce.CartItem do
       :selected_specs,
       :metadata
     ])
-    |> validate_required([:cart_uuid, :product_title, :unit_price, :quantity])
+    |> validate_required([:cart_uuid, :product_title, :unit_price, :quantity, :currency])
     |> validate_number(:quantity, greater_than: 0)
     |> validate_number(:unit_price, greater_than_or_equal_to: 0)
     |> validate_length(:currency, is: 3)
@@ -132,7 +146,13 @@ defmodule PhoenixKitEcommerce.CartItem do
     lang = Keyword.get(opts, :language) || default_language()
 
     %{
-      product_uuid: product.uuid,
+      # A catalogue-backed product is a hand-built view-struct
+      # (`__meta__.state == :built`) — there is no row in
+      # `phoenix_kit_shop_products` for `product_uuid` to reference, so the
+      # column stays nil (it is `ON DELETE SET NULL`, already nullable) and
+      # the catalogue item's own uuid is carried in `metadata` instead, the
+      # only place left to reach it from a cart row.
+      product_uuid: if(catalogue_backed?(product), do: nil, else: product.uuid),
       product_title: get_localized_string(product.title, lang),
       product_slug: get_localized_string(product.slug, lang),
       product_image: get_product_image_url(product),
@@ -143,6 +163,18 @@ defmodule PhoenixKitEcommerce.CartItem do
       # total still summed it was incoherent: the cart said "Price on request"
       # and then printed the sum of the very numbers it had just hidden.
       unit_price: if(PriceDisplay.on_request?(product), do: Decimal.new(0), else: product.price),
+      # Default only — the two cart-context callers (`add_simple_product_to_cart/4`,
+      # `add_product_with_specs_to_cart/5`) always override this with
+      # `calculate_product_price/2`'s own result via `Map.put/3` right
+      # after calling `from_product/3`, the same as `unit_price` above.
+      base_unit_price:
+        if(PriceDisplay.on_request?(product), do: Decimal.new(0), else: product.price),
+      # Default only, same as `unit_price`/`base_unit_price` above — a base
+      # amount here. Both cart-context callers convert it forward into the
+      # cart's own currency, through the SAME `snapshot_unit_price/2` the
+      # unit price uses, right after calling `from_product/3` (§4.3.1: a
+      # cart line's "was" price must discount from the same currency frame
+      # as its "now" price, or the displayed percentage off is wrong).
       compare_at_price:
         if(PriceDisplay.on_request?(product), do: nil, else: product.compare_at_price),
       # Line amounts are summed in the CART's currency frame, so the line
@@ -159,11 +191,27 @@ defmodule PhoenixKitEcommerce.CartItem do
       metadata:
         %{"requires_shipping" => product.requires_shipping}
         |> put_price_unit(product, lang)
+        |> put_catalogue_item_uuid(product)
     }
   end
 
   def from_product(%Product{} = product, quantity, language) do
     from_product(product, quantity, language: language)
+  end
+
+  # A view-struct built by `ProductSource.Catalogue` (see the module doc for
+  # `PhoenixKitEcommerce.ProductSource`) — never a row from
+  # `phoenix_kit_shop_products`. Same test the facade already uses to refuse
+  # `Repo` writes on one (`update_product/2`/`delete_product/2`).
+  defp catalogue_backed?(%Product{__meta__: %Ecto.Schema.Metadata{state: :built}}), do: true
+  defp catalogue_backed?(%Product{}), do: false
+
+  defp put_catalogue_item_uuid(metadata, product) do
+    if catalogue_backed?(product) do
+      Map.put(metadata, "catalogue_item_uuid", product.uuid)
+    else
+      metadata
+    end
   end
 
   # The unit is snapshotted with the line, not read live at render time:
@@ -230,6 +278,14 @@ defmodule PhoenixKitEcommerce.CartItem do
   Returns true if product data has changed since the item was added.
   Useful for showing price change warnings.
   """
+  def product_changed?(
+        %__MODULE__{product_uuid: nil, metadata: %{"catalogue_item_uuid" => uuid}} = item,
+        %Product{} = product
+      )
+      when is_binary(uuid) do
+    Decimal.compare(item.unit_price, product.price) != :eq
+  end
+
   def product_changed?(%__MODULE__{product_uuid: nil}, _product), do: true
 
   def product_changed?(%__MODULE__{} = item, %Product{} = product) do
@@ -271,8 +327,20 @@ defmodule PhoenixKitEcommerce.CartItem do
   end
 
   @doc """
-  Returns true if the product has been deleted (product_uuid is nil after SET NULL).
+  Returns true if the product has been deleted (`product_uuid` is nil
+  after ON DELETE SET NULL).
+
+  Catalogue-backed lines never store `product_uuid` — their identity is
+  `metadata["catalogue_item_uuid"]` — so a nil uuid is not a deletion
+  signal for those.
   """
+  def product_deleted?(%__MODULE__{
+        product_uuid: nil,
+        metadata: %{"catalogue_item_uuid" => uuid}
+      })
+      when is_binary(uuid),
+      do: false
+
   def product_deleted?(%__MODULE__{product_uuid: nil}), do: true
   def product_deleted?(_), do: false
 

@@ -9,20 +9,22 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
-  alias PhoenixKit.Utils.HtmlSanitizer
   alias PhoenixKit.Utils.Routes
-  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     product = Shop.get_product!(id, preload: [:category])
-    currency = Shop.get_default_currency()
+    # Admin view: the product's own stored price is a BASE-currency amount,
+    # so the admin must always see it in base, never the visitor's display
+    # currency (§4.2, "ADMIN view -> base").
+    currency = Shop.get_default_currency_code()
 
     # Get price-affecting specs for admin view
     price_affecting_specs = Options.get_price_affecting_specs_for_product(product)
@@ -221,7 +223,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
             <%!-- Action Buttons --%>
             <div class="flex gap-2">
               <.link
-                navigate={Routes.path("/admin/shop/products/#{@product.uuid}/edit")}
+                navigate={Helpers.admin_edit_path(:item, @product.uuid, assigns[:url_path])}
                 class="btn btn-primary"
               >
                 <.icon name="hero-pencil" class="w-4 h-4 mr-2" /> {gettext("Edit")}
@@ -394,12 +396,21 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                   <div class="divider"></div>
                   <div>
                     <span class="text-base-content/60 text-sm">{gettext("Full Description:")}</span>
-                    <%!-- Imported supplier HTML. Sanitized unless an admin
-                          opted in — a bare `raw/1` here executed whatever the
-                          CSV supplied, in an admin's browser. --%>
-                    <div class="prose prose-sm mt-2 max-w-none">
-                      {render_product_body(@product_body_html)}
-                    </div>
+                    <%!-- body_html is Markdown for Shopify-synced products
+                          (converted at sync time, see HtmlToMarkdown) and
+                          raw HTML for CSV-imported/legacy ones — the
+                          Markdown renderer passes raw HTML blocks through
+                          untouched, so both keep rendering correctly
+                          through the same component the public storefront
+                          uses for this field (catalog_product.ex). Same
+                          sanitization policy as there: sanitized unless an
+                          admin has explicitly opted into raw HTML. --%>
+                    <.markdown
+                      content={@product_body_html}
+                      sanitize={not Policy.allow_raw_html_descriptions?()}
+                      class="mt-2"
+                      compact
+                    />
                   </div>
                 <% end %>
               </div>
@@ -410,7 +421,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
               <div class="card-body">
                 <div class="flex items-center justify-between">
                   <h2 class="card-title">{gettext("Pricing")}</h2>
-                  <span class="badge badge-outline">{(@currency && @currency.code) || "—"}</span>
+                  <span class="badge badge-outline">{@currency || "—"}</span>
                 </div>
 
                 <div class="grid grid-cols-3 gap-4 mt-4">
@@ -703,15 +714,9 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   defp status_badge_class("archived"), do: "badge badge-neutral badge-lg"
   defp status_badge_class(_), do: "badge badge-lg"
 
-  defp format_price(nil, _currency), do: "—"
-
-  defp format_price(price, nil) do
-    "$#{Decimal.round(price, 2)}"
-  end
-
-  defp format_price(price, currency) do
-    Currency.format_amount(price, currency)
-  end
+  # `currency` is now a CODE, not a struct (Э1-E4) — delegate to the one
+  # place that resolves a code to its symbol (§12.1).
+  defp format_price(price, currency), do: Helpers.format_price(price, currency)
 
   # Get signed URL for Storage image (skip URLs - they are legacy Shopify images)
   defp get_storage_image_url("http" <> _ = _url, _variant), do: nil
@@ -838,7 +843,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   end
 
   defp format_modifier(value, _type, currency) do
-    Currency.format_amount(value, currency)
+    Helpers.format_price(value, currency)
   end
 
   # Get available languages for preview switcher
@@ -861,21 +866,6 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
             name: lang.name || code
           }
         end)
-    end
-  end
-
-  # Imported supplier HTML for the "Full Description" block.
-  #
-  # This is third-party content — `body_html` is populated by the CSV
-  # import — so it goes through the core sanitizer unless an admin has
-  # explicitly opted into raw HTML. `HtmlSanitizer.sanitize/1` allowlists
-  # schemes and strips scripting constructs; `raw/1` is only reached once
-  # the content is either sanitized or deliberately trusted.
-  defp render_product_body(html) do
-    if Policy.allow_raw_html_descriptions?() do
-      Phoenix.HTML.raw(html)
-    else
-      html |> HtmlSanitizer.sanitize() |> Phoenix.HTML.raw()
     end
   end
 end

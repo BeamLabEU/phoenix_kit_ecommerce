@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Modules.Languages.DialectMapper
+  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
@@ -26,7 +27,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Date, as: UtilsDate
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce.Vocabulary
 
   # Data URI placeholder for broken images - works without external file serving
@@ -54,7 +54,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     current_language =
       params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
-    case Shop.get_product_by_slug_localized(slug, current_language, preload: [:category]) do
+    case Shop.get_product_by_slug_localized(slug, current_language,
+           preload: [:category],
+           language: current_language
+         ) do
       {:error, :not_found} ->
         handle_cross_language_redirect(slug, current_language, params, session, socket)
 
@@ -91,14 +94,22 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     selected_specs = build_default_specs(selectable_specs, product.metadata || %{})
 
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
 
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
 
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -112,10 +123,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, Translations.get(product, :description, current_language))
       |> assign(:localized_body, Translations.get(product, :body_html, current_language))
-      |> assign(:currency, Shop.get_default_currency())
+      |> assign(:currency, Shop.get_display_currency_code())
       |> assign(:quantity, 1)
       |> assign(:session_id, session_id)
       |> assign(:user_uuid, user_uuid)
@@ -137,9 +149,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       )
       |> assign(
         :current_path,
-        socket.assigns[:url_path] || Shop.product_url(product, current_language)
+        Shop.product_url(product, current_language)
       )
       |> assign(:categories, Shop.list_active_categories(preload: [:featured_product]))
+      |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
       |> assign(:filter_qs, FilterHelpers.build_query_string(active_filters, enabled_filters))
       |> assign(
         :category_name_wrap,
@@ -149,8 +162,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Helpers.admin_edit_path(
+          :item,
+          product.uuid,
+          Shop.product_url(product, current_language)
+        ),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -158,7 +177,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # Handle cross-language slug redirect
   # When user visits with a slug from a different language, redirect to correct localized URL
   defp handle_cross_language_redirect(slug, current_language, params, session, socket) do
-    case Shop.get_product_by_any_slug(slug, preload: [:category]) do
+    case Shop.get_product_by_any_slug(slug, preload: [:category], language: current_language) do
       {:error, :not_found} ->
         # Product truly not found
         {:ok,
@@ -273,7 +292,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     user = Helpers.get_current_user(socket)
     user_uuid = if user, do: user.uuid, else: nil
 
-    currency = Shop.get_default_currency()
+    currency = Shop.get_display_currency_code()
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
     # Build specifications
@@ -289,20 +308,28 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     # Compute filter_qs from URL params (preserves filters across cross-language redirect)
     category_uuid = if product.category, do: product.category.uuid, else: nil
-    {enabled_filters, _fv} = FilterHelpers.load_filter_data(category_uuid: category_uuid)
+
+    {enabled_filters, _fv} =
+      FilterHelpers.load_filter_data(
+        category_uuid: category_uuid,
+        category: product.category,
+        language: current_language
+      )
+
     active_filters = FilterHelpers.parse_filter_params(params, enabled_filters)
     filter_qs = FilterHelpers.build_query_string(active_filters, enabled_filters)
 
     # Get localized content
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
     localized_description = Translations.get(product, :description, current_language)
     localized_body = Translations.get(product, :body_html, current_language)
-    current_path = socket.assigns[:url_path] || Shop.product_url(product, current_language)
+    current_path = Shop.product_url(product, current_language)
 
     # Subscribe to updates
     if connected?(socket) do
       Events.subscribe_product(product.uuid)
       Events.subscribe_inventory()
+      Events.subscribe_currencies()
     end
 
     seo = SEOHelpers.product_seo(product, current_language)
@@ -315,6 +342,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:og, seo.og)
       |> assign(:product, product)
       |> assign(:current_language, current_language)
+      |> assign(:show_tags?, Helpers.tags_visible?(current_language))
       |> assign(:localized_title, localized_title)
       |> assign(:localized_description, localized_description)
       |> assign(:localized_body, localized_body)
@@ -333,7 +361,9 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:calculated_price, calculated_price)
       |> assign(:missing_required_specs, missing_required_specs)
       |> assign(:current_path, current_path)
+      |> assign(:cart_count, storefront_cart_count(session_id, user_uuid))
       |> assign(:categories, all_categories)
+      |> assign(:show_categories?, Helpers.sidebar_categories_enabled?())
       |> assign(:filter_qs, filter_qs)
       |> assign(
         :category_name_wrap,
@@ -343,8 +373,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         :category_icon_mode,
         Settings.get_setting_cached("shop_category_icon_mode", "none")
       )
-      |> assign(:admin_edit_url, Routes.path("/admin/shop/products/#{product.uuid}/edit"))
-      |> assign(:admin_edit_label, gettext("Edit Product"))
+      |> Helpers.maybe_assign_admin_edit(
+        Helpers.admin_edit_path(
+          :item,
+          product.uuid,
+          Shop.product_url(product, current_language)
+        ),
+        gettext("Edit Product")
+      )
 
     {:ok, socket}
   end
@@ -455,38 +491,42 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp do_add_to_cart_impl(socket) do
     socket = assign(socket, :adding_to_cart, true)
 
-    # Get or create cart
-    {:ok, cart} =
-      Shop.get_or_create_cart(
-        user_uuid: socket.assigns.user_uuid,
-        session_id: socket.assigns.session_id
-      )
+    # Get or create cart. Opening one requires a currency since
+    # `Cart.changeset/2` started validating it (§4.2), so a shop with no
+    # default currency configured in Billing gets the same "unavailable"
+    # flash the disabled-shop branch below gets — never a MatchError.
+    case Shop.get_or_create_cart(
+           user_uuid: socket.assigns.user_uuid,
+           session_id: socket.assigns.session_id
+         ) do
+      {:ok, cart} ->
+        add_to_cart_with(socket, cart)
 
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, gettext("The shop is currently unavailable"))}
+    end
+  end
+
+  defp add_to_cart_with(socket, cart) do
     %{
       product: product,
       quantity: quantity,
       currency: currency,
       selected_specs: selected_specs,
-      price_affecting_specs: price_affecting_specs,
-      calculated_price: calculated_price
+      price_affecting_specs: price_affecting_specs
     } = socket.assigns
 
     add_result = add_to_cart(cart, product, quantity, selected_specs, socket)
 
     case add_result do
       {:ok, updated_cart} ->
-        unit_price =
-          if price_affecting_specs != [] do
-            calculated_price
-          else
-            product.price
-          end
-
-        display_name = build_cart_display_name(product, price_affecting_specs, selected_specs)
-
-        message =
-          build_cart_message(display_name, quantity, unit_price, updated_cart.total, currency)
-
+        # The STORED line item, not a fresh live-amount conversion: this is
+        # what the shopper was actually charged, so the flash cannot drift
+        # from the snapshot even by a rounding cent (review follow-up on
+        # Э1-E4).
         updated_cart_item =
           find_cart_item_after_add(
             updated_cart.items,
@@ -495,13 +535,24 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             price_affecting_specs
           )
 
+        display_name = build_cart_display_name(product, price_affecting_specs, selected_specs)
+
+        message =
+          build_cart_message(
+            display_name,
+            quantity,
+            updated_cart_item,
+            updated_cart.total,
+            currency
+          )
+
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
          |> assign(:quantity, 1)
          |> assign(:cart_item, updated_cart_item)
-         |> put_flash(:info, message)
-         |> push_event("cart_updated", %{})}
+         |> assign(:cart_count, updated_cart.items_count)
+         |> put_flash(:info, message)}
 
       {:error, :shop_disabled} ->
         {:noreply,
@@ -638,8 +689,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   defp build_cart_display_name(product, _price_affecting_specs, selected_specs) do
-    # Get localized title (use default language for cart display)
-    title = Translations.get(product, :title, Translations.default_language())
+    # Get localized title (use default language for cart display). The
+    # "Added to cart" flash is storefront-only and ephemeral (never
+    # persisted) - get_display/3 applies here, unlike the STORED
+    # `cart_item.product_title` snapshot, which stays raw.
+    title = Translations.get_display(product, :title, Translations.default_language())
 
     if map_size(selected_specs) > 0 do
       specs_str = selected_specs |> Map.values() |> Enum.join(", ")
@@ -649,7 +703,14 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
-  defp build_cart_message(display_name, quantity, unit_price, cart_total, currency) do
+  defp build_cart_message(display_name, quantity, cart_item, cart_total, currency) do
+    # `cart_item.unit_price` is the STORED snapshot — already converted and
+    # rounded at add-to-cart time, in the cart's own currency — not a fresh
+    # live conversion recomputed here. That is what the shopper was
+    # actually charged, so the flash cannot drift from the persisted line
+    # even by a rounding cent (review follow-up on Э1-E4). `cart_total` is
+    # likewise already a stored snapshot; neither is converted again (N1).
+    unit_price = cart_item.unit_price
     line_total = Decimal.mult(unit_price, quantity)
     line_str = format_price(line_total, currency)
     cart_total_str = format_price(cart_total, currency)
@@ -660,58 +721,85 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   defp find_cart_item_after_add(items, product_uuid, selected_specs, _price_affecting_specs) do
     if map_size(selected_specs) > 0 do
-      Enum.find(items, &(&1.product_uuid == product_uuid && &1.selected_specs == selected_specs))
+      Enum.find(
+        items,
+        &(cart_item_matches_product?(&1, product_uuid) && &1.selected_specs == selected_specs)
+      )
     else
-      Enum.find(items, &(&1.product_uuid == product_uuid))
+      Enum.find(items, &cart_item_matches_product?(&1, product_uuid))
     end
+  end
+
+  # `product_uuid` here is always the product's real identifying uuid — for
+  # a catalogue-backed product that's the catalogue item's own uuid, which
+  # `CartItem.from_product/3` snapshots into `metadata["catalogue_item_uuid"]`
+  # rather than the row's `product_uuid` column (nil for those rows). Without
+  # this fallback, every post-add lookup for a catalogue product (the "added
+  # to cart" flash, the existing-item check before a repeat add) would come
+  # back nil even though the row is right there in `items`.
+  defp cart_item_matches_product?(item, product_uuid) do
+    item.product_uuid == product_uuid or
+      (item.metadata || %{})["catalogue_item_uuid"] == product_uuid
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
-      <div class="container flex-col mx-auto px-4 py-6 max-w-7xl">
-        
-        <ShopCards.storefront_bar language={@current_language} cart_count={@cart_count} />
-        <%!-- Breadcrumbs --%>
-        <div class="breadcrumbs text-sm mb-6">
-          <ul>
-            <li>
-              <.link navigate={Shop.catalog_url(@current_language) <> @filter_qs}>
-                {gettext("Shop")}
-              </.link>
-            </li>
-            <%= if @product.category do %>
-              <% cat_name = Translations.get(@product.category, :name, @current_language) %>
+      <%!-- `pt-0`: the host layout already pads the top of every page, and a
+            second helping of it pushed the first row of the shop below the
+            fold's most valuable strip. --%>
+      <div class="container flex-col mx-auto px-4 pt-0 pb-6 max-w-[96rem]">
+        <%!-- One row under the site header: breadcrumbs on the left, cart and
+              (for an admin) edit on the right. --%>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <%!-- Breadcrumbs --%>
+          <div class="breadcrumbs text-sm">
+            <ul>
               <li>
-                <.link navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}>
-                  {cat_name}
+                <%!-- The house marks this crumb as the way back to the shop's
+                      front page, so it reads as a destination rather than
+                      just the first word of a trail. --%>
+                <.link
+                  navigate={Shop.catalog_url(@current_language) <> @filter_qs}
+                  class="inline-flex items-center gap-1"
+                >
+                  <.icon name="hero-home" class="w-4 h-4" />
+                  {gettext("Shop")}
                 </.link>
               </li>
-            <% end %>
-            <li class="font-medium truncate max-w-[10rem] sm:max-w-xs">{@localized_title}</li>
-          </ul>
+              <%= if @product.category do %>
+                <% cat_name = Translations.get_display(@product.category, :name, @current_language) %>
+                <li>
+                  <.link navigate={
+                    Shop.category_url(@product.category, @current_language) <> @filter_qs
+                  }>
+                    {cat_name}
+                  </.link>
+                </li>
+              <% end %>
+              <li class="font-medium truncate max-w-[10rem] sm:max-w-xs">{@localized_title}</li>
+            </ul>
+          </div>
+
+          <ShopCards.storefront_bar
+            language={@current_language}
+            cart_count={@cart_count}
+            admin_edit_url={assigns[:admin_edit_url]}
+            admin_edit_label={assigns[:admin_edit_label]}
+          />
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr] gap-6 lg:gap-8">
-          <%!-- Category navigation (no filters on product page) --%>
-          <aside class="hidden lg:block">
-            <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-              <div class="card-body p-4">
-                <CatalogSidebar.category_nav
-                  categories={@categories}
-                  current_category={@product.category}
-                  current_language={@current_language}
-                  category_icon_mode={@category_icon_mode}
-                  category_name_wrap={@category_name_wrap}
-                  open={true}
-                  filter_qs={@filter_qs}
-                />
-              </div>
-            </div>
-          </aside>
+        <%!-- Two columns, 65/35: gallery with the description under it on the
+              left, buy box on the right. The three blocks are separate grid
+              items placed by row/column rather than nested, so the single
+              column a phone gets stacks them gallery -> buy box ->
+              description: the description sits under the picture on a wide
+              screen without pushing "Add to Cart" off the first screen on a
+              narrow one (what #44 fixed). --%>
+        <div class="grid grid-cols-1 md:grid-cols-[65fr_35fr] gap-6 lg:gap-10 md:items-start">
           <%!-- Product Images --%>
-          <div class="space-y-4">
+          <div class="space-y-4 md:col-start-1 md:row-start-1">
             <%!-- Main Image --%>
             <div class="aspect-square bg-base-200 rounded-lg overflow-hidden">
               <%= if @selected_image do %>
@@ -788,12 +876,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </div>
 
           <%!-- Product Info --%>
-          <div class="space-y-6">
+          <div class="space-y-6 md:col-start-2 md:row-start-1 md:row-span-2">
             <div>
+              <%!-- Heading only: the admin edit link lives in the shop bar
+                    above, so an admin sees the same title layout a shopper
+                    does. --%>
               <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
 
               <%= if @product.vendor do %>
-                <p class="text-base-content/60">by {@product.vendor}</p>
+                <p class="text-base-content/60">{gettext("by %{vendor}", vendor: @product.vendor)}</p>
               <% end %>
             </div>
 
@@ -807,10 +898,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                     language: @current_language
                   )}
                 </span>
-                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
-                     Decimal.compare(@product.compare_at_price, @calculated_price) == :gt do %>
+                <%= if cmp = PriceDisplay.compare_at(@product, @currency, :selected, amount: @calculated_price) do %>
                   <span class="text-xl text-base-content/40 line-through">
-                    {format_price(@product.compare_at_price, @currency)}
+                    {cmp.price}
+                  </span>
+                  <span class="badge badge-success">
+                    {cmp.percent}% OFF
                   </span>
                 <% end %>
               <% else %>
@@ -818,99 +911,16 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <span class="text-3xl font-bold text-primary">
                   {PriceDisplay.render(@product, @currency, :catalog, language: @current_language)}
                 </span>
-                <%= if !PriceDisplay.on_request?(@product) && @product.compare_at_price &&
-                     Decimal.compare(@product.compare_at_price, @product.price) == :gt do %>
+                <%= if cmp = PriceDisplay.compare_at(@product, @currency, :catalog, []) do %>
                   <span class="text-xl text-base-content/40 line-through">
-                    {format_price(@product.compare_at_price, @currency)}
+                    {cmp.price}
                   </span>
                   <span class="badge badge-success">
-                    {discount_percentage(@product)}% OFF
+                    {cmp.percent}% OFF
                   </span>
                 <% end %>
               <% end %>
             </div>
-
-            <%!-- Description --%>
-            <%!-- Sanitized unless an admin has explicitly opted into raw HTML.
-                  This renders on the UNAUTHENTICATED storefront, and product
-                  descriptions are writable by anyone holding the "shop"
-                  permission and by whoever supplies a CSV import file — so
-                  `sanitize={false}` here was a path from "can edit a product"
-                  to script execution in every shopper's and the Owner's
-                  browser. See PhoenixKitEcommerce.Policy. --%>
-            <%= if @localized_description do %>
-              <.markdown
-                content={@localized_description}
-                sanitize={not Policy.allow_raw_html_descriptions?()}
-                compact
-              />
-            <% end %>
-
-            <%!-- Full body (imports put the complete supplier description in
-                  body_html and only a short extract in description). Same
-                  sanitization policy as the description above. --%>
-            <%= if @localized_body && @localized_body != "" do %>
-              <div class="mt-4">
-                <.markdown
-                  content={@localized_body}
-                  sanitize={not Policy.allow_raw_html_descriptions?()}
-                />
-              </div>
-            <% end %>
-
-            <%!-- Product Details --%>
-            <div class="divider"></div>
-
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <%= if @product.weight_grams && @product.weight_grams > 0 do %>
-                <div>
-                  <span class="text-base-content/60">{gettext("Weight:")}</span>
-                  <span class="ml-2 font-medium">{@product.weight_grams}g</span>
-                </div>
-              <% end %>
-
-              <%= if @product.category do %>
-                <% cat_name = Translations.get(@product.category, :name, @current_language) %>
-                <div>
-                  <span class="text-base-content/60">{gettext("Category:")}</span>
-                  <.link
-                    navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}
-                    class="ml-2 link link-primary"
-                  >
-                    {cat_name}
-                  </.link>
-                </div>
-              <% end %>
-            </div>
-
-            <%!-- Specifications Table --%>
-            <%= if @specifications != [] do %>
-              <div class="divider"></div>
-
-              <h3 class="font-semibold text-lg mb-3">
-                <.icon name="hero-tag" class="w-5 h-5 inline" /> {gettext("Specifications")}
-              </h3>
-
-              <div class="overflow-x-auto">
-                <table class="table table-zebra table-sm">
-                  <tbody>
-                    <%= for {label, value, unit} <- @specifications do %>
-                      <tr>
-                        <td class="font-medium w-1/3 text-base-content/70">{label}</td>
-                        <td>
-                          {format_spec_value(value)}
-                          <%= if unit do %>
-                            <span class="text-base-content/50 ml-1">{unit}</span>
-                          <% end %>
-                        </td>
-                      </tr>
-                    <% end %>
-                  </tbody>
-                </table>
-              </div>
-            <% end %>
-
-            <div class="divider"></div>
 
             <%!-- Add to Cart Section --%>
             <%= if @product.status == "active" do %>
@@ -1003,23 +1013,47 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                         <.icon name="hero-plus" class="w-4 h-4" />
                       </button>
                     </div>
-                    <span class="text-base-content/60">×</span>
-                    <span class="text-base-content/60">
-                      {format_price(
-                        current_display_price(@product, @calculated_price, @price_affecting_specs),
-                        @currency
-                      )}
-                    </span>
-                    <span class="text-base-content/60">=</span>
-                    <span class="text-xl font-bold text-primary">
-                      {format_price(
-                        line_total(
-                          current_display_price(@product, @calculated_price, @price_affecting_specs),
-                          @quantity
-                        ),
-                        @currency
-                      )}
-                    </span>
+                    <%= if PriceDisplay.on_request?(@product) do %>
+                      <span class="text-base-content/60">
+                        {PriceDisplay.render(@product, @currency, :selected,
+                          amount:
+                            current_display_price(
+                              @product,
+                              @calculated_price,
+                              @price_affecting_specs
+                            )
+                        )}
+                      </span>
+                    <% else %>
+                      <span class="text-base-content/60">×</span>
+                      <span class="text-base-content/60">
+                        {PriceDisplay.render(@product, @currency, :selected,
+                          amount:
+                            current_display_price(
+                              @product,
+                              @calculated_price,
+                              @price_affecting_specs
+                            )
+                        )}
+                      </span>
+                      <span class="text-base-content/60">=</span>
+                      <span class="text-xl font-bold text-primary">
+                        {format_price(
+                          line_total(
+                            Currency.present(
+                              current_display_price(
+                                @product,
+                                @calculated_price,
+                                @price_affecting_specs
+                              ),
+                              @currency
+                            ),
+                            @quantity
+                          ),
+                          @currency
+                        )}
+                      </span>
+                    <% end %>
                   </div>
                 </fieldset>
 
@@ -1076,16 +1110,131 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               </div>
             <% end %>
 
-            <%!-- Tags --%>
-            <%= if @product.tags && @product.tags != [] do %>
+            <%!-- Product Details --%>
+            <div class="divider"></div>
+
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <%= if @product.weight_grams && @product.weight_grams > 0 do %>
+                <div>
+                  <span class="text-base-content/60">{gettext("Weight:")}</span>
+                  <span class="ml-2 font-medium">{@product.weight_grams}g</span>
+                </div>
+              <% end %>
+
+              <%= if @product.category do %>
+                <% cat_name = Translations.get_display(@product.category, :name, @current_language) %>
+                <div>
+                  <span class="text-base-content/60">{gettext("Category:")}</span>
+                  <.link
+                    navigate={Shop.category_url(@product.category, @current_language) <> @filter_qs}
+                    class="ml-2 link link-primary"
+                  >
+                    {cat_name}
+                  </.link>
+                </div>
+              <% end %>
+            </div>
+
+            <%!-- Tags. Shown only in the default language: they arrive from
+                  Shopify as one untranslated list, so on a translated page
+                  they would be the only English text on the card. --%>
+            <%= if @show_tags? and @product.tags && @product.tags != [] do %>
               <div class="flex flex-wrap gap-2 mt-4">
                 <%= for tag <- @product.tags do %>
                   <span class="badge badge-ghost">{tag}</span>
                 <% end %>
               </div>
             <% end %>
+
+            <%!-- Category filter, under the tags: browsing the rest of the
+                  shop belongs with the other navigation in this column, not
+                  in a collapsed panel at the foot of the page. --%>
+            <%= if @show_categories? and @categories != [] do %>
+              <div id="product-category-filter" class="card bg-base-100 shadow mt-6">
+                <div class="card-body p-4">
+                  <CatalogSidebar.category_nav
+                    categories={@categories}
+                    current_category={@product.category}
+                    current_language={@current_language}
+                    category_icon_mode={@category_icon_mode}
+                    category_name_wrap={@category_name_wrap}
+                    open={true}
+                    filter_qs={@filter_qs}
+                  />
+                </div>
+              </div>
+            <% end %>
           </div>
+
+          <%!-- Description: its own grid item, placed in the gallery's column
+                on the row below it. Being a sibling rather than a child is
+                what lets a phone put the buy box between the picture and this
+                text. --%>
+          <%= if has_text?(@localized_description) or has_text?(@localized_body) do %>
+            <section class="md:col-start-1 md:row-start-2">
+              <div class="divider"></div>
+              <h2 class="text-xl font-semibold mb-4">
+                <.icon name="hero-document-text" class="w-5 h-5 inline" /> {gettext("Description")}
+              </h2>
+
+              <%!-- Sanitized unless an admin has explicitly opted into raw
+                    HTML. This renders on the UNAUTHENTICATED storefront, and
+                    product descriptions are writable by anyone holding the
+                    "shop" permission and by whoever supplies a CSV import
+                    file — so `sanitize={false}` here was a path from "can
+                    edit a product" to script execution in every shopper's
+                    and the Owner's browser. See PhoenixKitEcommerce.Policy. --%>
+              <%= if has_text?(@localized_description) do %>
+                <.markdown
+                  content={@localized_description}
+                  sanitize={not Policy.allow_raw_html_descriptions?()}
+                  compact
+                />
+              <% end %>
+
+              <%!-- Full body (imports put the complete supplier description
+                    in body_html and only a short extract in description).
+                    Same sanitization policy as the description above. --%>
+              <%= if has_text?(@localized_body) do %>
+                <div class="mt-4">
+                  <.markdown
+                    content={@localized_body}
+                    sanitize={not Policy.allow_raw_html_descriptions?()}
+                  />
+                </div>
+              <% end %>
+            </section>
+          <% end %>
         </div>
+
+        <%!-- Specifications Table --%>
+        <%= if @specifications != [] do %>
+          <section class="mt-10 max-w-5xl">
+            <div class="divider"></div>
+            <h2 class="text-xl font-semibold mb-4">
+              <.icon name="hero-tag" class="w-5 h-5 inline" /> {gettext("Specifications")}
+            </h2>
+
+            <div class="overflow-x-auto">
+              <table class="table table-zebra table-sm">
+                <tbody>
+                  <%= for {label, value, unit} <- @specifications do %>
+                    <tr>
+                      <td class="font-medium w-1/3 text-base-content/70">{label}</td>
+                      <td>
+                        {format_spec_value(value)}
+                        <%= if unit do %>
+                          <span class="text-base-content/50 ml-1">{unit}</span>
+                        <% end %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        <% end %>
+
       </div>
     </ShopLayouts.shop_layout>
     """
@@ -1113,7 +1262,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         !@selected && @is_missing && "btn-error btn-outline"
       ]}
     >
-      {@option_value} — {format_price(@price, @currency)}
+      {@option_value} — {PriceDisplay.render(nil, @currency, :selected, amount: @price)}
     </button>
     """
   end
@@ -1144,6 +1293,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   # Private helpers
+
+  defp has_text?(nil), do: false
+  defp has_text?(text) when is_binary(text), do: String.trim(text) != ""
+  defp has_text?(_), do: false
 
   defp generate_session_id do
     :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
@@ -1255,14 +1408,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
-  defp discount_percentage(%{price: price, compare_at_price: compare}) when not is_nil(compare) do
-    diff = Decimal.sub(compare, price)
-    percent = Decimal.div(diff, compare) |> Decimal.mult(100) |> Decimal.round(0)
-    Decimal.to_integer(percent)
-  end
-
-  defp discount_percentage(_), do: 0
-
   defp line_total(price, quantity) when not is_nil(price) do
     Decimal.mult(price, quantity)
   end
@@ -1364,7 +1509,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       %{items: items} when is_list(items) ->
         Enum.find(items, fn item ->
-          item.product_uuid == product_uuid &&
+          cart_item_matches_product?(item, product_uuid) &&
             specs_match?(item.selected_specs, selected_specs)
         end)
 
@@ -1445,6 +1590,30 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     end
   end
 
+  # §4.2.1 п.5: a currency-table change re-renders this tab's prices.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    # Rate edits only need a re-present of the loaded amounts, done here
+    # at once. A base-currency reprice rewrites `product.price` in the
+    # table, so the loaded struct has to be re-fetched or the page keeps
+    # showing the pre-reprice number (and add-to-cart would charge the new
+    # one) — that re-fetch is coalesced into one `:fx_reload` per burst,
+    # since billing broadcasts once per currency it touched.
+    {:noreply, socket |> Helpers.refresh_display_currency() |> Helpers.schedule_fx_reload()}
+  end
+
+  @impl true
+  def handle_info(:fx_reload, socket) do
+    socket = Helpers.fx_reload_done(socket)
+
+    {:noreply,
+     if socket.assigns[:product] do
+       refresh_product(socket)
+     else
+       socket
+     end}
+  end
+
   # Catch-all: an unrecognised message must not take the LiveView down.
   #
   # Every clause above matches a specific broadcast shape, so ANY message
@@ -1462,7 +1631,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   # "active" sends the shopper back to the catalog instead of a crash or a
   # stale purchasable page.
   defp refresh_product(socket) do
-    product = Shop.get_product(socket.assigns.product.uuid, preload: [:category])
+    product =
+      Shop.get_product(socket.assigns.product.uuid,
+        preload: [:category],
+        language: socket.assigns.current_language
+      )
 
     # The SAME rule mount applies - `publicly_visible?/1` also rejects a
     # product whose category is hidden. Checking only the product's own
@@ -1480,7 +1653,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp do_refresh_product(socket, product) do
     current_language = socket.assigns.current_language
     selectable_specs = Shop.get_selectable_specs(product)
-    localized_title = Translations.get(product, :title, current_language)
+    localized_title = Translations.get_display(product, :title, current_language)
 
     selected_specs = retained_specs(socket.assigns.selected_specs, selectable_specs, product)
 

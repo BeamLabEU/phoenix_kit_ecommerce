@@ -5,56 +5,16 @@ require Logger
 # Level 1: Unit tests (schemas, changesets, pure functions) always run.
 # Level 2: Integration tests (tagged `:integration` via
 #          PhoenixKitEcommerce.DataCase / LiveCase) require PostgreSQL —
-#          by default a missing/broken database is a HARD FAILURE (see
-#          the `allow_missing_db?` block below), not a silent exclusion.
+#          automatically excluded when the database is unavailable.
 #
 # First-time setup:
 #
 #   createdb phoenix_kit_ecommerce_test
 #
 # After that, `mix test` boots the repo, runs core's versioned migrations
-# via `PhoenixKit.Migration.ensure_current/2`, and lets the Ecto sandbox
-# handle isolation. No module-owned DDL.
-
-# --- MIX_ENV guard -------------------------------------------------------
-#
-# config/config.exs only loads config/test.exs (test DB credentials, the
-# Ecto.Adapters.SQL.Sandbox pool, the test Endpoint, etc.) when
-# `config_env() == :test`:
-#
-#   if config_env() == :test do
-#     import_config "test.exs"
-#   end
-#
-# `mix test` normally runs with `Mix.env() == :test` even when nothing
-# sets MIX_ENV, because Mix applies each task's *preferred* environment —
-# but only when MIX_ENV is unset. An explicit `MIX_ENV=dev` (or any other
-# value) exported in the shell/container always overrides that
-# preference, so `mix test` would silently run in `:dev`, config/test.exs
-# would never load, and the repo would start on bare Ecto/Postgrex
-# defaults (no Sandbox pool, no configured credentials/database). That
-# makes every test look like a database problem when it is really a
-# config problem — fail loudly here instead of leaving it to be
-# rediscovered downstream (e.g. as `cannot invoke sandbox operation with
-# pool DBConnection.ConnectionPool`).
-if Mix.env() != :test do
-  raise """
-  mix test is running with MIX_ENV=#{Mix.env()}, not "test".
-
-  config/config.exs only imports config/test.exs when config_env() == :test,
-  so none of the test repo configuration (database, credentials, the
-  Ecto.Adapters.SQL.Sandbox pool, the test Endpoint) was loaded and this
-  suite cannot run correctly.
-
-  This happens whenever MIX_ENV is exported in the environment: Mix only
-  applies mix test's preferred environment (:test) when MIX_ENV is unset,
-  and an explicit value always wins over that preference.
-
-  Run instead:
-
-      MIX_ENV=test mix test
-  """
-end
+# via `PhoenixKit.Migration.ensure_current/2`, applies this module's own
+# chain (`PhoenixKitEcommerce.Migrations`) on top, and lets the Ecto
+# sandbox handle isolation.
 
 # Elixir 1.19's `mix test` no longer auto-loads modules from
 # `:elixirc_paths` test directories at test-helper time — only files
@@ -83,123 +43,126 @@ db_name =
   Application.get_env(:phoenix_kit_ecommerce, TestRepo, [])[:database] ||
     "phoenix_kit_ecommerce_test"
 
-# --- Degraded "no database" mode (opt-in only) ---------------------------
-#
-# A broken or missing test database used to be swallowed here: the
-# integration tests were quietly excluded and the run still reported
-# "0 failures". That is exactly how a MIX_ENV misconfiguration (see the
-# guard above) went unnoticed — a config bug that should have failed
-# loudly instead looked like a healthy, if partial, green suite.
-#
-# By default this file now treats a broken/missing database as a hard
-# failure: `mix test` raises instead of degrading. A contributor who
-# genuinely has no PostgreSQL available and only wants the unit-level
-# suite can opt in explicitly:
-#
-#   PK_ECOMMERCE_TEST_NO_DB=1 mix test
-#
-# which still prints exactly what happened and what got excluded, so the
-# degraded run can never be mistaken for a full one.
-allow_missing_db? = System.get_env("PK_ECOMMERCE_TEST_NO_DB") == "1"
-
-no_db_hint = fn reason ->
-  """
-
-    Test database unavailable — integration tests excluded (PK_ECOMMERCE_TEST_NO_DB=1).
-    Database: #{db_name}
-    Reason: #{reason}
-  """
-end
-
+# The preflight ships in core, and older cores this helper has run against
+# predate it — so it is used when the running core has it, and otherwise
+# this falls through to exactly the previous behaviour.
 db_check =
-  try do
-    case System.cmd("psql", ["-lqt"], stderr_to_stdout: true) do
-      {output, 0} ->
-        exists =
-          output
-          |> String.split("\n")
-          |> Enum.any?(fn line ->
-            line |> String.split("|") |> List.first("") |> String.trim() == db_name
-          end)
+  if Code.ensure_loaded?(PhoenixKit.TestSupport.PostgresPreflight) do
+    # One classified connection attempt, with the repo's OWN credentials and
+    # transport, before anything starts the pool.
+    #
+    # This replaces a `psql -lqt` listing. That check asked the wrong question:
+    # it ran as the shell's user over a unix socket, so it reported "the
+    # database is there" and said nothing about whether the CONFIGURED role
+    # could reach it over TCP. When it could not, the answer arrived minutes
+    # later as a pool checkout timeout that reads like a flaky test.
+    case PhoenixKit.TestSupport.PostgresPreflight.check(
+           Application.get_env(:phoenix_kit_ecommerce, PhoenixKitEcommerce.Test.Repo, [])
+         ) do
+      :ok ->
+        :exists
 
-        if exists, do: :exists, else: :not_found
-
-      _ ->
-        :try_connect
+      {:error, _reason, message} ->
+        IO.puts(:stderr, "\n" <> message)
+        :not_found
     end
-  rescue
-    # `psql` not on PATH (CI / minimal env). Fall through to the
-    # connection attempt — the repo start-up below is the real check;
-    # this is just an optional early, friendlier diagnostic.
-    ErlangError -> :try_connect
+  else
+    :try_connect
   end
 
 repo_available =
-  cond do
-    db_check == :not_found and allow_missing_db? ->
-      IO.puts(no_db_hint.("database \"#{db_name}\" not found (checked via `psql -lqt`)"))
-      false
+  if db_check == :not_found do
+    IO.puts("""
 
-    db_check == :not_found ->
-      raise """
-      Test database "#{db_name}" not found.
+      Cannot reach test database "#{db_name}" — integration tests excluded.
+       The reason is printed above.
+    """)
 
-      Run:  createdb #{db_name}
+    false
+  else
+    try do
+      {:ok, _} = TestRepo.start_link()
 
-      To run only the unit-level suite without a database, opt in explicitly:
+      # Build the schema directly from core's versioned migrations — same
+      # call the host app makes in production. `ensure_current/2`
+      # re-applies any newly-shipped Vxxx migrations on every boot.
+      PhoenixKit.Migration.ensure_current(TestRepo, log: false)
 
-          PK_ECOMMERCE_TEST_NO_DB=1 mix test
-      """
+      # ...then the module-owned chain on top. V1 was purely adoptive over
+      # core's baseline, so skipping it changed nothing; V2 is not — it
+      # drops the `DEFAULT 'USD'` core declares on the four `currency`
+      # columns, and a test database that never ran it would still hand
+      # out "USD" behind the schemas' backs. `up/1` needs an
+      # `Ecto.Migration` runner, so the statements are executed directly —
+      # that is exactly what `up_statements/1` exists for, and every one of
+      # them is idempotent.
+      Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
-    true ->
-      try do
-        {:ok, _} = TestRepo.start_link()
+      # ...and billing's own chain, because this module reads and writes
+      # billing's schemas directly (checkout converts a cart through them).
+      # `phoenix_kit_currencies` is created by CORE's migrations, but
+      # billing (floor raised to "~> 0.11" for per-domain-currency) OWNS
+      # extending it — `rounding_rule`, `rate_updated_at`, the partial
+      # default-currency index — via its own versioned chain, never core's.
+      # Without this, a freshly fetched billing (0.11+) raises
+      # `undefined_column: rounding_rule` on every currency read, since
+      # core's schema never grows that column itself.
+      Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
 
-        # Build the schema directly from core's versioned migrations — same
-        # call the host app makes in production. `ensure_current/2`
-        # re-applies any newly-shipped Vxxx migrations on every boot.
-        PhoenixKit.Migration.ensure_current(TestRepo, log: false)
-
-        Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
-        true
-      rescue
-        e ->
-          if allow_missing_db? do
-            IO.puts(no_db_hint.(Exception.message(e)))
-            false
-          else
-            # Decorate and die — never swallow. A failure here (wrong
-            # credentials, un-migratable schema, a genuine migration bug)
-            # is a real defect, not an absent-database situation.
-            reraise(
-              Exception.message(e) <>
-                "\n\nThe test database is required. Create it with: createdb #{db_name}\n" <>
-                "To skip it deliberately, set PK_ECOMMERCE_TEST_NO_DB=1.",
-              __STACKTRACE__
-            )
-          end
-      catch
-        :exit, reason ->
-          if allow_missing_db? do
-            IO.puts(no_db_hint.(inspect(reason)))
-            false
-          else
-            raise """
-            Could not connect to test database "#{db_name}".
-
-            Error: #{inspect(reason)}
-
-            Create it with: createdb #{db_name}
-            To skip it deliberately, set PK_ECOMMERCE_TEST_NO_DB=1.
-            """
-          end
+      # ...and, when the test-only catalogue bridge is resolved (see
+      # mix.exs's `catalogue_test_deps/0`), the entities and catalogue
+      # chains — in that order, the same way catalogue's own test helper
+      # runs them. Core's baseline creates the `phoenix_kit_cat_*` tables
+      # in their V1 shape only; catalogue's V2 adds the per-language `slug`
+      # column its `Item`/`Category` schemas insert, so a database built
+      # without this chain fails every `:catalogue` test with
+      # `undefined_column: slug` from inside `create_item/2`.
+      if Code.ensure_loaded?(PhoenixKitCatalogue.Migrations) do
+        Enum.each(PhoenixKitEntities.Migrations.up_statements("public"), &TestRepo.query!/1)
+        Enum.each(PhoenixKitCatalogue.Migrations.up_statements("public"), &TestRepo.query!/1)
       end
+
+      Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)
+      true
+    rescue
+      e ->
+        IO.puts("""
+
+          Could not connect to test database — integration tests excluded.          The reason is printed above.
+          Error: #{Exception.message(e)}
+        """)
+
+        false
+    catch
+      :exit, reason ->
+        IO.puts("""
+
+          Could not connect to test database — integration tests excluded.          The reason is printed above.
+          Error: #{inspect(reason)}
+        """)
+
+        false
+    end
   end
 
 Application.put_env(:phoenix_kit_ecommerce, :test_repo_available, repo_available)
 
 # Minimal PhoenixKit services needed by the context layer.
 {:ok, _pid} = PhoenixKit.PubSub.Manager.start_link([])
+
+# `PhoenixKitCatalogue.Catalogue.PubSub.broadcast/3` (fired on every
+# catalogue mutation) needs a `Phoenix.PubSub` server registered as
+# `PhoenixKit.PubSub` — the host app provides this in production, and
+# `phoenix_kit_catalogue`'s own test suite starts it the same way. Only
+# relevant when the optional test-only `phoenix_kit_catalogue` path dep
+# (see mix.exs's `catalogue_test_deps/0`) is actually resolved, so the
+# common (`:catalogue` excluded) run starts no extra process.
+if Code.ensure_loaded?(PhoenixKitCatalogue) do
+  case Phoenix.PubSub.Supervisor.start_link(name: PhoenixKit.PubSub) do
+    {:ok, _} -> :ok
+    {:error, {:already_started, _}} -> :ok
+  end
+end
 
 # The permission layer resolves a sub-permission through the module
 # registry: `Scope.can?/2` requires `feature_enabled?/1`, which asks the
@@ -279,4 +242,25 @@ transliteration_exclude =
     []
   end
 
-ExUnit.start(exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude)
+# `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
+# by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
+# `ProductSource.Catalogue` adapter's own tests need it loaded (a real
+# `PhoenixKitCatalogue.Schemas.Item`/`Category` struct for the pure view
+# tests, a live catalogue DB for the query tests) and are tagged
+# `:catalogue` so they run automatically once a host declares the dep.
+catalogue_exclude =
+  if Code.ensure_loaded?(PhoenixKitCatalogue) do
+    []
+  else
+    Logger.info(
+      "[test_helper] phoenix_kit_catalogue not loaded — ProductSource.Catalogue " <>
+        "tests excluded. They will run automatically once a host declares the " <>
+        "optional dependency."
+    )
+
+    [:catalogue]
+  end
+
+ExUnit.start(
+  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+)

@@ -31,17 +31,18 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
-  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
 
   import TranslationTabs
+  import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -50,15 +51,31 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    socket = apply_action(socket, socket.assigns.live_action, params)
-    {:noreply, socket}
+    # Products are catalogue-managed while the catalogue source is active
+    # (`create_product/1`/`update_product/2` both refuse under it) — redirect
+    # away from this form entirely rather than let an admin fill it out only
+    # to have the save fail, for :new and for :edit via any entry point
+    # (button, row link, direct URL).
+    if socket.assigns.live_action in [:new, :edit] and catalogue_source_active?() do
+      {:noreply, redirect_to_catalogue(socket)}
+    else
+      {:noreply, apply_action(socket, socket.assigns.live_action, params)}
+    end
+  end
+
+  defp catalogue_source_active?, do: ProductSource.current() == ProductSource.Catalogue
+
+  defp redirect_to_catalogue(socket) do
+    socket
+    |> put_flash(:info, gettext("Products are managed in the catalogue module now."))
+    |> push_navigate(to: Routes.path("/admin/catalogue"))
   end
 
   defp apply_action(socket, :new, _params) do
     product = %Product{}
     changeset = Shop.change_product(product)
     categories = Shop.category_options()
-    currency = Shop.get_default_currency()
+    currency = Shop.get_base_currency()
 
     # Get global options (no category selected yet)
     option_schema = Options.get_enabled_global_options()
@@ -89,7 +106,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     product = Shop.get_product!(id, preload: [:category])
     changeset = Shop.change_product(product)
     categories = Shop.category_options()
-    currency = Shop.get_default_currency()
+    currency = Shop.get_base_currency()
 
     # Get merged option schema for the product
     option_schema = Options.get_option_schema_for_product(product)
@@ -752,6 +769,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
+
+      {:error, :read_only_view} ->
+        {:noreply, redirect_to_catalogue(socket)}
     end
   rescue
     e ->
@@ -781,6 +801,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
+
+      {:error, :read_only_view} ->
+        {:noreply, redirect_to_catalogue(socket)}
     end
   rescue
     e ->
@@ -1106,7 +1129,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                       },
                       %{
                         key: :body_html,
-                        label: gettext("Full Description (HTML)"),
+                        label: gettext("Full Description"),
                         type: :html,
                         placeholder: gettext("<p>Full translated description...</p>")
                       },
@@ -1930,25 +1953,6 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp extract_image_url(url) when is_binary(url), do: url
   defp extract_image_url(_), do: nil
 
-  # Format price for display with currency
-  defp format_price(nil, _currency), do: "—"
-  defp format_price("", _currency), do: "—"
-
-  defp format_price(price, currency) when is_binary(price) do
-    case Decimal.parse(price) do
-      {decimal, _} -> Currency.format_amount(decimal, currency)
-      :error -> Currency.format_amount(Decimal.new("0"), currency)
-    end
-  end
-
-  defp format_price(price, nil) do
-    "$#{Decimal.round(price, 2)}"
-  end
-
-  defp format_price(price, currency) do
-    Currency.format_amount(price, currency)
-  end
-
   # Get currency symbol for display
   defp currency_symbol(%{symbol: symbol}), do: symbol
   defp currency_symbol(_), do: "$"
@@ -1985,6 +1989,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp normalize_override(_), do: nil
 
   # Calculate final price for a single option value
+  # Authoring screen: base currency, never converted (§4.3)
   defp calculate_option_price(base_price, modifier_type, modifier_value) do
     base = if is_nil(base_price), do: Decimal.new("0"), else: base_price
 
@@ -2401,15 +2406,13 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp build_localized_params(entity, params, translations_map, default_language) do
     translatable_fields = Translations.product_fields()
 
-    # Extract main form values for default language
-    default_values = %{
-      "title" => params["title"],
-      "slug" => params["slug"],
-      "description" => params["description"],
-      "body_html" => params["body_html"],
-      "seo_title" => params["seo_title"],
-      "seo_description" => params["seo_description"]
-    }
+    # Extract main form values for default language.
+    #
+    # Only the fields this submission actually carried: the main form renders
+    # inputs for title/slug/description, while body_html and the SEO fields
+    # are translation-tab-only. Listing them here with a `nil` value read as
+    # "the user cleared it" and wiped the default language's stored content.
+    default_values = Map.take(params, Enum.map(translatable_fields, &to_string/1))
 
     # Merge translations into localized field maps
     localized_attrs =

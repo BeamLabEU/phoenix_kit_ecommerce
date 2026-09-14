@@ -8,7 +8,8 @@ defmodule PhoenixKitEcommerce.Schemas.CartItemTest do
     cart_uuid: Ecto.UUID.generate(),
     product_title: "Widget",
     unit_price: Decimal.new("10.00"),
-    quantity: 3
+    quantity: 3,
+    currency: "USD"
   }
 
   describe "changeset/2 validity" do
@@ -79,6 +80,25 @@ defmodule PhoenixKitEcommerce.Schemas.CartItemTest do
     test "product_deleted?/1" do
       assert CartItem.product_deleted?(%CartItem{product_uuid: nil})
       refute CartItem.product_deleted?(%CartItem{product_uuid: Ecto.UUID.generate()})
+
+      refute CartItem.product_deleted?(%CartItem{
+               product_uuid: nil,
+               metadata: %{"catalogue_item_uuid" => Ecto.UUID.generate()}
+             })
+    end
+
+    test "product_changed?/2 does not treat every catalogue line as changed" do
+      uuid = Ecto.UUID.generate()
+      price = Decimal.new("40.00")
+
+      item = %CartItem{
+        product_uuid: nil,
+        unit_price: price,
+        metadata: %{"catalogue_item_uuid" => uuid}
+      }
+
+      refute CartItem.product_changed?(item, %Product{price: price})
+      assert CartItem.product_changed?(item, %Product{price: Decimal.new("50.00")})
     end
   end
 end

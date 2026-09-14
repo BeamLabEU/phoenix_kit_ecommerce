@@ -6,12 +6,22 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   catalog_category, catalog_product, cart_page, checkout_page, and checkout_complete.
   """
 
+  # `catalogue_edit_path/2` below is only ever reached once
+  # `admin_edit_path/3`'s own `Code.ensure_loaded?(PhoenixKitCatalogue.Paths)`
+  # guard has already passed, same duck-typed pattern as
+  # `ProductSource.Catalogue.View`'s `@compile` tag on `Catalogue` — the
+  # tag only quietens the compiler's static xref check for hosts that
+  # don't declare the optional dependency.
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Paths}
+
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
+  alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Translations
 
   # ---------------------------------------------------------------------------
@@ -42,7 +52,10 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def format_price(price, code) when is_binary(code) do
-    "#{trim_decimals(price, 2)} #{code}"
+    case PhoenixKitEcommerce.currency_for_code(code) do
+      %Currency{} = currency -> format_price(price, currency)
+      _ -> "#{trim_decimals(price, 2)} #{code}"
+    end
   end
 
   def format_price(price, currency) do
@@ -121,6 +134,56 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   # ---------------------------------------------------------------------------
+  # Currency refresh
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Re-marks `@currency` as changed so every price expression that reads it
+  re-evaluates on the next render — the ONE way a mounted storefront picks
+  up a currency-table change (§4.2.1 п.5).
+
+  The rate is deliberately not in assigns (§12.4), so nothing in the
+  socket knows it moved; `Phoenix.Component.assign/3` skips an equal value
+  and HEEx re-evaluates an expression only when one of ITS assigns
+  changed. Passing through a sentinel value marks the key changed while
+  the code itself stays what the request resolved. Base numbers
+  (`@products`, `@calculated_price`) are unchanged and are not re-read.
+  """
+  @spec refresh_display_currency(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def refresh_display_currency(socket) do
+    code = PhoenixKitEcommerce.get_display_currency_code()
+
+    socket
+    |> Phoenix.Component.assign(:currency, :refreshing)
+    |> Phoenix.Component.assign(:currency, code)
+  end
+
+  @doc """
+  Coalesces the product RELOAD a `{:currencies_changed, _}` broadcast asks
+  for into one `:fx_reload` message per burst.
+
+  Billing broadcasts once per currency per rate refresh, and a base
+  change touches every row — so a storefront tab that re-queried its
+  products on every message ran N full catalog queries for one event,
+  on every open tab at once. The cheap part (`refresh_display_currency/1`,
+  re-marking `@currency` so loaded prices re-present) stays immediate;
+  the re-fetch is deferred by `delay_ms` and scheduled at most once while
+  `:fx_reload_pending` is set. The page's `handle_info(:fx_reload, _)`
+  clause clears the flag (`fx_reload_done/1`) and does the reload.
+  """
+  def schedule_fx_reload(socket, delay_ms \\ 250) do
+    if socket.assigns[:fx_reload_pending] do
+      socket
+    else
+      Process.send_after(self(), :fx_reload, delay_ms)
+      Phoenix.Component.assign(socket, :fx_reload_pending, true)
+    end
+  end
+
+  @doc "Clears the `schedule_fx_reload/2` flag; call first in `handle_info(:fx_reload, _)`."
+  def fx_reload_done(socket), do: Phoenix.Component.assign(socket, :fx_reload_pending, false)
+
+  # ---------------------------------------------------------------------------
   # Current user
   # ---------------------------------------------------------------------------
 
@@ -148,6 +211,41 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
   def get_language_from_params_or_default(_params) do
     Translations.default_language()
+  end
+
+  @doc """
+  Whether a product's tags may be shown on a page rendered in `language`.
+
+  Tags arrive from Shopify as one untranslated list on
+  `data["ecommerce"]["tags"]` — there is no per-language variant of them.
+  Rendering that list on a translated page puts the only untranslated text
+  on the card, so tags stay on the default-language storefront and are
+  hidden elsewhere until translated tags exist.
+  """
+  @spec tags_visible?(String.t() | nil) :: boolean()
+  def tags_visible?(language) when is_binary(language) do
+    # Compare bases, not dialects. The page language is resolved to a
+    # canonical dialect (`"en"` → `"en-US"`) while the configured default
+    # is stored verbatim (`"en"`, `"en-GB"`, `"en-US"` are all legitimate).
+    # Dialect equality hid tags on a shop whose default is a non-canonical
+    # dialect (`en-GB` vs the page's `en-US`). Same-base secondary dialects
+    # (`en-GB` visitor on an `en-US`-default shop) also show tags — they
+    # are untranslated default-language text either way.
+    DialectMapper.extract_base(language) ==
+      DialectMapper.extract_base(Translations.default_language())
+  end
+
+  def tags_visible?(_language), do: false
+
+  @doc """
+  Whether the storefront's category navigation is switched on
+  (`shop_sidebar_show_categories`, default `true`). Read by every public page
+  that renders a category list, so the catalog aside, the catalog grid and
+  the product page's category panel cannot disagree about the default.
+  """
+  @spec sidebar_categories_enabled?() :: boolean()
+  def sidebar_categories_enabled? do
+    PhoenixKit.Settings.get_setting_cached("shop_sidebar_show_categories", "true") == "true"
   end
 
   @doc """
@@ -435,4 +533,100 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def order_billing_identity(_order), do: nil
+
+  # ---------------------------------------------------------------------------
+  # Admin edit link (storefront -> admin)
+  # ---------------------------------------------------------------------------
+
+  @admin_edit_helper_mod PhoenixKitWeb.AdminEditHelper
+
+  @doc """
+  Assigns `:admin_edit_url`/`:admin_edit_label` on `socket` for an admin
+  visitor, via core's `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3`.
+
+  `permission` is what the LINKED PAGE actually requires, and it defaults
+  to `"shop.manage_catalog"` because most of these links open a catalog
+  editor. Core's own helper gates on "can this visitor reach the admin
+  area at all", which is broader: an admin with, say, only order-desk
+  permissions used to be shown an Edit button that landed them on a form
+  they could not submit. But the gate must not run ahead of the target
+  either — the shop index's "Manage Shop" link opens the dashboard at
+  `/admin/shop`, which asks for base `"shop"` — so that call site passes
+  its own weaker permission rather than inheriting the catalog one.
+
+  Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
+  calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
+  requirement, not an exact version, so a host running an older core that
+  predates the helper must not crash storefront pages. Returns `socket`
+  unchanged when the helper isn't available or the visitor isn't an admin.
+  """
+  def maybe_assign_admin_edit(socket, path, label, opts \\ []) do
+    mod = @admin_edit_helper_mod
+    permission = Keyword.get(opts, :permission, "shop.manage_catalog")
+
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) and
+         can?(socket, permission) do
+      mod.assign_admin_edit(socket, path, label: label, permission: permission)
+    else
+      socket
+    end
+  end
+
+  defp can?(socket, permission) do
+    case socket.assigns[:phoenix_kit_current_scope] do
+      nil -> false
+      scope -> Scope.can?(scope, permission)
+    end
+  end
+
+  @doc """
+  Where the storefront's admin edit link should point for `kind` and `uuid`,
+  and where the editor should send the visitor back to.
+
+  The shop's products and categories live in `phoenix_kit_catalogue` once
+  the catalogue product source is on, so the link has to open the catalogue
+  editor rather than the legacy shop form, which no longer backs the page
+  being viewed. `return_to` is where the editor should send the visitor
+  back to — both catalogue forms validate it (`safe_return_to/1`) and use
+  it for their exit, so "edit, save, back to the page I was on" works
+  without reaching for the browser's back button. It is the page's
+  canonical URL rather than the exact one the visitor typed, and query
+  state (a filter, a page number) is not carried back. Two reasons, and
+  the second is the one that matters: these links are built in `mount/3`,
+  while core assigns `:url_path` from its `handle_params` hook, which
+  runs later — but `:url_path` is a path, parsed out of the URL with the
+  query discarded, so building the link later would not carry the query
+  either.
+
+  Falls back to the legacy shop path when the catalogue source is off or
+  the catalogue module isn't loaded at all (it is an optional dependency).
+  """
+  @spec admin_edit_path(:item | :category, String.t(), String.t() | nil) :: String.t()
+  def admin_edit_path(kind, uuid, return_to \\ nil)
+
+  def admin_edit_path(kind, uuid, return_to) when kind in [:item, :category] do
+    path =
+      if catalogue_source?() and Code.ensure_loaded?(PhoenixKitCatalogue.Paths) do
+        catalogue_edit_path(kind, uuid)
+      else
+        legacy_edit_path(kind, uuid)
+      end
+
+    append_return_to(path, return_to)
+  end
+
+  defp catalogue_edit_path(:item, uuid), do: PhoenixKitCatalogue.Paths.item_edit(uuid)
+  defp catalogue_edit_path(:category, uuid), do: PhoenixKitCatalogue.Paths.category_edit(uuid)
+
+  defp legacy_edit_path(:item, uuid), do: Routes.path("/admin/shop/products/#{uuid}/edit")
+  defp legacy_edit_path(:category, uuid), do: Routes.path("/admin/shop/categories/#{uuid}/edit")
+
+  defp catalogue_source?, do: ProductSource.current() == ProductSource.Catalogue
+
+  defp append_return_to(path, return_to) when is_binary(return_to) and return_to != "" do
+    separator = if String.contains?(path, "?"), do: "&", else: "?"
+    path <> separator <> URI.encode_query(%{"return_to" => return_to})
+  end
+
+  defp append_return_to(path, _return_to), do: path
 end

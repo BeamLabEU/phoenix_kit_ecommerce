@@ -25,6 +25,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   alias PhoenixKitEcommerce.Import.{CSVAnalyzer, FormatDetector}
   alias PhoenixKitEcommerce.ImportLog
   alias PhoenixKitEcommerce.Options
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Services.ImageMigration
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
@@ -60,9 +61,12 @@ defmodule PhoenixKitEcommerce.Web.Imports do
     import_configs = Shop.list_import_configs(active_only: true)
     default_config = Shop.get_default_import_config()
 
+    catalogue_source_active? = ProductSource.current() == ProductSource.Catalogue
+
     socket =
       socket
       |> assign(:page_title, gettext("CSV Import"))
+      |> assign(:catalogue_source_active?, catalogue_source_active?)
       |> assign(:imports, list_imports())
       |> assign(:current_import, nil)
       |> assign(:import_progress, nil)
@@ -790,8 +794,19 @@ defmodule PhoenixKitEcommerce.Web.Imports do
           </p>
         </.admin_page_header>
 
+        <%= if @catalogue_source_active? do %>
+          <div id="imports-catalogue-notice" class="alert alert-info mb-6">
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>
+              {gettext(
+                "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
+              )}
+            </span>
+          </div>
+        <% end %>
+
         <%!-- Import Wizard Card --%>
-        <div class="card bg-base-100 shadow-xl mb-6">
+        <div :if={!@catalogue_source_active?} class="card bg-base-100 shadow-xl mb-6">
           <div class="card-body">
             <%!-- Wizard Steps Indicator --%>
             <%= if @format_mod && !@format_mod.requires_option_mapping?() do %>

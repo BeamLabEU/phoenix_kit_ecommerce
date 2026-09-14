@@ -31,8 +31,11 @@ defmodule PhoenixKitEcommerce.Errors do
           | :all_urls_invalid
           | :already_migrated
           | :cart_already_converting
+          | :cart_base_unavailable
           | :cart_empty
           | :cart_not_active
+          | :currency_mismatch
+          | :currency_unavailable
           | :email_already_registered
           | :email_exists_confirmed
           | :empty_file
@@ -70,8 +73,21 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:cart_already_converting),
     do: gettext("This cart is already being converted to an order.")
 
+  def message(:cart_base_unavailable),
+    do:
+      gettext(
+        "The shop's base currency changed and this cart cannot be updated right now. Please try again later."
+      )
+
   def message(:cart_empty), do: gettext("The cart is empty.")
   def message(:cart_not_active), do: gettext("This cart is no longer active.")
+
+  def message(:currency_mismatch),
+    do: gettext("This item is priced in a different currency and cannot be added right now.")
+
+  def message(:currency_unavailable),
+    do: gettext("This cart's currency is not available right now.")
+
   def message(:email_already_registered), do: gettext("This email address is already registered.")
 
   def message(:email_exists_confirmed),

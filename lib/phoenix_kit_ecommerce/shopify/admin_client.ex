@@ -19,7 +19,8 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   @api_version "2025-01"
 
   @page_limit 250
-  @product_fields ~w(id handle title body_html vendor product_type tags status images variants)
+  @product_fields ~w(id handle title body_html vendor product_type tags status images variants options)
+  @collection_fields ~w(id handle title sort_order)
   @max_retries 5
   @default_retry_after_seconds 1
   @max_retry_after_seconds 60
@@ -35,12 +36,165 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   """
   @spec fetch_products(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def fetch_products(integration_uuid, opts \\ []) do
+    with {:ok, {shop_domain, req}} <-
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
+      fetch_all(req, initial_url(shop_domain), [], @max_retries, "products")
+    end
+  end
+
+  @doc """
+  Fetches a single product from the Shopify store connected via
+  `integration_uuid`, given its Shopify `product_id` — a single,
+  unpaginated `GET /admin/api/<version>/products/{id}.json` request. This
+  is the point lookup a per-product panel needs instead of pulling the
+  whole catalog through `fetch_products/2` to check one item.
+
+  Reuses `resolve_client/2` (credential resolution/auth), the same
+  `@product_fields` field set, and the same 429/401/403 handling as
+  `fetch_products/2` — but is NOT built on top of `fetch_all/5`: that
+  helper is shaped around a paginated LIST response (`Link: rel="next"`,
+  an accumulator), while this endpoint returns exactly one `"product"`
+  map and never paginates. The two diverge on the 404 case too — see
+  below — so a shared status-handling core was not worth the added
+  indirection for what is otherwise a short, linear match.
+
+  A 404 here means the given `product_id` doesn't exist in this store
+  and maps to `:not_found` — deliberately NOT `:shop_not_found`
+  (`fetch_products/2`'s 404, meaning the *shop* domain itself doesn't
+  resolve): the shop answered fine, it just has no such product.
+
+  ## Options
+
+    * `:req_options` — as `fetch_products/2`.
+  """
+  @spec fetch_product(String.t(), String.t() | integer(), keyword()) ::
+          {:ok, map()} | {:error, :invalid_product_id | term()}
+  def fetch_product(integration_uuid, product_id, opts \\ []) do
+    with {:ok, product_id} <- numeric_id(product_id, :invalid_product_id),
+         {:ok, {shop_domain, req}} <-
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
+      fetch_one(req, product_url(shop_domain, product_id), @max_retries)
+    end
+  end
+
+  # Shopify ids are numeric. An id is interpolated straight into the URL
+  # path, so anything else — `"555/../shop"`, `"555?x=1"`, `""` — would
+  # rewrite the request rather than name a product. A stored id is
+  # trusted no more than a typed one; both go through this.
+  defp numeric_id(id, _error) when is_integer(id) and id >= 0, do: {:ok, id}
+
+  defp numeric_id(id, error) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} when n >= 0 -> {:ok, n}
+      _ -> {:error, error}
+    end
+  end
+
+  defp numeric_id(_id, error), do: {:error, error}
+
+  @doc """
+  Fetches the connected store's own `shop.json` — its name, domain, and
+  crucially its `currency`. Per the per-domain-currency design (§7.5), a
+  Shopify sync must be able to check the store's own currency against
+  the base currency and refuse price updates on a mismatch rather than
+  silently reimporting numbers that no longer mean what they used to.
+
+  A single, unpaginated request — unlike `fetch_products/2` and its
+  siblings, there is only ever one shop.
+
+  ## Options
+
+    * `:req_options` — as `fetch_products/2`.
+  """
+  @spec fetch_shop(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def fetch_shop(integration_uuid, opts \\ []) do
+    with {:ok, {shop_domain, req}} <-
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
+      req
+      |> Req.get(url: shop_url(shop_domain))
+      |> parse_shop_response()
+    end
+  end
+
+  @doc false
+  # Split out of `fetch_shop/2` so the response-shape handling can be
+  # covered directly (`AdminClientTest`) without a network call — the
+  # error atoms mirror `fetch_all/5`'s own status-code handling above,
+  # so the two clients agree on what a given Shopify status means.
+  @spec parse_shop_response({:ok, Req.Response.t()} | {:error, term()}) ::
+          {:ok, map()} | {:error, term()}
+  def parse_shop_response({:ok, %{status: 200, body: %{"shop" => shop}}}), do: {:ok, shop}
+  def parse_shop_response({:ok, %{status: 401}}), do: {:error, :unauthorized}
+  def parse_shop_response({:ok, %{status: 403}}), do: {:error, :forbidden}
+  def parse_shop_response({:ok, %{status: 404}}), do: {:error, :shop_not_found}
+  def parse_shop_response({:ok, %{status: status}}), do: {:error, {:unexpected_status, status}}
+  def parse_shop_response({:error, reason}), do: {:error, reason}
+
+  defp shop_url(shop_domain), do: "https://#{shop_domain}/admin/api/#{@api_version}/shop.json"
+
+  @doc """
+  Fetches every collection from the connected store — `custom_collections`
+  and `smart_collections` concatenated, each paginated like
+  `fetch_products/2`. Each returned collection carries `"kind"` (`"custom"`
+  or `"smart"`, which endpoint it came from) and `"position"` — a running
+  index across BOTH lists, in API order (custom first, then smart) — this
+  is the order `CollectionSync` writes as `category.position`.
+
+  ## Options
+
+    * `:integration_uuid` — required; resolves the shop domain/access
+      token the same way `fetch_products/2` does.
+    * `:req_options` — as `fetch_products/2`.
+  """
+  @spec fetch_collections(keyword()) :: {:ok, [map()]} | {:error, term()}
+  def fetch_collections(opts \\ []) do
+    with {:ok, integration_uuid} <- fetch_integration_uuid(opts),
+         {:ok, {shop_domain, req}} <-
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
+      fetch_collections_by_kind(req, shop_domain)
+    end
+  end
+
+  @doc """
+  Fetches the product ids of `collection_id`, in the order Shopify
+  returns them — Shopify applies the collection's own sort order to this
+  endpoint, so no client-side sorting happens here; `CollectionSync` reads
+  this order directly as `item.position` within the category. Paginated
+  like `fetch_products/2`.
+
+  ## Options
+
+  Same as `fetch_collections/1`.
+  """
+  @spec fetch_collection_product_ids(String.t() | integer(), keyword()) ::
+          {:ok, [term()]} | {:error, :invalid_collection_id | term()}
+  def fetch_collection_product_ids(collection_id, opts \\ []) do
+    with {:ok, collection_id} <- numeric_id(collection_id, :invalid_collection_id),
+         {:ok, integration_uuid} <- fetch_integration_uuid(opts),
+         {:ok, {shop_domain, req}} <-
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
+      url = collection_products_url(shop_domain, collection_id)
+
+      case fetch_all(req, url, [], @max_retries, "products") do
+        {:ok, products} -> {:ok, Enum.map(products, & &1["id"])}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  defp fetch_integration_uuid(opts) do
+    case Keyword.get(opts, :integration_uuid) do
+      uuid when is_binary(uuid) and uuid != "" -> {:ok, uuid}
+      _ -> {:error, :missing_integration_uuid}
+    end
+  end
+
+  defp resolve_client(integration_uuid, req_options) do
     case Integrations.get_credentials(integration_uuid) do
       {:ok, %{"shop_domain" => shop_domain, "access_token" => access_token}}
       when is_binary(shop_domain) and shop_domain != "" and
              is_binary(access_token) and access_token != "" ->
-        req = build_req(access_token, Keyword.get(opts, :req_options, []))
-        fetch_all(req, initial_url(shop_domain), [], @max_retries)
+        {:ok, {shop_domain, build_req(access_token, req_options)}}
 
       {:ok, _incomplete} ->
         {:error, :missing_credentials}
@@ -50,11 +204,59 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     end
   end
 
+  defp fetch_collections_by_kind(req, shop_domain) do
+    with {:ok, custom} <-
+           fetch_all(
+             req,
+             collections_url(shop_domain, "custom_collections"),
+             [],
+             @max_retries,
+             "custom_collections"
+           ),
+         {:ok, smart} <-
+           fetch_all(
+             req,
+             collections_url(shop_domain, "smart_collections"),
+             [],
+             @max_retries,
+             "smart_collections"
+           ) do
+      collections =
+        (tag_kind(custom, "custom") ++ tag_kind(smart, "smart"))
+        |> Enum.with_index()
+        |> Enum.map(fn {collection, index} -> Map.put(collection, "position", index) end)
+
+      {:ok, collections}
+    end
+  end
+
+  defp tag_kind(collections, kind), do: Enum.map(collections, &Map.put(&1, "kind", kind))
+
   defp initial_url(shop_domain) do
     query =
       URI.encode_query(%{"limit" => @page_limit, "fields" => Enum.join(@product_fields, ",")})
 
     "https://#{shop_domain}/admin/api/#{@api_version}/products.json?" <> query
+  end
+
+  defp product_url(shop_domain, product_id) do
+    query = URI.encode_query(%{"fields" => Enum.join(@product_fields, ",")})
+
+    "https://#{shop_domain}/admin/api/#{@api_version}/products/#{product_id}.json?" <> query
+  end
+
+  defp collections_url(shop_domain, resource) do
+    query =
+      URI.encode_query(%{"limit" => @page_limit, "fields" => Enum.join(@collection_fields, ",")})
+
+    "https://#{shop_domain}/admin/api/#{@api_version}/#{resource}.json?" <> query
+  end
+
+  defp collection_products_url(shop_domain, collection_id) do
+    query = URI.encode_query(%{"limit" => @page_limit, "fields" => "id"})
+
+    "https://#{shop_domain}/admin/api/#{@api_version}/collections/#{collection_id}/products.json?" <>
+      query
   end
 
   defp build_req(access_token, req_options) do
@@ -63,17 +265,23 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     |> Req.new()
   end
 
-  defp fetch_all(_req, nil, acc, _retries_left), do: {:ok, Enum.reverse(acc)}
+  defp fetch_all(_req, nil, acc, _retries_left, _response_key), do: {:ok, Enum.reverse(acc)}
 
-  defp fetch_all(req, url, acc, retries_left) do
+  defp fetch_all(req, url, acc, retries_left, response_key) do
     case Req.get(req, url: url) do
-      {:ok, %{status: 200, body: %{"products" => products}} = response} ->
-        fetch_all(req, next_page_url(response), Enum.reverse(products, acc), @max_retries)
+      {:ok, %{status: 200, body: %{^response_key => entries}} = response} ->
+        fetch_all(
+          req,
+          next_page_url(response),
+          Enum.reverse(entries, acc),
+          @max_retries,
+          response_key
+        )
 
       {:ok, %{status: 429} = response} when retries_left > 0 ->
         retry_after = retry_after_seconds(response)
         Process.sleep(:timer.seconds(retry_after))
-        fetch_all(req, url, acc, retries_left - 1)
+        fetch_all(req, url, acc, retries_left - 1, response_key)
 
       {:ok, %{status: 429}} ->
         {:error, :rate_limited}
@@ -86,6 +294,41 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
 
       {:ok, %{status: 404}} ->
         {:error, :shop_not_found}
+
+      {:ok, %{status: status}} ->
+        {:error, {:unexpected_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # `fetch_product/3`'s own request loop — not built on `fetch_all/5`
+  # (see that function's doc for why: no accumulator, no pagination, a
+  # singular `"product"` map instead of a list, and a 404 that means
+  # something different here). Shares `retry_after_seconds/1` and the
+  # 429/401/403/unexpected-status handling verbatim.
+  defp fetch_one(req, url, retries_left) do
+    case Req.get(req, url: url) do
+      {:ok, %{status: 200, body: %{"product" => product}}} ->
+        {:ok, product}
+
+      {:ok, %{status: 429} = response} when retries_left > 0 ->
+        retry_after = retry_after_seconds(response)
+        Process.sleep(:timer.seconds(retry_after))
+        fetch_one(req, url, retries_left - 1)
+
+      {:ok, %{status: 429}} ->
+        {:error, :rate_limited}
+
+      {:ok, %{status: 401}} ->
+        {:error, :unauthorized}
+
+      {:ok, %{status: 403}} ->
+        {:error, :forbidden}
+
+      {:ok, %{status: 404}} ->
+        {:error, :not_found}
 
       {:ok, %{status: status}} ->
         {:error, {:unexpected_status, status}}

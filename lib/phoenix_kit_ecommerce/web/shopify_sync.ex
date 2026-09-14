@@ -13,11 +13,11 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   that mode (see `visible_sections/2`).
 
   Changes are grouped into field sections (Prices, Titles, Descriptions,
-  HTML texts, Tags, Statuses, Vendors — in that order, price first). One
+  Full Descriptions, Tags, Statuses, Vendors — in that order, price first). One
   product's change can appear in more than one section if more than one
   of its fields differs. Sections are collapsed by default and show a
   count; expanding one reveals its rows, 25 at a time (see the module
-  attribute doc on `@per_page` for why pagination here is a correctness
+  attribute doc on `@per_page` for why chunking here is a correctness
   requirement, not polish). An operator can apply a single field on a
   single product, a whole section, or every pending change at once —
   always through `PhoenixKitEcommerce.Shopify.Sync`'s existing
@@ -65,13 +65,16 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   import PhoenixKitWeb.Components.Core.EmptyState
 
   alias PhoenixKit.Integrations
+  alias PhoenixKit.PubSub.Manager
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Sync
   alias PhoenixKitEcommerce.Shopify.TextDiff
   alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker
 
   # Section order — price first, per spec. Order only: the plural section
   # headers live in `section_label/1` and the singular per-field wording
@@ -100,15 +103,17 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # `row_change_summary/1` already renders for `:vendor`/`:tags`/etc.
   @text_fields [:description, :body_html]
 
-  # Rows rendered per page within an expanded section. Not a display
+  # Rows added per load within an expanded section. Not a display
   # preference: `TextDiff`'s own moduledoc measures a wholly-rewritten
   # 1.7 KB body_html at 12 ms per row, and the live catalog's ~500
   # products commonly differ in title, description, AND body_html at
   # once — rendering a full section in one pass can spend several
   # seconds computing summaries inside the LiveView process, on top of
-  # producing a DOM no operator can usefully scroll. Bounding to 25 rows
-  # bounds both costs at once; summaries are computed only for the rows
-  # on the current page (`build_section/2` below).
+  # producing a DOM no operator can usefully scroll. Opening a section
+  # therefore costs one chunk, and each further chunk is the operator's
+  # own click; summaries are computed only for rows actually loaded
+  # (`build_section/2` below). Loaded rows stay on screen rather than
+  # being replaced, which is what lets a bulk selection survive a load.
   @per_page 25
 
   @impl true
@@ -117,10 +122,18 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     # — a direct link to a turned-off sync must not open it, mirroring
     # `Web.Translations`' own guard for `shop_translations_enabled`.
     if Shop.shopify_enabled?() do
+      if connected?(socket), do: Manager.subscribe(ShopifyMediaSyncWorker.topic())
+
       {:ok,
        socket
        |> assign(:page_title, gettext("Shopify Sync"))
        |> assign(:connection, shopify_connection())
+       |> assign(:catalogue_source_active?, catalogue_source_active?())
+       |> assign(:media_sync_progress, ShopifyMediaSyncWorker.get_progress())
+       |> assign(
+         :collections_filter,
+         PhoenixKitEcommerce.get_config("shopify_collections_filter")
+       )
        |> assign(:checking, false)
        |> assign(:changes, nil)
        |> assign(:error, nil)
@@ -131,6 +144,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
        |> assign(:expanded_sections, MapSet.new())
        |> assign(:expanded_rows, MapSet.new())
        |> assign(:page, %{})
+       |> assign(:diffs, %{})
        |> assign(:applied_any?, false)
        |> assign(:pending, nil)}
     else
@@ -142,6 +156,66 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
        )
        |> push_navigate(to: Routes.path("/admin/shop"))}
     end
+  end
+
+  # `@diffs` — `%{{field, product_uuid} => %{summary: ..., words: ...}}`
+  # — memoizes `TextDiff.summary/2` (and `words/2` for an expanded row)
+  # for exactly the rows `build_section/2` will render: the loaded page
+  # of every EXPANDED text-field section. `render/1` only reads it.
+  #
+  # Computing summaries inside `render/1` meant a full Myers diff per
+  # loaded row on EVERY render — including each `{:media_sync_progress,
+  # _}` message the worker broadcasts every 20 products, which has
+  # nothing to do with the change list. At ~12 ms per rewritten
+  # body_html row (TextDiff's own measurement) and 25 rows per loaded
+  # page, a media sync run turned into hundreds of milliseconds of diff
+  # work per progress tick in the LiveView process. Now a summary is
+  # computed once, when the row first becomes visible, and reused until
+  # the change list is replaced; entries for rows no longer visible are
+  # dropped so an applied row's stale diff never lingers.
+  #
+  # Every handler that changes what is visible — `@changes`, `@page`,
+  # `@expanded_sections`, `@expanded_rows` — pipes through this.
+  defp refresh_diffs(socket) do
+    %{changes: changes, source: source, page: page, diffs: previous} = socket.assigns
+    expanded_sections = socket.assigns.expanded_sections
+    expanded_rows = socket.assigns.expanded_rows
+
+    diffs =
+      (changes || [])
+      |> visible_sections(source)
+      |> Enum.filter(fn {field, _} -> field in @text_fields and field in expanded_sections end)
+      |> Enum.flat_map(fn {field, field_changes} ->
+        loaded = current_page(page, field, length(field_changes)) * @per_page
+
+        field_changes
+        |> Enum.take(loaded)
+        |> Enum.map(&{field, &1})
+      end)
+      |> Map.new(fn {field, change} ->
+        key = {field, change.product_uuid}
+        %{current: current, incoming: incoming} = Map.fetch!(change.changes, field)
+        expanded? = MapSet.member?(expanded_rows, key)
+        {key, diff_entry(Map.get(previous, key), current || "", incoming || "", expanded?)}
+      end)
+
+    assign(socket, :diffs, diffs)
+  end
+
+  # A cached summary is kept; `words` is computed only once the row is
+  # expanded (and kept once computed — collapsing and re-expanding a row
+  # costs nothing).
+  defp diff_entry(nil, current, incoming, expanded?) do
+    %{
+      summary: TextDiff.summary(current, incoming),
+      words: expanded? && TextDiff.words(current, incoming)
+    }
+  end
+
+  defp diff_entry(%{words: words} = entry, current, incoming, expanded?) do
+    if expanded? and not is_list(words),
+      do: %{entry | words: TextDiff.words(current, incoming)},
+      else: entry
   end
 
   @impl true
@@ -165,10 +239,38 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
              expanded_sections: MapSet.new(),
              expanded_rows: MapSet.new(),
              page: %{},
+             diffs: %{},
              applied_any?: false,
              pending: nil
            )
            |> start_async(:check_diff, fn -> Sync.check(uuid) end)}
+      end
+    end)
+  end
+
+  # "Media & collections" panel — three buttons, one event, `kind` in the
+  # payload (unlike the field-section buttons above, which smuggle their
+  # field into the event NAME: these payloads are plain `phx-value-kind`,
+  # no JS hook is involved). Enqueueing is authorized here, same as
+  # `"check"` — `ShopifyMediaSyncWorker`'s own moduledoc: "Background jobs
+  # are authorized at ENQUEUE time by the LiveView that starts them; the
+  # workers themselves run without a scope by design." Oban's own
+  # `unique:` on the worker is the real guard against a double-enqueue —
+  # the in-flight check here is UX only (an already-disabled button).
+  def handle_event("run_media_sync", %{"kind" => kind}, socket)
+      when kind in ~w(images variants collections) do
+    Authz.authorize(socket, :run_imports, fn ->
+      if media_sync_in_flight?(socket.assigns.media_sync_progress, kind) do
+        {:noreply, socket}
+      else
+        actor_uuid = socket.assigns.phoenix_kit_current_scope.user.uuid
+
+        result =
+          %{"kind" => kind, "actor_uuid" => actor_uuid}
+          |> ShopifyMediaSyncWorker.new()
+          |> Oban.insert()
+
+        {:noreply, flash_media_sync_enqueue(socket, result)}
       end
     end)
   end
@@ -180,7 +282,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
       field ->
         {:noreply,
-         assign(socket, :expanded_sections, toggle(socket.assigns.expanded_sections, field))}
+         socket
+         |> assign(:expanded_sections, toggle(socket.assigns.expanded_sections, field))
+         |> refresh_diffs()}
     end
   end
 
@@ -191,16 +295,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
       field ->
         {:noreply,
-         assign(socket, :expanded_rows, toggle(socket.assigns.expanded_rows, {field, uuid}))}
+         socket
+         |> assign(:expanded_rows, toggle(socket.assigns.expanded_rows, {field, uuid}))
+         |> refresh_diffs()}
     end
   end
 
-  def handle_event("page_prev", %{"field" => field_str}, socket) do
-    {:noreply, bump_page(socket, field_str, -1)}
-  end
-
-  def handle_event("page_next", %{"field" => field_str}, socket) do
-    {:noreply, bump_page(socket, field_str, 1)}
+  # One event per section rather than one event carrying the section:
+  # core's `load_more/1` renders its own button and forwards nothing, so
+  # `phx-value-field` cannot reach the DOM on a released core. (Fixed
+  # upstream in phoenix_kit#798; collapse these back into one event with
+  # a value once this package's floor carries it.)
+  def handle_event("load_more_rows:" <> field_str, _params, socket) do
+    {:noreply, grow_section(socket, field_str)}
   end
 
   # --- Request phase: validate the click, stash what it would do in
@@ -348,6 +455,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remove_field_for(changes, succeeded, field))
+     |> refresh_diffs()
      |> flash_bulk_result(succeeded, failed, field)}
     |> clear_pending()
   end
@@ -376,6 +484,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remaining)
+     |> refresh_diffs()
      |> flash_everything_result(succeeded, failed)}
     |> clear_pending()
   end
@@ -393,6 +502,13 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   defp open_pending(socket, [], _pending), do: {:noreply, socket}
   defp open_pending(socket, _eligible, pending), do: {:noreply, assign(socket, :pending, pending)}
 
+  # `ShopifyMediaSyncWorker`'s own broadcast — live progress for the
+  # "Media & collections" panel, no polling.
+  @impl true
+  def handle_info({:media_sync_progress, progress}, socket) do
+    {:noreply, assign(socket, :media_sync_progress, progress)}
+  end
+
   @impl true
   def handle_async(
         :check_diff,
@@ -408,22 +524,25 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         socket
       ) do
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        checking: false,
        changes: changes,
        source: source,
        fallback_reason: reason,
        total_shopify_products: total_shopify_products,
        matched_local_products: matched_local_products
-     )}
+     )
+     |> refresh_diffs()}
   end
 
   def handle_async(:check_diff, {:ok, {:error, reason}}, socket) do
-    {:noreply, assign(socket, checking: false, changes: nil, error: format_error(reason))}
+    {:noreply,
+     assign(socket, checking: false, changes: nil, diffs: %{}, error: format_error(reason))}
   end
 
   def handle_async(:check_diff, {:exit, reason}, socket) do
-    {:noreply, assign(socket, checking: false, changes: nil, error: inspect(reason))}
+    {:noreply, assign(socket, checking: false, changes: nil, diffs: %{}, error: inspect(reason))}
   end
 
   defp apply_row_change(socket, changes, change, field) do
@@ -440,6 +559,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         {:noreply,
          socket
          |> assign(:changes, remove_field_for(changes, [change], field))
+         |> refresh_diffs()
          |> assign(:applied_any?, true)
          |> put_flash(
            :info,
@@ -449,17 +569,33 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
            )
          )}
 
-      {:error, _changeset} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           gettext("Could not update %{title}'s %{field}.",
-             title: change.title,
-             field: field_label(field)
-           )
-         )}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, apply_error_flash(reason, change.title, field))}
     end
+  end
+
+  # `{:currency_mismatch, shop, base}` (`Sync.apply_change/3`'s own
+  # error, per-domain-currency design §7.5) is the one failure reason
+  # worth naming specifically: "sync failed" tells an operator nothing
+  # actionable, while naming the two currencies that disagree tells them
+  # exactly what changed and where to look. Anything else (a changeset
+  # error, in practice) keeps the pre-existing generic wording — this
+  # page has never surfaced changeset field errors here, and that stays
+  # unchanged; only the reason this module can name in one sentence
+  # gets a sentence.
+  defp apply_error_flash({:currency_mismatch, shop_currency, base_currency}, title, field) do
+    gettext(
+      "Could not update %{title}'s %{field}: the store is now in %{shop_currency} " <>
+        "while this shop's base currency is %{base_currency}.",
+      title: title,
+      field: field_label(field),
+      shop_currency: shop_currency,
+      base_currency: base_currency
+    )
+  end
+
+  defp apply_error_flash(_reason, title, field) do
+    gettext("Could not update %{title}'s %{field}.", title: title, field: field_label(field))
   end
 
   defp apply_section_changes(socket, field) do
@@ -484,6 +620,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:changes, remove_field_for(changes, succeeded, field))
+     |> refresh_diffs()
      |> flash_bulk_result(succeeded, failed, field)}
   end
 
@@ -661,22 +798,22 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     if MapSet.member?(set, item), do: MapSet.delete(set, item), else: MapSet.put(set, item)
   end
 
-  defp bump_page(socket, field_str, delta) do
+  defp grow_section(socket, field_str) do
     case to_field(field_str) do
       nil ->
         socket
 
       field ->
-        # The CLAMPED current page, not the raw stored one: applying a
-        # section's last row shrinks its count, which can snap the
-        # DISPLAYED page back (`current_page/3`'s own clamp) while the
-        # STORED value stays at the now-out-of-range page it was on.
-        # Reading raw here would then compute the next page relative to
-        # a page the operator was never actually looking at, and a Prev
-        # click right after such an apply would silently move the
-        # stored value without moving the display — a no-op the operator
-        # has no way to explain. See the regression test for the exact
-        # 51-row repro.
+        # Grow from the CLAMPED page, not the raw stored one. Applying a
+        # section's last row shrinks its count, and `build_section/2`
+        # clamps what it renders, so the stored value can sit past the
+        # end of a section the operator is no longer looking at. Growing
+        # from the clamp keeps the stored page within one chunk of what
+        # actually exists instead of letting it drift further out with
+        # every click. Rendering clamps either way, so this is a bound on
+        # the state rather than a fix for something visible: with rows
+        # taken as `page * @per_page`, an overshoot saturates at the list
+        # length and shows the same thing.
         count = field_change_count(socket, field)
         current = current_page(socket.assigns.page, field, count)
 
@@ -686,8 +823,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         # across pages. Paging away must not leave a modal open that could
         # still confirm into a write for rows no longer on screen.
         socket
-        |> assign(:page, Map.put(socket.assigns.page, field, current + delta))
+        |> assign(:page, Map.put(socket.assigns.page, field, current + 1))
         |> assign(:pending, nil)
+        |> refresh_diffs()
     end
   end
 
@@ -713,6 +851,87 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       [] -> nil
     end
   end
+
+  # ============================================================
+  # "Media & collections" panel
+  # ============================================================
+
+  defp catalogue_source_active?, do: ProductSource.current() == ProductSource.Catalogue
+
+  # `label` is a real `gettext/1` call at each list entry, not a stored
+  # runtime string reused from a module attribute — see `@sections`'
+  # own comment above for why that distinction matters for extraction.
+  defp media_sync_kinds do
+    [
+      {"variants", gettext("Sync variants & prices")},
+      {"images", gettext("Sync images")},
+      {"collections", gettext("Sync collections")}
+    ]
+  end
+
+  defp media_sync_in_flight?(%{"kind" => kind, "finished_at" => nil}, kind), do: true
+  defp media_sync_in_flight?(_progress, _kind), do: false
+
+  # `Oban.insert/1`'s result, not just its call, decides the flash: on a
+  # unique-constraint hit it returns `{:ok, %Job{conflict?: true}}` —
+  # nothing was actually queued — and on a DB error `{:error, changeset}`;
+  # only a genuine fresh insert gets the "running in the background" copy.
+  defp flash_media_sync_enqueue(socket, {:ok, %Oban.Job{conflict?: false}}) do
+    put_flash(socket, :info, gettext("Sync queued — running in the background."))
+  end
+
+  defp flash_media_sync_enqueue(socket, {:ok, %Oban.Job{conflict?: true}}) do
+    put_flash(socket, :info, gettext("A sync of this kind is already running."))
+  end
+
+  defp flash_media_sync_enqueue(socket, {:error, _changeset}) do
+    put_flash(socket, :error, gettext("Could not queue the sync — try again."))
+  end
+
+  defp media_sync_summary(%{
+         "kind" => kind,
+         "total" => total,
+         "done" => done,
+         "errors" => errors,
+         "finished_at" => finished_at
+       }) do
+    status = if finished_at, do: gettext("finished"), else: gettext("running")
+
+    gettext("%{kind}: %{status} (%{done}/%{total}, %{error_count} errors)",
+      kind: kind,
+      status: status,
+      done: done,
+      total: total,
+      error_count: length(errors || [])
+    )
+  end
+
+  defp media_sync_summary(_progress), do: nil
+
+  # `@collections_filter` is `CollectionSync.run/1`'s own allowlist
+  # (`PhoenixKitEcommerce.get_config("shopify_collections_filter")`,
+  # `%{}` when never configured) — shown here so an operator clicking
+  # "Sync collections" sees which of the store's collections will
+  # actually become categories, without opening the config.
+  defp collections_filter_summary(filter) when is_map(filter) do
+    prefix = filter["prefix"]
+    exclude = filter["exclude"] || []
+
+    if is_nil(prefix) and exclude == [] do
+      gettext("Collections filter: none — every Shopify collection becomes a category.")
+    else
+      gettext("Collections filter: prefix %{prefix}, excluding %{exclude}",
+        prefix: prefix || gettext("(any)"),
+        exclude: if(exclude == [], do: gettext("(none)"), else: Enum.join(exclude, ", "))
+      )
+    end
+  end
+
+  # A `shop_config` value stored as something other than a map (e.g. an
+  # operator hand-edited it, or it predates this key's map shape)
+  # degrades to "no filter" instead of raising on mount.
+  defp collections_filter_summary(_filter),
+    do: gettext("Collections filter: none — every Shopify collection becomes a category.")
 
   # Groups `changes` by field, in `@sections` order, dropping fields with
   # no matching changes. A change appears once per field it differs on.
@@ -766,8 +985,11 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
     rows =
       if expanded? do
+        # `take`, not a window: rows already on screen stay there when the
+        # operator loads more, which is what keeps a bulk selection alive
+        # across a load (selection lives in the DOM).
         field_changes
-        |> Enum.slice((page - 1) * @per_page, @per_page)
+        |> Enum.take(page * @per_page)
         |> Enum.map(&build_row(&1, field, assigns))
       else
         []
@@ -780,9 +1002,6 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       bulk_eligible_count: length(eligible),
       bulk_excluded_count: length(excluded),
       expanded?: expanded?,
-      page: page,
-      per_page: @per_page,
-      total_pages: total_pages(count),
       rows: rows
     }
   end
@@ -794,10 +1013,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     %{eligible_count: length(eligible), excluded_count: length(excluded)}
   end
 
+  # Summaries/word-diffs come from `@diffs` (see `refresh_diffs/1`) —
+  # never computed here, since this runs on every render.
   defp build_row(change, field, assigns) do
     %{current: current, incoming: incoming} = Map.fetch!(change.changes, field)
     text? = field in @text_fields
-    expanded? = MapSet.member?(assigns.expanded_rows, {field, change.product_uuid})
+    key = {field, change.product_uuid}
+    expanded? = MapSet.member?(assigns.expanded_rows, key)
+    diff = text? && Map.get(assigns.diffs, key)
 
     %{
       change: change,
@@ -807,8 +1030,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       incoming: incoming,
       text?: text?,
       expanded?: expanded?,
-      summary: text? && TextDiff.summary(current || "", incoming || ""),
-      words: text? && expanded? && TextDiff.words(current || "", incoming || "")
+      summary: diff && diff.summary,
+      words: (expanded? && diff && diff.words) || false
     }
   end
 
@@ -820,18 +1043,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   defp section_label(:price), do: gettext("Prices")
   defp section_label(:title), do: gettext("Titles")
   defp section_label(:description), do: gettext("Descriptions")
-  defp section_label(:body_html), do: gettext("HTML texts")
+  defp section_label(:body_html), do: gettext("Full Descriptions")
   defp section_label(:tags), do: gettext("Tags")
   defp section_label(:status), do: gettext("Statuses")
   defp section_label(:vendor), do: gettext("Vendors")
 
   # Singular wording for row/confirm text — kept in lockstep with
   # `section_label/1`'s plural headers above (drop the trailing "s").
-  # `:body_html` used to read "Description (HTML)" here while its own
-  # section header read "HTML texts" a few lines up — two different
-  # names for the same field on the same page, right next to the
-  # actually-different `:description` field's "Description"/"Descriptions".
-  # "HTML text(s)" now matches its section exactly.
+  # `:body_html` stores Markdown for Shopify-synced products (converted at
+  # sync time) as well as raw HTML for CSV-imported ones, so "HTML" is no
+  # longer an accurate name for it here; "Full Description(s)" matches the
+  # same field's admin-page label elsewhere (product_detail.ex,
+  # product_form.ex) and stays distinct from the actually-different
+  # `:description` field's "Description"/"Descriptions".
   #
   # ⚠️ These are interpolated into whole sentences as `%{field}`
   # ("Apply %{count} %{field} changes from Shopify?"), so a translator
@@ -845,7 +1069,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # want in another case. Do not copy this shape to a customer-facing
   # page.
   defp field_label(:title), do: gettext("Title")
-  defp field_label(:body_html), do: gettext("HTML text")
+  defp field_label(:body_html), do: gettext("Full Description")
   defp field_label(:description), do: gettext("Description")
   defp field_label(:vendor), do: gettext("Vendor")
   defp field_label(:tags), do: gettext("Tags")
@@ -1291,6 +1515,53 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           {gettext("Connected: %{name}", name: @connection.name)}
         </div>
 
+        <%!-- Outside the field-diff report below: these three writers act
+             directly on the catalogue (images, variants/prices,
+             collections → categories) rather than on the reviewed diff,
+             so they only ever show under the catalogue product source. --%>
+        <div
+          :if={@connection && @catalogue_source_active?}
+          id="media-sync-panel"
+          class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
+        >
+          <div class="font-semibold">{gettext("Media & collections")}</div>
+          <p class="text-sm text-base-content/70">
+            {gettext(
+              "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
+            )}
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              :for={{kind, label} <- media_sync_kinds()}
+              type="button"
+              id={"sync-media-#{kind}"}
+              class="btn btn-sm"
+              phx-click="run_media_sync"
+              phx-value-kind={kind}
+              disabled={media_sync_in_flight?(@media_sync_progress, kind)}
+            >
+              <span
+                :if={media_sync_in_flight?(@media_sync_progress, kind)}
+                class="loading loading-spinner loading-xs"
+              />
+              {label}
+            </button>
+          </div>
+
+          <div
+            :if={media_sync_summary(@media_sync_progress)}
+            id="media-sync-progress"
+            class="text-sm text-base-content/70"
+          >
+            {media_sync_summary(@media_sync_progress)}
+          </div>
+
+          <div id="media-sync-collections-filter" class="text-sm text-base-content/70">
+            {collections_filter_summary(@collections_filter)}
+          </div>
+        </div>
+
         <div :if={@error} class="alert alert-error">
           <span>{@error}</span>
         </div>
@@ -1474,7 +1745,13 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
                     <%= for row <- section.rows do %>
                       <.table_default_row id={"change-row-#{section.field}-#{row.product_uuid}"}>
                         <.bulk_select_cell value={row.product_uuid} />
-                        <.table_default_cell class="font-medium max-w-xs truncate">
+                        <%!-- Wraps rather than truncating: a product's title
+                              is what the operator identifies the row by, and
+                              this shop's titles are long enough that a cut
+                              one left several rows reading identically. The
+                              incoming value in the next column already
+                              wraps. --%>
+                        <.table_default_cell class="font-medium max-w-xs break-words whitespace-normal">
                           {row.title}
                         </.table_default_cell>
                         <.table_default_cell>
@@ -1505,37 +1782,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
                 </.table_default>
               </.bulk_select_scope>
 
-              <div
-                :if={section.total_pages > 1}
-                class="flex items-center justify-between p-2 bg-base-200/50"
-              >
-                <button
-                  type="button"
-                  id={"page-prev-#{section.field}"}
-                  phx-click="page_prev"
-                  phx-value-field={section.field}
-                  class="btn btn-xs"
-                  disabled={section.page == 1}
-                >
-                  « {gettext("Prev")}
-                </button>
-                <div id={"page-info-#{section.field}"}>
-                  <.pagination_info
-                    page={section.page}
-                    per_page={section.per_page}
-                    total_count={section.count}
-                  />
-                </div>
-                <button
-                  type="button"
-                  id={"page-next-#{section.field}"}
-                  phx-click="page_next"
-                  phx-value-field={section.field}
-                  class="btn btn-xs"
-                  disabled={section.page == section.total_pages}
-                >
-                  {gettext("Next")} »
-                </button>
+              <%!-- Core's load-more footer, the same one the catalogue's
+                    own lists use: this page pages by LiveView event (each
+                    section pages on its own, and there is no URL to patch),
+                    and its rows carry a client-side bulk selection that only
+                    survives if loaded rows stay in the DOM. --%>
+              <div :if={section.count > 0} class="p-2 bg-base-200/50">
+                <.load_more
+                  id={"load-more-#{section.field}"}
+                  loaded={length(section.rows)}
+                  total={section.count}
+                  on_load_more={"load_more_rows:#{section.field}"}
+                  noun_plural={gettext("changes")}
+                />
               </div>
             </div>
           </div>

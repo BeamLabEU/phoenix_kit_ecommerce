@@ -52,7 +52,7 @@ PhoenixKit auto-discovers the module at startup — no additional configuration 
 3. Add Oban queues to `config/config.exs`:
    ```elixir
    config :my_app, Oban,
-     queues: [shop_import: 5, shop_images: 5]
+     queues: [shop_imports: 5]
    ```
 4. Run `mix phoenix_kit.update` to generate migrations
 5. Enable the Shop module in Admin -> Modules
@@ -568,7 +568,7 @@ tests). The test repo runs core's versioned migrations via
 - Check that `enabled?/0` is not returning `false` (requires database access)
 
 ### CSV imports not processing
-- Ensure Oban is configured with `shop_import` and `shop_images` queues
+- Ensure Oban is configured with the `shop_imports` queue (every shop worker — CSV import, image migration, Shopify media sync — runs on it)
 - Check Oban dashboard for failed jobs
 - Review import logs at `/admin/shop/imports` for error details
 
@@ -577,7 +577,7 @@ tests). The test repo runs core's versioned migrations via
 - Check that session cookies are configured correctly
 
 ### Images not downloading during import
-- Ensure `shop_images` Oban queue is running
+- Ensure the `shop_imports` Oban queue is running
 - Check that `download_images` is enabled in the import config
 - Review image migration worker logs for HTTP errors
 

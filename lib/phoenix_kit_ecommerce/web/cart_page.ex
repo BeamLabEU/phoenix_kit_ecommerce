@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
@@ -55,10 +56,26 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     user = get_current_user(socket)
     user_uuid = if user, do: user.uuid, else: nil
 
-    # Get or create cart
-    {:ok, cart} =
-      Shop.get_or_create_cart(user_uuid: user_uuid, session_id: session_id)
+    # Get or create cart. Since `Cart.changeset/2` began requiring
+    # `:currency`, this can FAIL: a shop whose Billing currency table has no
+    # default row resolves `nil` and the changeset rejects it. That is the
+    # intended loud failure, but it must not reach a shopper as a MatchError
+    # crashing the page — the shop is simply not open for business yet.
+    case Shop.get_or_create_cart(user_uuid: user_uuid, session_id: session_id) do
+      {:ok, cart} -> mount_with_cart(socket, cart, session_id, current_language)
+      {:error, _reason} -> {:ok, shop_unavailable(socket)}
+    end
+  end
 
+  # The same exit the disabled-shop gate in `mount/3` takes: a flash on the
+  # HOST's root, not `Routes.path("/")`.
+  defp shop_unavailable(socket) do
+    socket
+    |> put_flash(:error, gettext("The shop is currently unavailable"))
+    |> push_navigate(to: "/")
+  end
+
+  defp mount_with_cart(socket, cart, session_id, current_language) do
     # Subscribe to cart events for real-time sync across tabs
     if connected?(socket) do
       Events.subscribe_to_cart(cart)
@@ -193,6 +210,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     socket
     |> assign(:cart, cart)
+    |> assign(:currency, Shop.currency_for_code(cart.currency))
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
     |> assign(:skip_mode, skip_mode)
@@ -384,6 +402,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                       </thead>
                       <tbody>
                         <%= for item <- @cart.items do %>
+                          <% display_title = NamePrefix.strip(item.product_title) %>
                           <tr>
                             <td>
                               <div class="flex items-center gap-4">
@@ -395,7 +414,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                     >
                                       <img
                                         src={item.product_image}
-                                        alt={item.product_title}
+                                        alt={display_title}
                                         class="w-full h-full object-cover"
                                       />
                                     </.link>
@@ -403,7 +422,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                     <div class="w-16 h-16 bg-base-200 rounded-lg overflow-hidden flex-shrink-0">
                                       <img
                                         src={item.product_image}
-                                        alt={item.product_title}
+                                        alt={display_title}
                                         class="w-full h-full object-cover"
                                       />
                                     </div>
@@ -429,10 +448,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                                         navigate={product_item_url(item, @current_language)}
                                         class="hover:text-primary transition-colors"
                                       >
-                                        {item.product_title}
+                                        {display_title}
                                       </.link>
                                     <% else %>
-                                      {item.product_title}
+                                      {display_title}
                                     <% end %>
                                   </div>
                                   <%= if item.product_sku do %>
@@ -555,12 +574,15 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               <div class="text-sm text-base-content/50">{estimate}</div>
                             <% end %>
                           </div>
+                          <%!-- `method.price` and the free threshold are BASE
+                               amounts; the cart is in its own currency. --%>
+                          <% presented = Shop.present_shipping_method(@cart, method) %>
                           <div class="text-right">
-                            <%= if ShippingMethod.free_for?(method, @cart.subtotal || Decimal.new("0")) do %>
+                            <%= if presented.free? do %>
                               <span class="badge badge-success">{gettext("FREE")}</span>
                             <% else %>
                               <span class="font-semibold">
-                                {format_price(method.price, @currency)}
+                                {format_price(presented.price, @currency)}
                               </span>
                             <% end %>
                           </div>

@@ -25,20 +25,16 @@ defmodule PhoenixKitEcommerce.Web.Products do
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
-  alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @per_page 25
-
-  # Last-resort currency symbol used only when no default currency is
-  # configured in Billing (i.e. `@currency` resolved to nil at mount).
-  # When a currency struct is present we always defer to its own symbol.
-  @default_currency_symbol "$"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -47,7 +43,10 @@ defmodule PhoenixKitEcommerce.Web.Products do
       Events.subscribe_inventory()
     end
 
-    currency = Shop.get_default_currency()
+    # A product's own `price` is always BASE currency (admin authoring
+    # screen, §4.5) - not "whatever the current display default resolves
+    # to", which is what `get_default_currency/0` names ambiguously.
+    currency = Shop.get_base_currency()
     categories = Shop.list_categories()
 
     # Get current language for admin (use default language)
@@ -70,6 +69,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
       |> assign(:delete_target, nil)
       |> assign(:delete_media_checked, false)
       |> assign(:bulk_delete_media, false)
+      |> assign(:catalogue_source_active?, ProductSource.current() == ProductSource.Catalogue)
 
     {:ok, socket}
   end
@@ -91,7 +91,11 @@ defmodule PhoenixKitEcommerce.Web.Products do
   end
 
   @impl true
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  def handle_params(_params, uri, socket) do
+    # Kept so the catalogue editor these pages link into can send the
+    # visitor back to the list they left, not to the catalogue's own.
+    {:noreply, assign(socket, :url_path, URI.parse(uri).path)}
+  end
 
   # `replace: true` — debounced box, so a typed-out query would otherwise leave
   # one history entry per pause and Back would walk the search string backwards.
@@ -353,10 +357,19 @@ defmodule PhoenixKitEcommerce.Web.Products do
             <div>
               <label class="label"><span class="fieldset-legend">&nbsp;</span></label>
               <.link
-                navigate={Routes.path("/admin/shop/products/new")}
+                navigate={
+                  Routes.path(
+                    if @catalogue_source_active?,
+                      do: "/admin/catalogue",
+                      else: "/admin/shop/products/new"
+                  )
+                }
                 class="btn btn-primary w-full"
               >
-                <.icon name="hero-plus" class="w-4 h-4 mr-2" /> {gettext("Add Product")}
+                <.icon name="hero-plus" class="w-4 h-4 mr-2" />
+                {if @catalogue_source_active?,
+                  do: gettext("Manage in Catalogue"),
+                  else: gettext("Add Product")}
               </.link>
             </div>
           </div>
@@ -461,7 +474,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                   label={Gettext.gettext(PhoenixKitWeb.Gettext, "View")}
                 />
                 <.table_row_menu_link
-                  navigate={Routes.path("/admin/shop/products/#{product.uuid}/edit")}
+                  navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
                   icon="hero-pencil"
                   label={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
                 />
@@ -588,7 +601,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                             label={Gettext.gettext(PhoenixKitWeb.Gettext, "View")}
                           />
                           <.table_row_menu_link
-                            navigate={Routes.path("/admin/shop/products/#{product.uuid}/edit")}
+                            navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
                             icon="hero-pencil"
                             label={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
                           />
@@ -785,17 +798,6 @@ defmodule PhoenixKitEcommerce.Web.Products do
   defp type_badge_class("physical"), do: "badge badge-info badge-outline"
   defp type_badge_class("digital"), do: "badge badge-secondary badge-outline"
   defp type_badge_class(_), do: "badge badge-outline"
-
-  defp format_price(nil, _currency), do: "—"
-
-  defp format_price(price, nil) do
-    # Fallback if no currency configured
-    "#{@default_currency_symbol}#{Decimal.round(price, 2)}"
-  end
-
-  defp format_price(price, currency) do
-    Currency.format_amount(price, currency)
-  end
 
   # Get product thumbnail - prefers Storage images over legacy URLs
   defp get_product_thumbnail(%{featured_image_uuid: id}) when is_binary(id) do

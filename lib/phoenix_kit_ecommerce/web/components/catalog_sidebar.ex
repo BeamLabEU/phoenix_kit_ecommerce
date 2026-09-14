@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
@@ -53,6 +54,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
       assigns
       |> assign(:has_active, FilterHelpers.has_active_filters?(assigns.active_filters))
       |> assign(:categories_open, true)
+      # Resolved once per render, not once per category entry in the tree.
+      |> assign(:name_prefixes, NamePrefix.prefixes())
 
     ~H"""
     <div class="space-y-1">
@@ -98,7 +101,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
                 </.link>
               </li>
               <%= for cat <- @categories do %>
-                <% cat_name = Translations.get(cat, :name, @current_language) %>
+                <% cat_name =
+                  Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes) %>
                 <li>
                   <.link
                     navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
@@ -150,6 +154,9 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   attr :filter_qs, :string, default: ""
 
   def category_nav(assigns) do
+    # Resolved once per render, not once per category entry.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <%= if @categories != [] do %>
       <details open={@open} class="group">
@@ -171,7 +178,8 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
               </.link>
             </li>
             <%= for cat <- @categories do %>
-              <% cat_name = Translations.get(cat, :name, @current_language) %>
+              <% cat_name =
+                Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes) %>
               <li>
                 <.link
                   navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
@@ -275,7 +283,7 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   end
 
   def filter_section(%{filter: %{"type" => type}} = assigns)
-      when type in ["vendor", "metadata_option"] do
+      when type in ["vendor", "metadata_option", "attribute_set"] do
     values = if is_list(assigns.values), do: assigns.values, else: []
     active_list = assigns.active || []
     assigns = assign(assigns, values: values, active_list: active_list)
@@ -290,23 +298,47 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
         {translate_label(@filter)}
         <%= if @active_list != [] do %>
           <span class="badge badge-primary badge-xs ml-1">{length(@active_list)}</span>
+          <%!-- Clears THIS filter only. The sidebar's "Clear filters"
+                empties every one of them, which is the wrong tool for
+                starting one facet over. `preventDefault` because the
+                button sits inside a <summary>, whose own click would
+                otherwise fold the section shut. --%>
+          <button
+            type="button"
+            phx-click="clear_filter"
+            phx-value-key={@filter["key"]}
+            onclick="event.preventDefault(); event.stopPropagation();"
+            class="btn btn-ghost btn-xs px-1 ml-auto"
+            title={gettext("Clear this filter")}
+            aria-label={gettext("Clear this filter")}
+          >
+            <.icon name="hero-x-mark" class="w-3 h-3" />
+          </button>
         <% end %>
       </summary>
       <div class="pt-1 pb-2 max-h-48 overflow-y-auto space-y-1">
         <%= if @values == [] do %>
           <p class="text-xs text-base-content/40 italic">{gettext("No options available")}</p>
         <% else %>
+          <%!-- `vendor`/legacy `metadata_option` facets carry `:value` (the
+               same string is both the display text and the filter value);
+               `attribute_set` facets — and `metadata_option` on the
+               catalogue source, which is an alias of it — carry a
+               `:slug`/`:label` pair instead, so the checkbox submits the
+               slug while showing the label. --%>
           <%= for item <- @values do %>
+            <% item_value = Map.get(item, :slug) || Map.get(item, :value) %>
+            <% item_label = Map.get(item, :label) || Map.get(item, :value) %>
             <label class="flex items-center gap-2 cursor-pointer hover:bg-base-200 rounded px-1 py-0.5">
               <input
                 type="checkbox"
                 class="checkbox checkbox-primary checkbox-xs"
-                checked={item.value in @active_list}
+                checked={item_value in @active_list}
                 phx-click="toggle_filter"
                 phx-value-key={@filter["key"]}
-                phx-value-val={item.value}
+                phx-value-val={item_value}
               />
-              <span class="text-sm flex-1 truncate">{item.value}</span>
+              <span class="text-sm flex-1 truncate">{item_label}</span>
               <span class="badge badge-ghost badge-xs">{item.count}</span>
             </label>
           <% end %>

@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
@@ -117,6 +118,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # Subscribe to cart events for real-time sync across tabs
     if connected?(socket) do
       Events.subscribe_to_cart(cart)
+      Events.subscribe_currencies()
       PhoenixKitEcommerce.Notifications.checkout_started(cart)
     end
 
@@ -201,6 +203,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:page_title, gettext("Checkout"))
     |> assign(:cart, assigns.cart)
     |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
+    |> assign(:fx_drift, Shop.cart_rate_drift(assigns.cart))
     |> assign(:is_guest, assigns.is_guest)
     |> assign(:authenticated, assigns.authenticated)
     |> assign(:payment_options, assigns.payment_options)
@@ -494,6 +497,23 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     end
   end
 
+  # §4.4: the shopper's own EXPLICIT choice to accept the current rate -
+  # the ONE path that ever changes a non-empty cart's `exchange_rate`.
+  @impl true
+  def handle_event("refresh_cart_rate", _params, socket) do
+    case Shop.refresh_cart_rate(socket.assigns.cart) do
+      {:ok, cart} ->
+        {:noreply,
+         socket
+         |> assign_cart_repriced(cart)
+         |> put_flash(:info, gettext("Your cart has been repriced at the current exchange rate"))}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("The cart could not be repriced — please try again"))}
+    end
+  end
+
   @impl true
   def handle_event("confirm_order", _params, socket) do
     socket = assign(socket, :processing, true)
@@ -696,14 +716,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # review step, re-price through the same path that produced the figure in
   # the first place.
   defp assign_cart_repriced(socket, cart) do
-    if socket.assigns[:step] == :review do
-      case Shop.preview_checkout_totals(cart, checkout_opts(socket)) do
-        {:ok, priced} -> assign(socket, :cart, priced)
-        {:error, _} -> assign(socket, :cart, cart)
+    socket =
+      if socket.assigns[:step] == :review do
+        case Shop.preview_checkout_totals(cart, checkout_opts(socket)) do
+          {:ok, priced} -> assign(socket, :cart, priced)
+          {:error, _} -> assign(socket, :cart, cart)
+        end
+      else
+        assign(socket, :cart, cart)
       end
-    else
-      assign(socket, :cart, cart)
-    end
+
+    assign(socket, :fx_drift, Shop.cart_rate_drift(socket.assigns.cart))
   end
 
   defp shipping_selection_still_valid?(cart) do
@@ -992,6 +1015,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     {:noreply, redirect_to_cart(socket, gettext("Your cart is empty"))}
   end
 
+  # §4.4: a currency-table change may open (or close) the drift gap
+  # between this cart's frozen rate and the live one. The cart itself is
+  # NEVER touched here — only the notice is recomputed.
+  @impl true
+  def handle_info({:currencies_changed, _code}, socket) do
+    {:noreply, assign(socket, :fx_drift, Shop.cart_rate_drift(socket.assigns.cart))}
+  end
+
   # Catch-all: an unrecognised message must not take the LiveView down.
   #
   # Every clause above matches a specific broadcast shape, so ANY message
@@ -1036,6 +1067,35 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             {gettext("Review & Confirm")}
           </div>
         </div>
+
+        <%!-- §4.4: the frozen rate drifted past fx_rate_drift_alert_pct.
+             Prices stay as shown; only the button reprices. --%>
+        <%= if @fx_drift do %>
+          <div id="checkout-fx-drift" class="alert alert-warning mb-6">
+            <.icon name="hero-arrow-trending-up" class="w-5 h-5" />
+            <div class="flex-1">
+              <div class="font-semibold">
+                {gettext("The exchange rate has changed since you started this cart")}
+              </div>
+              <div class="text-sm">
+                {gettext(
+                  "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{pct}% apart). Your prices stay as shown unless you reprice.",
+                  frozen: Decimal.to_string(@fx_drift.frozen, :normal),
+                  current: Decimal.to_string(@fx_drift.current, :normal),
+                  pct: Decimal.to_string(@fx_drift.pct, :normal)
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              id="checkout-fx-drift-reprice"
+              class="btn btn-sm btn-outline"
+              phx-click="refresh_cart_rate"
+            >
+              {gettext("Reprice at the current rate")}
+            </button>
+          </div>
+        <% end %>
 
         <%!-- Guest Checkout Info --%>
         <%= if @is_guest do %>
@@ -1439,7 +1499,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                     <div class="text-sm text-base-content/60">{method.description}</div>
                   <% end %>
                 </div>
-                <div class="font-semibold">{format_price(method.price, @currency)}</div>
+                <%!-- `method.price` is a BASE amount; the cart is in its own
+                     currency, so present it through the cart's frozen rate. --%>
+                <% presented = Shop.present_shipping_method(@cart, method) %>
+                <div class="font-semibold">
+                  <%= if presented.free? do %>
+                    <span class="badge badge-success">{gettext("FREE")}</span>
+                  <% else %>
+                    {format_price(presented.price, @currency)}
+                  <% end %>
+                </div>
               </label>
             </div>
             <div class="flex items-center gap-3 mt-6">
@@ -1639,12 +1708,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
           <div class="space-y-4">
             <%= for item <- @cart.items do %>
+              <% display_title = NamePrefix.strip(item.product_title) %>
               <div class="flex items-center gap-4">
                 <%= if item.product_image do %>
                   <div class="w-16 h-16 bg-base-200 rounded-lg overflow-hidden flex-shrink-0">
                     <img
                       src={item.product_image}
-                      alt={item.product_title}
+                      alt={display_title}
                       class="w-full h-full object-cover"
                     />
                   </div>
@@ -1654,7 +1724,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   </div>
                 <% end %>
                 <div class="flex-1">
-                  <div class="font-medium">{item.product_title}</div>
+                  <div class="font-medium">{display_title}</div>
                   <%= if item.selected_specs && item.selected_specs != %{} do %>
                     <div class="text-xs text-base-content/60 mt-0.5">
                       <%= for {key, value} <- item.selected_specs do %>

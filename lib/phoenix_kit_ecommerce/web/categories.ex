@@ -29,6 +29,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
@@ -55,6 +56,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
       |> assign(:current_language, current_language)
       |> assign(:bulk_uuids, [])
       |> assign(:show_bulk_modal, nil)
+      |> assign(:catalogue_source_active?, ProductSource.current() == ProductSource.Catalogue)
       |> load_static_category_data()
 
     {:ok, socket}
@@ -77,7 +79,11 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   end
 
   @impl true
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  def handle_params(_params, uri, socket) do
+    # Kept so the catalogue editor these pages link into can send the
+    # visitor back to the list they left, not to the catalogue's own.
+    {:noreply, assign(socket, :url_path, URI.parse(uri).path)}
+  end
 
   # ============================================
   # EVENT HANDLERS
@@ -329,10 +335,19 @@ defmodule PhoenixKitEcommerce.Web.Categories do
             <div>
               <label class="label"><span class="fieldset-legend">&nbsp;</span></label>
               <.link
-                navigate={Routes.path("/admin/shop/categories/new")}
+                navigate={
+                  Routes.path(
+                    if @catalogue_source_active?,
+                      do: "/admin/catalogue",
+                      else: "/admin/shop/categories/new"
+                  )
+                }
                 class="btn btn-primary w-full"
               >
-                <.icon name="hero-plus" class="w-4 h-4 mr-2" /> {gettext("Add Category")}
+                <.icon name="hero-plus" class="w-4 h-4 mr-2" />
+                {if @catalogue_source_active?,
+                  do: gettext("Manage in Catalogue"),
+                  else: gettext("Add Category")}
               </.link>
             </div>
           </div>
@@ -397,7 +412,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
           <:card_actions :let={category}>
             <.table_row_menu id={"card-menu-#{category.uuid}"}>
               <.table_row_menu_link
-                navigate={Routes.path("/admin/shop/categories/#{category.uuid}/edit")}
+                navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
                 icon="hero-pencil"
                 label={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
               />
@@ -484,7 +499,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
                     <div class="flex justify-end">
                       <.table_row_menu id={"menu-#{category.uuid}"}>
                         <.table_row_menu_link
-                          navigate={Routes.path("/admin/shop/categories/#{category.uuid}/edit")}
+                          navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
                           icon="hero-pencil"
                           label={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
                         />

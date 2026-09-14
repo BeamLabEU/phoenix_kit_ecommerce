@@ -22,6 +22,8 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   """
 
   use Ecto.Schema
+
+  @type t :: %__MODULE__{}
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
@@ -37,7 +39,7 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
 
     # Pricing
     field :price, :decimal, default: Decimal.new("0")
-    field :currency, :string, default: "USD"
+    field :currency, :string
     field :free_above_amount, :decimal
 
     # Constraints
