@@ -183,6 +183,44 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
     def fetch_collection_product_ids(4, _opts), do: {:ok, [222]}
   end
 
+  # One collection whose category the catalogue trashes while the run is
+  # fetching its products — after `resolve_categories/2` read it, before the
+  # item is assigned to it.
+  defmodule TrashingStub do
+    @moduledoc false
+
+    def fetch_collections(_opts) do
+      {:ok,
+       [
+         %{
+           "id" => 1,
+           "handle" => "frames",
+           "title" => "Frames",
+           "kind" => "custom",
+           "position" => 0
+         }
+       ]}
+    end
+
+    def fetch_collection_product_ids(1, _opts) do
+      {:ok, _} =
+        :collection_sync_trash_on_fetch
+        |> Process.get()
+        |> PhoenixKitCatalogue.Catalogue.trash_category()
+
+      {:ok, [222]}
+    end
+  end
+
+  # Only a catalogue that refuses trashed categories on `update_item/3` can
+  # produce the refusal (it shipped with `permanent_delete_scope/1`).
+  @catalogue_refuses_trashed_categories Code.ensure_loaded?(Catalogue) and
+                                          function_exported?(
+                                            Catalogue,
+                                            :permanent_delete_scope,
+                                            1
+                                          )
+
   describe "run/1 — legacy source" do
     test "is a no-op returning :catalogue_source_inactive" do
       assert CollectionSync.run(client: Stub, catalogue_uuid: Ecto.UUID.generate()) ==
@@ -390,6 +428,31 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
 
       assert {:error, %Ecto.Changeset{}} =
                CollectionSync.run(client: CollisionStub, catalogue_uuid: catalogue.uuid)
+    end
+
+    unless @catalogue_refuses_trashed_categories do
+      @tag skip: "needs a phoenix_kit_catalogue that refuses trashed categories"
+    end
+
+    test "a category trashed mid-run leaves its items in place instead of failing the run", %{
+      catalogue: catalogue
+    } do
+      {:ok, frames} =
+        Catalogue.create_category(%{
+          name: "Frames",
+          catalogue_uuid: catalogue.uuid,
+          slug: %{"en" => "frames"},
+          position: 0
+        })
+
+      item = create_item(catalogue.uuid, "Gift A", 222)
+      Process.put(:collection_sync_trash_on_fetch, frames)
+
+      assert {:ok, result} =
+               CollectionSync.run(client: TrashingStub, catalogue_uuid: catalogue.uuid)
+
+      assert result.items_assigned == 0
+      assert Catalogue.get_item!(item.uuid).category_uuid == nil
     end
 
     test "a category with no matching collection is left untouched", %{catalogue: catalogue} do

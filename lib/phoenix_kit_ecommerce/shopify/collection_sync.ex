@@ -53,7 +53,11 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   rather than the narrowest match — is the bug this task fixes. A
   product id with no matching item is collected into
   `:unmatched_products` instead (deduplicated — the same missing id is
-  never reported twice even if more than one collection lists it).
+  never reported twice even if more than one collection lists it). An
+  item whose target category the catalogue refuses at assignment time
+  (trashed, or moved to another catalogue, since this run resolved it)
+  stays where it is, with a logged warning, instead of failing the whole
+  run; the next run resolves its categories afresh.
 
   A no-op — `{:error, :catalogue_source_inactive}` — when
   `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
@@ -70,6 +74,8 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   """
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+
+  require Logger
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.ProductSource
@@ -428,8 +434,25 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
         index = Map.put(index, shopify_product_id(updated), updated)
         {:cont, {:ok, index, assigned + 1, repositioned, unmatched}}
 
+      {:error, %Ecto.Changeset{errors: errors} = changeset} ->
+        if Keyword.has_key?(errors, :category_uuid) do
+          skip_refused_assignment(item, category_uuid, index, assigned, repositioned, unmatched)
+        else
+          {:halt, {:error, changeset}}
+        end
+
       {:error, reason} ->
         {:halt, {:error, reason}}
     end
+  end
+
+  # The catalogue refused the category (trashed, or in another catalogue,
+  # since `resolve_categories/2` read it): leave the item where it is.
+  defp skip_refused_assignment(item, category_uuid, index, assigned, repositioned, unmatched) do
+    Logger.warning(
+      "Shopify collection sync left item #{item.uuid} in place: category #{category_uuid} was refused"
+    )
+
+    {:cont, {:ok, index, assigned, repositioned, unmatched}}
   end
 end
