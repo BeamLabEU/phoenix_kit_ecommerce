@@ -70,6 +70,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:shipping_selection_position, to_string(Shop.shipping_selection_position()))
       |> assign(:shop_translations_enabled, TranslationSweepSettings.translations_enabled?())
       |> assign(:ai_translations_available, ai_translations_available?())
+      |> assign(:translations_supported, Shop.translations_supported?())
       |> assign(:shop_shopify_enabled, Shop.shopify_enabled?())
       |> assign_policy()
 
@@ -620,7 +621,15 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <label class="label cursor-pointer justify-between">
                 <span class="fieldset-legend text-lg">
                   <span class="font-semibold">{gettext("Enable shop translations")}</span>
-                  <div :if={not @ai_translations_available} class="text-sm text-warning mt-1">
+                  <div :if={not @translations_supported} class="text-sm text-warning mt-1">
+                    {gettext(
+                      "Not available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
+                    )}
+                  </div>
+                  <div
+                    :if={@translations_supported and not @ai_translations_available}
+                    class="text-sm text-warning mt-1"
+                  >
                     {gettext(
                       "Configure an enabled AI endpoint in the AI section first — this stays off until one exists."
                     )}
@@ -631,7 +640,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   type="checkbox"
                   class="toggle toggle-secondary"
                   checked={@shop_translations_enabled}
-                  disabled={not @ai_translations_available and not @shop_translations_enabled}
+                  disabled={
+                    not (@translations_supported and @ai_translations_available) and
+                      not @shop_translations_enabled
+                  }
                   phx-click="toggle_shop_translations_enabled"
                 />
               </label>
@@ -1408,15 +1420,27 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   defp gated_event("toggle_shop_translations_enabled", _params, socket) do
     new_value = !socket.assigns.shop_translations_enabled
 
-    if new_value and not ai_translations_available?() do
-      {:noreply,
-       put_flash(
-         socket,
-         :error,
-         gettext("Configure an enabled AI endpoint in the AI section before enabling this.")
-       )}
-    else
-      do_toggle_shop_translations_enabled(new_value, socket)
+    cond do
+      new_value and not Shop.translations_supported?() ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext(
+             "Not available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
+           )
+         )}
+
+      new_value and not ai_translations_available?() ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Configure an enabled AI endpoint in the AI section before enabling this.")
+         )}
+
+      true ->
+        do_toggle_shop_translations_enabled(new_value, socket)
     end
   end
 

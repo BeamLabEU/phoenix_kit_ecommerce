@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.5.5 - 2026-09-15
 
 ### Added
 
@@ -83,6 +83,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   in the paragraph above would work. `phoenix_kit_ai` stays optional —
   absent, the whole translation feature (adapters, worker, page, sidebar
   entry) compiles out and the rest of the shop is unaffected.
+
+### Fixed
+
+Post-merge review of PR #56; findings in
+`dev_docs/pull_requests/2026/56-catalogue-translation-control/CLAUDE_REVIEW.md`.
+
+- **Translations no longer run against the catalogue product source.** Both
+  adapters work on the shop's own tables and are not registered with
+  `phoenix_kit_ai` under `shop_product_source: "catalogue"`, yet the page
+  listed catalogue items it could not act on and every sweep tick enqueued
+  jobs the translation worker discarded as an unknown resource type. The new
+  `PhoenixKitEcommerce.translations_supported?/0` now gates the page (redirect
+  with an explanation), the tick (a new `product_source_unsupported` stop
+  reason, manual run included) and the settings toggle (disabled, and the
+  handler refuses).
+- **The translations page no longer reloads on every AI translation event.**
+  It subscribes to the global topic every module broadcasts on, and each event
+  re-read the whole catalogue twice plus the prompt rollout and request log.
+  It now reloads only when a `shop_product` / `shop_category` job completes or
+  fails.
+- **Enabling the shop can no longer crash on sweep scheduling.** A failure to
+  insert the sweep tick (Oban not running yet, an insert refused) is logged
+  instead of raising out of `enable_system/0` after `shop_enabled` has already
+  flipped; the translations page and a sweep-settings save retry it.
+- The translations page schedules the sweep tick on the connected mount only,
+  not on the dead render as well.
 
 ### Operator notes
 

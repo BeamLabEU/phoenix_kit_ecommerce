@@ -211,7 +211,10 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   below instead, not this function.
 
   Returns `{reason, info}` — `reason` is one of `:translations_disabled`,
-  `:sweep_disabled`, `:ai_unavailable`, `:sweep_stalled` (Fix C: the tick
+  `:product_source_unsupported` (the shop reads products from the
+  catalogue, so no shop adapter is registered with `phoenix_kit_ai` and
+  every job would be discarded — see
+  `PhoenixKitEcommerce.translations_supported?/0`), `:sweep_disabled`, `:ai_unavailable`, `:sweep_stalled` (Fix C: the tick
   selected nothing AND the configured batch/ceiling guarantees every
   future tick will do the same until they change — see
   `structurally_stalled?/3`), `:ceiling_reached`, `:no_target_languages`,
@@ -245,6 +248,9 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
     cond do
       not SweepSettings.translations_enabled?() ->
         finish(:translations_disabled)
+
+      not PhoenixKitEcommerce.translations_supported?() ->
+        finish(:product_source_unsupported)
 
       not bypass? and not SweepSettings.sweep_enabled?() ->
         finish(:sweep_disabled)

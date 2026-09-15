@@ -148,6 +148,10 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   @incomplete_states ~w(available scheduled executing retryable)
   @translate_worker "PhoenixKitAI.TranslateWorker"
 
+  # `AITranslatable.resource_type/0` / `CategoryAITranslatable.resource_type/0`
+  # as literals — `handle_info/2`'s guard cannot call a function.
+  @shop_resource_types ~w(shop_product shop_category)
+
   # Design §8's own measured throughput: 44.6s average per call, ten
   # parallel `TranslateWorker` jobs. Used only for the confirm modal's
   # "≈N calls, about M minutes" estimate — never for anything that gates
@@ -177,6 +181,14 @@ defmodule PhoenixKitEcommerce.Web.Translations do
           gettext("Shop translations aren't enabled. Turn them on in E-Commerce settings first.")
         )
 
+      not Shop.translations_supported?() ->
+        unavailable(
+          socket,
+          gettext(
+            "Shop translations aren't available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
+          )
+        )
+
       not ai_translations_available?() ->
         unavailable(
           socket,
@@ -186,12 +198,16 @@ defmodule PhoenixKitEcommerce.Web.Translations do
         )
 
       true ->
-        if connected?(socket), do: PhoenixKitAI.Translations.subscribe()
+        if connected?(socket) do
+          PhoenixKitAI.Translations.subscribe()
 
-        # Design §4.3: reached on every page mount so a broken chain
-        # (server restart, Oban pruning) self-heals on the operator's
-        # very next visit, without waiting for a settings save.
-        SweepWorker.ensure_scheduled()
+          # Design §4.3: reached on every page visit so a broken chain
+          # (server restart, Oban pruning) self-heals on the operator's
+          # very next visit, without waiting for a settings save. Connected
+          # mount only — the dead render would attempt the same insert a
+          # second time for nothing.
+          SweepWorker.ensure_scheduled()
+        end
 
         {:ok,
          socket
@@ -1265,8 +1281,17 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # PubSub — global translation status topic (design §4.5)
   # ============================================================
 
+  # The global topic carries EVERY module's translation events, and
+  # `load_data/1` re-reads the whole catalogue (twice — the table and the
+  # coverage row), the prompt rollout and the request log. Reload only when a
+  # SHOP job reaches a terminal state: `:translation_started` changes nothing
+  # this page shows (the job was already counted in flight), and a publishing
+  # run of a thousand jobs must not turn every open copy of this page into a
+  # thousand full catalogue reloads.
   @impl true
-  def handle_info({:ai_translation, _event, _payload}, socket) do
+  def handle_info({:ai_translation, event, %{resource_type: type}}, socket)
+      when event in [:translation_completed, :translation_failed] and
+             type in @shop_resource_types do
     {:noreply, load_data(socket)}
   end
 
@@ -1338,6 +1363,12 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   defp sweep_result_message(:translations_disabled, _info),
     do: gettext("Sweep did not run — shop translations are disabled.")
+
+  defp sweep_result_message(:product_source_unsupported, _info),
+    do:
+      gettext(
+        "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
+      )
 
   defp sweep_result_message(:sweep_disabled, _info),
     do: gettext("Sweep did not run — automatic sweeping is turned off.")
@@ -2077,7 +2108,8 @@ defmodule PhoenixKitEcommerce.Web.Translations do
     end
   end
 
-  @translated_reasons ~w(translations_disabled sweep_disabled ai_unavailable no_target_languages ceiling_reached)
+  @translated_reasons ~w(translations_disabled product_source_unsupported sweep_disabled
+                         ai_unavailable no_target_languages ceiling_reached)
 
   # Fix F: every OTHER stored reason (`:translations_disabled`,
   # `:sweep_disabled`, `:ai_unavailable`, `:ceiling_reached`,

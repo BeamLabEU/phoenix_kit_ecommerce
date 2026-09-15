@@ -132,12 +132,36 @@ defmodule PhoenixKitEcommerce do
   def enable_system do
     result = Settings.update_boolean_setting_with_module("shop_enabled", true, "shop")
     refresh_dashboard_tabs()
-    # Design §4.3: recovers the sweep's self-rescheduling Oban chain if it
-    # was ever broken (a restart, Oban pruning) — unconditional, cheap
-    # (deduplicated by the worker's own uniqueness), and safe to call even
-    # when translations were never turned on.
-    TranslationSweepWorker.ensure_scheduled()
+    recover_translation_sweep()
     result
+  end
+
+  # Design §4.3: recovers the sweep's self-rescheduling Oban chain if it
+  # was ever broken (a restart, Oban pruning) — cheap (deduplicated by the
+  # worker's own uniqueness) and safe to call even when translations were
+  # never turned on. It is a side concern of enabling the shop, though: an
+  # Oban instance that isn't running yet, or an insert it refuses, must not
+  # turn "enable the shop" into a crash after the setting already flipped.
+  # The translations page and a sweep-settings save retry the same recovery.
+  defp recover_translation_sweep do
+    case TranslationSweepWorker.ensure_scheduled() do
+      {:ok, _job} -> :ok
+      {:error, reason} -> log_sweep_recovery_failure(reason)
+    end
+  rescue
+    error -> log_sweep_recovery_failure(error)
+  catch
+    :exit, reason -> log_sweep_recovery_failure(reason)
+  end
+
+  defp log_sweep_recovery_failure(reason) do
+    require Logger
+
+    Logger.warning(
+      "[PhoenixKitEcommerce] could not schedule the translation sweep: #{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl PhoenixKit.Module
@@ -751,16 +775,29 @@ defmodule PhoenixKitEcommerce do
   advertising a translatable resource nothing reads through it anymore.
   """
   def ai_translatables do
-    if ProductSource.current() == ProductSource.Catalogue do
-      []
-    else
+    if translations_supported?() do
       [
         {PhoenixKitEcommerce.AITranslatable.resource_type(), PhoenixKitEcommerce.AITranslatable},
         {PhoenixKitEcommerce.CategoryAITranslatable.resource_type(),
          PhoenixKitEcommerce.CategoryAITranslatable}
       ]
+    else
+      []
     end
   end
+
+  @doc """
+  Whether shop AI translation can operate against the current product
+  source. Both adapters read and write the shop's own product/category
+  tables, and `ai_translatables/0` stops registering them once
+  `shop_product_source` is `"catalogue"` — so under that source every
+  `TranslateWorker` job for a `shop_*` resource is discarded as an unknown
+  resource type, and the translations page would act on catalogue items the
+  adapters cannot find. The translations page, the sweep tick and the
+  settings toggle all refuse on `false`.
+  """
+  @spec translations_supported?() :: boolean()
+  def translations_supported?, do: ProductSource.current() != ProductSource.Catalogue
 
   @doc """
   Catalogue item/category form "extension slot" modules this package

@@ -33,6 +33,34 @@ defmodule PhoenixKitEcommerce.Web.SettingsTranslationsTest do
     :ok
   end
 
+  # Only takes effect with `phoenix_kit_catalogue` loaded (`ProductSource.
+  # current/0` checks that first), so every caller is tagged `:catalogue`.
+  defp put_product_source!(value) do
+    %PhoenixKitEcommerce.ShopConfig{}
+    |> PhoenixKitEcommerce.ShopConfig.changeset(%{
+      key: "shop_product_source",
+      value: %{"value" => value}
+    })
+    |> PhoenixKit.RepoHelper.repo().insert!()
+  end
+
+  @tag :catalogue
+  test "under the catalogue product source the toggle is disabled and the handler refuses", %{
+    conn: conn
+  } do
+    setup_ai!()
+    put_product_source!("catalogue")
+
+    {:ok, view, html} = live(conn, "/en/admin/shop/settings")
+
+    assert html =~ "Not available while the shop reads products from the catalogue"
+    assert has_element?(view, "#toggle-shop-translations-enabled[disabled]")
+
+    render_click(view, "toggle_shop_translations_enabled", %{})
+
+    refute Settings.get_boolean_setting("shop_translations_enabled", false)
+  end
+
   test "renders the card, toggle off by default", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/en/admin/shop/settings")
 
