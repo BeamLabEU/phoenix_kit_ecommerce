@@ -94,6 +94,17 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
+  # Only takes effect with `phoenix_kit_catalogue` loaded (`ProductSource.
+  # current/0` checks that first), so every caller is tagged `:catalogue`.
+  defp put_product_source!(value) do
+    %PhoenixKitEcommerce.ShopConfig{}
+    |> PhoenixKitEcommerce.ShopConfig.changeset(%{
+      key: "shop_product_source",
+      value: %{"value" => value}
+    })
+    |> repo().insert!()
+  end
+
   defp translate_jobs do
     from(j in "oban_jobs", where: j.worker == ^@translate_worker)
     |> select([j], %{state: j.state, args: j.args})
@@ -127,6 +138,16 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
 
     test "redirects when enabled but AI is unavailable", %{conn: conn} do
       enable_translations!()
+      conn = put_test_scope(conn, fake_scope())
+
+      assert {:error, {:live_redirect, %{to: to}}} = live(conn, "/en/admin/shop/translations")
+      assert to =~ "/admin/shop"
+    end
+
+    @tag :catalogue
+    test "redirects when the shop reads products from the catalogue", %{conn: conn} do
+      ready!()
+      put_product_source!("catalogue")
       conn = put_test_scope(conn, fake_scope())
 
       assert {:error, {:live_redirect, %{to: to}}} = live(conn, "/en/admin/shop/translations")
@@ -790,10 +811,15 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
     test "an :ai_translation broadcast triggers a reload that reflects the new state", %{
       conn: conn
     } do
-      product = create_product()
-      {:ok, view, html} = live(conn, "/en/admin/shop/translations")
+      # Title only, so translating it moves the de cell to "Fresh". Asserted
+      # on the ROW: the page-wide HTML always contains "Fresh" and "Missing"
+      # (the state filter's own <option>s), so a page-wide match could not
+      # fail.
+      product = create_product(%{description: %{}})
+      {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
+      row = "#translation-row-#{product.uuid}"
 
-      assert html =~ "Missing"
+      refute render(element(view, row)) =~ "Fresh"
 
       # Simulate what `PhoenixKitAI.TranslateWorker` does on success: write
       # the translation directly (bypassing the real AI call), THEN
@@ -816,7 +842,40 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
       # never Process.sleep to wait for another process).
       _ = :sys.get_state(view.pid)
 
-      assert render(view) =~ "Fresh"
+      assert render(element(view, row)) =~ "Fresh"
+    end
+
+    # The global topic carries every module's translation events; a full
+    # catalogue reload per event is only worth paying for a shop job that
+    # finished. The write below lands unannounced, so a reload is the only
+    # way the row could turn "Fresh".
+    test "another module's event, or a shop job merely starting, does not reload", %{
+      conn: conn
+    } do
+      product = create_product(%{description: %{}})
+      {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
+      row = "#translation-row-#{product.uuid}"
+
+      {:ok, _translated} =
+        AITranslatable.put_translation(product, "de", %{"title" => "Holzvase"},
+          source_fields: %{"title" => "Wooden Vase"}
+        )
+
+      for {event, type} <- [
+            {:translation_completed, "publishing_post"},
+            {:translation_started, "shop_product"}
+          ] do
+        PhoenixKitAI.Translations.broadcast(event, %{
+          resource_type: type,
+          resource_uuid: product.uuid,
+          source_lang: "en",
+          target_lang: "de"
+        })
+      end
+
+      _ = :sys.get_state(view.pid)
+
+      refute render(element(view, row)) =~ "Fresh"
     end
   end
 

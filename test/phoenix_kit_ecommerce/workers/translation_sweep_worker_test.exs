@@ -96,6 +96,17 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorkerTest do
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
+  # Only takes effect with `phoenix_kit_catalogue` loaded (`ProductSource.
+  # current/0` checks that first), so every caller is tagged `:catalogue`.
+  defp put_product_source!(value) do
+    %PhoenixKitEcommerce.ShopConfig{}
+    |> PhoenixKitEcommerce.ShopConfig.changeset(%{
+      key: "shop_product_source",
+      value: %{"value" => value}
+    })
+    |> repo().insert!()
+  end
+
   defp job, do: %Oban.Job{id: 1, args: %{}, attempt: 1, max_attempts: 1}
 
   defp pending_tick_jobs do
@@ -271,6 +282,25 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorkerTest do
 
       assert {:ai_unavailable, _} = TranslationSweepWorker.run_tick()
       assert TranslationSweepWorker.last_run()["reason"] == "ai_unavailable"
+    end
+
+    # Under the catalogue source `ai_translatables/0` registers no shop
+    # adapter, so `TranslateWorker` would discard every job it was handed as
+    # an unknown resource type — the tick must stop before enqueueing any.
+    @tag :catalogue
+    test "catalogue product source ⇒ product_source_unsupported, nothing enqueued" do
+      enable_translations!()
+      setup_ai!()
+      enable_languages!(["en", "de"])
+      create_product()
+      put_product_source!("catalogue")
+
+      assert {:product_source_unsupported, _} = TranslationSweepWorker.run_tick()
+      assert TranslationSweepWorker.last_run()["reason"] == "product_source_unsupported"
+      assert translate_jobs() == []
+
+      # The manual button bypasses only the sweep toggle, never this gate.
+      assert {:product_source_unsupported, _} = TranslationSweepWorker.run_manual_tick()
     end
 
     test "AI plugin enabled but no endpoints configured ⇒ ai_unavailable" do
