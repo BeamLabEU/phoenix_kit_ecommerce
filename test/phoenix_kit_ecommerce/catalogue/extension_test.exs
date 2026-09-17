@@ -48,9 +48,15 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
              }
     end
 
-    test "a category copy keeps its shop fields" do
+    test "a category copy keeps its shop fields but not the Shopify collection" do
       data = %{"shop_status" => "hidden", "featured_item_uuid" => "x", "option_schema" => []}
+
       assert Extension.duplicate_data(:category, data) == data
+
+      assert Extension.duplicate_data(
+               :category,
+               Map.put(data, "shopify", %{"collection_id" => "gid://shopify/Collection/1"})
+             ) == data
     end
   end
 
