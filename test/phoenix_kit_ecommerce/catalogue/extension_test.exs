@@ -37,7 +37,12 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
         "shop_status" => "active",
         "vendor" => "Acme",
         "price_modifiers" => %{"color" => %{"red" => "2.00"}},
-        "shopify" => %{"product_id" => "123", "handle" => "oak-door", "variant_ids" => ["9"]},
+        "shopify" => %{
+          "product_id" => "123",
+          "handle" => "oak-door",
+          "image_ids" => %{"456" => "01a0ae3b-0000-7000-8000-000000000002"},
+          "set_slugs" => ["color"]
+        },
         "legacy_product_uuid" => "01a0ae3b-0000-7000-8000-000000000001"
       }
 

@@ -54,9 +54,11 @@ defmodule PhoenixKitEcommerce.Catalogue.Extension do
   @doc """
   The shop fields a copied item or category keeps (catalogue's Duplicate,
   a whole catalogue's copy included). A copy leaves out what ties the
-  original to other records: on an item the Shopify product, variant ids
-  and handle — two rows claiming one product would both be synced to it —
-  and the legacy product it was migrated from; on a category the Shopify
+  original to other records: on an item the whole Shopify sub-map (product
+  id and handle, which the collection and media syncs match items by — two
+  rows claiming one product would both be synced to it — plus the
+  `image_ids` and `set_slugs` bookkeeping of that sync) and the legacy
+  product it was migrated from; on a category the Shopify
   collection id the collection sync writes. Everything else is the copy's
   to keep; a featured item inside the copied rows is re-pointed by the
   catalogue itself.
