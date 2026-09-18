@@ -14,6 +14,12 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
+  import Ecto.Query, only: [select: 3]
+
+  alias PhoenixKitEcommerce.Test.Repo, as: TestRepo
+
+  alias PhoenixKit.Users.Permissions
+  alias PhoenixKit.Users.Roles
   alias PhoenixKitEcommerce, as: Shop
 
   defmodule ThrowingProvider do
@@ -107,12 +113,49 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
     assert_activity_logged("shop.order_converted", resource_uuid: order.uuid)
   end
 
+  test "the operator's new-order notification still goes out" do
+    # The third post-commit step, and the one the shopper never sees: if the
+    # email failure had aborted the chain, this is the row that would be
+    # missing when the operator asks why nobody told them about the order.
+    # Matched on the rendered text: the admin fan-out does not stamp
+    # `metadata["action"]` (only `notify_shop/1` does), so
+    # `notifications_for_action/1` cannot see these rows.
+    %{uuid: admin_uuid} = create_admin_user()
+    cart = guest_cart()
+
+    {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
+
+    assert admin_uuid in new_order_recipients(order.order_number)
+  end
+
   test "a throw from the mail path is survived too, not only a raise" do
     Application.put_env(:phoenix_kit, :email_provider, ThrowingProvider)
     cart = guest_cart()
 
     assert {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
     assert_activity_logged("shop.order_converted", resource_uuid: order.uuid)
+  end
+
+  # A user holding "shop.manage_carts" through the "Admin" system role — the
+  # resolution path `admin_recipients/1` unions over. Explicit grant because
+  # module-discovery auto-granting happens at host boot, which this package's
+  # test env does not run.
+  defp new_order_recipients(order_number) do
+    "phoenix_kit_notifications"
+    |> select([n], %{recipient_uuid: type(n.recipient_uuid, Ecto.UUID), metadata: n.metadata})
+    |> TestRepo.all()
+    |> Enum.filter(
+      &String.starts_with?(&1.metadata["notification_text"] || "", "New order #{order_number}")
+    )
+    |> Enum.map(& &1.recipient_uuid)
+  end
+
+  defp create_admin_user do
+    user = fixture_user()
+    role = Roles.get_role_by_name("Admin")
+    {:ok, _} = Roles.assign_role(user, "Admin")
+    {:ok, _} = Permissions.grant_permission(role.uuid, "shop.manage_carts")
+    user
   end
 
   test "the cart is still marked converted" do
