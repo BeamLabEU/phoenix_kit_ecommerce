@@ -16,6 +16,17 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
 
   alias PhoenixKitEcommerce, as: Shop
 
+  defmodule ThrowingProvider do
+    @moduledoc false
+    # A raise is not the only way the mail path can end badly — a throw or an
+    # exit from anything below it (a GenServer call into a dead mailer, say)
+    # unwinds past `rescue` and needs the `catch` clause. The original bug
+    # shipped from precisely this kind of unexercised path.
+    def get_active_template_by_name(_name), do: %{name: "register", id: 1}
+    def render_template(_template, _variables, _locale), do: throw(:mailer_gone)
+    def track_usage(_template), do: :ok
+  end
+
   defmodule RaisingProvider do
     @moduledoc false
     # Stands in for the real failure seen in production: an active database
@@ -93,6 +104,14 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
 
     {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
 
+    assert_activity_logged("shop.order_converted", resource_uuid: order.uuid)
+  end
+
+  test "a throw from the mail path is survived too, not only a raise" do
+    Application.put_env(:phoenix_kit, :email_provider, ThrowingProvider)
+    cart = guest_cart()
+
+    assert {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
     assert_activity_logged("shop.order_converted", resource_uuid: order.uuid)
   end
 

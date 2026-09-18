@@ -4536,10 +4536,18 @@ defmodule PhoenixKitEcommerce do
         # Already confirmed user - no action needed
         :ok
     end
+
+    # `Logger.error`, where the rest of this module logs swallowed failures at
+    # `warning`: a customer completed a checkout and the account they were
+    # given has no way to confirm itself. That needs an operator, not a line
+    # someone reads later. The message says "guest confirmation" rather than
+    # "the email", because the rescue also covers the user lookup above it —
+    # which must not be narrowed out, since a database fault there would kill
+    # the checkout LiveView just as surely as a mail failure did.
   rescue
     error ->
       Logger.error(
-        "[Shop] guest confirmation email failed for user #{inspect(user_uuid)}: " <>
+        "[Shop] guest confirmation failed for user #{inspect(user_uuid)}: " <>
           Exception.format(:error, error, __STACKTRACE__)
       )
 
@@ -4547,7 +4555,7 @@ defmodule PhoenixKitEcommerce do
   catch
     kind, value ->
       Logger.error(
-        "[Shop] guest confirmation email failed for user #{inspect(user_uuid)}: " <>
+        "[Shop] guest confirmation failed for user #{inspect(user_uuid)}: " <>
           "#{inspect(kind)} #{inspect(value)}"
       )
 
