@@ -1,0 +1,106 @@
+defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
+  @moduledoc """
+  The steps that run AFTER the checkout transaction commits must not be able
+  to undo, or skip each other over, a fact the shopper has already completed.
+
+  `do_convert_cart_to_order/2` runs three of them in a row — the guest
+  confirmation email, the activity record, the operator's "new order"
+  notification — and its own comment promises the first one's failure is
+  logged rather than raised. It was not: a raise there killed the caller (the
+  checkout LiveView, which then remounted onto an empty cart and told the
+  shopper their cart was empty) and took the other two steps with it, so the
+  order existed while nobody was told about it.
+  """
+
+  use PhoenixKitEcommerce.DataCase, async: false
+
+  alias PhoenixKitEcommerce, as: Shop
+
+  defmodule RaisingProvider do
+    @moduledoc false
+    # Stands in for the real failure seen in production: an active database
+    # template whose render answers in a shape the caller mis-reads. Any raise
+    # on the send path reproduces the same collapse.
+    def get_active_template_by_name(_name), do: %{name: "register", id: 1}
+
+    def render_template(_template, _variables, _locale),
+      do: raise(KeyError, key: :text, term: %{})
+
+    def track_usage(_template), do: :ok
+  end
+
+  defp lang do
+    PhoenixKitEcommerce.SlugResolver.normalize_language_public(
+      PhoenixKitEcommerce.Translations.default_language()
+    )
+  end
+
+  setup do
+    previous = Application.get_env(:phoenix_kit, :email_provider)
+    Application.put_env(:phoenix_kit, :email_provider, RaisingProvider)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:phoenix_kit, :email_provider, previous),
+        else: Application.delete_env(:phoenix_kit, :email_provider)
+    end)
+
+    :ok
+  end
+
+  defp guest_cart do
+    {:ok, cart} = Shop.create_cart(session_id: "s-#{System.unique_integer([:positive])}")
+
+    {:ok, product} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Wand", lang() => "Wand"},
+        "slug" => %{lang() => "email-fail-#{System.unique_integer([:positive])}"},
+        "price" => Decimal.new("21.80"),
+        "status" => "active",
+        "currency" => "USD",
+        "requires_shipping" => false
+      })
+
+    {:ok, cart} = Shop.add_to_cart(cart, product, 1)
+    cart
+  end
+
+  defp guest_billing do
+    %{
+      "email" => "guest-#{System.unique_integer([:positive])}@example.com",
+      "first_name" => "Guest",
+      "last_name" => "Buyer",
+      "address_line1" => "1 Test Street",
+      "city" => "Testville",
+      "postal_code" => "10001",
+      "country" => "US"
+    }
+  end
+
+  test "a guest checkout still returns its order when the confirmation email raises" do
+    cart = guest_cart()
+
+    assert {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
+    assert order.order_number
+  end
+
+  test "the steps after the email still run" do
+    # The activity record sits between the failing email and the operator's
+    # notification. If it is missing, the chain aborted at the email and the
+    # notification never had a chance either — which is exactly how an order
+    # reached the database with nobody informed.
+    cart = guest_cart()
+
+    {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
+
+    assert_activity_logged("shop.order_converted", resource_uuid: order.uuid)
+  end
+
+  test "the cart is still marked converted" do
+    cart = guest_cart()
+
+    {:ok, _order} = Shop.convert_cart_to_order(cart, billing_data: guest_billing())
+
+    assert Shop.get_cart(cart.uuid).status == "converted"
+  end
+end
