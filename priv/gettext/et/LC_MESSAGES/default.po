@@ -4789,15 +4789,10 @@ msgstr "Kaal (grammides)"
 msgid "comma, separated, tags"
 msgstr "komadega, eraldatud, sildid"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:801
-#, elixir-autogen, elixir-format
-msgid "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
-msgstr "Tooted ja kategooriad asuvad nüüd katalooguses. CSV-import on keelatud — kasutage toodete lisamiseks või muutmiseks katalooguse üksuse vormi (link poe admin lehel) või Shopify sünkroonimist Shopify oma andmete toomiseks."
-
 #: lib/phoenix_kit_ecommerce/web/settings.ex:930
 #, elixir-autogen, elixir-format
 msgid "Add a storefront filter backed by a catalogue attribute set, by its slug."
-msgstr "Lisage vitriini filter, mis põhineb katalooguse atribuudikomplektil, selle slugi kaudu."
+msgstr "Lisage vitriini filter, mis põhineb kataloogi atribuudikomplektil, selle slugi kaudu."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:928
 #, elixir-autogen, elixir-format
@@ -5643,22 +5638,6 @@ msgid_plural "≈%{count} model calls"
 msgstr[0] "≈%{count} mudeli päring"
 msgstr[1] "≈%{count} mudeli päringut"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:625
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
-#, elixir-autogen, elixir-format
-msgid "Not available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Pole saadaval, kuni pood loeb tooteid kataloogist — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:187
-#, elixir-autogen, elixir-format
-msgid "Shop translations aren't available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Poe tõlked pole saadaval, kuni pood loeb tooteid kataloogist — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
-#, elixir-autogen, elixir-format
-msgid "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
-msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb tooteid kataloogist."
-
 #: lib/phoenix_kit_ecommerce/web/categories.ex:349
 #: lib/phoenix_kit_ecommerce/web/products.ex:371
 #, elixir-autogen, elixir-format
@@ -5674,3 +5653,24 @@ msgstr "Kategooriaid haldab nüüd moodul Kataloogid."
 #, elixir-autogen, elixir-format
 msgid "Products are managed in the Catalogues module now."
 msgstr "Tooteid haldab nüüd moodul Kataloogid."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:625
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
+#, elixir-autogen, elixir-format
+msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Pole saadaval, kuni pood loeb tooteid moodulist Kataloogid — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
+
+#: lib/phoenix_kit_ecommerce/web/imports.ex:801
+#, elixir-autogen, elixir-format
+msgid "Products and categories now live in the Catalogues module. CSV import is disabled — use the Catalogues item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
+msgstr "Tooted ja kategooriad asuvad nüüd moodulis Kataloogid. CSV-import on keelatud — kasutage toodete lisamiseks või muutmiseks Kataloogide üksuse vormi (link poe admin lehel) või Shopify sünkroonimist Shopify oma andmete toomiseks."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:187
+#, elixir-autogen, elixir-format
+msgid "Shop translations aren't available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Poe tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
+#, elixir-autogen, elixir-format
+msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
+msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid."

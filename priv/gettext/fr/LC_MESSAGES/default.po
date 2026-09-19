@@ -4791,11 +4791,6 @@ msgstr "Poids (grammes)"
 msgid "comma, separated, tags"
 msgstr "virgule, séparés, tags"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:801
-#, elixir-autogen, elixir-format
-msgid "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
-msgstr "Les produits et les catégories se trouvent désormais dans le catalogue. L'import CSV est désactivé — utilisez le formulaire d'article du catalogue (accessible depuis l'admin de la boutique) pour ajouter ou modifier des produits, ou la synchronisation Shopify pour récupérer les données de Shopify."
-
 #: lib/phoenix_kit_ecommerce/web/settings.ex:930
 #, elixir-autogen, elixir-format
 msgid "Add a storefront filter backed by a catalogue attribute set, by its slug."
@@ -5645,22 +5640,6 @@ msgid_plural "≈%{count} model calls"
 msgstr[0] "≈%{count} appel au modèle"
 msgstr[1] "≈%{count} appels au modèle"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:625
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
-#, elixir-autogen, elixir-format
-msgid "Not available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Indisponible tant que la boutique lit les produits depuis le catalogue — les adaptateurs de traduction ne couvrent que les tables de produits et de catégories propres à la boutique."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:187
-#, elixir-autogen, elixir-format
-msgid "Shop translations aren't available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Les traductions de la boutique sont indisponibles tant que la boutique lit les produits depuis le catalogue — les adaptateurs de traduction ne couvrent que les tables de produits et de catégories propres à la boutique."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
-#, elixir-autogen, elixir-format
-msgid "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
-msgstr "Rapprochement non exécuté — les traductions sont indisponibles tant que la boutique lit les produits depuis le catalogue."
-
 #: lib/phoenix_kit_ecommerce/web/categories.ex:349
 #: lib/phoenix_kit_ecommerce/web/products.ex:371
 #, elixir-autogen, elixir-format
@@ -5676,3 +5655,24 @@ msgstr "Les catégories sont désormais gérées dans le module Catalogues."
 #, elixir-autogen, elixir-format
 msgid "Products are managed in the Catalogues module now."
 msgstr "Les produits sont désormais gérés dans le module Catalogues."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:625
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
+#, elixir-autogen, elixir-format
+msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Indisponible tant que la boutique lit les produits depuis le module Catalogues — les adaptateurs de traduction ne couvrent que les tables de produits et de catégories propres à la boutique."
+
+#: lib/phoenix_kit_ecommerce/web/imports.ex:801
+#, elixir-autogen, elixir-format
+msgid "Products and categories now live in the Catalogues module. CSV import is disabled — use the Catalogues item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
+msgstr "Les produits et les catégories se trouvent désormais dans le module Catalogues. L'import CSV est désactivé — utilisez le formulaire d'article des Catalogues (accessible depuis l'admin de la boutique) pour ajouter ou modifier des produits, ou la synchronisation Shopify pour récupérer les données de Shopify."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:187
+#, elixir-autogen, elixir-format
+msgid "Shop translations aren't available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Les traductions de la boutique sont indisponibles tant que la boutique lit les produits depuis le module Catalogues — les adaptateurs de traduction ne couvrent que les tables de produits et de catégories propres à la boutique."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
+#, elixir-autogen, elixir-format
+msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
+msgstr "Rapprochement non exécuté — les traductions sont indisponibles tant que la boutique lit les produits depuis le module Catalogues."

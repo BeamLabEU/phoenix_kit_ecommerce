@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.9 - 2026-09-19
+
+### Changed
+
+- **The shop calls the catalogue module "Catalogues" everywhere it names
+  it** (#60). `phoenix_kit_catalogue` renamed itself to "Catalogues" — its
+  tab, its pages, the Modules page — and the shop's two "Manage in
+  Catalogue" buttons and two "managed in the catalogue module now" flashes
+  followed. The four prose strings that also name the module did not, so an
+  operator who switched the product source read "Manage in Catalogues" on
+  the products page and "now live in the catalogue" one screen over on the
+  import page. The imports notice, the translations toggle's warning and
+  refusal flash, the translations page's redirect message and the sweep's
+  "did not run" result now all say "the Catalogues module", translated in
+  en/et/ru/de/fr against the names the catalogue module's own catalogues
+  use (`Kataloogid`, `Каталоги`, `Kataloge`, `Catalogues`). Strings that
+  name something other than the module — a catalogue attribute set,
+  Shopify's own catalogue, the `"mixed"` storefront vocabulary — are
+  deliberately unchanged.
+
+### Fixed
+
+- **Estonian: `kataloogus` is not a word.** The stem is `kataloog`
+  (inessive `kataloogis`, genitive `kataloogi`). #60 corrected the
+  declension in the strings it retranslated but left it in two others, so
+  the imports notice and the storefront-filter help kept showing the
+  misspelling. Both are fixed; `grep kataloogus priv/gettext/` is empty.
+
 ## 0.5.8 - 2026-09-18
 
 ### Fixed
