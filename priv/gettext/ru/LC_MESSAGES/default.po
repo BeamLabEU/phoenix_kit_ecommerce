@@ -4813,11 +4813,6 @@ msgstr "Вес (граммы)"
 msgid "comma, separated, tags"
 msgstr "теги, через, запятую"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:801
-#, elixir-autogen, elixir-format
-msgid "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
-msgstr "Товары и категории теперь находятся в каталоге. Импорт CSV отключён — используйте форму товара каталога (ссылка в админке магазина), чтобы добавлять или редактировать товары, либо синхронизацию с Shopify, чтобы получить собственные данные Shopify."
-
 #: lib/phoenix_kit_ecommerce/web/settings.ex:930
 #, elixir-autogen, elixir-format
 msgid "Add a storefront filter backed by a catalogue attribute set, by its slug."
@@ -5690,22 +5685,6 @@ msgstr[0] "≈%{count} обращение к модели"
 msgstr[1] "≈%{count} обращения к модели"
 msgstr[2] "≈%{count} обращений к модели"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:625
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
-#, elixir-autogen, elixir-format
-msgid "Not available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Недоступно, пока магазин берёт товары из каталога — адаптеры перевода работают только с собственными таблицами товаров и категорий магазина."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:187
-#, elixir-autogen, elixir-format
-msgid "Shop translations aren't available while the shop reads products from the catalogue — the translation adapters only cover the shop's own product and category tables."
-msgstr "Переводы магазина недоступны, пока магазин берёт товары из каталога — адаптеры перевода работают только с собственными таблицами товаров и категорий магазина."
-
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
-#, elixir-autogen, elixir-format
-msgid "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
-msgstr "Сверка не выполнялась — переводы недоступны, пока магазин берёт товары из каталога."
-
 #: lib/phoenix_kit_ecommerce/web/categories.ex:349
 #: lib/phoenix_kit_ecommerce/web/products.ex:371
 #, elixir-autogen, elixir-format
@@ -5721,3 +5700,24 @@ msgstr "Категории теперь управляются в модуле �
 #, elixir-autogen, elixir-format
 msgid "Products are managed in the Catalogues module now."
 msgstr "Товары теперь управляются в модуле «Каталоги»."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:625
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1429
+#, elixir-autogen, elixir-format
+msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Недоступно, пока магазин берёт товары из модуля «Каталоги» — адаптеры перевода работают только с собственными таблицами товаров и категорий магазина."
+
+#: lib/phoenix_kit_ecommerce/web/imports.ex:801
+#, elixir-autogen, elixir-format
+msgid "Products and categories now live in the Catalogues module. CSV import is disabled — use the Catalogues item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
+msgstr "Товары и категории теперь находятся в модуле «Каталоги». Импорт CSV отключён — используйте форму товара в «Каталогах» (ссылка в админке магазина), чтобы добавлять или редактировать товары, либо синхронизацию с Shopify, чтобы получить собственные данные Shopify."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:187
+#, elixir-autogen, elixir-format
+msgid "Shop translations aren't available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
+msgstr "Переводы магазина недоступны, пока магазин берёт товары из модуля «Каталоги» — адаптеры перевода работают только с собственными таблицами товаров и категорий магазина."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
+#, elixir-autogen, elixir-format
+msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
+msgstr "Сверка не выполнялась — переводы недоступны, пока магазин берёт товары из модуля «Каталоги»."
