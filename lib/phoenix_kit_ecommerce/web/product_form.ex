@@ -67,7 +67,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   defp redirect_to_catalogue(socket) do
     socket
-    |> put_flash(:info, gettext("Products are managed in the catalogue module now."))
+    |> put_flash(:info, gettext("Products are managed in the Catalogues module now."))
     |> push_navigate(to: Routes.path("/admin/catalogue"))
   end
 

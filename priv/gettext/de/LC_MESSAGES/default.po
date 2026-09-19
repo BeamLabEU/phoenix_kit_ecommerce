@@ -4791,26 +4791,10 @@ msgstr "Gewicht (Gramm)"
 msgid "comma, separated, tags"
 msgstr "komma, getrennte, Tags"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:54
-#, elixir-autogen, elixir-format
-msgid "Categories are managed in the catalogue module now."
-msgstr "Kategorien werden jetzt im Katalogmodul verwaltet."
-
-#: lib/phoenix_kit_ecommerce/web/categories.ex:349
-#: lib/phoenix_kit_ecommerce/web/products.ex:371
-#, elixir-autogen, elixir-format
-msgid "Manage in Catalogue"
-msgstr "Im Katalog verwalten"
-
 #: lib/phoenix_kit_ecommerce/web/imports.ex:801
 #, elixir-autogen, elixir-format
 msgid "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
 msgstr "Produkte und Kategorien befinden sich jetzt im Katalog. Der CSV-Import ist deaktiviert — verwenden Sie das Artikelformular des Katalogs (verlinkt im Shop-Admin), um Produkte hinzuzufügen oder zu bearbeiten, oder den Shopify-Sync, um Shopifys eigene Daten zu übernehmen."
-
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:70
-#, elixir-autogen, elixir-format
-msgid "Products are managed in the catalogue module now."
-msgstr "Produkte werden jetzt im Katalogmodul verwaltet."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:930
 #, elixir-autogen, elixir-format
@@ -5676,3 +5660,19 @@ msgstr "Shop-Übersetzungen sind nicht verfügbar, solange der Shop Produkte aus
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
 msgstr "Abgleich nicht ausgeführt — Übersetzungen sind nicht verfügbar, solange der Shop Produkte aus dem Katalog bezieht."
+
+#: lib/phoenix_kit_ecommerce/web/categories.ex:349
+#: lib/phoenix_kit_ecommerce/web/products.ex:371
+#, elixir-autogen, elixir-format
+msgid "Manage in Catalogues"
+msgstr "In Katalogen verwalten"
+
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:54
+#, elixir-autogen, elixir-format
+msgid "Categories are managed in the Catalogues module now."
+msgstr "Kategorien werden jetzt im Modul „Kataloge“ verwaltet."
+
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:70
+#, elixir-autogen, elixir-format
+msgid "Products are managed in the Catalogues module now."
+msgstr "Produkte werden jetzt im Modul „Kataloge“ verwaltet."
