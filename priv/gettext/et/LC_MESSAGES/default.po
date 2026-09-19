@@ -1511,7 +1511,6 @@ msgid "No categories found"
 msgstr "Kategooriaid ei leitud"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:543
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
 msgid "No category"
 msgstr "Kategooriata"
@@ -5674,3 +5673,8 @@ msgstr "Poe tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid �
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
 msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid."
+
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:942
+#, elixir-autogen, elixir-format
+msgid "Category not set"
+msgstr "Kategooria määramata"
