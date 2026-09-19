@@ -4789,26 +4789,10 @@ msgstr "Kaal (grammides)"
 msgid "comma, separated, tags"
 msgstr "komadega, eraldatud, sildid"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:54
-#, elixir-autogen, elixir-format
-msgid "Categories are managed in the catalogue module now."
-msgstr "Kategooriaid haldab nüüd katalooguse moodul."
-
-#: lib/phoenix_kit_ecommerce/web/categories.ex:349
-#: lib/phoenix_kit_ecommerce/web/products.ex:371
-#, elixir-autogen, elixir-format
-msgid "Manage in Catalogue"
-msgstr "Halda katalooguses"
-
 #: lib/phoenix_kit_ecommerce/web/imports.ex:801
 #, elixir-autogen, elixir-format
 msgid "Products and categories now live in the catalogue. CSV import is disabled — use the catalogue's item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
 msgstr "Tooted ja kategooriad asuvad nüüd katalooguses. CSV-import on keelatud — kasutage toodete lisamiseks või muutmiseks katalooguse üksuse vormi (link poe admin lehel) või Shopify sünkroonimist Shopify oma andmete toomiseks."
-
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:70
-#, elixir-autogen, elixir-format
-msgid "Products are managed in the catalogue module now."
-msgstr "Tooteid haldab nüüd katalooguse moodul."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:930
 #, elixir-autogen, elixir-format
@@ -5674,3 +5658,19 @@ msgstr "Poe tõlked pole saadaval, kuni pood loeb tooteid kataloogist — tõlke
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — translations aren't available while the shop reads products from the catalogue."
 msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb tooteid kataloogist."
+
+#: lib/phoenix_kit_ecommerce/web/categories.ex:349
+#: lib/phoenix_kit_ecommerce/web/products.ex:371
+#, elixir-autogen, elixir-format
+msgid "Manage in Catalogues"
+msgstr "Halda kataloogides"
+
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:54
+#, elixir-autogen, elixir-format
+msgid "Categories are managed in the Catalogues module now."
+msgstr "Kategooriaid haldab nüüd moodul Kataloogid."
+
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:70
+#, elixir-autogen, elixir-format
+msgid "Products are managed in the Catalogues module now."
+msgstr "Tooteid haldab nüüd moodul Kataloogid."
