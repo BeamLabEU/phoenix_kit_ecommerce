@@ -4723,14 +4723,14 @@ msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{
 msgstr "Votre panier est calculé au taux %{frozen} ; le taux actuel est %{current} (écart de %{pct} %). Vos prix restent tels qu'affichés tant que vous ne recalculez pas."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:314
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Active — category and items visible"
-msgstr "Actif — catégorie et produits visibles"
+msgstr "Actif — catégorie et articles visibles"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:173
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Charge tax on this item"
-msgstr "Appliquer une taxe à ce produit"
+msgstr "Appliquer une taxe à cet article"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:238
 #, elixir-autogen, elixir-format
@@ -4743,20 +4743,20 @@ msgid "Download expiry (days)"
 msgstr "Expiration du téléchargement (jours)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:249
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Download limit"
-msgstr "Limite de téléchargements :"
+msgstr "Limite de téléchargements"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:326
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:397
-#, elixir-autogen, elixir-format, fuzzy
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:325
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:396
+#, elixir-autogen, elixir-format
 msgid "Featured item (image fallback)"
-msgstr "Produit vedette (image de secours)"
+msgstr "Article vedette (image de secours)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:316
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Hidden — category and items hidden"
-msgstr "Masquée — catégorie et produits masqués"
+msgstr "Masquée — catégorie et articles masqués"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:191
 #, elixir-autogen, elixir-format
@@ -4764,9 +4764,9 @@ msgid "Made to order (always available)"
 msgstr "Fabriqué sur commande (toujours disponible)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:182
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Requires shipping"
-msgstr "Nécessite une livraison :"
+msgstr "Nécessite une livraison"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:80
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:311
@@ -4776,9 +4776,9 @@ msgid "Shop status"
 msgstr "Statut de la boutique"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:315
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Unlisted — category hidden, items still visible"
-msgstr "Non répertoriée — Catégorie masquée, produits toujours visibles"
+msgstr "Non répertoriée — catégorie masquée, articles toujours visibles"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:164
 #, elixir-autogen, elixir-format
@@ -4964,8 +4964,8 @@ msgstr "modifications"
 msgid "e.g. 3D Printed"
 msgstr "p. ex. 3D Printed"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:349
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:367
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:348
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:366
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first item with an image)"
 msgstr "Détection automatique (premier article avec une image)"
@@ -4976,7 +4976,7 @@ msgstr "Détection automatique (premier article avec une image)"
 msgid "Clear this filter"
 msgstr "Effacer ce filtre"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:401
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:400
 #, elixir-autogen, elixir-format
 msgid "No items with images in this category. Add item images to enable this option."
 msgstr "Aucun article avec image dans cette catégorie. Ajoutez des images aux articles pour activer cette option."
@@ -5678,5 +5678,5 @@ msgstr "Rapprochement non exécuté — les traductions sont indisponibles tant 
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
-msgid "Category not set"
-msgstr "Catégorie non définie"
+msgid "— Category not set —"
+msgstr "— Catégorie non définie —"
