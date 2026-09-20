@@ -939,7 +939,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                   <.select
                     field={@form[:category_uuid]}
                     label={gettext("Category")}
-                    prompt={gettext("Category not set")}
+                    prompt={gettext("— Category not set —")}
                     options={@categories}
                   />
                 </div>

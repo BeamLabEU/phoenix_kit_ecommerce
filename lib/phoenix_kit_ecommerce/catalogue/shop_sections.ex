@@ -318,7 +318,6 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
             />
           </div>
 
-
           <div class="w-full md:col-span-2">
             <%= if @item_options != [] do %>
               <label class="label mb-2">

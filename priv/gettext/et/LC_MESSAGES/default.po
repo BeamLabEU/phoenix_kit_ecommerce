@@ -4721,12 +4721,12 @@ msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{
 msgstr "Teie ostukorv on arvutatud kursiga %{frozen}; praegune kurss on %{current} (erinevus %{pct}%). Hinnad jäävad kuvatuks, kuni te ümber ei arvuta."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:314
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Active — category and items visible"
 msgstr "Aktiivne — kategooria ja tooted nähtavad"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:173
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Charge tax on this item"
 msgstr "Rakenda maks sellele tootele"
 
@@ -4741,18 +4741,18 @@ msgid "Download expiry (days)"
 msgstr "Allalaadimise kehtivusaeg (päevad)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:249
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Download limit"
-msgstr "Allalaadimise limiit:"
+msgstr "Allalaadimise limiit"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:326
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:397
-#, elixir-autogen, elixir-format, fuzzy
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:325
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:396
+#, elixir-autogen, elixir-format
 msgid "Featured item (image fallback)"
 msgstr "Esitletud toode (varupilt)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:316
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Hidden — category and items hidden"
 msgstr "Peidetud — kategooria ja tooted peidetud"
 
@@ -4762,9 +4762,9 @@ msgid "Made to order (always available)"
 msgstr "Tellimusena (alati saadaval)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:182
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Requires shipping"
-msgstr "Nõuab tarnimist:"
+msgstr "Nõuab tarnimist"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:80
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:311
@@ -4774,7 +4774,7 @@ msgid "Shop status"
 msgstr "Poe olek"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:315
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Unlisted — category hidden, items still visible"
 msgstr "Peidetud — kategooria peidetud, tooted nähtavad"
 
@@ -4962,8 +4962,8 @@ msgstr "muudatust"
 msgid "e.g. 3D Printed"
 msgstr "nt 3D Printed"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:349
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:367
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:348
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:366
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first item with an image)"
 msgstr "Automaatne (esimene pildiga toode)"
@@ -4974,7 +4974,7 @@ msgstr "Automaatne (esimene pildiga toode)"
 msgid "Clear this filter"
 msgstr "Tühjenda see filter"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:401
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:400
 #, elixir-autogen, elixir-format
 msgid "No items with images in this category. Add item images to enable this option."
 msgstr "Selles kategoorias pole pildiga tooteid. Lisa toodetele pildid, et see valik lubada."
@@ -5676,5 +5676,5 @@ msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb too
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
-msgid "Category not set"
-msgstr "Kategooria määramata"
+msgid "— Category not set —"
+msgstr "— Kategooria määramata —"

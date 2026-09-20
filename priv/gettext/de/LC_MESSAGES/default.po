@@ -4723,14 +4723,14 @@ msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{
 msgstr "Ihr Warenkorb ist zum Kurs %{frozen} berechnet; der aktuelle Kurs ist %{current} (%{pct} % Abweichung). Ihre Preise bleiben wie angezeigt, solange Sie nicht neu berechnen."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:314
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Active — category and items visible"
-msgstr "Aktiv — Kategorie und Produkte sichtbar"
+msgstr "Aktiv — Kategorie und Artikel sichtbar"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:173
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Charge tax on this item"
-msgstr "Steuer für dieses Produkt berechnen"
+msgstr "Steuer für diesen Artikel berechnen"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:238
 #, elixir-autogen, elixir-format
@@ -4743,20 +4743,20 @@ msgid "Download expiry (days)"
 msgstr "Download-Ablauf (Tage)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:249
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Download limit"
-msgstr "Download-Limit:"
+msgstr "Download-Limit"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:326
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:397
-#, elixir-autogen, elixir-format, fuzzy
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:325
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:396
+#, elixir-autogen, elixir-format
 msgid "Featured item (image fallback)"
-msgstr "Empfohlenes Produkt (Bild-Ersatz)"
+msgstr "Empfohlener Artikel (Bild-Ersatz)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:316
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Hidden — category and items hidden"
-msgstr "Ausgeblendet — Kategorie und Produkte ausgeblendet"
+msgstr "Ausgeblendet — Kategorie und Artikel ausgeblendet"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:191
 #, elixir-autogen, elixir-format
@@ -4764,9 +4764,9 @@ msgid "Made to order (always available)"
 msgstr "Auf Bestellung gefertigt (immer verfügbar)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:182
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Requires shipping"
-msgstr "Erfordert Versand:"
+msgstr "Erfordert Versand"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:80
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:311
@@ -4776,9 +4776,9 @@ msgid "Shop status"
 msgstr "Shop-Status"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:315
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Unlisted — category hidden, items still visible"
-msgstr "Nicht gelistet — Kategorie ausgeblendet, Produkte weiterhin sichtbar"
+msgstr "Nicht gelistet — Kategorie ausgeblendet, Artikel weiterhin sichtbar"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:164
 #, elixir-autogen, elixir-format
@@ -4964,8 +4964,8 @@ msgstr "Änderungen"
 msgid "e.g. 3D Printed"
 msgstr "z. B. 3D Printed"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:349
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:367
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:348
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:366
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first item with an image)"
 msgstr "Automatisch (erster Artikel mit Bild)"
@@ -4976,7 +4976,7 @@ msgstr "Automatisch (erster Artikel mit Bild)"
 msgid "Clear this filter"
 msgstr "Diesen Filter zurücksetzen"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:401
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:400
 #, elixir-autogen, elixir-format
 msgid "No items with images in this category. Add item images to enable this option."
 msgstr "Keine Artikel mit Bildern in dieser Kategorie. Fügen Sie Artikelbilder hinzu, um diese Option zu aktivieren."
@@ -5678,5 +5678,5 @@ msgstr "Abgleich nicht ausgeführt — Übersetzungen sind nicht verfügbar, sol
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
-msgid "Category not set"
-msgstr "Kategorie nicht festgelegt"
+msgid "— Category not set —"
+msgstr "— Kategorie nicht festgelegt —"

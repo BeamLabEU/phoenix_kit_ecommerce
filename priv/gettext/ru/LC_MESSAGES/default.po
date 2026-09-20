@@ -4745,12 +4745,12 @@ msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{
 msgstr "Корзина рассчитана по курсу %{frozen}; текущий курс — %{current} (расхождение %{pct}%). Цены останутся как показано, пока вы не пересчитаете."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:314
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Active — category and items visible"
 msgstr "Активна — категория и товары видны"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:173
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Charge tax on this item"
 msgstr "Взимать налог с этого товара"
 
@@ -4765,18 +4765,18 @@ msgid "Download expiry (days)"
 msgstr "Срок действия скачивания (дни)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:249
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Download limit"
-msgstr "Лимит загрузок:"
+msgstr "Лимит загрузок"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:326
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:397
-#, elixir-autogen, elixir-format, fuzzy
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:325
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:396
+#, elixir-autogen, elixir-format
 msgid "Featured item (image fallback)"
 msgstr "Рекомендованный товар (запасное изображение)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:316
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Hidden — category and items hidden"
 msgstr "Скрыта — категория и товары скрыты"
 
@@ -4786,9 +4786,9 @@ msgid "Made to order (always available)"
 msgstr "На заказ (всегда доступно)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:182
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Requires shipping"
-msgstr "Требует доставки:"
+msgstr "Требует доставки"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:80
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:311
@@ -4798,7 +4798,7 @@ msgid "Shop status"
 msgstr "Статус магазина"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:315
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Unlisted — category hidden, items still visible"
 msgstr "Скрыта — категория не видна, товары отображаются"
 
@@ -4986,8 +4986,8 @@ msgstr "изменений"
 msgid "e.g. 3D Printed"
 msgstr "например, 3D Printed"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:349
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:367
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:348
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:366
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first item with an image)"
 msgstr "Автоматически (первый товар с изображением)"
@@ -4998,7 +4998,7 @@ msgstr "Автоматически (первый товар с изображе�
 msgid "Clear this filter"
 msgstr "Сбросить этот фильтр"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:401
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:400
 #, elixir-autogen, elixir-format
 msgid "No items with images in this category. Add item images to enable this option."
 msgstr "В этой категории нет товаров с изображениями. Добавьте изображения товарам, чтобы включить этот вариант."
@@ -5723,5 +5723,5 @@ msgstr "Сверка не выполнялась — переводы недос
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
-msgid "Category not set"
-msgstr "Категория не указана"
+msgid "— Category not set —"
+msgstr "— Категория не указана —"

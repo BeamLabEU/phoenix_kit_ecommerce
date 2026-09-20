@@ -4747,8 +4747,8 @@ msgstr ""
 msgid "Download limit"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:326
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:397
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:325
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:396
 #, elixir-autogen, elixir-format
 msgid "Featured item (image fallback)"
 msgstr ""
@@ -4964,8 +4964,8 @@ msgstr ""
 msgid "e.g. 3D Printed"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:349
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:367
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:348
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:366
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first item with an image)"
 msgstr ""
@@ -4976,7 +4976,7 @@ msgstr ""
 msgid "Clear this filter"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:401
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:400
 #, elixir-autogen, elixir-format
 msgid "No items with images in this category. Add item images to enable this option."
 msgstr ""
@@ -5678,5 +5678,5 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
-msgid "Category not set"
+msgid "— Category not set —"
 msgstr ""
