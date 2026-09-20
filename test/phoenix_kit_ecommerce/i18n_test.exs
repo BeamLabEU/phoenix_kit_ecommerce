@@ -61,6 +61,20 @@ defmodule PhoenixKitEcommerce.I18nTest do
       Gettext.put_locale(EcommerceGettext, "et")
       assert Gettext.gettext(EcommerceGettext, "My Cart") == "Minu ostukorv"
     end
+
+    # The product form's category default (boss, 2026-09-19: "No category"
+    # read as if there were none).
+    test "the category default resolves in every shipped locale" do
+      for {locale, text} <- [
+            {"et", "Kategooria määramata"},
+            {"ru", "Категория не указана"},
+            {"de", "Kategorie nicht festgelegt"},
+            {"fr", "Catégorie non définie"}
+          ] do
+        Gettext.put_locale(EcommerceGettext, locale)
+        assert Gettext.gettext(EcommerceGettext, "Category not set") == text
+      end
+    end
   end
 
   describe "Tab.localized_label/1 against the module's catalogue" do
