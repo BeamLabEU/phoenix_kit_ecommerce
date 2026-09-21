@@ -185,9 +185,9 @@ Repo-local aliases:
 - **Activity logging happens at the LiveView layer**, on the `{:ok, _}` branch
   of a successful mutation, through `PhoenixKitEcommerce.Activity` — never
   inside context functions, which stay pure and keep stable signatures. The
-  wrapper centralizes the `Code.ensure_loaded?/1` guard, the rescue (logging
-  failures never crash the caller) and the default metadata (`module: "shop"`,
-  `actor_role`); the actor comes from `socket.assigns[:phoenix_kit_current_scope]`.
+  wrapper adds the module key (`"shop"`) and `actor_role` to core's
+  `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
+  from `PhoenixKitWeb.Actor`.
   Rows carry no PII.
 - **The core pin floor is two-segment (`~> 2.16`) on purpose.** The
   three-segment form (`~> 2.6.4`) expands to `< 2.7.0` and breaks CONSUMERS —
