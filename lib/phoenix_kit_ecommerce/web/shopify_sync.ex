@@ -72,6 +72,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Sync
+  alias PhoenixKitEcommerce.Shopify.SyncScope
   alias PhoenixKitEcommerce.Shopify.TextDiff
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker
@@ -134,8 +135,11 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
          :collections_filter,
          PhoenixKitEcommerce.get_config("shopify_collections_filter")
        )
+       |> assign_scope(SyncScope.get())
        |> assign(:checking, false)
        |> assign(:changes, nil)
+       |> assign(:new_products, nil)
+       |> assign(:new_products_out_of_scope, 0)
        |> assign(:error, nil)
        |> assign(:source, nil)
        |> assign(:fallback_reason, nil)
@@ -231,6 +235,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
            |> assign(
              checking: true,
              changes: nil,
+             new_products: nil,
+             new_products_out_of_scope: 0,
              error: nil,
              source: nil,
              fallback_reason: nil,
@@ -271,6 +277,26 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           |> Oban.insert()
 
         {:noreply, flash_media_sync_enqueue(socket, result)}
+      end
+    end)
+  end
+
+  # Saves the sync scope (`PhoenixKitEcommerce.Shopify.SyncScope`) —
+  # decides which unmatched Shopify products the media sync/"New in
+  # Shopify" panels treat as missing versus intentionally excluded.
+  # Never touches `@changes`/`@new_products`: the operator re-runs
+  # "Check for changes" to see the new scope reflected there.
+  def handle_event("save_sync_scope", %{"sync_scope" => params}, socket) do
+    Authz.authorize(socket, :run_imports, fn ->
+      case SyncScope.put(params) do
+        {:ok, scope} ->
+          {:noreply,
+           socket
+           |> assign_scope(scope)
+           |> put_flash(:info, gettext("Sync scope saved."))}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, gettext("Could not save the sync scope."))}
       end
     end)
   end
@@ -357,6 +383,29 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     end)
   end
 
+  # --- "New in Shopify" (create-`Change`s from `check/2`'s own
+  # `:new_products`, catalogue source only — see the moduledoc's "New in
+  # Shopify" section). Same request -> confirm flow as every other write
+  # on this page.
+
+  def handle_event("request_apply_new_row", %{"handle" => handle}, socket) do
+    Authz.authorize(socket, :run_imports, fn ->
+      new_products = socket.assigns.new_products || []
+
+      if Enum.any?(new_products, &(&1.handle == handle)) do
+        {:noreply, assign(socket, :pending, %{scope: :new_row, handle: handle})}
+      else
+        {:noreply, socket}
+      end
+    end)
+  end
+
+  def handle_event("request_apply_new_all", _params, socket) do
+    Authz.authorize(socket, :run_imports, fn ->
+      open_pending(socket, socket.assigns.new_products || [], %{scope: :new_all})
+    end)
+  end
+
   # Field is smuggled into the event name (not the payload) because the
   # `BulkSelectScope` JS hook's `data-bulk-action` click handler always
   # pushes exactly `%{"uuids" => [...]}` — it has no way to attach an
@@ -401,6 +450,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         %{scope: :section, field: field} -> confirm_section_apply(socket, field)
         %{scope: :selection} = pending -> confirm_selection_apply(socket, pending)
         %{scope: :everything} -> confirm_everything_apply(socket)
+        %{scope: :new_row, handle: handle} -> confirm_new_row_apply(socket, handle)
+        %{scope: :new_all} -> confirm_new_all_apply(socket)
       end
     end)
   end
@@ -489,6 +540,109 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     |> clear_pending()
   end
 
+  # `change.product_uuid` is always `nil` on a create-`Change` (see
+  # `ProductDiff.Change`'s own moduledoc) — matched by `handle` instead,
+  # not `product_uuid`, unlike every other apply path on this page.
+  defp confirm_new_row_apply(socket, handle) do
+    new_products = socket.assigns.new_products || []
+
+    case Enum.find(new_products, &(&1.handle == handle)) do
+      nil -> {:noreply, assign(socket, :pending, nil)}
+      change -> socket |> apply_new_products([change], new_products) |> clear_pending()
+    end
+  end
+
+  defp confirm_new_all_apply(socket) do
+    new_products = socket.assigns.new_products || []
+    socket |> apply_new_products(new_products, new_products) |> clear_pending()
+  end
+
+  # A create-`Change`'s currency guard is all-or-nothing PER BATCH (this
+  # module's own moduledoc, "Precomputed currency verdict" /
+  # `create_change/2`): every create in one `apply_changes/3` call is
+  # refused together on a mismatch, never some subset of them. So the
+  # verdict is resolved ONCE here — both to reuse it for the actual
+  # write (`opts[:currency_verdict]`, skipping a second live lookup) and
+  # to know, without inspecting `failed` at all, whether every failure
+  # below is a currency refusal or something else entirely.
+  defp apply_new_products(socket, changes, new_products) do
+    verdict = Sync.currency_verdict()
+
+    %{succeeded: succeeded, failed: failed} =
+      Sync.apply_changes(changes, :all, currency_verdict: verdict)
+
+    socket =
+      if succeeded != [] do
+        Activity.log("shop.shopify_sync_new_products_apply",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          metadata: %{"count" => length(succeeded)}
+        )
+
+        assign(socket, :applied_any?, true)
+      else
+        socket
+      end
+
+    succeeded_handles = MapSet.new(succeeded, & &1.handle)
+    remaining = Enum.reject(new_products, &MapSet.member?(succeeded_handles, &1.handle))
+
+    {:noreply,
+     socket
+     |> assign(:new_products, remaining)
+     |> flash_new_products_result(succeeded, failed, verdict)}
+  end
+
+  defp flash_new_products_result(socket, succeeded, failed, verdict) do
+    socket =
+      if succeeded != [] do
+        put_flash(
+          socket,
+          :info,
+          ngettext(
+            "Added %{count} product from Shopify.",
+            "Added %{count} products from Shopify.",
+            length(succeeded),
+            count: length(succeeded)
+          )
+        )
+      else
+        socket
+      end
+
+    flash_new_products_failure(socket, failed, verdict)
+  end
+
+  defp flash_new_products_failure(socket, [], _verdict), do: socket
+
+  defp flash_new_products_failure(socket, failed, {:mismatch, shop_currency, base_currency}) do
+    put_flash(
+      socket,
+      :error,
+      ngettext(
+        "Could not add %{count} product: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}.",
+        "Could not add %{count} products: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}.",
+        length(failed),
+        count: length(failed),
+        shop_currency: shop_currency,
+        base_currency: base_currency
+      )
+    )
+  end
+
+  defp flash_new_products_failure(socket, failed, :match) do
+    put_flash(
+      socket,
+      :error,
+      ngettext(
+        "Could not add %{count} product — try again individually.",
+        "Could not add %{count} products — try again individually.",
+        length(failed),
+        count: length(failed)
+      )
+    )
+  end
+
   # Always clears @pending, win or lose — a failed write still leaves the
   # failing row visible in its section (see `flash_bulk_result`'s error
   # branch), it just shouldn't leave a stale confirmation hanging open.
@@ -503,10 +657,20 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   defp open_pending(socket, _eligible, pending), do: {:noreply, assign(socket, :pending, pending)}
 
   # `ShopifyMediaSyncWorker`'s own broadcast — live progress for the
-  # "Media & collections" panel, no polling.
+  # "Media & collections" panel, no polling. `@media_sync_progress` is
+  # now one row PER KIND (`ShopifyMediaSyncWorker.get_progress/0`'s own
+  # shape) — the broadcast payload is still a single kind's progress
+  # map, filed here under its own `"kind"` rather than replacing the
+  # whole assign, so a "variants" broadcast can never clobber the last
+  # "images" result still on screen.
   @impl true
-  def handle_info({:media_sync_progress, progress}, socket) do
-    {:noreply, assign(socket, :media_sync_progress, progress)}
+  def handle_info({:media_sync_progress, %{"kind" => kind} = progress}, socket) do
+    {:noreply,
+     assign(
+       socket,
+       :media_sync_progress,
+       Map.put(socket.assigns.media_sync_progress, kind, progress)
+     )}
   end
 
   @impl true
@@ -516,6 +680,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
          {:ok,
           %{
             changes: changes,
+            new_products: new_products,
+            new_products_out_of_scope: new_products_out_of_scope,
             source: source,
             fallback_reason: reason,
             total_shopify_products: total_shopify_products,
@@ -528,6 +694,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
      |> assign(
        checking: false,
        changes: changes,
+       new_products: new_products,
+       new_products_out_of_scope: new_products_out_of_scope,
        source: source,
        fallback_reason: reason,
        total_shopify_products: total_shopify_products,
@@ -538,11 +706,26 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   def handle_async(:check_diff, {:ok, {:error, reason}}, socket) do
     {:noreply,
-     assign(socket, checking: false, changes: nil, diffs: %{}, error: format_error(reason))}
+     assign(socket,
+       checking: false,
+       changes: nil,
+       new_products: nil,
+       new_products_out_of_scope: 0,
+       diffs: %{},
+       error: format_error(reason)
+     )}
   end
 
   def handle_async(:check_diff, {:exit, reason}, socket) do
-    {:noreply, assign(socket, checking: false, changes: nil, diffs: %{}, error: inspect(reason))}
+    {:noreply,
+     assign(socket,
+       checking: false,
+       changes: nil,
+       new_products: nil,
+       new_products_out_of_scope: 0,
+       diffs: %{},
+       error: inspect(reason)
+     )}
   end
 
   defp apply_row_change(socket, changes, change, field) do
@@ -869,8 +1052,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     ]
   end
 
-  defp media_sync_in_flight?(%{"kind" => kind, "finished_at" => nil}, kind), do: true
-  defp media_sync_in_flight?(_progress, _kind), do: false
+  # `progress_map` is `ShopifyMediaSyncWorker.get_progress/0`'s own
+  # shape — one row per kind — so this reads straight off `kind`'s own
+  # entry instead of matching a single progress record's `"kind"` field
+  # against the button's kind, the way the old single-record storage
+  # required.
+  defp media_sync_in_flight?(progress_map, kind) do
+    match?(%{"finished_at" => nil}, Map.get(progress_map, kind))
+  end
 
   # `Oban.insert/1`'s result, not just its call, decides the flash: on a
   # unique-constraint hit it returns `{:ok, %Job{conflict?: true}}` —
@@ -888,25 +1077,78 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     put_flash(socket, :error, gettext("Could not queue the sync — try again."))
   end
 
-  defp media_sync_summary(%{
-         "kind" => kind,
-         "total" => total,
-         "done" => done,
-         "errors" => errors,
-         "finished_at" => finished_at
-       }) do
-    status = if finished_at, do: gettext("finished"), else: gettext("running")
+  # Builds the per-kind status block the template renders under each
+  # sync button (`id="media-sync-status-#{kind}"`) — never run / running
+  # (with a progress bar) / finished (with matched/skipped/error counts,
+  # plus `"images"`'s own downloaded/reused line) / a failed whole-run
+  # (`fail_progress/2`'s `"_run"` error entry, `"total" => 0`).
+  defp media_sync_status(nil), do: %{state: :never_run}
 
-    gettext("%{kind}: %{status} (%{done}/%{total}, %{error_count} errors)",
-      kind: kind,
-      status: status,
-      done: done,
-      total: total,
-      error_count: length(errors || [])
+  defp media_sync_status(%{"finished_at" => nil, "total" => total, "done" => done}) do
+    %{state: :running, done: done, total: total}
+  end
+
+  defp media_sync_status(%{
+         "total" => 0,
+         "done" => 0,
+         "errors" => [%{"product" => "_run", "reason" => reason} | _]
+       }) do
+    %{state: :failed, reason: reason}
+  end
+
+  # `counts_recorded?` is false for a LEGACY progress record — one
+  # written before this change added `"matched"`/`"skipped"`/`"stats"`
+  # (`get_progress/0`'s own fallback to the old single
+  # `"shopify_media_sync"` key, or any per-kind row a stand wrote before
+  # the deploy that added these fields). Such a record's matched/skipped
+  # would otherwise always read as 0 — indistinguishable from a real run
+  # that genuinely matched/skipped nothing — so the template must show
+  # "counts not recorded" instead of a confidently wrong "0 synced, 0
+  # skipped" for a run this page never actually measured those on.
+  defp media_sync_status(progress) do
+    errors = Map.get(progress, "errors") || []
+    counts_recorded? = Map.has_key?(progress, "matched") and Map.has_key?(progress, "skipped")
+    stats = Map.get(progress, "stats") || %{}
+
+    %{
+      state: :finished,
+      finished_at: format_finished_at(progress["finished_at"]),
+      matched: Map.get(progress, "matched", 0),
+      skipped: Map.get(progress, "skipped", 0),
+      errors: errors,
+      error_count: length(errors),
+      stats: stats,
+      counts_recorded?: counts_recorded?,
+      nothing_new?: counts_recorded? and Map.get(stats, "downloaded", 0) == 0 and errors == []
+    }
+  end
+
+  defp format_finished_at(nil), do: nil
+
+  defp format_finished_at(iso8601) do
+    case DateTime.from_iso8601(iso8601) do
+      {:ok, datetime, _offset} -> Calendar.strftime(datetime, "%H:%M")
+      {:error, _reason} -> iso8601
+    end
+  end
+
+  defp media_sync_finished_summary(%{matched: matched, skipped: skipped, error_count: errors}) do
+    gettext("%{matched} synced, %{skipped} skipped, %{errors} errors.",
+      matched: matched,
+      skipped: skipped,
+      errors: errors
     )
   end
 
-  defp media_sync_summary(_progress), do: nil
+  defp media_images_stats_text(stats) do
+    gettext("Downloaded %{downloaded}, reused %{reused}.",
+      downloaded: Map.get(stats, "downloaded", 0),
+      reused: Map.get(stats, "reused", 0)
+    )
+  end
+
+  defp media_error_line(%{"product" => product, "reason" => reason}),
+    do: "#{product} — #{reason}"
 
   # `@collections_filter` is `CollectionSync.run/1`'s own allowlist
   # (`PhoenixKitEcommerce.get_config("shopify_collections_filter")`,
@@ -932,6 +1174,60 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # degrades to "no filter" instead of raising on mount.
   defp collections_filter_summary(_filter),
     do: gettext("Collections filter: none — every Shopify collection becomes a category.")
+
+  # ============================================================
+  # Sync scope (`PhoenixKitEcommerce.Shopify.SyncScope`)
+  # ============================================================
+
+  # Both `@scope` (the domain struct — atom keys, atom `:mode`) and
+  # `@scope_form` (the SAME scope, rendered as the string-keyed params
+  # shape `<.form>`/`SyncScope.put/1` expect) are derived from one
+  # source of truth here, so a save can never leave the two out of sync
+  # with each other.
+  defp assign_scope(socket, scope) do
+    socket
+    |> assign(:scope, scope)
+    |> assign(
+      :scope_form,
+      to_form(
+        %{
+          "mode" => Atom.to_string(scope.mode),
+          "tags" => Enum.join(scope.tags, ", "),
+          "product_types" => Enum.join(scope.product_types, ", ")
+        },
+        as: :sync_scope
+      )
+    )
+  end
+
+  defp scope_summary(%{mode: :all}) do
+    gettext("Scope: whole store — every unmatched Shopify product counts.")
+  end
+
+  defp scope_summary(%{mode: :filtered, tags: [], product_types: []}) do
+    gettext("Scope: whole store — every unmatched Shopify product counts.")
+  end
+
+  defp scope_summary(%{mode: :filtered, tags: tags, product_types: product_types}) do
+    gettext("Scope: tags %{tags}, product types %{product_types}",
+      tags: if(tags == [], do: gettext("(any)"), else: Enum.join(tags, ", ")),
+      product_types:
+        if(product_types == [], do: gettext("(any)"), else: Enum.join(product_types, ", "))
+    )
+  end
+
+  # ============================================================
+  # "New in Shopify" (create-`Change`s)
+  # ============================================================
+
+  # First 50 + a count of the rest — simplest option the spec allows
+  # over a full load-more; this list is reviewed once per check, not
+  # paged through repeatedly the way a field section is.
+  @new_products_shown 50
+  defp new_products_visible(new_products), do: Enum.take(new_products, @new_products_shown)
+
+  defp new_products_hidden_count(new_products),
+    do: max(length(new_products) - @new_products_shown, 0)
 
   # Groups `changes` by field, in `@sections` order, dropping fields with
   # no matching changes. A change appears once per field it differs on.
@@ -1211,6 +1507,38 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     }
   end
 
+  defp pending_modal(%{pending: %{scope: :new_row, handle: handle}, new_products: new_products}) do
+    case Enum.find(new_products || [], &(&1.handle == handle)) do
+      nil ->
+        nil
+
+      change ->
+        %{
+          title: gettext("Add product?"),
+          prompt: gettext("Add %{title} from Shopify?", title: change.title),
+          messages: [],
+          danger: false
+        }
+    end
+  end
+
+  defp pending_modal(%{pending: %{scope: :new_all}, new_products: new_products}) do
+    count = length(new_products || [])
+
+    %{
+      title: gettext("Add all new products?"),
+      prompt:
+        ngettext(
+          "Add %{count} new product from Shopify?",
+          "Add %{count} new products from Shopify?",
+          count,
+          count: count
+        ),
+      messages: [],
+      danger: true
+    }
+  end
+
   defp row_summary_text(%{fragments: fragments, length_delta: delta}) do
     ngettext(
       "%{count} changed region (%{delta})",
@@ -1476,6 +1804,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   @impl true
   def render(assigns) do
+    new_products_visible = new_products_visible(assigns.new_products || [])
+
     assigns =
       assigns
       |> assign(:sections, build_sections(assigns))
@@ -1483,6 +1813,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       |> assign(:modal, pending_modal(assigns))
       |> assign(:stats, build_change_stats(assigns))
       |> assign(:coverage, build_coverage(assigns))
+      |> assign(:new_products_visible, new_products_visible)
+      |> assign(:new_products_hidden_count, new_products_hidden_count(assigns.new_products || []))
 
     ~H"""
     <div class="container mx-auto px-4 py-6 max-w-5xl">
@@ -1515,6 +1847,71 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           {gettext("Connected: %{name}", name: @connection.name)}
         </div>
 
+        <%!-- Decides which unmatched Shopify products the media sync's
+             "no_matching_item" errors and the "New in Shopify" panel
+             below even consider — see `PhoenixKitEcommerce.Shopify.
+             SyncScope`'s own moduledoc. An item the catalogue already
+             has always syncs regardless of this setting. --%>
+        <div
+          :if={@connection && @catalogue_source_active?}
+          id="sync-scope-panel"
+          class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
+        >
+          <div class="font-semibold">{gettext("Sync scope")}</div>
+          <p class="text-sm text-base-content/70">
+            {gettext(
+              "Scope decides which Shopify products count for adding and skipping; items already in the catalogue always sync."
+            )}
+          </p>
+
+          <.form
+            for={@scope_form}
+            id="sync-scope-form"
+            phx-submit="save_sync_scope"
+            class="flex flex-wrap items-end gap-3"
+          >
+            <div class="fieldset">
+              <label class="label"><span class="fieldset-legend">{gettext("Mode")}</span></label>
+              <select name="sync_scope[mode]" class="select select-sm">
+                <option value="all" selected={@scope.mode == :all}>{gettext("Whole store")}</option>
+                <option value="filtered" selected={@scope.mode == :filtered}>
+                  {gettext("Only matching products")}
+                </option>
+              </select>
+            </div>
+
+            <div class="fieldset">
+              <label class="label"><span class="fieldset-legend">{gettext("Tags (comma-separated)")}</span></label>
+              <input
+                type="text"
+                name="sync_scope[tags]"
+                value={@scope_form[:tags].value}
+                class="input input-sm w-56"
+              />
+            </div>
+
+            <div class="fieldset">
+              <label class="label">
+                <span class="fieldset-legend">{gettext("Product types (comma-separated)")}</span>
+              </label>
+              <input
+                type="text"
+                name="sync_scope[product_types]"
+                value={@scope_form[:product_types].value}
+                class="input input-sm w-56"
+              />
+            </div>
+
+            <button type="submit" id="save-sync-scope" class="btn btn-sm btn-primary">
+              {gettext("Save")}
+            </button>
+          </.form>
+
+          <div id="sync-scope-summary" class="text-sm text-base-content/70">
+            {scope_summary(@scope)}
+          </div>
+        </div>
+
         <%!-- Outside the field-diff report below: these three writers act
              directly on the catalogue (images, variants/prices,
              collections → categories) rather than on the reviewed diff,
@@ -1531,30 +1928,71 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             )}
           </p>
 
-          <div class="flex flex-wrap gap-2">
-            <button
-              :for={{kind, label} <- media_sync_kinds()}
-              type="button"
-              id={"sync-media-#{kind}"}
-              class="btn btn-sm"
-              phx-click="run_media_sync"
-              phx-value-kind={kind}
-              disabled={media_sync_in_flight?(@media_sync_progress, kind)}
-            >
-              <span
-                :if={media_sync_in_flight?(@media_sync_progress, kind)}
-                class="loading loading-spinner loading-xs"
-              />
-              {label}
-            </button>
-          </div>
+          <div :for={{kind, label} <- media_sync_kinds()} class="border-t border-base-200 pt-3 first:border-t-0 first:pt-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id={"sync-media-#{kind}"}
+                class="btn btn-sm"
+                phx-click="run_media_sync"
+                phx-value-kind={kind}
+                disabled={media_sync_in_flight?(@media_sync_progress, kind)}
+              >
+                <span
+                  :if={media_sync_in_flight?(@media_sync_progress, kind)}
+                  class="loading loading-spinner loading-xs"
+                />
+                {label}
+              </button>
 
-          <div
-            :if={media_sync_summary(@media_sync_progress)}
-            id="media-sync-progress"
-            class="text-sm text-base-content/70"
-          >
-            {media_sync_summary(@media_sync_progress)}
+              <% status = media_sync_status(Map.get(@media_sync_progress, kind)) %>
+
+              <div id={"media-sync-status-#{kind}"} class="text-sm text-base-content/70">
+                <span :if={status.state == :never_run}>{gettext("Not run yet")}</span>
+
+                <span :if={status.state == :running} class="flex items-center gap-2">
+                  <progress class="progress progress-primary w-32" value={status.done} max={max(status.total, 1)} />
+                  {gettext("%{done} / %{total}", done: status.done, total: status.total)}
+                </span>
+
+                <span :if={status.state == :failed} class="text-error">
+                  {gettext("Failed: %{reason}", reason: status.reason)}
+                </span>
+
+                <span :if={status.state == :finished}>
+                  {gettext("Finished at %{time} (UTC).", time: status.finished_at)}
+
+                  <span :if={status.counts_recorded?}>{media_sync_finished_summary(status)}</span>
+                  <span :if={not status.counts_recorded?}>
+                    {ngettext("%{count} error.", "%{count} errors.", status.error_count, count: status.error_count)}
+                    {gettext("Counts not recorded by this run.")}
+                  </span>
+
+                  <span :if={kind == "images" and status.counts_recorded? and not status.nothing_new?}>
+                    {media_images_stats_text(status.stats)}
+                  </span>
+                  <span :if={kind == "images" and status.nothing_new?}>
+                    {gettext("Nothing new — all images already present.")}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <details
+              :if={status.state == :finished and status.error_count > 0}
+              id={"media-sync-errors-#{kind}"}
+              class="mt-1 text-sm"
+            >
+              <summary class="cursor-pointer text-error">
+                {ngettext("%{count} error", "%{count} errors", status.error_count, count: status.error_count)}
+              </summary>
+              <ul class="pl-4 list-disc">
+                <li :for={error <- Enum.take(status.errors, 50)}>{media_error_line(error)}</li>
+                <li :if={status.error_count > 50}>
+                  {gettext("… and %{count} more", count: status.error_count - 50)}
+                </li>
+              </ul>
+            </details>
           </div>
 
           <div id="media-sync-collections-filter" class="text-sm text-base-content/70">
@@ -1616,6 +2054,104 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
               <:icon><.icon name="hero-chart-pie" class="w-5 h-5" /></:icon>
             </.stat_card>
           </div>
+        </div>
+
+        <%!-- Shopify products with no local match at all — `check/2`'s own
+             `:new_products` (catalogue source only, `@source == :admin`
+             — see `Sync.check/2`'s moduledoc for why storefront never
+             carries these). Scoped by `@scope`; `@new_products_out_of_scope`
+             is how many were dropped by it. --%>
+        <div
+          :if={@new_products != nil && @source == :admin}
+          id="new-products-panel"
+          class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
+        >
+          <div class="flex items-center justify-between gap-4">
+            <div class="font-semibold">
+              {gettext("New in Shopify (%{count})", count: length(@new_products))}
+            </div>
+            <button
+              :if={@new_products != []}
+              type="button"
+              id="add-all-new-products"
+              class="btn btn-sm btn-primary"
+              phx-click="request_apply_new_all"
+            >
+              {gettext("Add all (%{count})", count: length(@new_products))}
+            </button>
+          </div>
+
+          <p :if={@new_products_out_of_scope > 0} class="text-sm text-base-content/70">
+            {ngettext(
+              "%{count} product is outside the sync scope and hidden.",
+              "%{count} products are outside the sync scope and hidden.",
+              @new_products_out_of_scope,
+              count: @new_products_out_of_scope
+            )}
+          </p>
+
+          <.empty_state
+            :if={@new_products == []}
+            icon="hero-check-circle"
+            title={gettext("No new products in scope.")}
+          />
+
+          <.table_default :if={@new_products != []} id="new-products-table" items={@new_products_visible} size="sm">
+            <.table_default_header>
+              <.table_default_row>
+                <.table_default_header_cell>{gettext("Title")}</.table_default_header_cell>
+                <.table_default_header_cell>{gettext("Handle")}</.table_default_header_cell>
+                <.table_default_header_cell>{gettext("Product type")}</.table_default_header_cell>
+                <.table_default_header_cell>{gettext("Status")}</.table_default_header_cell>
+                <.table_default_header_cell class="w-24" />
+              </.table_default_row>
+            </.table_default_header>
+            <.table_default_body>
+              <.table_default_row :for={change <- @new_products_visible} id={"new-product-row-#{change.handle}"}>
+                <.table_default_cell class="font-medium max-w-xs break-words whitespace-normal">
+                  {change.title}
+                </.table_default_cell>
+                <.table_default_cell>{change.handle}</.table_default_cell>
+                <.table_default_cell>{change.shopify_product["product_type"]}</.table_default_cell>
+                <.table_default_cell>{change.shopify_product["status"]}</.table_default_cell>
+                <.table_default_cell>
+                  <button
+                    type="button"
+                    id={"add-new-product-#{change.handle}"}
+                    class="btn btn-xs btn-primary"
+                    phx-click="request_apply_new_row"
+                    phx-value-handle={change.handle}
+                  >
+                    {gettext("Add")}
+                  </button>
+                </.table_default_cell>
+              </.table_default_row>
+            </.table_default_body>
+
+            <:card_body :let={change}>
+              <div class="font-medium">{change.title}</div>
+              <div class="text-sm text-base-content/70">{change.handle}</div>
+            </:card_body>
+            <:card_actions :let={change}>
+              <button
+                type="button"
+                id={"add-new-product-#{change.handle}-card"}
+                class="btn btn-xs btn-primary"
+                phx-click="request_apply_new_row"
+                phx-value-handle={change.handle}
+              >
+                {gettext("Add")}
+              </button>
+            </:card_actions>
+          </.table_default>
+
+          <p :if={@new_products_hidden_count > 0} class="text-sm text-base-content/70">
+            {gettext("Showing the first %{shown} of %{total} — %{hidden} more not shown.",
+              shown: length(@new_products_visible),
+              total: length(@new_products),
+              hidden: @new_products_hidden_count
+            )}
+          </p>
         </div>
 
         <div :if={@changes == [] && @source == :admin}>
