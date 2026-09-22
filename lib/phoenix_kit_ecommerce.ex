@@ -1682,9 +1682,11 @@ defmodule PhoenixKitEcommerce do
 
   def update_category(%Category{} = category, attrs) do
     result =
-      category
-      |> Category.changeset(attrs)
-      |> repo().update()
+      in_category_tree(reparenting?(category, attrs), fn ->
+        category
+        |> Category.changeset(attrs)
+        |> repo().update()
+      end)
 
     case result do
       {:ok, updated_category} ->
@@ -1774,6 +1776,47 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp do_bulk_update_category_parent(ids, parent_uuid) do
+    {count, moved} =
+      if is_nil(parent_uuid) do
+        set_category_parents(ids, nil)
+      else
+        {:ok, result} =
+          in_category_tree(true, fn -> {:ok, set_category_parents(ids, parent_uuid)} end)
+
+        result
+      end
+
+    # After the commit: nobody hears of a move that could still roll back.
+    if count > 0, do: Events.broadcast_categories_bulk_parent_changed(moved, parent_uuid)
+    count
+  end
+
+  # A new parent is checked for a cycle against the tree as committed: under
+  # one lock on the shop's category tree, two opposite re-parents (or a
+  # bulk move beside a single one) no longer both pass the check.
+  defp in_category_tree(false, fun), do: fun.()
+
+  defp in_category_tree(true, fun) do
+    repo().transaction(fn ->
+      repo().query!(
+        "SELECT pg_advisory_xact_lock(hashtext('phoenix_kit_ecommerce:category_tree'))"
+      )
+
+      case fun.() do
+        {:ok, value} -> value
+        {:error, reason} -> repo().rollback(reason)
+      end
+    end)
+  end
+
+  defp reparenting?(%Category{parent_uuid: current}, attrs) do
+    case Map.get(attrs, :parent_uuid, Map.get(attrs, "parent_uuid", current)) do
+      parent when parent in [nil, ""] -> false
+      parent -> to_string(parent) != to_string(current)
+    end
+  end
+
+  defp set_category_parents(ids, parent_uuid) do
     # Exclude the target parent and its ancestors from update set to prevent cycles
     ids_to_update =
       if parent_uuid do
@@ -1785,7 +1828,7 @@ defmodule PhoenixKitEcommerce do
       end
 
     if ids_to_update == [] do
-      0
+      {0, []}
     else
       now = UtilsDate.utc_now()
 
@@ -1802,11 +1845,7 @@ defmodule PhoenixKitEcommerce do
           |> repo().update_all(set: [parent_uuid: parent_uuid, updated_at: now])
         end
 
-      if count > 0 do
-        Events.broadcast_categories_bulk_parent_changed(ids_to_update, parent_uuid)
-      end
-
-      count
+      {count, ids_to_update}
     end
   end
 
