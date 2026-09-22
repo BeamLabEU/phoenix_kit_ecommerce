@@ -31,6 +31,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScope do
   """
 
   alias PhoenixKitEcommerce.ShopConfig
+  alias PhoenixKitEcommerce.Shopify.ProductDiff
 
   @type mode :: :all | :filtered
   @type t :: %{mode: mode(), tags: [String.t()], product_types: [String.t()]}
@@ -147,23 +148,37 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScope do
     end
   end
 
-  defp product_tags(%{"tags" => tags}) when is_list(tags), do: tags
-
-  defp product_tags(%{"tags" => tags}) when is_binary(tags) do
-    tags |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
-  end
-
+  # Reuses `ProductDiff.parse_tags/1` — the exact same comma-split/trim/
+  # reject-blank rule `ProductDiff.diff/4` already applies to this same
+  # Shopify `"tags"` field, rather than a second, independent parser
+  # that could silently drift out of sync with it.
+  defp product_tags(%{"tags" => tags}), do: ProductDiff.parse_tags(tags)
   defp product_tags(_product), do: []
 
   defp downcase_trim(value) when is_binary(value), do: value |> String.trim() |> String.downcase()
+  defp downcase_trim(nil), do: ""
+  defp downcase_trim(value), do: value |> to_string() |> downcase_trim()
 
   @doc """
   Splits `products` into `{in_scope, out_of_scope}` per `in_scope?/2`,
   preserving each side's relative order.
   """
   @spec partition([map()], t()) :: {[map()], [map()]}
-  def partition(products, scope) when is_list(products) do
-    Enum.split_with(products, &in_scope?(&1, scope))
+  def partition(products, scope), do: partition(products, scope, & &1)
+
+  @doc """
+  Same as `partition/2`, but for a list of ITEMS that each wrap a raw
+  Shopify product rather than being one — `extract_fun` pulls the
+  product map out of each item for the `in_scope?/2` check, while both
+  output lists still carry the original items, not the extracted
+  products. `Shopify.Sync.check/2`'s own `:new_products` uses this to
+  partition `ProductDiff.Change` structs by their `.shopify_product`
+  without a second, independent `Enum.split_with/2`.
+  """
+  @spec partition([term()], t(), (term() -> map())) :: {[term()], [term()]}
+  def partition(items, scope, extract_fun)
+      when is_list(items) and is_function(extract_fun, 1) do
+    Enum.split_with(items, &in_scope?(extract_fun.(&1), scope))
   end
 
   @doc "The scope that means \"everything\" — `get/0`'s default."

@@ -224,10 +224,7 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   defp new_product_changes(local_products, products, base_locale, :admin, scope) do
     if ProductSource.current() == ProductSource.Catalogue do
       all_changes = ProductDiff.new_product_changes(local_products, products, base_locale)
-
-      {in_scope, out_of_scope} =
-        Enum.split_with(all_changes, &SyncScope.in_scope?(&1.shopify_product, scope))
-
+      {in_scope, out_of_scope} = SyncScope.partition(all_changes, scope, & &1.shopify_product)
       {in_scope, length(out_of_scope)}
     else
       {[], 0}
