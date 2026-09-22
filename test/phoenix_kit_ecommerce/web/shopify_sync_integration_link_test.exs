@@ -31,7 +31,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncIntegrationLinkTest do
     on_exit(fn -> set_product_source("legacy") end)
     set_product_source("catalogue")
 
-    {:ok, conn: put_test_scope(conn, fake_scope())}
+    permissions = ["integrations_system" | shop_permissions()]
+    {:ok, conn: put_test_scope(conn, fake_scope(permissions: permissions))}
   end
 
   defp set_product_source(value) do

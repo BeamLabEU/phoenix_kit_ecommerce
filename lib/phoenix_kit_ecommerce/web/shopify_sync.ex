@@ -67,6 +67,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   alias PhoenixKit.Integrations
   alias PhoenixKit.PubSub.Manager
+  alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
@@ -143,6 +144,10 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
        socket
        |> assign(:page_title, gettext("Shopify Sync"))
        |> assign(:connection, shopify_connection())
+       |> assign(
+         :can_manage_integrations?,
+         can_manage_integrations?(socket.assigns[:phoenix_kit_current_scope])
+       )
        |> assign(:catalogue_source_active?, catalogue_source_active?())
        |> assign(:media_sync_progress, ShopifyMediaSyncWorker.get_progress())
        |> assign(
@@ -1109,6 +1114,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     ArgumentError -> nil
   end
 
+  # Core gates the Integrations pages on `integrations_system`, which is
+  # independent of every `shop.*` key — a link to them shown to a
+  # `shop.run_imports` holder without it lands on an access-denied redirect.
+  defp can_manage_integrations?(scope),
+    do: Scope.has_module_access?(scope, "integrations_system")
+
   defp shopify_connection do
     case Integrations.list_connections("shopify", owner: :system) do
       [connection | _rest] -> connection
@@ -1970,7 +1981,11 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         <div :if={is_nil(@connection)} class="alert alert-warning">
           <span>
             {gettext("Shopify isn't connected yet.")}
-            <.link navigate={Routes.path("/admin/settings/integrations/website")} class="link">
+            <.link
+              :if={@can_manage_integrations?}
+              navigate={Routes.path("/admin/settings/integrations")}
+              class="link"
+            >
               {gettext("Connect it in Integrations settings.")}
             </.link>
           </span>
@@ -2020,6 +2035,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         <div :if={@active_tab == "settings"} id="tab-panel-settings">
           <.settings_tab
             connection={@connection}
+            can_manage_integrations?={@can_manage_integrations?}
             catalogue_source_active?={@catalogue_source_active?}
             scope_form={@scope_form}
             scope={@scope}
@@ -2528,6 +2544,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   end
 
   attr :connection, :any, required: true
+  attr :can_manage_integrations?, :boolean, required: true
   attr :catalogue_source_active?, :boolean, required: true
   attr :scope_form, :any, required: true
   attr :scope, :map, required: true
@@ -2606,9 +2623,10 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             "not connected yet" warning — which goes to the Integrations LIST
             and disappears the moment a connection exists, so an operator
             rotating a token had to remember the path and work out which
-            connection is the Shopify one. --%>
+            connection is the Shopify one. Gated on `integrations_system` too:
+            that page is core's, and it refuses anyone without the key. --%>
       <div
-        :if={@connection}
+        :if={@connection && @can_manage_integrations?}
         id="shopify-credentials-panel"
         class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
       >

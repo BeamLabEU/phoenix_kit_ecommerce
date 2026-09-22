@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.13 - 2026-09-22
+
+### Added
+
+- **Shopify sync Settings tab links the connected integration** (#67).
+  The shop domain and Admin API token live on the integration, and once a
+  connection existed nothing on the page pointed there; the Settings tab
+  now links `/admin/settings/integrations/<connection uuid>`.
+
+### Fixed
+
+- **The "Shopify isn't connected yet" link opened an error.** It pointed
+  at `/admin/settings/integrations/website`, which core's edit route
+  reads as a connection uuid, flashing "Integration not found" before
+  redirecting. It now links the Integrations list.
+- **Integration links are shown only to viewers core admits.** Core gates
+  its Integrations pages on `integrations_system`, which no `shop.*` key
+  implies; a shop-only role no longer sees links that bounce off an
+  access-denied redirect.
+
 ## 0.5.12 - 2026-09-22
 
 ### Added
