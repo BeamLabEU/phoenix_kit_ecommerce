@@ -300,7 +300,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
           end)
 
         errors = Enum.reverse(acc.errors)
-        finish_progress(kind, total, done, acc.skipped, acc.matched, acc.stats, errors, started_at, nil)
+        finish_progress(kind, total, done, acc, errors, started_at, nil)
         {:ok, %{total: total, done: done, errors: errors}}
       rescue
         exception ->
@@ -373,7 +373,8 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   # at all; see `run_collections/1`).
   defp merge_stats(stats, "images", result) do
     Enum.reduce([downloaded: "downloaded", reused: "reused", attached: "attached"], stats, fn
-      {rkey, key}, acc -> Map.update(acc, key, Map.get(result, rkey, 0), &(&1 + Map.get(result, rkey, 0)))
+      {rkey, key}, acc ->
+        Map.update(acc, key, Map.get(result, rkey, 0), &(&1 + Map.get(result, rkey, 0)))
     end)
   end
 
@@ -511,7 +512,16 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         try do
           case CollectionSync.run(run_opts) do
             {:ok, result} ->
-              finish_progress("collections", 1, 1, 0, 1, %{}, [], started_at, result)
+              finish_progress(
+                "collections",
+                1,
+                1,
+                %{skipped: 0, matched: 1, stats: %{}},
+                [],
+                started_at,
+                result
+              )
+
               {:ok, result}
 
             {:error, reason} = error ->
@@ -598,14 +608,21 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   # Progress: read/write `phoenix_kit_shop_config["shopify_media_sync:" <> kind]`
   # ============================================================
 
-  defp build_progress(kind, total, done, skipped, matched, stats, errors, started_at, finished_at, result) do
+  @empty_counts %{skipped: 0, matched: 0, stats: %{}}
+
+  # `counts` bundles the three fields the sync-scope work added
+  # (`:skipped`, `:matched`, `:stats`) into one argument — keeps this
+  # under credo's max-arity check, and reads at every call site as
+  # exactly what it is: the run's own tallies, as one unit, alongside
+  # `total`/`done`/`errors`.
+  defp build_progress(kind, total, done, counts, errors, started_at, finished_at, result) do
     %{
       "kind" => kind,
       "total" => total,
       "done" => done,
-      "skipped" => skipped,
-      "matched" => matched,
-      "stats" => stats,
+      "skipped" => counts.skipped,
+      "matched" => counts.matched,
+      "stats" => counts.stats,
       "errors" => errors,
       "started_at" => started_at,
       "finished_at" => finished_at,
@@ -615,7 +632,12 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
 
   defp start_progress(kind, total) do
     started_at = iso_now()
-    save_and_broadcast(kind, build_progress(kind, total, 0, 0, 0, %{}, [], started_at, nil, nil))
+
+    save_and_broadcast(
+      kind,
+      build_progress(kind, total, 0, @empty_counts, [], started_at, nil, nil)
+    )
+
     started_at
   end
 
@@ -629,34 +651,23 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
        when rem(done, @progress_interval) == 0 or done == total do
     save_and_broadcast(
       kind,
-      build_progress(
-        kind,
-        total,
-        done,
-        acc.skipped,
-        acc.matched,
-        acc.stats,
-        Enum.reverse(acc.errors),
-        started_at,
-        nil,
-        nil
-      )
+      build_progress(kind, total, done, acc, Enum.reverse(acc.errors), started_at, nil, nil)
     )
   end
 
   defp maybe_save_progress(_kind, _total, _done, _acc, _started_at), do: :ok
 
-  defp finish_progress(kind, total, done, skipped, matched, stats, errors, started_at, result) do
+  defp finish_progress(kind, total, done, counts, errors, started_at, result) do
     save_and_broadcast(
       kind,
-      build_progress(kind, total, done, skipped, matched, stats, errors, started_at, iso_now(), result)
+      build_progress(kind, total, done, counts, errors, started_at, iso_now(), result)
     )
   end
 
   defp fail_progress(kind, reason) do
     now = iso_now()
     error = %{"product" => "_run", "reason" => error_reason_string(reason)}
-    save_and_broadcast(kind, build_progress(kind, 0, 0, 0, 0, %{}, [error], now, now, nil))
+    save_and_broadcast(kind, build_progress(kind, 0, 0, @empty_counts, [error], now, now, nil))
   end
 
   defp save_and_broadcast(kind, progress) do

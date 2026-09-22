@@ -96,7 +96,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScope do
     %{"mode" => Atom.to_string(mode), "tags" => tags, "product_types" => product_types}
   end
 
-  @doc "Whether `scope` is a `\"filtered\"` scope (as opposed to `\"all\"`)."
+  @doc ~S{Whether `scope` is a `"filtered"` scope (as opposed to `"all"`).}
   @spec filtered?(t()) :: boolean()
   def filtered?(%{mode: :filtered}), do: true
   def filtered?(_scope), do: false
@@ -120,7 +120,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScope do
   @spec in_scope?(map(), t()) :: boolean()
   def in_scope?(_product, %{mode: :all}), do: true
 
-  def in_scope?(product, %{mode: :filtered, tags: [], product_types: []}), do: true
+  def in_scope?(_product, %{mode: :filtered, tags: [], product_types: []}), do: true
 
   def in_scope?(product, %{mode: :filtered, tags: tags, product_types: product_types}) do
     tags_match?(product, tags) and product_type_match?(product, product_types)
