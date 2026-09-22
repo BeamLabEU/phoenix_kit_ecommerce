@@ -545,13 +545,15 @@ settings-layer error.
   the page's "Run sweep" ignores it.
 - `shop_translation_interval_minutes` (`60`), `shop_translation_batch` (`3`,
   resources per tick), `shop_translation_max_in_flight` (`6`, incomplete
-  shop `TranslateWorker` JOBS). The page refuses a batch below 1 or a ceiling
-  below the target-language count.
+  shop `TranslateWorker` JOBS). The page refuses a batch or ceiling below 1;
+  a ceiling below the target-language count admits the languages that fit
+  and leaves the rest for a later tick.
 - `shop_translation_languages` — `%{"codes" => [...]}`, default every enabled
   language but the primary; intersected with enabled languages on every read.
 - `shop_translation_statuses` — `%{"statuses" => [...]}`, default
   `["active"]`; products only, categories are never status-filtered.
-- `shop_translation_sweep_last_run` — written by the tick, read by the page.
+- The last tick's outcome is not a `shop_` key: `phoenix_kit_ai`'s sweep
+  engine keeps it (`TranslationSweepWorker.last_run/0` reads it).
 
 **Consumed from billing** (owned by `phoenix_kit_billing`, read here)
 
@@ -653,7 +655,7 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 | Feature | Constraint that must hold | Where |
 |---|---|---|
 | Price display and storefront i18n | "Price on request" is snapshotted onto the cart line and the order line, never read live; every public LiveView calls `put_content_locale/1` in `mount/3`; `push_event` names, paths, route segments and setting keys are never wrapped in `gettext` | `dev_docs/guides/storefront.md` |
-| AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
+| AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source. The sweep's chain, gates and budget are `PhoenixKitAI.TranslationSweep`'s — the worker supplies only the shop's gates, settings, candidates and prompts, and answers `:ai_unavailable` when the installed `phoenix_kit_ai` has no engine | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |
 
 ## Versioning & releases

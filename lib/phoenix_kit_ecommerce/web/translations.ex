@@ -142,7 +142,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   @per_page 25
 
   # Job states that mean "already in flight" — the same four
-  # `PhoenixKitAI.Translations` and `TranslationSweepWorker` dedup
+  # `PhoenixKitAI.Translations` and `PhoenixKitAI.TranslationSweep` dedup
   # against (deliberately excludes `:suspended`, absent from some hosts'
   # `oban_job_state` enum — see those modules' docs).
   @incomplete_states ~w(available scheduled executing retryable)
@@ -489,7 +489,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # Design §4.5's diagnostics panel. Reads the RAW `phoenix_kit_ai_requests`
   # table (schemaless — never `PhoenixKitAI.Request` directly, which would
   # tie this optional-dependency page's compilation to that module always
-  # being present; `TranslationSweepWorker.count_in_flight/0` uses the same
+  # being present; the sweep's in-flight count uses the same
   # schemaless-table technique for `oban_jobs`). Only SUCCESSFUL requests
   # carry `attribution` (design §4.5's honesty note: `log_failed_request/7`
   # never merges it) — a transport failure never shows up here, only a
@@ -716,37 +716,22 @@ defmodule PhoenixKitEcommerce.Web.Translations do
     end
   end
 
-  # Fix C: a batch/ceiling combination that `TranslationSweepWorker.
-  # structurally_stalled?/3` would call permanently stuck must never reach
-  # storage in the first place — the tick can only ever REPORT the
-  # deadlock after it happens, never prevent it. `take_within_budget/3`
-  # HALTS (not skips) on the first candidate whose language count exceeds
-  # the remaining budget, so a ceiling below the number of target
-  # languages about to be saved would deadlock every tick forever, same
-  # as a batch or ceiling of zero. Rejecting and naming the minimum here
-  # — never clamping to it — keeps the operator in control of the actual
-  # number saved.
-  defp sweep_settings_error(batch, max_in_flight, languages) do
-    min_ceiling = max(1, length(languages))
-
+  # Fix C: a batch or ceiling below 1 admits nothing, ever — the tick can
+  # only REPORT that stall (`:sweep_stalled`), so it must never reach
+  # storage in the first place. Rejecting and naming the minimum here —
+  # never clamping to it — keeps the operator in control of the actual
+  # number saved. A ceiling below the number of target languages is fine:
+  # the sweep admits the languages that fit and takes the rest next tick.
+  defp sweep_settings_error(batch, max_in_flight, _languages) do
     [
       batch < 1 && gettext("Batch size must be at least 1."),
-      max_in_flight < min_ceiling && max_in_flight_error(min_ceiling)
+      max_in_flight < 1 && gettext("Max in-flight jobs must be at least 1.")
     ]
     |> Enum.filter(& &1)
     |> case do
       [] -> nil
       messages -> Enum.join(messages, " ")
     end
-  end
-
-  defp max_in_flight_error(1), do: gettext("Max in-flight jobs must be at least 1.")
-
-  defp max_in_flight_error(min_ceiling) do
-    gettext(
-      "Max in-flight jobs must be at least %{min} — the number of target languages selected. A lower ceiling can never enqueue a resource missing every language.",
-      min: min_ceiling
-    )
   end
 
   defp persist_sweep_settings(
@@ -1229,7 +1214,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
       # would report a bulk action whose every insert failed as
       # "0 jobs queued" — indistinguishable from "nothing needed doing",
       # on the operator's primary entry point. Same fold the sweep tick
-      # does (`TranslationSweepWorker.enqueue_one/6`); tolerant `Map.get`
+      # does (`PhoenixKitAI.TranslationSweep`); tolerant `Map.get`
       # because phoenix_kit_ai is an optional dep with a `~> 0.18` floor.
       {:ok, %{enqueued: n, conflicts: c} = result} ->
         lang_errors = Enum.map(Map.get(result, :errors, []), &{uuid, &1})
@@ -1345,20 +1330,19 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   defp sweep_flash_kind(_reason, _info), do: :warning
 
   defp sweep_result_message(:ok, %{enqueued: n} = info) do
-    base =
+    errors = Map.get(info, :errors, 0)
+    held = Map.get(info, :backed_off, 0)
+
+    [
       ngettext("Sweep ran — %{count} job queued.", "Sweep ran — %{count} jobs queued.", n,
         count: n
-      )
-
-    errors = Map.get(info, :errors, 0)
-
-    if errors > 0 do
-      base <>
-        " " <>
-        ngettext("%{count} enqueue error.", "%{count} enqueue errors.", errors, count: errors)
-    else
-      base
-    end
+      ),
+      errors > 0 &&
+        ngettext("%{count} enqueue error.", "%{count} enqueue errors.", errors, count: errors),
+      held > 0 && held_back_message(held)
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join(" ")
   end
 
   defp sweep_result_message(:translations_disabled, _info),
@@ -1392,26 +1376,21 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   defp sweep_result_message(:ceiling_reached, %{in_flight: n}),
     do: gettext("Sweep did not run — %{count} jobs already in flight (at the ceiling).", count: n)
 
-  # Fix C: distinguishes a PERMANENT empty tick (batch or ceiling
-  # configured too low for the selection to ever recover on its own —
-  # `TranslationSweepWorker.structurally_stalled?/3`) from the ordinary,
+  # Fix C: distinguishes a PERMANENT empty tick (a batch or ceiling below
+  # 1, which no tick can ever recover from on its own) from the ordinary,
   # self-clearing `:ceiling_reached` above. Names the actual numbers so
   # the operator doesn't have to scroll down to the settings panel to see
-  # what's wrong. Worded "queued nothing" rather than "did not run": the
-  # tick does run under a too-low ceiling, it just cannot admit a resource
-  # missing every target language, and that resource blocks the scan.
+  # what's wrong.
   defp sweep_result_message(:sweep_stalled, info) do
-    count = Map.get(info, :target_language_count)
-
-    ngettext(
-      "Sweep queued nothing — batch %{batch} / ceiling %{ceiling} can never admit a resource missing the only %{count} target language. Raise them in the settings below.",
-      "Sweep queued nothing — batch %{batch} / ceiling %{ceiling} can never admit a resource missing all %{count} target languages. Raise them in the settings below.",
-      count,
-      batch: Map.get(info, :batch_size),
-      ceiling: Map.get(info, :max_in_flight),
-      count: count
+    gettext(
+      "Sweep queued nothing — batch %{batch} / ceiling %{ceiling}: both must be at least 1. Raise them in the settings below.",
+      batch: Map.get(info, :batch),
+      ceiling: Map.get(info, :max_in_flight)
     )
   end
+
+  defp sweep_result_message(:prompts_unavailable, _info),
+    do: gettext("Sweep did not run — the translation prompts could not be prepared.")
 
   defp sweep_result_message(:no_target_languages, _info),
     do: gettext("Sweep did not run — no target languages are configured.")
@@ -2062,18 +2041,23 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # indistinguishable here from "nothing needed doing", which is exactly
   # the silent-failure shape that fix closed at the source. Surfacing it
   # is what makes that fix's outcome actually visible per design §1.
+  #
+  # `"backed_off"` counts the (resource, language) pairs the tick held back
+  # because their latest job failed for good in the last day — without it
+  # a pair that keeps failing would read as "nothing needed doing" too.
   defp last_run_summary(%{"reason" => "ok"} = run) do
     n = Map.get(run, "enqueued", 0)
     errors = Map.get(run, "errors", 0)
-    base = ngettext("ran, %{count} job queued", "ran, %{count} jobs queued", n, count: n)
+    held = Map.get(run, "backed_off", 0)
 
-    if errors > 0 do
-      base <>
-        " — " <>
-        ngettext("%{count} enqueue error", "%{count} enqueue errors", errors, count: errors)
-    else
-      base
-    end
+    [
+      ngettext("ran, %{count} job queued", "ran, %{count} jobs queued", n, count: n),
+      errors > 0 &&
+        ngettext("%{count} enqueue error", "%{count} enqueue errors", errors, count: errors),
+      held > 0 && held_back_message(held)
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join(" — ")
   end
 
   # Fix C: the persisted twin of the flash message above — same distinct
@@ -2081,35 +2065,14 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # a flash, since nobody clicked anything) is just as legible in the
   # "Last tick" line as one provoked through the manual button.
   defp last_run_summary(%{"reason" => "sweep_stalled"} = run) do
-    batch = Map.get(run, "batch_size", "?")
-    ceiling = Map.get(run, "max_in_flight", "?")
-    count = Map.get(run, "target_language_count", "?")
-
-    # `count` falls back to the literal "?" when the persisted run map
-    # never recorded it — `ngettext/4` requires an integer to pick a
-    # plural form, so that unknown case takes the plain `gettext/2` path
-    # below instead of crashing on a non-numeric `n`.
-    if is_integer(count) do
-      ngettext(
-        "stalled — batch %{batch} / ceiling %{ceiling} can never admit a resource missing the only %{count} target language",
-        "stalled — batch %{batch} / ceiling %{ceiling} can never admit a resource missing all %{count} target languages",
-        count,
-        batch: batch,
-        ceiling: ceiling,
-        count: count
-      )
-    else
-      gettext(
-        "stalled — batch %{batch} / ceiling %{ceiling} can never admit a resource missing all %{count} target languages",
-        batch: batch,
-        ceiling: ceiling,
-        count: count
-      )
-    end
+    gettext("stalled — batch %{batch} / ceiling %{ceiling}: both must be at least 1",
+      batch: Map.get(run, "batch", "?"),
+      ceiling: Map.get(run, "max_in_flight", "?")
+    )
   end
 
   @translated_reasons ~w(translations_disabled product_source_unsupported sweep_disabled
-                         ai_unavailable no_target_languages ceiling_reached)
+                         ai_unavailable no_target_languages ceiling_reached prompts_unavailable)
 
   # Fix F: every OTHER stored reason (`:translations_disabled`,
   # `:sweep_disabled`, `:ai_unavailable`, `:ceiling_reached`,
@@ -2147,9 +2110,17 @@ defmodule PhoenixKitEcommerce.Web.Translations do
       enqueued: Map.get(run, "enqueued", 0),
       errors: Map.get(run, "errors", 0),
       in_flight: Map.get(run, "in_flight"),
-      batch_size: Map.get(run, "batch_size"),
-      max_in_flight: Map.get(run, "max_in_flight"),
-      target_language_count: Map.get(run, "target_language_count")
+      batch: Map.get(run, "batch"),
+      max_in_flight: Map.get(run, "max_in_flight")
     }
+  end
+
+  defp held_back_message(count) do
+    ngettext(
+      "%{count} held back after a recent failure",
+      "%{count} held back after recent failures",
+      count,
+      count: count
+    )
   end
 end
