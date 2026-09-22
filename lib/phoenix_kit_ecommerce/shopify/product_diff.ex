@@ -14,7 +14,11 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   handles as create-`Change`s for `Shopify.Sync` instead).
 
   Compared fields: `title`, `body_html`, `description`, `vendor`, `tags`,
-  `status`, `price`, `compare_at_price`. `title`/`body_html`/`description`
+  `status`, `price`, `compare_at_price`. `status` is the MERCHANT status —
+  the value `Shopify.Sync`'s apply writes back (`shop_status` under the
+  catalogue source), not the derived visibility status the storefront
+  shows; see `merchant_status/1` below for why the two must not be
+  confused. `title`/`body_html`/`description`
   are localized fields; only the base locale is read/compared here
   (writing them back is
   `Shopify.Sync.apply_change/2`'s job). `diff/4`'s `opts[:only]` narrows this
@@ -317,7 +321,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       )
       |> maybe_put(:vendor, product.vendor, shopify_product["vendor"], only)
       |> maybe_put_tags(product.tags, shopify_product["tags"], only)
-      |> maybe_put(:status, merchant_status(product), shopify_product["status"], only)
+      |> maybe_put_status(merchant_status(product), shopify_product["status"], only)
       |> maybe_put_price(product.price, shopify_product["variants"], only)
       |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
 
@@ -345,6 +349,26 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   # nil means the legacy source, whose `:status` IS the merchant status.
   defp merchant_status(%{merchant_status: status}) when is_binary(status), do: status
   defp merchant_status(product), do: product.status
+
+  # Only a status an apply can actually land is worth reporting. Shopify's
+  # REST product payload carries "active" / "archived" / "draft" and nothing
+  # else (`AdminClient`'s `@product_fields` always asks for `status`), but a
+  # value outside that set — or an absent one — is not a merchant status this
+  # sync can store: `Catalogue.Writer.shopify_shop_status/1` maps everything
+  # it does not recognise to "draft", so reporting the difference would offer
+  # an apply that silently RETIRES the product and still leaves the two sides
+  # differing on the next check. That is the same never-converging shape
+  # `merchant_status/1` above exists to remove, arriving from the write end
+  # instead of the read end. Ignoring an unknown status is strictly better
+  # than acting on it; under the legacy source it would fail
+  # `Product.changeset/2`'s `validate_inclusion` instead, which at least
+  # surfaces, but there is no reason to offer it there either.
+  defp maybe_put_status(changes, current, incoming, only)
+       when incoming in ["draft", "active", "archived"] do
+    maybe_put(changes, :status, current, incoming, only)
+  end
+
+  defp maybe_put_status(changes, _current, _incoming, _only), do: changes
 
   defp maybe_put(changes, field, current, incoming, only) do
     cond do

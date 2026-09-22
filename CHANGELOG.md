@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.12 - 2026-09-22
+
+### Added
+
+- **Shopify sync page tabs** (#65). The page splits into Changes, New in
+  Shopify, Media & collections and Settings, driven by a `?tab=` query
+  param and patch links, so switching never remounts the LiveView and
+  never drops in-flight state (media-sync progress, the check result).
+  The New in Shopify list and each media kind's error list gain
+  "load more" instead of a hard 50-row cap.
+
+### Fixed
+
+- **Shopify status differences that no apply could close** (#66). The
+  sync diff compared `product.status`, which under the catalogue source
+  is a DERIVED visibility value — forced to `archived` whenever the
+  catalogue itself retired the item — while an apply writes
+  `shop_status`. A retired product whose stored merchant status already
+  matched Shopify was reported as differing and stayed reported through
+  every apply. `%Product{}` gains a virtual `:merchant_status`, filled
+  from `shop_status` by the catalogue view, and the diff compares that;
+  the legacy source is unaffected, where `:status` already is the
+  merchant status.
+- **An incoming Shopify status the apply cannot store is no longer
+  offered.** `Catalogue.Writer` coerces anything outside
+  `draft`/`active`/`archived` to `draft`, so reporting such a difference
+  offered an apply that would silently retire the product and still
+  report a difference on the next check. The diff now skips it.
+
 ## 0.5.11 - 2026-09-22
 
 ### Added
