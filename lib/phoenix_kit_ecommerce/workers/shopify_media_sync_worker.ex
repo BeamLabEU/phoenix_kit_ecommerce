@@ -153,6 +153,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
     ]
 
   require Logger
+  import Ecto.Query
 
   alias PhoenixKit.Integrations
   alias PhoenixKit.PubSub.Manager
@@ -182,24 +183,37 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   Reads every kind's current (or last) progress record — `%{"images" =>
   progress | nil, "variants" => ..., "collections" => ...}`. See this
   module's moduledoc ("Progress record") for the legacy-key fallback.
+
+  One query for all four rows (the three per-kind keys plus the legacy
+  single key) rather than `get_progress/1` called three times — each of
+  which would itself issue up to two queries (the per-kind key, then the
+  legacy fallback) — which would mean up to 6 round-trips for a page
+  that reads this once per mount/render.
   """
   @spec get_progress() :: %{String.t() => map() | nil}
   def get_progress do
-    Map.new(@kinds, &{&1, get_progress(&1)})
+    keys = Enum.map(@kinds, &progress_key/1) ++ [@legacy_progress_key]
+
+    rows =
+      ShopConfig
+      |> where([c], c.key in ^keys)
+      |> repo().all()
+      |> Map.new(&{&1.key, &1.value})
+
+    Map.new(@kinds, fn kind ->
+      {kind, Map.get(rows, progress_key(kind)) || legacy_progress(rows, kind)}
+    end)
   end
 
   @doc "Reads one `kind`'s current (or last) progress record, `nil` if none exists yet."
   @spec get_progress(String.t()) :: map() | nil
   def get_progress(kind) when kind in @kinds do
-    case repo().get(ShopConfig, progress_key(kind)) do
-      %ShopConfig{value: value} -> value
-      nil -> legacy_progress(kind)
-    end
+    Map.fetch!(get_progress(), kind)
   end
 
-  defp legacy_progress(kind) do
-    case repo().get(ShopConfig, @legacy_progress_key) do
-      %ShopConfig{value: %{"kind" => ^kind} = value} -> value
+  defp legacy_progress(rows, kind) do
+    case Map.get(rows, @legacy_progress_key) do
+      %{"kind" => ^kind} = value -> value
       _ -> nil
     end
   end
@@ -516,7 +530,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
                 "collections",
                 1,
                 1,
-                %{skipped: 0, matched: 1, stats: %{}},
+                collections_counts(result),
                 [],
                 started_at,
                 result
@@ -538,6 +552,38 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         fail_progress("collections", reason)
         error
     end
+  end
+
+  # `"matched"`/`"skipped"` for a `"collections"` run are over COLLECTIONS,
+  # not products (the `"images"`/`"variants"` meaning of those two fields)
+  # — a collection that resolved to a category, created or matched, is
+  # "matched"; one dropped by the filter or because its only live match
+  # is trashed is "skipped". `"stats"` carries `CollectionSync.run/1`'s
+  # own counts (string-keyed, matching every other kind's `"stats"`
+  # shape) so the sync page never has to reach into `"result"` for a
+  # number it can show right next to `"matched"`/`"skipped"`.
+  defp collections_counts(%{
+         categories_created: created,
+         categories_matched: matched,
+         collections_skipped_by_filter: skipped_by_filter,
+         collections_skipped_trashed: skipped_trashed,
+         items_assigned: assigned,
+         items_repositioned: repositioned,
+         unmatched_products: unmatched_products
+       }) do
+    %{
+      matched: created + matched,
+      skipped: skipped_by_filter + skipped_trashed,
+      stats: %{
+        "categories_created" => created,
+        "categories_matched" => matched,
+        "collections_skipped_by_filter" => skipped_by_filter,
+        "collections_skipped_trashed" => skipped_trashed,
+        "items_assigned" => assigned,
+        "items_repositioned" => repositioned,
+        "unmatched_products" => length(unmatched_products)
+      }
+    }
   end
 
   # ============================================================

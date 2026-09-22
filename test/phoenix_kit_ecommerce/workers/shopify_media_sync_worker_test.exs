@@ -291,6 +291,24 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
     def fetch_collection_product_ids(1, _opts), do: {:ok, [444]}
   end
 
+  # A second collection ("wall-art") that the "3d-" prefix filter drops
+  # entirely — for the `"skipped"`/`collections_skipped_by_filter`
+  # assertion below; `CollectionsStub` above has no filtered-out
+  # collection to count.
+  defmodule FilterAwareCollectionsStub do
+    @moduledoc false
+
+    def fetch_collections(_opts) do
+      {:ok,
+       [
+         %{"id" => 1, "handle" => "3d-gifts", "title" => "Gifts", "position" => 0},
+         %{"id" => 2, "handle" => "wall-art", "title" => "Wall Art", "position" => 1}
+       ]}
+    end
+
+    def fetch_collection_product_ids(1, _opts), do: {:ok, [444]}
+  end
+
   describe "run/3 — legacy source" do
     test "every kind is a no-op returning :catalogue_source_inactive" do
       assert Worker.run("images", nil, integration_uuid: "irrelevant") ==
@@ -569,6 +587,46 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert progress["done"] == 1
       assert progress["finished_at"] != nil
       assert progress["result"]["categories_created"] == 1
+
+      # `"matched"`/`"skipped"` for a collections run are over
+      # COLLECTIONS, not products: one collection ("gifts") was created
+      # (never filtered/trashed), so matched == 1, skipped == 0 — real
+      # `CollectionSync.run/1` counts, not the old hardcoded 1/0.
+      assert progress["matched"] == 1
+      assert progress["skipped"] == 0
+
+      assert progress["stats"] == %{
+               "categories_created" => 1,
+               "categories_matched" => 0,
+               "collections_skipped_by_filter" => 0,
+               "collections_skipped_trashed" => 0,
+               "items_assigned" => 1,
+               "items_repositioned" => 0,
+               "unmatched_products" => 0
+             }
+    end
+
+    test "collections: skipped-by-filter and trashed collections are counted, not just created/matched ones",
+         %{catalogue: catalogue} do
+      %ShopConfig{}
+      |> ShopConfig.changeset(%{
+        key: "shopify_collections_filter",
+        value: %{"value" => %{"prefix" => "3d-", "exclude" => []}}
+      })
+      |> Repo.insert!()
+
+      create_item(catalogue.uuid, "Gift A", %{"product_id" => "444"})
+
+      assert {:ok, _result} =
+               Worker.run("collections", nil,
+                 client: FilterAwareCollectionsStub,
+                 integration_uuid: "test-integration"
+               )
+
+      progress = Worker.get_progress("collections")
+      assert progress["matched"] == 1
+      assert progress["skipped"] == 1
+      assert progress["stats"]["collections_skipped_by_filter"] == 1
     end
 
     test "images and variants each keep their own progress row — running one doesn't erase the other's last result",
