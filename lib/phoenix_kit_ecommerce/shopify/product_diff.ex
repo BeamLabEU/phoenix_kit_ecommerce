@@ -317,7 +317,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       )
       |> maybe_put(:vendor, product.vendor, shopify_product["vendor"], only)
       |> maybe_put_tags(product.tags, shopify_product["tags"], only)
-      |> maybe_put(:status, product.status, shopify_product["status"], only)
+      |> maybe_put(:status, merchant_status(product), shopify_product["status"], only)
       |> maybe_put_price(product.price, shopify_product["variants"], only)
       |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
 
@@ -333,6 +333,18 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   end
 
   defp local(product, field, base_locale), do: (Map.get(product, field) || %{})[base_locale]
+
+  # `Sync.apply_change/3` writes the merchant status (`shop_status` under
+  # the catalogue source); compare the same field, or the diff reports a
+  # difference no apply can close. Under the catalogue source
+  # `product.status` is a DERIVED value — forced to "archived" whenever the
+  # catalogue itself retired the item — while `shop_status` may already
+  # hold exactly what Shopify says. Seven live products sat in the report
+  # as `archived -> active` through every apply because of that.
+  #
+  # nil means the legacy source, whose `:status` IS the merchant status.
+  defp merchant_status(%{merchant_status: status}) when is_binary(status), do: status
+  defp merchant_status(product), do: product.status
 
   defp maybe_put(changes, field, current, incoming, only) do
     cond do

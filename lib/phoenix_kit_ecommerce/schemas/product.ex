@@ -58,6 +58,15 @@ defmodule PhoenixKitEcommerce.Product do
     # Status (non-localized)
     field :status, :string, default: "draft"
 
+    # The merchant status as STORED, which is what a Shopify apply writes.
+    # Under the legacy source `:status` above is already that value, so this
+    # stays nil there and readers fall back to it. Under the catalogue source
+    # `:status` is a DERIVED visibility value — `View.product_status/2` forces
+    # "archived" for a catalogue-retired item regardless of what the last sync
+    # stored — so the two must not be confused. See
+    # `PhoenixKitEcommerce.Shopify.ProductDiff`.
+    field :merchant_status, :string, virtual: true
+
     # Type
     field :product_type, :string, default: "physical"
     field :vendor, :string
