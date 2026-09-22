@@ -224,7 +224,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
         "stats" => %{"downloaded" => 0, "reused" => 0, "attached" => 0}
       })
 
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       status = view |> element("#media-sync-status-images") |> render()
       refute status =~ "Nothing new"
