@@ -166,6 +166,21 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncTest do
       refute html =~ ~s(id="media-sync-panel")
     end
 
+    # The credentials panel is gated on `@connection` ALONE, unlike the
+    # sync-scope panel beside it — the shop domain and the Admin API token
+    # are worth reaching whichever product source the shop runs on. This
+    # module runs under the legacy source, so it is the only place that can
+    # pin that: copying the neighbour's `&& @catalogue_source_active?` would
+    # otherwise pass every test in the suite.
+    test "?tab=settings still offers the integration link under the legacy source",
+         %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=settings")
+
+      assert html =~ ~s(id="shopify-credentials-panel")
+      assert html =~ ~s(id="open-shopify-integration")
+      refute html =~ ~s(id="sync-scope-panel")
+    end
+
     test "an unknown ?tab= falls back to \"Changes\"", %{conn: conn} do
       {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=bogus")
 
