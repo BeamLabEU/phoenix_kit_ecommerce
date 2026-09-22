@@ -263,7 +263,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       if media_sync_in_flight?(socket.assigns.media_sync_progress, kind) do
         {:noreply, socket}
       else
-        actor_uuid = socket.assigns.phoenix_kit_current_scope.user.uuid
+        actor_uuid = Activity.actor_uuid(socket)
 
         result =
           %{"kind" => kind, "actor_uuid" => actor_uuid}

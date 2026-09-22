@@ -136,11 +136,16 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     end
 
     test "clicking a button enqueues a job with that kind and the current user", %{conn: conn} do
+      user_uuid = Ecto.UUID.generate()
+      conn = put_test_scope(conn, fake_scope(user_uuid: user_uuid))
       {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
 
       render_click(element(view, "#sync-media-images"))
 
-      assert_enqueued(worker: ShopifyMediaSyncWorker, args: %{"kind" => "images"})
+      assert_enqueued(
+        worker: ShopifyMediaSyncWorker,
+        args: %{"kind" => "images", "actor_uuid" => user_uuid}
+      )
     end
 
     test "a second click before the first job starts hits Oban's own uniqueness — no second job, an info flash instead of the success wording",
