@@ -195,6 +195,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply, assign(socket, :active_tab, valid_tab(params["tab"]))}
   end
 
+  # The "New in Shopify" tab badge: nil before a check has run AND after a
+  # check that found nothing — a literal "0" badge reads as noise there.
+  defp new_tab_badge(nil), do: nil
+  defp new_tab_badge([]), do: nil
+  defp new_tab_badge(new_products) when is_list(new_products), do: length(new_products)
+
   defp valid_tab(tab) when tab in @tabs, do: tab
   defp valid_tab(_tab), do: "changes"
 
@@ -1928,7 +1934,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             id: "new",
             label: gettext("New in Shopify"),
             patch: Routes.path("/admin/shop/shopify-sync?tab=new"),
-            badge: assigns.new_products && length(assigns.new_products)
+            badge: new_tab_badge(assigns.new_products)
           },
           %{
             id: "media",
