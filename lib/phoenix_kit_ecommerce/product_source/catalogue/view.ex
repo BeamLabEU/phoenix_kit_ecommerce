@@ -105,6 +105,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
       download_limit: Map.get(ecommerce, "download_limit"),
       download_expiry_days: Map.get(ecommerce, "download_expiry_days"),
       status: product_status(item, ecommerce),
+      merchant_status: merchant_status(ecommerce),
       featured_image_uuid: Map.get(data, "featured_image_uuid"),
       image_uuids: Map.get(data, "media_order") || [],
       images: [],
@@ -246,6 +247,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   # used to consult `shop_status` first and only fall back to `item.status`
   # when it was absent/unrecognised, so a recognised `shop_status` passed
   # straight through no matter what the catalogue said.
+  # The stored merchant status, untouched by the visibility rule below.
+  # `product_status/2` answers "what should the storefront show"; this
+  # answers "what did the last Shopify sync write", which is the value a
+  # sync diff must compare and an apply overwrites. Same fallback as that
+  # function's else-branch, so the two agree for every non-retired item.
+  defp merchant_status(ecommerce) do
+    case Map.get(ecommerce, "shop_status") do
+      status when status in ["draft", "active", "archived"] -> status
+      _ -> "active"
+    end
+  end
+
   defp product_status(item, ecommerce) do
     if Map.get(item, :status) != "active" do
       "archived"
