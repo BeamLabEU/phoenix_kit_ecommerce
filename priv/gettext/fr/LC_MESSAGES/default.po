@@ -5353,6 +5353,16 @@ msgstr "Ressource"
 msgid "Run sweep"
 msgstr "Lancer le rapprochement"
 
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Running…"
+msgstr "En cours…"
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Saving…"
+msgstr "Enregistrement…"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1434
 #, elixir-autogen, elixir-format
 msgid "SEO description"

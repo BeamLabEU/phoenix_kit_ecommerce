@@ -5352,6 +5352,16 @@ msgstr ""
 msgid "Run sweep"
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Running…"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Saving…"
+msgstr ""
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1434
 #, elixir-autogen, elixir-format
 msgid "SEO description"

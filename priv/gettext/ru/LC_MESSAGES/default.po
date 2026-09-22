@@ -5389,6 +5389,16 @@ msgstr "Ресурс"
 msgid "Run sweep"
 msgstr "Запустить сверку"
 
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Running…"
+msgstr "Выполняется…"
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Saving…"
+msgstr "Сохранение…"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1434
 #, elixir-autogen, elixir-format
 msgid "SEO description"

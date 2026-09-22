@@ -5353,6 +5353,16 @@ msgstr "Ressource"
 msgid "Run sweep"
 msgstr "Abgleich starten"
 
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Running…"
+msgstr "Läuft…"
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Saving…"
+msgstr "Wird gespeichert…"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1434
 #, elixir-autogen, elixir-format
 msgid "SEO description"

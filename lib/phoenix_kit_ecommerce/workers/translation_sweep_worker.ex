@@ -107,7 +107,7 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   defp tick(trigger),
     do: if(engine?(), do: @engine.run_tick(__MODULE__, trigger), else: {:ai_unavailable, %{}})
 
-  @doc ~s(The last tick's outcome — `%{"reason" => …, "at" => …}` — or `nil`.)
+  @doc ~s(The last tick's outcome — `%{"reason" => …, "since" => …}`, `since` being when ticks began ending this way — or `nil`.)
   @spec last_run() :: map() | nil
   def last_run, do: if(engine?(), do: @engine.last_run(__MODULE__))
 

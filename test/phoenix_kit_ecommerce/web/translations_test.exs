@@ -1299,7 +1299,7 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
           PhoenixKitAI.TranslationSweep.last_run_key(SweepWorker),
           %{
             "reason" => "quota_exhausted",
-            "at" => DateTime.to_iso8601(DateTime.utc_now())
+            "since" => DateTime.to_iso8601(DateTime.utc_now())
           },
           "ai"
         )
@@ -1308,6 +1308,50 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
 
       assert html =~ "Last tick: quota_exhausted"
       refute html =~ "Sweep finished."
+    end
+
+    test "the Last tick line counts pairs held back, and says when prompts failed", %{conn: conn} do
+      key = PhoenixKitAI.TranslationSweep.last_run_key(SweepWorker)
+      since = DateTime.to_iso8601(DateTime.utc_now())
+
+      {:ok, _} =
+        Settings.update_json_setting_with_module(
+          key,
+          %{"reason" => "ok", "enqueued" => 2, "backed_off" => 3, "since" => since},
+          "ai"
+        )
+
+      {:ok, _view, html} = live(conn, "/en/admin/shop/translations")
+      assert html =~ "Last tick: ran, 2 jobs queued — 3 held back after recent failures"
+
+      {:ok, _} =
+        Settings.update_json_setting_with_module(
+          key,
+          %{"reason" => "prompts_unavailable", "since" => since},
+          "ai"
+        )
+
+      {:ok, _view, html} = live(conn, "/en/admin/shop/translations")
+
+      assert html =~
+               "Last tick: Sweep did not run — the translation prompts could not be prepared."
+    end
+
+    # A double click queued two ticks' worth of jobs, or saved twice.
+    test "Run sweep and Save sweep settings are disabled while their event runs", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
+      assert has_element?(view, "#run-sweep-now[phx-disable-with]")
+      assert has_element?(view, "#save-sweep-settings[phx-disable-with]")
+
+      untranslated =
+        for locale <- ~w(de et fr ru),
+            msgid <- ["Running…", "Saving…"],
+            Gettext.with_locale(PhoenixKitEcommerce.Gettext, locale, fn ->
+              Gettext.gettext(PhoenixKitEcommerce.Gettext, msgid)
+            end) == msgid,
+            do: {locale, msgid}
+
+      assert untranslated == []
     end
   end
 

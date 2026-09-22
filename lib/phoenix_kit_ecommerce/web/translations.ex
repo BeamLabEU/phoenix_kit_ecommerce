@@ -699,7 +699,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
     languages = checked_list(params["languages"], allowed_languages)
     statuses = checked_list(params["statuses"], @product_statuses)
 
-    case sweep_settings_error(batch, max_in_flight, languages) do
+    case sweep_settings_error(batch, max_in_flight) do
       nil ->
         persist_sweep_settings(
           socket,
@@ -722,7 +722,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # never clamping to it — keeps the operator in control of the actual
   # number saved. A ceiling below the number of target languages is fine:
   # the sweep admits the languages that fit and takes the rest next tick.
-  defp sweep_settings_error(batch, max_in_flight, _languages) do
+  defp sweep_settings_error(batch, max_in_flight) do
     [
       batch < 1 && gettext("Batch size must be at least 1."),
       max_in_flight < 1 && gettext("Max in-flight jobs must be at least 1.")
@@ -1682,7 +1682,13 @@ defmodule PhoenixKitEcommerce.Web.Translations do
           <button type="button" id="recheck-translations" class="btn btn-ghost btn-sm" phx-click="recheck">
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> {gettext("Check now")}
           </button>
-          <button type="button" id="run-sweep-now" class="btn btn-primary btn-sm" phx-click="run_sweep_now">
+          <button
+            type="button"
+            id="run-sweep-now"
+            class="btn btn-primary btn-sm"
+            phx-click="run_sweep_now"
+            phx-disable-with={gettext("Running…")}
+          >
             {gettext("Run sweep")}
           </button>
         </:actions>
@@ -1762,7 +1768,12 @@ defmodule PhoenixKitEcommerce.Web.Translations do
             </div>
 
             <div class="md:col-span-2">
-              <button type="submit" id="save-sweep-settings" class="btn btn-primary btn-sm">
+              <button
+                type="submit"
+                id="save-sweep-settings"
+                class="btn btn-primary btn-sm"
+                phx-disable-with={gettext("Saving…")}
+              >
                 {gettext("Save sweep settings")}
               </button>
             </div>

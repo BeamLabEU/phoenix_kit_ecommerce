@@ -5351,6 +5351,16 @@ msgstr "Ressurss"
 msgid "Run sweep"
 msgstr "Käivita ühtlustus"
 
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Running…"
+msgstr "Käib…"
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
+msgid "Saving…"
+msgstr "Salvestan…"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1434
 #, elixir-autogen, elixir-format
 msgid "SEO description"
