@@ -38,6 +38,21 @@ defmodule PhoenixKitEcommerce.LiveCase do
       import PhoenixKitEcommerce.DataCase, only: [errors_on: 1]
 
       import PhoenixKitEcommerce.LiveCase
+
+      @doc """
+      Opens a LiveView and clicks a tab on it, returning the view and the
+      HTML the tab renders.
+
+      Lives in the `using` block rather than the module body because
+      `Phoenix.LiveViewTest.live/2` is a macro that reads the caller's
+      `@endpoint`. Shared here rather than copied per file so a tab rename
+      is one edit — same reasoning as the `errors_on/1` import above.
+      """
+      def live_on_tab(conn, path, tab, strip_id \\ "sync-tabs") do
+        {:ok, view, _html} = live(conn, path)
+        html = view |> element(~s(##{strip_id} [phx-value-tab="#{tab}"])) |> render_click()
+        {:ok, view, html}
+      end
     end
   end
 

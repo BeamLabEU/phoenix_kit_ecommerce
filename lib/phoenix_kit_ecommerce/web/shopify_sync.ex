@@ -1113,7 +1113,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     assigns.connection != nil and assigns.catalogue_source_active?
   end
 
-  defp sync_tab_list(false), do: [%{id: "check", label: gettext("Check for changes")}]
+  # Never rendered — the strip is hidden whenever `extra_tabs?/1` is false
+  # (see its `:if` in the template). It exists so `switch_tab`'s whitelist
+  # has a single source of truth for which ids are on offer; keeping the
+  # entry identical to the one below stops a future reader from "fixing"
+  # a divergence into a visible one.
+  defp sync_tab_list(false) do
+    [%{id: "check", label: gettext("Check for changes"), icon: "hero-arrow-path"}]
+  end
 
   defp sync_tab_list(true) do
     [
@@ -1873,9 +1880,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       |> assign(:new_products_visible, new_products_visible)
       |> assign(:media_sync_rows, media_sync_rows(assigns.media_sync_progress))
       |> assign(:new_products_hidden_count, new_products_hidden_count(assigns.new_products || []))
-      |> assign(:extra_tabs?, extra_tabs?(assigns))
-      |> assign(:sync_tab_list, sync_tab_list(extra_tabs?(assigns)))
-      |> assign(:check_tab?, assigns.active_tab == "check")
+      |> then(fn assigns ->
+        extra? = extra_tabs?(assigns)
+
+        assigns
+        |> assign(:extra_tabs?, extra?)
+        |> assign(:sync_tab_list, sync_tab_list(extra?))
+        |> assign(:check_tab?, assigns.active_tab == "check")
+      end)
 
     ~H"""
     <div class="container mx-auto px-4 py-6 max-w-5xl">
@@ -1905,7 +1917,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           <.nav_tabs active_tab={@active_tab} on_change="switch_tab" tabs={@sync_tab_list} />
         </div>
 
-        <div :if={@active_tab == "check"} class="space-y-6">
+        <div :if={@check_tab?} class="space-y-6">
           <button
             :if={@connection}
             class="btn btn-primary"

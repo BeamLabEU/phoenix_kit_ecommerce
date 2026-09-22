@@ -104,7 +104,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
   describe "sync scope panel" do
     test "shows the default \"whole store\" summary when never configured", %{conn: conn} do
       connect_shopify()
-      {:ok, _view, html} = live_on_tab(conn, "settings")
+      {:ok, _view, html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "settings")
 
       assert html =~ ~s(id="sync-scope-panel")
       assert html =~ ~s(id="sync-scope-summary")
@@ -114,7 +114,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
     test "saving a filtered scope re-renders the summary and round-trips through SyncScope",
          %{conn: conn} do
       connect_shopify()
-      {:ok, view, _html} = live_on_tab(conn, "settings")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "settings")
 
       html =
         view
@@ -149,7 +149,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
     test "denied without shop.run_imports — the scope is left untouched", %{conn: conn} do
       connect_shopify()
       conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
-      {:ok, view, _html} = live_on_tab(conn, "settings")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "settings")
 
       html =
         view
@@ -192,7 +192,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       connect_shopify()
       seed_progress("images", %{"total" => 10, "done" => 10, "matched" => 7, "skipped" => 3})
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       status = view |> element("#media-sync-status-images") |> render()
       assert status =~ "3 skipped"
@@ -206,7 +206,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
         "stats" => %{"downloaded" => 0, "reused" => 4, "attached" => 4}
       })
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       status = view |> element("#media-sync-status-images") |> render()
       assert status =~ "Nothing new"
@@ -224,7 +224,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
         "stats" => %{"downloaded" => 0, "reused" => 0, "attached" => 0}
       })
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       status = view |> element("#media-sync-status-images") |> render()
       refute status =~ "Nothing new"
@@ -239,7 +239,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
         "stats" => %{"downloaded" => 12, "reused" => 2, "attached" => 14}
       })
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       status = view |> element("#media-sync-status-images") |> render()
       refute status =~ "Nothing new"
@@ -254,7 +254,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       errors = for n <- 1..55, do: %{"product" => "p#{n}", "reason" => "no_matching_item"}
       seed_progress("variants", %{"errors" => errors})
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       assert has_element?(view, "#media-sync-errors-variants")
       details = view |> element("#media-sync-errors-variants") |> render()
@@ -285,7 +285,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       |> ShopConfig.changeset(%{key: "shopify_media_sync:collections", value: legacy_value})
       |> Repo.insert!()
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       status = view |> element("#media-sync-status-collections") |> render()
       refute status =~ "0 synced, 0 skipped"
@@ -431,14 +431,5 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       assert html =~ ~s(id="new-products-panel")
       assert html =~ "No new products in scope."
     end
-  end
-
-  # The panel moved behind its own tab on the sync page — open the page
-  # there before asserting on it. Kept as one helper so a later tab rename
-  # is a single edit rather than one per test.
-  defp live_on_tab(conn, tab) do
-    {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
-    html = view |> element(~s(#sync-tabs [phx-value-tab="#{tab}"])) |> render_click()
-    {:ok, view, html}
   end
 end

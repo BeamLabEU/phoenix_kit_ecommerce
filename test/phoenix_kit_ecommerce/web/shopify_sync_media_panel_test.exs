@@ -103,7 +103,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
   describe "catalogue source" do
     test "shows all three buttons, none disabled", %{conn: conn} do
-      {:ok, view, html} = live_on_tab(conn, "media")
+      {:ok, view, html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       assert html =~ ~s(id="media-sync-panel")
 
@@ -113,7 +113,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     end
 
     test "shows the active collections filter — \"none\" when never configured", %{conn: conn} do
-      {:ok, _view, html} = live_on_tab(conn, "media")
+      {:ok, _view, html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       assert html =~ ~s(id="media-sync-collections-filter")
       assert html =~ "Collections filter: none"
@@ -127,7 +127,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       })
       |> Repo.insert!()
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       filter_html = view |> element("#media-sync-collections-filter") |> render()
 
@@ -136,7 +136,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     end
 
     test "clicking a button enqueues a job with that kind and the current user", %{conn: conn} do
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       render_click(element(view, "#sync-media-images"))
 
@@ -145,7 +145,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
     test "a second click before the first job starts hits Oban's own uniqueness — no second job, an info flash instead of the success wording",
          %{conn: conn} do
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       html1 = render_click(element(view, "#sync-media-images"))
       assert html1 =~ "Sync queued"
@@ -166,7 +166,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
     test "denied without shop.run_imports — no flash success, nothing enqueued", %{conn: conn} do
       conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       html = render_click(element(view, "#sync-media-variants"))
 
@@ -178,7 +178,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
          %{conn: conn} do
       seed_progress("images", nil)
 
-      {:ok, view, html} = live_on_tab(conn, "media")
+      {:ok, view, html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       assert has_element?(view, "#sync-media-images[disabled]")
       refute has_element?(view, "#sync-media-variants[disabled]")
@@ -197,7 +197,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     test "a finished progress record does not disable the button", %{conn: conn} do
       seed_progress("collections", "2026-01-01T00:05:00Z")
 
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       refute has_element?(view, "#sync-media-collections[disabled]")
     end
@@ -205,7 +205,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     test "a PubSub progress broadcast updates the panel live, without a page reload", %{
       conn: conn
     } do
-      {:ok, view, _html} = live_on_tab(conn, "media")
+      {:ok, view, _html} = live_on_tab(conn, "/en/admin/shop/shopify-sync", "media")
 
       Manager.broadcast(
         ShopifyMediaSyncWorker.topic(),
@@ -225,14 +225,5 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       assert html =~ "4 / 10"
       assert has_element?(view, "#sync-media-variants[disabled]")
     end
-  end
-
-  # The panel moved behind its own tab on the sync page — open the page
-  # there before asserting on it. Kept as one helper so a later tab rename
-  # is a single edit rather than one per test.
-  defp live_on_tab(conn, tab) do
-    {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
-    html = view |> element(~s(#sync-tabs [phx-value-tab="#{tab}"])) |> render_click()
-    {:ok, view, html}
   end
 end
