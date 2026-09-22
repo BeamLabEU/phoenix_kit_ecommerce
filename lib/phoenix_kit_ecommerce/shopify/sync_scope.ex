@@ -230,9 +230,14 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScope do
     value |> String.split(",") |> normalize_list()
   end
 
+  # Non-string entries are dropped rather than `to_string/1`-ed: a map or a
+  # tuple (a tampered form submit, a hand-edited config row) raises
+  # `Protocol.UndefinedError` there, and `get/0` runs on every sync-page
+  # mount, `Sync.check/2` and media-sync run — one bad entry would take
+  # all three down instead of reading as "not a tag".
   defp normalize_list(value) when is_list(value) do
     value
-    |> Enum.map(&to_string/1)
+    |> Enum.filter(&is_binary/1)
     |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()

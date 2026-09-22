@@ -290,6 +290,16 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     Authz.authorize(socket, :run_imports, fn ->
       case SyncScope.put(params) do
         {:ok, scope} ->
+          Activity.log("shop.shopify_sync_scope_saved",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            metadata: %{
+              "mode" => Atom.to_string(scope.mode),
+              "tags" => scope.tags,
+              "product_types" => scope.product_types
+            }
+          )
+
           {:noreply,
            socket
            |> assign_scope(scope)
@@ -1077,6 +1087,15 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     put_flash(socket, :error, gettext("Could not queue the sync — try again."))
   end
 
+  # One `{kind, label, status}` per sync button, built here rather than by
+  # a `<% status = ... %>` binding inside the template's `:for` — a
+  # template-local variable opts that block out of change tracking.
+  defp media_sync_rows(progress_map) do
+    for {kind, label} <- media_sync_kinds() do
+      {kind, label, media_sync_status(Map.get(progress_map, kind))}
+    end
+  end
+
   # Builds the per-kind status block the template renders under each
   # sync button (`id="media-sync-status-#{kind}"`) — never run / running
   # (with a progress bar) / finished (with matched/skipped/error counts,
@@ -1119,7 +1138,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       error_count: length(errors),
       stats: stats,
       counts_recorded?: counts_recorded?,
-      nothing_new?: counts_recorded? and Map.get(stats, "downloaded", 0) == 0 and errors == []
+      # `matched > 0`: a run whose every product was skipped by the scope
+      # downloaded nothing too, but "all images already present" would be a
+      # claim about images it never looked at.
+      nothing_new?:
+        counts_recorded? and Map.get(progress, "matched", 0) > 0 and
+          Map.get(stats, "downloaded", 0) == 0 and errors == []
     }
   end
 
@@ -1814,6 +1838,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       |> assign(:stats, build_change_stats(assigns))
       |> assign(:coverage, build_coverage(assigns))
       |> assign(:new_products_visible, new_products_visible)
+      |> assign(:media_sync_rows, media_sync_rows(assigns.media_sync_progress))
       |> assign(:new_products_hidden_count, new_products_hidden_count(assigns.new_products || []))
 
     ~H"""
@@ -1928,7 +1953,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             )}
           </p>
 
-          <div :for={{kind, label} <- media_sync_kinds()} class="border-t border-base-200 pt-3 first:border-t-0 first:pt-0">
+          <div :for={{kind, label, status} <- @media_sync_rows} class="border-t border-base-200 pt-3 first:border-t-0 first:pt-0">
             <div class="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1944,8 +1969,6 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
                 />
                 {label}
               </button>
-
-              <% status = media_sync_status(Map.get(@media_sync_progress, kind)) %>
 
               <div id={"media-sync-status-#{kind}"} class="text-sm text-base-content/70">
                 <span :if={status.state == :never_run}>{gettext("Not run yet")}</span>
