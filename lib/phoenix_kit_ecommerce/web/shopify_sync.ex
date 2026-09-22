@@ -2601,6 +2601,33 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         </div>
       </div>
 
+      <%!-- The shop domain and the Admin API token live on the integration,
+            not here. Until this link the page pointed at them only from the
+            "not connected yet" warning — which goes to the Integrations LIST
+            and disappears the moment a connection exists, so an operator
+            rotating a token had to remember the path and work out which
+            connection is the Shopify one. --%>
+      <div
+        :if={@connection}
+        id="shopify-credentials-panel"
+        class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
+      >
+        <div class="font-semibold">{gettext("Shopify connection")}</div>
+        <p class="text-sm text-base-content/70">
+          {gettext(
+            "The shop domain and the Admin API token are stored on the integration itself."
+          )}
+        </p>
+        <.link
+          id="open-shopify-integration"
+          navigate={Routes.path("/admin/settings/integrations/#{@connection.uuid}")}
+          class="btn btn-sm btn-outline"
+        >
+          <.icon name="hero-key" class="w-4 h-4" />
+          {gettext("Open integration settings")}
+        </.link>
+      </div>
+
       <div
         :if={@connection && @catalogue_source_active?}
         id="media-sync-collections-filter"
