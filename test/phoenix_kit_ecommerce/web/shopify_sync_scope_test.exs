@@ -136,6 +136,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
                tags: ["catalog-3d", "featured"],
                product_types: ["Mug"]
              }
+
+      assert_activity_logged("shop.shopify_sync_scope_saved",
+        metadata_has: %{
+          "mode" => "filtered",
+          "tags" => ["catalog-3d", "featured"],
+          "product_types" => ["Mug"]
+        }
+      )
     end
 
     test "denied without shop.run_imports — the scope is left untouched", %{conn: conn} do
@@ -150,6 +158,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
 
       assert html =~ "You don&#39;t have permission to do that"
       assert SyncScope.get() == SyncScope.all()
+      refute_activity_logged("shop.shopify_sync_scope_saved")
     end
   end
 
@@ -201,6 +210,25 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
 
       status = view |> element("#media-sync-status-images") |> render()
       assert status =~ "Nothing new"
+    end
+
+    # A run whose every product was skipped by the scope downloaded nothing
+    # too, but it never looked at a single image — "all images already
+    # present" would be a claim about images it never checked.
+    test "\"images\" with nothing matched does not claim nothing-new", %{conn: conn} do
+      connect_shopify()
+
+      seed_progress("images", %{
+        "matched" => 0,
+        "skipped" => 5,
+        "stats" => %{"downloaded" => 0, "reused" => 0, "attached" => 0}
+      })
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+
+      status = view |> element("#media-sync-status-images") |> render()
+      refute status =~ "Nothing new"
+      assert status =~ "5 skipped"
     end
 
     test "\"images\" with a fresh download shows the downloaded/reused counts instead",

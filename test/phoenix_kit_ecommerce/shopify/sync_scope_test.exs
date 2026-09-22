@@ -124,6 +124,27 @@ defmodule PhoenixKitEcommerce.Shopify.SyncScopeTest do
       assert SyncScope.get() == SyncScope.all()
     end
 
+    test "drops non-string tag/product-type entries instead of raising" do
+      %ShopConfig{}
+      |> ShopConfig.changeset(%{
+        key: "shopify_sync_scope",
+        value: %{
+          "value" => %{
+            "mode" => "filtered",
+            "tags" => ["catalog-3d", %{"x" => 1}, 7],
+            "product_types" => [["Mug"], "Poster"]
+          }
+        }
+      })
+      |> Repo.insert!()
+
+      assert SyncScope.get() == %{
+               mode: :filtered,
+               tags: ["catalog-3d"],
+               product_types: ["Poster"]
+             }
+    end
+
     test "tolerates an unrecognized mode by reading as all()" do
       %ShopConfig{}
       |> ShopConfig.changeset(%{
