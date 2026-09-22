@@ -557,8 +557,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     socket |> apply_new_products(new_products, new_products) |> clear_pending()
   end
 
+  # A create-`Change`'s currency guard is all-or-nothing PER BATCH (this
+  # module's own moduledoc, "Precomputed currency verdict" /
+  # `create_change/2`): every create in one `apply_changes/3` call is
+  # refused together on a mismatch, never some subset of them. So the
+  # verdict is resolved ONCE here — both to reuse it for the actual
+  # write (`opts[:currency_verdict]`, skipping a second live lookup) and
+  # to know, without inspecting `failed` at all, whether every failure
+  # below is a currency refusal or something else entirely.
   defp apply_new_products(socket, changes, new_products) do
-    %{succeeded: succeeded, failed: failed} = Sync.apply_changes(changes, :all)
+    verdict = Sync.currency_verdict()
+
+    %{succeeded: succeeded, failed: failed} =
+      Sync.apply_changes(changes, :all, currency_verdict: verdict)
 
     socket =
       if succeeded != [] do
@@ -579,10 +590,10 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     {:noreply,
      socket
      |> assign(:new_products, remaining)
-     |> flash_new_products_result(succeeded, failed)}
+     |> flash_new_products_result(succeeded, failed, verdict)}
   end
 
-  defp flash_new_products_result(socket, succeeded, failed) do
+  defp flash_new_products_result(socket, succeeded, failed, verdict) do
     socket =
       if succeeded != [] do
         put_flash(
@@ -599,20 +610,37 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         socket
       end
 
-    if failed != [] do
-      put_flash(
-        socket,
-        :error,
-        ngettext(
-          "Could not add %{count} product — try again individually.",
-          "Could not add %{count} products — try again individually.",
-          length(failed),
-          count: length(failed)
-        )
+    flash_new_products_failure(socket, failed, verdict)
+  end
+
+  defp flash_new_products_failure(socket, [], _verdict), do: socket
+
+  defp flash_new_products_failure(socket, failed, {:mismatch, shop_currency, base_currency}) do
+    put_flash(
+      socket,
+      :error,
+      ngettext(
+        "Could not add %{count} product: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}.",
+        "Could not add %{count} products: the store is now in %{shop_currency} while this shop's base currency is %{base_currency}.",
+        length(failed),
+        count: length(failed),
+        shop_currency: shop_currency,
+        base_currency: base_currency
       )
-    else
-      socket
-    end
+    )
+  end
+
+  defp flash_new_products_failure(socket, failed, :match) do
+    put_flash(
+      socket,
+      :error,
+      ngettext(
+        "Could not add %{count} product — try again individually.",
+        "Could not add %{count} products — try again individually.",
+        length(failed),
+        count: length(failed)
+      )
+    )
   end
 
   # Always clears @pending, win or lose — a failed write still leaves the
@@ -1068,9 +1096,19 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     %{state: :failed, reason: reason}
   end
 
+  # `counts_recorded?` is false for a LEGACY progress record — one
+  # written before this change added `"matched"`/`"skipped"`/`"stats"`
+  # (`get_progress/0`'s own fallback to the old single
+  # `"shopify_media_sync"` key, or any per-kind row a stand wrote before
+  # the deploy that added these fields). Such a record's matched/skipped
+  # would otherwise always read as 0 — indistinguishable from a real run
+  # that genuinely matched/skipped nothing — so the template must show
+  # "counts not recorded" instead of a confidently wrong "0 synced, 0
+  # skipped" for a run this page never actually measured those on.
   defp media_sync_status(progress) do
-    stats = Map.get(progress, "stats") || %{}
     errors = Map.get(progress, "errors") || []
+    counts_recorded? = Map.has_key?(progress, "matched") and Map.has_key?(progress, "skipped")
+    stats = Map.get(progress, "stats") || %{}
 
     %{
       state: :finished,
@@ -1080,7 +1118,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       errors: errors,
       error_count: length(errors),
       stats: stats,
-      nothing_new?: Map.get(stats, "downloaded", 0) == 0 and errors == []
+      counts_recorded?: counts_recorded?,
+      nothing_new?: counts_recorded? and Map.get(stats, "downloaded", 0) == 0 and errors == []
     }
   end
 
@@ -1765,6 +1804,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
   @impl true
   def render(assigns) do
+    new_products_visible = new_products_visible(assigns.new_products || [])
+
     assigns =
       assigns
       |> assign(:sections, build_sections(assigns))
@@ -1772,6 +1813,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       |> assign(:modal, pending_modal(assigns))
       |> assign(:stats, build_change_stats(assigns))
       |> assign(:coverage, build_coverage(assigns))
+      |> assign(:new_products_visible, new_products_visible)
+      |> assign(:new_products_hidden_count, new_products_hidden_count(assigns.new_products || []))
 
     ~H"""
     <div class="container mx-auto px-4 py-6 max-w-5xl">
@@ -1918,8 +1961,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
                 <span :if={status.state == :finished}>
                   {gettext("Finished at %{time} (UTC).", time: status.finished_at)}
-                  {media_sync_finished_summary(status)}
-                  <span :if={kind == "images" and not status.nothing_new?}>
+
+                  <span :if={status.counts_recorded?}>{media_sync_finished_summary(status)}</span>
+                  <span :if={not status.counts_recorded?}>
+                    {ngettext("%{count} error.", "%{count} errors.", status.error_count, count: status.error_count)}
+                    {gettext("Counts not recorded by this run.")}
+                  </span>
+
+                  <span :if={kind == "images" and status.counts_recorded? and not status.nothing_new?}>
                     {media_images_stats_text(status.stats)}
                   </span>
                   <span :if={kind == "images" and status.nothing_new?}>
@@ -2047,7 +2096,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             title={gettext("No new products in scope.")}
           />
 
-          <.table_default :if={@new_products != []} id="new-products-table" items={new_products_visible(@new_products)} size="sm">
+          <.table_default :if={@new_products != []} id="new-products-table" items={@new_products_visible} size="sm">
             <.table_default_header>
               <.table_default_row>
                 <.table_default_header_cell>{gettext("Title")}</.table_default_header_cell>
@@ -2058,7 +2107,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
               </.table_default_row>
             </.table_default_header>
             <.table_default_body>
-              <.table_default_row :for={change <- new_products_visible(@new_products)} id={"new-product-row-#{change.handle}"}>
+              <.table_default_row :for={change <- @new_products_visible} id={"new-product-row-#{change.handle}"}>
                 <.table_default_cell class="font-medium max-w-xs break-words whitespace-normal">
                   {change.title}
                 </.table_default_cell>
@@ -2096,11 +2145,11 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             </:card_actions>
           </.table_default>
 
-          <p :if={new_products_hidden_count(@new_products) > 0} class="text-sm text-base-content/70">
+          <p :if={@new_products_hidden_count > 0} class="text-sm text-base-content/70">
             {gettext("Showing the first %{shown} of %{total} — %{hidden} more not shown.",
-              shown: length(new_products_visible(@new_products)),
+              shown: length(@new_products_visible),
               total: length(@new_products),
-              hidden: new_products_hidden_count(@new_products)
+              hidden: @new_products_hidden_count
             )}
           </p>
         </div>

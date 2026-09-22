@@ -233,6 +233,36 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       assert details =~ "p1 — no_matching_item"
       assert details =~ "… and 5 more"
     end
+
+    # A record written before this PR (or `get_progress/0`'s own
+    # fallback to the legacy single `"shopify_media_sync"` key) carries
+    # no `"matched"`/`"skipped"`/`"stats"` at all — the page must not
+    # read that absence as "0 synced, 0 skipped", which would look like
+    # a real, fully-measured run that happened to match nothing.
+    test ~S{a legacy-shaped record (no matched/skipped/stats) shows a "not recorded" note, never "0 synced, 0 skipped"},
+         %{conn: conn} do
+      connect_shopify()
+
+      legacy_value = %{
+        "kind" => "collections",
+        "total" => 1,
+        "done" => 1,
+        "errors" => [],
+        "started_at" => "2026-01-01T00:00:00Z",
+        "finished_at" => "2026-01-01T00:05:00Z",
+        "result" => %{"categories_created" => 3}
+      }
+
+      %ShopConfig{}
+      |> ShopConfig.changeset(%{key: "shopify_media_sync:collections", value: legacy_value})
+      |> Repo.insert!()
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+
+      status = view |> element("#media-sync-status-collections") |> render()
+      refute status =~ "0 synced, 0 skipped"
+      assert status =~ "Counts not recorded"
+    end
   end
 
   describe "\"New in Shopify\" panel" do
@@ -308,6 +338,56 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
       refute has_element?(view, "#add-new-product-brand-new-mug")
 
       assert Catalogue.list_items_for_catalogue(CatalogueQuery.catalogue_uuid())
+             |> Enum.any?(&(&1.data["ecommerce"]["shopify"]["handle"] == "brand-new-mug"))
+    end
+
+    defp set_base_currency(code) do
+      PhoenixKit.Cache.clear(:billing_currencies)
+      Repo.delete_all(PhoenixKitBilling.Currency)
+
+      {:ok, _} =
+        PhoenixKitBilling.create_currency(%{
+          code: code,
+          name: code,
+          symbol: code,
+          is_default: true,
+          exchange_rate: "1.0"
+        })
+
+      :ok
+    end
+
+    # A create-`Change`'s currency guard is all-or-nothing per batch
+    # (`Sync.create_change/2`'s own moduledoc) — on a mismatch the flash
+    # must name the two currencies, the same wording a single-row field
+    # apply already gives (`apply_error_flash/3`), not the generic
+    # "try again individually" that fits every OTHER failure reason.
+    test "\"Add\" surfaces the currency mismatch by name when the store's currency no longer matches",
+         %{conn: conn} do
+      set_base_currency("USD")
+
+      Req.Test.stub(@stub, fn conn ->
+        if String.ends_with?(conn.request_path, "/shop.json") do
+          json_response(conn, 200, %{"shop" => %{"currency" => "EUR"}})
+        else
+          json_response(conn, 200, %{
+            "products" => [shopify_product(%{"handle" => "brand-new-mug"})]
+          })
+        end
+      end)
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      check_and_await(view)
+
+      render_click(view, "request_apply_new_row", %{"handle" => "brand-new-mug"})
+      html = render_click(view, "confirm_apply", %{})
+
+      assert html =~ "EUR"
+      assert html =~ "USD"
+      refute html =~ "try again individually"
+      assert has_element?(view, "#add-new-product-brand-new-mug")
+
+      refute Catalogue.list_items_for_catalogue(CatalogueQuery.catalogue_uuid())
              |> Enum.any?(&(&1.data["ecommerce"]["shopify"]["handle"] == "brand-new-mug"))
     end
 
