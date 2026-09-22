@@ -222,7 +222,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       )
 
       html = render(view)
-      assert html =~ "4/10"
+      assert html =~ "4 / 10"
       assert has_element?(view, "#sync-media-variants[disabled]")
     end
   end

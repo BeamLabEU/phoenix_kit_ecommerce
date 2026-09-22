@@ -224,14 +224,18 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   defp new_product_changes(local_products, products, base_locale, :admin, scope) do
     if ProductSource.current() == ProductSource.Catalogue do
       all_changes = ProductDiff.new_product_changes(local_products, products, base_locale)
-      {in_scope, out_of_scope} = Enum.split_with(all_changes, &SyncScope.in_scope?(&1.shopify_product, scope))
+
+      {in_scope, out_of_scope} =
+        Enum.split_with(all_changes, &SyncScope.in_scope?(&1.shopify_product, scope))
+
       {in_scope, length(out_of_scope)}
     else
       {[], 0}
     end
   end
 
-  defp new_product_changes(_local_products, _products, _base_locale, :storefront, _scope), do: {[], 0}
+  defp new_product_changes(_local_products, _products, _base_locale, :storefront, _scope),
+    do: {[], 0}
 
   @doc """
   Checks ONE local product against its matched Shopify product — see

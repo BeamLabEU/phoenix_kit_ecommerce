@@ -296,8 +296,18 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
     # one carrying `"catalog-3d"`, one not.
     defp unmatched_products do
       [
-        %{"id" => 1, "handle" => "in-scope-mug", "title" => "In Scope Mug", "tags" => "catalog-3d"},
-        %{"id" => 2, "handle" => "out-of-scope-poster", "title" => "Out of Scope Poster", "tags" => "wall-art"}
+        %{
+          "id" => 1,
+          "handle" => "in-scope-mug",
+          "title" => "In Scope Mug",
+          "tags" => "catalog-3d"
+        },
+        %{
+          "id" => 2,
+          "handle" => "out-of-scope-poster",
+          "title" => "Out of Scope Poster",
+          "tags" => "wall-art"
+        }
       ]
     end
 
@@ -346,7 +356,9 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
         json_response(conn, 200, %{"products" => [shopify_payload(%{}) | unmatched_products()]})
       end)
 
-      assert {:ok, %{new_products: [change], new_products_out_of_scope: 1}} = Sync.check(uuid, check_opts())
+      assert {:ok, %{new_products: [change], new_products_out_of_scope: 1}} =
+               Sync.check(uuid, check_opts())
+
       assert change.handle == "in-scope-mug"
     end
   end
