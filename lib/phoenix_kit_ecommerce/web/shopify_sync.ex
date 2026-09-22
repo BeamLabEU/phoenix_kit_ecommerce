@@ -63,6 +63,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   import PhoenixKitWeb.Components.Core.AdminPageHeader
   import PhoenixKitWeb.Components.Core.BulkSelect
   import PhoenixKitWeb.Components.Core.EmptyState
+  import PhoenixKitWeb.Components.Core.NavTabs
 
   alias PhoenixKit.Integrations
   alias PhoenixKit.PubSub.Manager
@@ -136,6 +137,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
          PhoenixKitEcommerce.get_config("shopify_collections_filter")
        )
        |> assign_scope(SyncScope.get())
+       |> assign(:active_tab, "check")
        |> assign(:checking, false)
        |> assign(:changes, nil)
        |> assign(:new_products, nil)
@@ -321,6 +323,20 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
          socket
          |> assign(:expanded_sections, toggle(socket.assigns.expanded_sections, field))
          |> refresh_diffs()}
+    end
+  end
+
+  # An id the strip does not currently offer is ignored rather than
+  # assigned: the two extra tabs disappear when the catalogue source is
+  # switched off, and a stale click (or a hand-crafted payload) would
+  # otherwise leave the page on a tab whose panels all render nothing,
+  # with no strip left to switch back with.
+  @impl true
+  def handle_event("switch_tab", %{"tab" => tab}, socket) do
+    if tab in Enum.map(sync_tab_list(extra_tabs?(socket.assigns)), & &1.id) do
+      {:noreply, assign(socket, :active_tab, tab)}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -1090,6 +1106,23 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # One `{kind, label, status}` per sync button, built here rather than by
   # a `<% status = ... %>` binding inside the template's `:for` — a
   # template-local variable opts that block out of change tracking.
+  # The two extra tabs are exactly the two panels that are themselves
+  # gated on a live connection and the catalogue product source — offering
+  # a tab that can only render an empty panel would be a dead end.
+  defp extra_tabs?(assigns) do
+    assigns.connection != nil and assigns.catalogue_source_active?
+  end
+
+  defp sync_tab_list(false), do: [%{id: "check", label: gettext("Check for changes")}]
+
+  defp sync_tab_list(true) do
+    [
+      %{id: "check", label: gettext("Check for changes"), icon: "hero-arrow-path"},
+      %{id: "media", label: gettext("Media & collections"), icon: "hero-photo"},
+      %{id: "settings", label: gettext("Settings"), icon: "hero-cog-6-tooth"}
+    ]
+  end
+
   defp media_sync_rows(progress_map) do
     for {kind, label} <- media_sync_kinds() do
       {kind, label, media_sync_status(Map.get(progress_map, kind))}
@@ -1840,23 +1873,13 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       |> assign(:new_products_visible, new_products_visible)
       |> assign(:media_sync_rows, media_sync_rows(assigns.media_sync_progress))
       |> assign(:new_products_hidden_count, new_products_hidden_count(assigns.new_products || []))
+      |> assign(:extra_tabs?, extra_tabs?(assigns))
+      |> assign(:sync_tab_list, sync_tab_list(extra_tabs?(assigns)))
+      |> assign(:check_tab?, assigns.active_tab == "check")
 
     ~H"""
     <div class="container mx-auto px-4 py-6 max-w-5xl">
-      <.admin_page_header title={gettext("Shopify Sync")}>
-        <:actions>
-          <button
-            :if={@connection}
-            class="btn btn-primary"
-            phx-click="check"
-            disabled={@checking}
-            id="check-shopify-changes"
-          >
-            <span :if={@checking} class="loading loading-spinner loading-sm"></span>
-            {gettext("Check for changes")}
-          </button>
-        </:actions>
-      </.admin_page_header>
+      <.admin_page_header title={gettext("Shopify Sync")} />
 
       <div class="space-y-6 mt-6">
         <div :if={is_nil(@connection)} class="alert alert-warning">
@@ -1872,13 +1895,36 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           {gettext("Connected: %{name}", name: @connection.name)}
         </div>
 
+        <%!-- The page carries three unrelated jobs — reviewing a diff,
+             running the media writers, and configuring the sync — and
+             stacking them down one column meant scrolling past two of
+             them to reach the third. The extra two tabs appear only
+             where their panels can: connected, on the catalogue source.
+             With nothing to switch to, no strip is drawn at all. --%>
+        <div :if={@extra_tabs?} id="sync-tabs">
+          <.nav_tabs active_tab={@active_tab} on_change="switch_tab" tabs={@sync_tab_list} />
+        </div>
+
+        <div :if={@active_tab == "check"} class="space-y-6">
+          <button
+            :if={@connection}
+            class="btn btn-primary"
+            phx-click="check"
+            disabled={@checking}
+            id="check-shopify-changes"
+          >
+            <span :if={@checking} class="loading loading-spinner loading-sm"></span>
+            {gettext("Check for changes")}
+          </button>
+        </div>
+
         <%!-- Decides which unmatched Shopify products the media sync's
              "no_matching_item" errors and the "New in Shopify" panel
              below even consider — see `PhoenixKitEcommerce.Shopify.
              SyncScope`'s own moduledoc. An item the catalogue already
              has always syncs regardless of this setting. --%>
         <div
-          :if={@connection && @catalogue_source_active?}
+          :if={@connection && @catalogue_source_active? && @active_tab == "settings"}
           id="sync-scope-panel"
           class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
         >
@@ -1937,12 +1983,36 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           </div>
         </div>
 
+        <%!-- The token itself lives on the integration, not here. Without
+             this the operator has to remember the Integrations path and
+             which of the connections is the Shopify one. --%>
+        <div
+          :if={@connection && @active_tab == "settings"}
+          id="shopify-credentials-panel"
+          class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
+        >
+          <div class="font-semibold">{gettext("Shopify connection")}</div>
+          <p class="text-sm text-base-content/70">
+            {gettext(
+              "The shop domain and the Admin API token are stored on the integration itself."
+            )}
+          </p>
+          <.link
+            id="open-shopify-integration"
+            navigate={Routes.path("/admin/settings/integrations/#{@connection.uuid}")}
+            class="btn btn-sm btn-outline"
+          >
+            <.icon name="hero-key" class="w-4 h-4" />
+            {gettext("Open integration settings")}
+          </.link>
+        </div>
+
         <%!-- Outside the field-diff report below: these three writers act
              directly on the catalogue (images, variants/prices,
              collections → categories) rather than on the reviewed diff,
              so they only ever show under the catalogue product source. --%>
         <div
-          :if={@connection && @catalogue_source_active?}
+          :if={@connection && @catalogue_source_active? && @active_tab == "media"}
           id="media-sync-panel"
           class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
         >
@@ -2023,12 +2093,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           </div>
         </div>
 
-        <div :if={@error} class="alert alert-error">
+        <div :if={@check_tab? && @error} class="alert alert-error">
           <span>{@error}</span>
         </div>
 
         <div
-          :if={@source == :storefront}
+          :if={@check_tab? && @source == :storefront}
           id="storefront-fallback-notice"
           class="alert alert-warning"
         >
@@ -2040,7 +2110,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           </span>
         </div>
 
-        <div :if={@stats} class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div :if={@check_tab? && @stats} class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div id="stat-total-changes">
             <.stat_card
               value={@stats.total_changes}
@@ -2085,7 +2155,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
              carries these). Scoped by `@scope`; `@new_products_out_of_scope`
              is how many were dropped by it. --%>
         <div
-          :if={@new_products != nil && @source == :admin}
+          :if={@check_tab? && @new_products != nil && @source == :admin}
           id="new-products-panel"
           class="border border-base-300 rounded-lg bg-base-100 p-4 space-y-3"
         >
@@ -2177,21 +2247,21 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
           </p>
         </div>
 
-        <div :if={@changes == [] && @source == :admin}>
+        <div :if={@check_tab? && @changes == [] && @source == :admin}>
           <.empty_state
             icon="hero-check-circle"
             title={gettext("No changes — the shop matches Shopify.")}
           />
         </div>
 
-        <div :if={@changes == [] && @source == :storefront} id="storefront-no-price-changes">
+        <div :if={@check_tab? && @changes == [] && @source == :storefront} id="storefront-no-price-changes">
           <.empty_state
             icon="hero-information-circle"
             title={storefront_empty_title(@applied_any?)}
           />
         </div>
 
-        <div :if={@changes not in [nil, []]} class="space-y-4">
+        <div :if={@check_tab? && @changes not in [nil, []]} class="space-y-4">
           <div class="flex items-center justify-end">
             <button
               type="button"
