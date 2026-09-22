@@ -22,7 +22,14 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffMerchantStatusTest do
   discrepancy is not hidden; only the phantom one goes.
   """
 
-  use PhoenixKitEcommerce.DataCase, async: true
+  # `ExUnit.Case`, not `DataCase`: every test here is pure — hand-built
+  # `%Product{}` structs, an explicit `base_locale` so `diff/4` never
+  # reaches `Translations.default_language/0`, and no `Repo` call at all.
+  # `DataCase` would tag the file `:integration`, which `mix test` excludes
+  # whenever Postgres is unavailable — the regression guard for the live
+  # defect would then quietly run nowhere but a machine with a database.
+  # Same case `product_diff_test.exs` uses for the same reason.
+  use ExUnit.Case, async: true
 
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.Shopify.ProductDiff
@@ -113,6 +120,36 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiffMerchantStatusTest do
       [change] = ProductDiff.diff([local], [shopify("draft")], "en")
 
       assert change.changes[:status] == %{current: "active", incoming: "draft"}
+    end
+  end
+
+  # The mirror image of the defect above, arriving from the write end: a
+  # status the apply cannot store faithfully. `Writer.shopify_shop_status/1`
+  # coerces anything outside the three to "draft", so reporting such a
+  # difference would offer an apply that retires the product AND still
+  # reports a difference on the next check.
+  describe "an incoming status the apply cannot land" do
+    test "is not reported at all" do
+      for incoming <- ["ACTIVE", "unlisted", "", nil] do
+        local = catalogue_product(%{status: "active", merchant_status: "active"})
+
+        assert ProductDiff.diff([local], [shopify(incoming)], "en") == []
+      end
+    end
+
+    test "does not suppress the rest of the diff" do
+      local = catalogue_product(%{status: "active", merchant_status: "active", vendor: "Acme"})
+
+      [change] = ProductDiff.diff([local], [shopify("ACTIVE")], "en")
+
+      refute Map.has_key?(change.changes, :status)
+      assert Map.has_key?(change.changes, :vendor)
+    end
+
+    test "legacy products are covered by the same rule" do
+      local = legacy_product(%{status: "active"})
+
+      assert ProductDiff.diff([local], [shopify("ACTIVE")], "en") == []
     end
   end
 

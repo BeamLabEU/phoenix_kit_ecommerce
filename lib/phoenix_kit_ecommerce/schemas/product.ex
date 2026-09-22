@@ -11,6 +11,8 @@ defmodule PhoenixKitEcommerce.Product do
   - `description` - Short description
   - `body_html` - Full rich text description
   - `status` - draft | active | archived
+  - `merchant_status` - virtual; the merchant status as STORED (see the
+    field's own comment and `PhoenixKitEcommerce.Shopify.ProductDiff`)
   - `product_type` - physical | digital
   - `vendor` - Brand/manufacturer
   - `tags` - JSONB array of tags
