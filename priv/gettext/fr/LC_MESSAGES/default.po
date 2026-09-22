@@ -5355,6 +5355,11 @@ msgstr "Lancer le rapprochement"
 
 #: lib/phoenix_kit_ecommerce/web/translations.ex
 #, elixir-autogen, elixir-format
+msgid "A sweep is already running. Its result appears when it finishes."
+msgstr "Un rapprochement est déjà en cours. Son résultat apparaîtra à la fin."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
 msgid "Running…"
 msgstr "En cours…"
 

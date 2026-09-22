@@ -1392,6 +1392,11 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   defp sweep_result_message(:prompts_unavailable, _info),
     do: gettext("Sweep did not run — the translation prompts could not be prepared.")
 
+  # The scheduled tick is mid-run: two at once would read one in-flight
+  # count and both admit against it.
+  defp sweep_result_message(:sweep_running, _info),
+    do: gettext("A sweep is already running. Its result appears when it finishes.")
+
   defp sweep_result_message(:no_target_languages, _info),
     do: gettext("Sweep did not run — no target languages are configured.")
 

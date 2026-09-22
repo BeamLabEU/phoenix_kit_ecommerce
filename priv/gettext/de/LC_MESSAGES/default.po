@@ -5355,6 +5355,11 @@ msgstr "Abgleich starten"
 
 #: lib/phoenix_kit_ecommerce/web/translations.ex
 #, elixir-autogen, elixir-format
+msgid "A sweep is already running. Its result appears when it finishes."
+msgstr "Ein Abgleich läuft bereits. Sein Ergebnis erscheint, sobald er fertig ist."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
 msgid "Running…"
 msgstr "Läuft…"
 

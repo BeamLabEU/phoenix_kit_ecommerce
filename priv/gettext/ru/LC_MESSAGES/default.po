@@ -5391,6 +5391,11 @@ msgstr "Запустить сверку"
 
 #: lib/phoenix_kit_ecommerce/web/translations.ex
 #, elixir-autogen, elixir-format
+msgid "A sweep is already running. Its result appears when it finishes."
+msgstr "Сверка уже выполняется. Её результат появится по завершении."
+
+#: lib/phoenix_kit_ecommerce/web/translations.ex
+#, elixir-autogen, elixir-format
 msgid "Running…"
 msgstr "Выполняется…"
 
