@@ -277,6 +277,29 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
     end
   end
 
+  # A product whose variant list `AdminClient` could not read in full
+  # (see `admin_client_test.exs`) — carries the flag straight through, as
+  # a real stub-backed `fetch_products/2` would after a failed backfill.
+  defmodule IncompleteVariantsStub do
+    @moduledoc false
+
+    def fetch_products(_integration_uuid, _opts) do
+      {:ok,
+       [
+         %{
+           "id" => 777,
+           "handle" => "two-option-mug",
+           "options" => [%{"name" => "Size", "position" => 1, "values" => ["Small", "Large"]}],
+           "variants" => [
+             %{"option1" => "Small", "price" => "10.00"},
+             %{"option1" => "Large", "price" => "15.00"}
+           ],
+           "_variants_incomplete" => ":rate_limited"
+         }
+       ]}
+    end
+  end
+
   # ============================================================
   # "collections" — same shape as `CollectionSyncTest`'s own stub
   # ============================================================
@@ -566,6 +589,35 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert progress["kind"] == "variants"
       assert progress["finished_at"] != nil
       assert length(progress["errors"]) == 1
+    end
+
+    test "variants: a product whose variant list is incomplete is refused, nothing written",
+         %{catalogue: catalogue} do
+      AttributeSets.register_deletion_guard()
+      PhoenixKit.Settings.update_setting("entities_enabled", "true")
+      on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
+
+      item =
+        create_item(catalogue.uuid, "Two-Option Mug", %{"handle" => "two-option-mug"}, %{
+          data: %{
+            "_primary_language" => "en",
+            "ecommerce" => %{
+              "shop_status" => "active",
+              "shopify" => %{"handle" => "two-option-mug"}
+            }
+          }
+        })
+
+      assert {:ok, %{errors: [%{"product" => "two-option-mug", "reason" => reason}]}} =
+               Worker.run("variants", fixture_user().uuid,
+                 client: IncompleteVariantsStub,
+                 integration_uuid: "test-integration"
+               )
+
+      assert reason =~ "variants incomplete"
+      assert reason =~ "rate_limited"
+      assert AttributeSets.list_attachments(item.uuid) == []
+      assert get_in(reload(item).data, ["ecommerce", "price_modifiers"]) in [nil, %{}]
     end
 
     test "collections: delegates to CollectionSync.run/1 and keeps its result on the progress record",

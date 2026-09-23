@@ -75,6 +75,14 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   and are entirely unaffected — the lookup isn't even attempted for
   them.
 
+  A per-product guard sits below the currency one: a product Shopify
+  `AdminClient` could not read every variant of
+  (`AdminClient.variants_incomplete?/1` — its `"variants"` is capped at
+  100 and the backfill to read the rest failed) is refused the same way,
+  with its own `"variants incomplete: <reason>"` error entry and
+  `Writer.sync_variants/3` never called for it; every other product in
+  the run is unaffected.
+
   ## `"collections"`
 
   Delegates entirely to `PhoenixKitEcommerce.Shopify.CollectionSync.run/1`
@@ -459,13 +467,29 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   # makes `Writer.sync_variants/3` create (entities' `created_by_uuid` is
   # NOT NULL); a `nil` actor lets that constraint error surface as this
   # product's own error rather than inventing a system uuid here.
+  #
+  # A product whose variant list `AdminClient` could not read in full
+  # (`AdminClient.variants_incomplete?/1`) is refused outright: its
+  # cheapest price may be among the variants not read, so writing price
+  # modifiers now could under-price the product. `Writer.sync_variants/3`
+  # is never called — the item's existing modifiers are left untouched,
+  # and this product's own error names the reason so the run still
+  # completes for the rest of the catalog.
   defp apply_writer("variants", item, product, actor_uuid, opts, _reuse_index) do
-    case Keyword.fetch!(opts, :currency_verdict) do
-      :match ->
-        Writer.sync_variants(item, product, actor_uuid: actor_uuid)
+    if AdminClient.variants_incomplete?(product) do
+      Logger.warning(
+        "Shopify media sync (variants): #{product["handle"]} — variant list incomplete, prices left as they are"
+      )
 
-      {:mismatch, shop_currency, base_currency} ->
-        {:error, {:currency_mismatch, shop_currency, base_currency}}
+      {:error, "variants incomplete: " <> product["_variants_incomplete"]}
+    else
+      case Keyword.fetch!(opts, :currency_verdict) do
+        :match ->
+          Writer.sync_variants(item, product, actor_uuid: actor_uuid)
+
+        {:mismatch, shop_currency, base_currency} ->
+          {:error, {:currency_mismatch, shop_currency, base_currency}}
+      end
     end
   end
 
