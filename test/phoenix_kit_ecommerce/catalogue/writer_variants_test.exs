@@ -250,7 +250,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
     } do
       # An operator-authored modifier for a set Shopify has never driven
       # (not in `set_slugs`, so `sync_variants/2` never attaches or
-      # detaches it) — `finalize_variant_sync/3` must write only the
+      # detaches it) — `finalize_variant_sync/4` must write only the
       # `size`/`color` keys this run computed, not replace the whole
       # `price_modifiers` map.
       {:ok, item} =
