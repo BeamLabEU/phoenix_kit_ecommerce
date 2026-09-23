@@ -296,17 +296,20 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   # failed `variants.json` request would be — even though no request is
   # ever made: a product still sitting at the embedded cap with an id
   # that can't be trusted must not read as complete to `ProductDiff`/the
-  # variants writer, which only ever check the flag, never the id.
-  defp complete_variants(req, shop_domain, %{"id" => id, "variants" => variants} = product)
+  # variants writer, which only ever check the flag, never the id. A
+  # payload with no "id" at all takes the same path (`numeric_id(nil, _)`
+  # is an error), so no product at the cap ever passes through unflagged.
+  defp complete_variants(req, shop_domain, %{"variants" => variants} = product)
        when is_list(variants) and length(variants) >= @embedded_variant_cap do
-    case numeric_id(id, :invalid_product_id) do
+    case numeric_id(product["id"], :invalid_product_id) do
       {:ok, product_id} ->
         backfill_variants(req, shop_domain, product_id, product)
 
       {:error, reason} ->
         Logger.warning(
-          "Shopify: could not read all variants of product #{inspect(id)} (#{inspect(reason)}); " <>
-            "its prices are left as they are until a later sync reads it in full"
+          "Shopify: could not read all variants of product #{inspect(product["id"])} " <>
+            "(#{inspect(reason)}); its prices are left as they are until a later sync " <>
+            "reads it in full"
         )
 
         Map.put(product, @variants_incomplete_key, inspect(reason))

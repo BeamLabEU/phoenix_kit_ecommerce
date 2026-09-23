@@ -365,6 +365,23 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert AdminClient.variants_incomplete?(product)
       assert product["_variants_incomplete"] =~ "invalid_product_id"
     end
+
+    test "a product at the cap with no id at all is flagged incomplete, no request made" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        refute conn.request_path =~ "/variants.json"
+
+        json_response(conn, 200, %{
+          "products" => [%{"handle" => "no-id", "variants" => variant_list(100)}]
+        })
+      end)
+
+      assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
+      assert length(product["variants"]) == 100
+      assert AdminClient.variants_incomplete?(product)
+      assert product["_variants_incomplete"] =~ "invalid_product_id"
+    end
   end
 
   describe "fetch_product/3 credential resolution" do
