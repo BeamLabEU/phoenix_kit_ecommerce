@@ -196,7 +196,9 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
     # Loaded before the fetch so the Admin client re-reads a capped
     # product's full variant list only where this check reads its price: a
     # matched product (price diff) or an in-scope newcomer (a create writes
-    # its price). A caller's own `admin_options[:complete_variants]` wins.
+    # its price — catalogue source only, the one `new_product_changes/5`
+    # builds creates for). A caller's own `admin_options[:complete_variants]`
+    # wins.
     local_products = Shop.list_products()
     source_opts = put_complete_variants(source_opts, local_products, base_locale, scope)
 
@@ -223,9 +225,15 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
 
   defp put_complete_variants(source_opts, local_products, base_locale, scope) do
     handles = ProductDiff.local_handles(local_products, base_locale)
+    # Under the Legacy source no newcomer is ever offered, so an in-scope
+    # unmatched product's prices are never read — re-reading every capped
+    # product in scope (the whole store under `mode: :all`) would be
+    # requests spent on nothing.
+    creates? = ProductSource.current() == ProductSource.Catalogue
 
     wanted = fn product ->
-      MapSet.member?(handles, product["handle"]) or SyncScope.in_scope?(product, scope)
+      MapSet.member?(handles, product["handle"]) or
+        (creates? and SyncScope.in_scope?(product, scope))
     end
 
     Keyword.update(
