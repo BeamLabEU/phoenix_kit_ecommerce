@@ -382,6 +382,75 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert AdminClient.variants_incomplete?(product)
       assert product["_variants_incomplete"] =~ "invalid_product_id"
     end
+
+    test "a 404 on variants.json names the product, not the shop" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        if conn.request_path =~ "/variants.json",
+          do: json_response(conn, 404, %{"errors" => "Not Found"}),
+          else:
+            json_response(conn, 200, %{
+              "products" => [%{"id" => 1, "handle" => "gone", "variants" => variant_list(100)}]
+            })
+      end)
+
+      assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
+      assert product["_variants_incomplete"] =~ "product_not_found"
+      refute product["_variants_incomplete"] =~ "shop_not_found"
+    end
+  end
+
+  describe "fetch_products/2 — :complete_variants" do
+    defp capped_stub(test_pid) do
+      fn conn ->
+        if conn.request_path =~ "/variants.json" do
+          send(test_pid, {:backfilled, conn.request_path})
+          json_response(conn, 200, %{"variants" => variant_list(130)})
+        else
+          json_response(conn, 200, %{
+            "products" => [
+              %{"id" => 1, "handle" => "wanted", "variants" => variant_list(100)},
+              %{"id" => 2, "handle" => "unwanted", "variants" => variant_list(100)},
+              %{"id" => 3, "handle" => "small", "variants" => variant_list(4)}
+            ]
+          })
+        end
+      end
+    end
+
+    test "false: no backfill; a product at the cap is flagged :not_requested" do
+      uuid = connect_shopify()
+      Req.Test.stub(@stub, capped_stub(self()))
+
+      assert {:ok, [wanted, unwanted, small]} =
+               AdminClient.fetch_products(uuid, req_options() ++ [complete_variants: false])
+
+      refute_received {:backfilled, _}
+      assert wanted["_variants_incomplete"] =~ "not_requested"
+      assert unwanted["_variants_incomplete"] =~ "not_requested"
+      assert length(wanted["variants"]) == 100
+      refute AdminClient.variants_incomplete?(small)
+    end
+
+    test "a predicate backfills only the products it selects, in the original order" do
+      uuid = connect_shopify()
+      Req.Test.stub(@stub, capped_stub(self()))
+
+      assert {:ok, [wanted, unwanted, small]} =
+               AdminClient.fetch_products(
+                 uuid,
+                 req_options() ++ [complete_variants: &(&1["handle"] == "wanted")]
+               )
+
+      assert_received {:backfilled, "/admin/api/2025-01/products/1/variants.json"}
+      refute_received {:backfilled, _}
+      assert length(wanted["variants"]) == 130
+      refute AdminClient.variants_incomplete?(wanted)
+      assert unwanted["_variants_incomplete"] =~ "not_requested"
+      assert small["handle"] == "small"
+      refute AdminClient.variants_incomplete?(small)
+    end
   end
 
   describe "fetch_product/3 credential resolution" do

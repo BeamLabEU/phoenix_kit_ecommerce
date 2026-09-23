@@ -300,6 +300,23 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
     end
   end
 
+  # Hands back what the worker asked `fetch_products/2` for (the run is a
+  # direct call, so `self()` is the test process) and one matched plus one
+  # unmatched product.
+  defmodule OptsRecordingStub do
+    @moduledoc false
+
+    def fetch_products(_integration_uuid, opts) do
+      send(self(), {:complete_variants, Keyword.get(opts, :complete_variants)})
+
+      {:ok,
+       [
+         %{"id" => 777, "handle" => "two-option-mug", "variants" => []},
+         %{"id" => 888, "handle" => "stranger", "variants" => []}
+       ]}
+    end
+  end
+
   # S/L x Red/Blue at 10/12/15/20 — not additive (see
   # `VariantMapperTest`/`WriterVariantsTest`'s own `non_additive_product/0`).
   defmodule NonAdditiveVariantsStub do
@@ -647,6 +664,19 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert reason =~ "rate_limited"
       assert AttributeSets.list_attachments(item.uuid) == []
       assert get_in(reload(item).data, ["ecommerce", "price_modifiers"]) in [nil, %{}]
+    end
+
+    test "full variant lists are asked for only where a run writes prices",
+         %{catalogue: catalogue} do
+      create_item(catalogue.uuid, "Two-Option Mug", %{"handle" => "two-option-mug"})
+
+      Worker.run("images", nil, client: OptsRecordingStub, integration_uuid: "test-integration")
+      assert_received {:complete_variants, false}
+
+      Worker.run("variants", nil, client: OptsRecordingStub, integration_uuid: "test-integration")
+      assert_received {:complete_variants, wanted}
+      assert wanted.(%{"id" => 777, "handle" => "two-option-mug"})
+      refute wanted.(%{"id" => 888, "handle" => "stranger"})
     end
 
     test "variants: an approximated price is a warning, not an error", %{catalogue: catalogue} do

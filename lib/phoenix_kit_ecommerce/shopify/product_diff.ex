@@ -290,6 +290,16 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
     end
   end
 
+  @doc """
+  The Shopify handles `local_products` answer to — exactly the keys
+  `diff/4` and `matched_count/3` match on, so a caller deciding up front
+  which Shopify products a diff will touch can never disagree with it.
+  """
+  @spec local_handles([Product.t()], String.t()) :: MapSet.t(String.t())
+  def local_handles(local_products, base_locale) when is_binary(base_locale) do
+    local_products |> index_by_handle(base_locale) |> Map.keys() |> MapSet.new()
+  end
+
   defp index_by_handle(products, base_locale) do
     Enum.reduce(products, %{}, fn product, acc ->
       case shopify_handle(product, base_locale) do

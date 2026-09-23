@@ -290,8 +290,9 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
     scope = Keyword.get_lazy(opts, :scope, &SyncScope.get/0)
 
     with {:ok, catalogue_uuid} <- fetch_catalogue_uuid(),
-         {:ok, products} <- client.fetch_products(integration_uuid, opts) do
-      index = items_index(catalogue_uuid)
+         index = items_index(catalogue_uuid),
+         fetch_opts = Keyword.put(opts, :complete_variants, complete_variants_for(kind, index)),
+         {:ok, products} <- client.fetch_products(integration_uuid, fetch_opts) do
       total = length(products)
       started_at = start_progress(kind, total)
       opts = Keyword.put(opts, :currency_verdict, currency_verdict_for(kind, opts))
@@ -649,6 +650,15 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
 
   defp index_by(acc, _key, nil, _item), do: acc
   defp index_by(acc, key, value, item), do: Map.update!(acc, key, &Map.put(&1, value, item))
+
+  # `AdminClient.fetch_products/2` re-reads a capped product's full variant
+  # list only when asked (`:complete_variants`). An "images" run never reads
+  # variants; a "variants" run writes prices only for products that match an
+  # item — an unmatched one is an error or a skip, never a price write.
+  defp complete_variants_for("variants", index),
+    do: &match?({:ok, _item}, find_item(index, &1))
+
+  defp complete_variants_for(_kind, _index), do: false
 
   defp find_item(index, product) do
     case product_id_string(product) do

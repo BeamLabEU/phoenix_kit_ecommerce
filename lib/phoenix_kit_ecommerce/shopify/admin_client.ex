@@ -33,6 +33,10 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   # 100" look the same in the payload; the extra request is harmless.
   @embedded_variant_cap 100
   @variants_incomplete_key "_variants_incomplete"
+  # Backfills run a few at a time: a full store fetch hit 68 capped
+  # products (62 s one by one); Shopify's REST bucket absorbs a burst of
+  # four, and a 429 is retried by `fetch_all/5` anyway.
+  @backfill_concurrency 4
 
   @doc """
   Fetches every product from the Shopify store connected via
@@ -51,14 +55,25 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
 
     * `:req_options` — keyword list merged into `Req.new/1` (e.g. `plug:`
       to stub the transport in tests).
+    * `:complete_variants` — which capped products to re-read: `true`
+      (default, every one), `false` (none) or a one-argument function
+      called with the product payload. A capped product that is NOT
+      re-read comes back flagged `"_variants_incomplete" =>
+      ":not_requested"`, so a caller that asked for less than everything
+      can never mistake a truncated list for a complete one. Callers that
+      only need some products' prices (the media sync, `Sync.check/2`)
+      pass a predicate — a whole store holds far more capped products
+      than the ones a sync compares or writes.
   """
   @spec fetch_products(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def fetch_products(integration_uuid, opts \\ []) do
+    wanted = Keyword.get(opts, :complete_variants, true)
+
     with {:ok, {shop_domain, req}} <-
            resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])),
          {:ok, products} <-
            fetch_all(req, initial_url(shop_domain), [], @max_retries, "products") do
-      {:ok, Enum.map(products, &complete_variants(req, shop_domain, &1))}
+      {:ok, complete_all(req, shop_domain, products, wanted)}
     end
   end
 
@@ -299,6 +314,33 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   # variants writer, which only ever check the flag, never the id. A
   # payload with no "id" at all takes the same path (`numeric_id(nil, _)`
   # is an error), so no product at the cap ever passes through unflagged.
+  defp complete_all(req, shop_domain, products, wanted) do
+    products
+    |> Task.async_stream(&complete_or_mark(req, shop_domain, &1, wanted),
+      max_concurrency: @backfill_concurrency,
+      ordered: true,
+      timeout: :infinity
+    )
+    |> Enum.map(fn {:ok, product} -> product end)
+  end
+
+  defp complete_or_mark(req, shop_domain, product, wanted) do
+    cond do
+      not at_cap?(product) -> product
+      wanted?(wanted, product) -> complete_variants(req, shop_domain, product)
+      true -> Map.put(product, @variants_incomplete_key, inspect(:not_requested))
+    end
+  end
+
+  defp at_cap?(%{"variants" => variants}) when is_list(variants),
+    do: length(variants) >= @embedded_variant_cap
+
+  defp at_cap?(_product), do: false
+
+  defp wanted?(true, _product), do: true
+  defp wanted?(false, _product), do: false
+  defp wanted?(fun, product) when is_function(fun, 1), do: fun.(product) == true
+
   defp complete_variants(req, shop_domain, %{"variants" => variants} = product)
        when is_list(variants) and length(variants) >= @embedded_variant_cap do
     case numeric_id(product["id"], :invalid_product_id) do
@@ -324,6 +366,10 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
         Map.put(product, "variants", all_variants)
 
       {:error, reason} ->
+        # `fetch_all/5` reads a 404 as "the shop is gone"; on this
+        # sub-resource the shop answered — the product is what vanished.
+        reason = if reason == :shop_not_found, do: :product_not_found, else: reason
+
         Logger.warning(
           "Shopify: could not read all variants of product #{product_id} (#{inspect(reason)}); " <>
             "its prices are left as they are until a later sync reads it in full"

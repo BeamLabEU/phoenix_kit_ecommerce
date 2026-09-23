@@ -193,9 +193,15 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
 
     {scope, source_opts} = Keyword.pop_lazy(opts, :scope, &SyncScope.get/0)
 
+    # Loaded before the fetch so the Admin client re-reads a capped
+    # product's full variant list only where this check reads its price: a
+    # matched product (price diff) or an in-scope newcomer (a create writes
+    # its price). A caller's own `admin_options[:complete_variants]` wins.
+    local_products = Shop.list_products()
+    source_opts = put_complete_variants(source_opts, local_products, base_locale, scope)
+
     with {:ok, %{source: source, products: products, only: only, fallback_reason: reason}} <-
            Source.fetch(integration_uuid, source_opts) do
-      local_products = Shop.list_products()
       changes = ProductDiff.diff(local_products, products, base_locale, only: only)
       matched = ProductDiff.matched_count(local_products, products, base_locale)
 
@@ -213,6 +219,21 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
          matched_local_products: matched
        }}
     end
+  end
+
+  defp put_complete_variants(source_opts, local_products, base_locale, scope) do
+    handles = ProductDiff.local_handles(local_products, base_locale)
+
+    wanted = fn product ->
+      MapSet.member?(handles, product["handle"]) or SyncScope.in_scope?(product, scope)
+    end
+
+    Keyword.update(
+      source_opts,
+      :admin_options,
+      [complete_variants: wanted],
+      &Keyword.put_new(&1, :complete_variants, wanted)
+    )
   end
 
   # New-handle creation is a catalogue-source-only path (see this module's
