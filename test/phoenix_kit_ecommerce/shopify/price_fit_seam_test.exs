@@ -55,7 +55,7 @@ defmodule PhoenixKitEcommerce.Shopify.PriceFitSeamTest do
       {:ok, [personalized_product(), mug_product()]}
     end
 
-    defp personalized_product do
+    def personalized_product do
       with_file = ~w(29.28 35.64 45.36 51.36 58.56 70.56 82.56)
       without_file = ~w(215.28 225.24 231.36 239.76 245.76 253.92 263.16)
 
@@ -143,12 +143,17 @@ defmodule PhoenixKitEcommerce.Shopify.PriceFitSeamTest do
     uuid
   end
 
-  defp create_item(catalogue_uuid, name, handle) do
+  # `base_price` defaults to each product's cheapest Shopify variant
+  # (Personalized 29.28, Mug 10.00) — the state a synced item is in once
+  # its price has been applied; the drift test passes its own.
+  defp create_item(catalogue_uuid, name, handle, base_price \\ nil) do
+    base_price = base_price || if(handle == "personalized", do: "29.28", else: "10.00")
+
     {:ok, item} =
       Catalogue.create_item(%{
         catalogue_uuid: catalogue_uuid,
         name: name,
-        base_price: Decimal.new("10.00"),
+        base_price: Decimal.new(base_price),
         status: "active",
         data: %{
           "_primary_language" => "en",
@@ -234,6 +239,52 @@ defmodule PhoenixKitEcommerce.Shopify.PriceFitSeamTest do
     {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
     assert html =~ "1 with approximated prices"
     assert view |> element("#media-sync-warnings-variants") |> render() =~ "personalized"
+
+    # The storefront leg: what `calculate_product_price/2` actually charges
+    # for each Shopify combination, from the stored modifiers and base —
+    # never below Shopify, and above it on exactly the 5 variants the fit
+    # reported.
+    product = PhoenixKitEcommerce.get_product(personalized.uuid)
+
+    deltas =
+      for variant <- SeamStub.personalized_product()["variants"] do
+        specs = %{
+          "printing_file_ready" => variant["option1"],
+          "print_or_figure_height" => variant["option2"]
+        }
+
+        product
+        |> PhoenixKitEcommerce.calculate_product_price(specs)
+        |> Decimal.sub(Decimal.new(variant["price"]))
+      end
+
+    assert Enum.all?(deltas, &(not Decimal.negative?(&1)))
+    assert Enum.count(deltas, &Decimal.gt?(&1, 0)) == 5
+    assert deltas |> Enum.max(Decimal) |> Decimal.to_string() == "5.40"
+  end
+
+  # The variant sync re-anchors modifiers to Shopify's cheapest variant but
+  # never writes the base (the Changes tab does). A base left behind shows
+  # up as the storefront's real offset, not as a clean "5 above" fit.
+  test "a base that is not Shopify's cheapest variant is reported with its offset", %{
+    catalogue: catalogue,
+    actor: actor
+  } do
+    personalized = create_item(catalogue.uuid, "Personalized", "personalized", "10.00")
+    _mug = create_item(catalogue.uuid, "Mug", "mug")
+
+    assert {:ok, %{errors: [], warnings: [warning]}} =
+             Worker.run("variants", actor.uuid,
+               client: SeamStub,
+               integration_uuid: "test-integration"
+             )
+
+    assert warning["reason"] =~ "base price is -19.28 off"
+
+    fit =
+      get_in(Catalogue.get_item!(personalized.uuid).data, ["ecommerce", "shopify", "price_fit"])
+
+    assert %{"base_offset" => "-19.28", "under" => 14} = fit
   end
 
   test "the item's price_fit_rule picked in the form reaches the next sync, and back", %{

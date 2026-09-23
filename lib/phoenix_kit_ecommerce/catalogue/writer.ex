@@ -172,7 +172,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
   @doc """
   Turns `shopify_product`'s options/variants
-  (`PhoenixKitEcommerce.Shopify.VariantMapper.build/1`) into catalogue
+  (`PhoenixKitEcommerce.Shopify.VariantMapper.build/2`) into catalogue
   attribute-set attachments on `item`: one set per real Shopify option
   (found by blueprint name `"catalogue_set_" <> slug`, created `kind:
   "fixed"` when missing), values resolved to slugs via `ValueResolver.
@@ -219,6 +219,14 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   modifiers are still written, since they are the best fit under the
   chosen rule, but the caller must surface the mismatch rather than let
   an approximated matrix pass silently.
+
+  The fit is measured against the item's own `base_price`, not only
+  Shopify's cheapest variant: this sync never writes the base price (the
+  Changes tab applies it), so when Shopify's cheapest variant moved — one
+  was removed — the modifiers re-anchor here while the base waits, and the
+  storefront drifts by the difference until that price change is applied.
+  That drift is reported as a non-exact fit with `"base_offset"`, the same
+  way an approximated matrix is.
   """
   @spec sync_variants(Item.t(), map(), keyword()) ::
           {:ok,
@@ -240,7 +248,10 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
 
   defp do_sync_variants(item, shopify_product, opts) do
     %{sets: mapped_sets, modifiers: modifiers, fit: fit, warnings: warnings} =
-      VariantMapper.build(shopify_product, rule: price_fit_rule(item))
+      VariantMapper.build(shopify_product,
+        rule: price_fit_rule(item),
+        base_price: Map.get(item, :base_price)
+      )
 
     create_opts = Keyword.take(opts, [:actor_uuid])
 
@@ -367,6 +378,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "under" => fit.under,
       "max_over" => Decimal.to_string(fit.max_over),
       "max_under" => Decimal.to_string(fit.max_under),
+      "base_offset" => Decimal.to_string(fit.base_offset),
       "synced_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
     })
   end

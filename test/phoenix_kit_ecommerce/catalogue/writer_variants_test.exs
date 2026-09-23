@@ -334,5 +334,18 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
                "price_fit"
              )
     end
+
+    test "a stored base that is not Shopify's cheapest variant is recorded as base_offset",
+         %{item: item, actor_uuid: actor_uuid} do
+      {:ok, item} = Catalogue.update_item(item, %{base_price: Decimal.new("5.00")})
+
+      assert {:ok, %{fit: %{exact?: false, under: 6}, warnings: [warning]}} =
+               Writer.sync_variants(item, two_option_product(), actor_uuid: actor_uuid)
+
+      assert warning =~ "base price is -5.00 off"
+
+      assert %{"base_offset" => "-5.00", "under" => 6, "max_under" => "5.00"} =
+               get_in(Catalogue.get_item!(item.uuid).data, ["ecommerce", "shopify", "price_fit"])
+    end
   end
 end

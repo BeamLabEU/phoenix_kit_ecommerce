@@ -435,4 +435,38 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapperTest do
       assert VariantMapper.build(product).fit.variants == 14
     end
   end
+
+  describe "build/2 — :base_price (the base the storefront adds modifiers to)" do
+    import ExUnit.CaptureLog
+
+    test "a base equal to Shopify's cheapest variant changes nothing" do
+      result = VariantMapper.build(two_option_product(), base_price: Decimal.new("10.00"))
+      assert result.fit.exact?
+      assert Decimal.to_string(result.fit.base_offset) == "0.00"
+      assert result.warnings == []
+    end
+
+    # Shopify removed the 10.00 variant's cheaper sibling or the base was
+    # never re-applied: modifiers still re-anchor to Shopify's cheapest
+    # variant, so every storefront price is off by the base's offset.
+    test "a base below Shopify's cheapest variant makes an additive product non-exact, and says why" do
+      {result, log} =
+        with_log(fn ->
+          VariantMapper.build(two_option_product(), base_price: Decimal.new("5.00"))
+        end)
+
+      assert strings(result.modifiers["size"]) == %{
+               "Small" => "0.00",
+               "Medium" => "2.00",
+               "Large" => "5.00"
+             }
+
+      assert %{exact?: false, over: 0, under: 6, variants: 6} = result.fit
+      assert Decimal.to_string(result.fit.max_under) == "5.00"
+      assert Decimal.to_string(result.fit.base_offset) == "-5.00"
+      assert [warning] = result.warnings
+      assert warning =~ "base price is -5.00 off"
+      assert log =~ "base price is -5.00 off"
+    end
+  end
 end
