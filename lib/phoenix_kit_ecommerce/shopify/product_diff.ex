@@ -44,11 +44,22 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   `diff/4` (and its `diff/2`/`diff/3` arities) is pure — no network or
   database access — so it can be tested directly with in-memory product
   structs and Shopify API response maps.
+
+  A Shopify product flagged `AdminClient.variants_incomplete?/1` (its
+  variant list was cut at the REST payload's 100-variant cap and a
+  backfill to read the rest failed) has neither `:price` nor
+  `:compare_at_price` compared — the cheapest variant may be among the
+  ones not read — and is never offered by `new_product_changes/3` either,
+  since creating a product always writes a price. Every other field is
+  still compared/created normally.
   """
+
+  require Logger
 
   alias PhoenixKitEcommerce.HtmlText
   alias PhoenixKitEcommerce.HtmlToMarkdown
   alias PhoenixKitEcommerce.Product
+  alias PhoenixKitEcommerce.Shopify.AdminClient
   alias PhoenixKitEcommerce.Translations
 
   @extreme_ratio Decimal.new("3")
@@ -247,9 +258,32 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
     shopify_products
     |> Enum.filter(fn shopify_product ->
       handle = shopify_product["handle"]
-      is_binary(handle) and handle != "" and not Map.has_key?(index, handle)
+
+      is_binary(handle) and handle != "" and not Map.has_key?(index, handle) and
+        creatable?(shopify_product)
     end)
     |> Enum.map(&build_create_change(&1, base_locale))
+  end
+
+  # A product whose variant list is incomplete would be created at a price
+  # read from its first 100 variants only. One the caller never asked to
+  # re-read (`":not_requested"`) is skipped quietly — that is a choice, not
+  # a failure.
+  defp creatable?(shopify_product) do
+    cond do
+      not AdminClient.variants_incomplete?(shopify_product) ->
+        true
+
+      shopify_product["_variants_incomplete"] == inspect(:not_requested) ->
+        false
+
+      true ->
+        Logger.warning(
+          "Shopify diff: #{shopify_product["handle"]} — variant list incomplete, not offered as a new product"
+        )
+
+        false
+    end
   end
 
   defp build_create_change(shopify_product, base_locale) do
@@ -275,6 +309,16 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
               "opts[:only] must be a subset of #{inspect(@comparable_fields)}, " <>
                 "got unrecognized field(s) #{inspect(unrecognized)}"
     end
+  end
+
+  @doc """
+  The Shopify handles `local_products` answer to — exactly the keys
+  `diff/4` and `matched_count/3` match on, so a caller deciding up front
+  which Shopify products a diff will touch can never disagree with it.
+  """
+  @spec local_handles([Product.t()], String.t()) :: MapSet.t(String.t())
+  def local_handles(local_products, base_locale) when is_binary(base_locale) do
+    local_products |> index_by_handle(base_locale) |> Map.keys() |> MapSet.new()
   end
 
   defp index_by_handle(products, base_locale) do
@@ -322,8 +366,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       |> maybe_put(:vendor, product.vendor, shopify_product["vendor"], only)
       |> maybe_put_tags(product.tags, shopify_product["tags"], only)
       |> maybe_put_status(merchant_status(product), shopify_product["status"], only)
-      |> maybe_put_price(product.price, shopify_product["variants"], only)
-      |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
+      |> maybe_put_prices(product, shopify_product, only)
 
     %Change{
       product_uuid: product.uuid,
@@ -419,6 +462,30 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   # fail-open posture this module takes for other malformed Shopify
   # fields.
   def parse_tags(_other), do: []
+
+  # A product whose variant list `AdminClient` could not read in full
+  # carries only the first 100 variants: its cheapest price may be past
+  # them, so neither price field is compared this time.
+  defp maybe_put_prices(changes, product, shopify_product, only) do
+    if AdminClient.variants_incomplete?(shopify_product) do
+      Logger.warning(
+        "Shopify diff: #{product_label(shopify_product)} — variant list incomplete, price not compared"
+      )
+
+      changes
+    else
+      changes
+      |> maybe_put_price(product.price, shopify_product["variants"], only)
+      |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
+    end
+  end
+
+  # Same "handle, else id, else unknown" fallback the sync worker's own
+  # log lines and error entries use — a product missing its handle
+  # (never expected from Shopify, but not worth crashing over) still
+  # names itself in the log instead of printing a blank.
+  defp product_label(shopify_product),
+    do: shopify_product["handle"] || shopify_product["id"] || "unknown"
 
   defp maybe_put_price(changes, current_price, variants, only) do
     if :price in only do
