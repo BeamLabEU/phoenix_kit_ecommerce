@@ -5886,3 +5886,72 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "The shop domain and the Admin API token are stored on the integration itself."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:230
+#, elixir-autogen, elixir-format
+msgid "Never cheaper than Shopify"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:231
+#, elixir-autogen, elixir-format
+msgid "Cheapest variant"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:233
+#, elixir-autogen, elixir-format
+msgid "Price approximation when Shopify prices are not additive"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:237
+#, elixir-autogen, elixir-format
+msgid "Applies on the next variants sync (Shopify sync, Media & collections)."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:501
+#, elixir-autogen, elixir-format
+msgid "cheapest variant"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:502
+#, elixir-autogen, elixir-format
+msgid "never cheaper than Shopify"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:536
+#, elixir-autogen, elixir-format
+msgid "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:522
+#, elixir-autogen, elixir-format
+msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:560
+#, elixir-autogen, elixir-format
+msgid "At the last variants sync the base price was %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
+#, elixir-autogen, elixir-format
+msgid "%{under} below Shopify, up to -%{max}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2533
+#, elixir-autogen, elixir-format
+msgid "%{count} with approximated prices."
+msgid_plural "%{count} with approximated prices."
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2583
+#, elixir-autogen, elixir-format
+msgid "%{count} price warning"
+msgid_plural "%{count} price warnings"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2598
+#, elixir-autogen, elixir-format
+msgid "warnings"
+msgstr ""

@@ -5887,3 +5887,72 @@ msgstr "Shopify-Verbindung"
 #, elixir-autogen, elixir-format
 msgid "The shop domain and the Admin API token are stored on the integration itself."
 msgstr "Die Shop-Domain und das Admin-API-Token liegen in der Integration selbst."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:230
+#, elixir-autogen, elixir-format
+msgid "Never cheaper than Shopify"
+msgstr "Nie günstiger als Shopify"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:231
+#, elixir-autogen, elixir-format
+msgid "Cheapest variant"
+msgstr "Günstigste Variante"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:233
+#, elixir-autogen, elixir-format
+msgid "Price approximation when Shopify prices are not additive"
+msgstr "Preisannäherung, wenn Shopify-Preise nicht additiv sind"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:237
+#, elixir-autogen, elixir-format
+msgid "Applies on the next variants sync (Shopify sync, Media & collections)."
+msgstr "Wirkt sich bei der nächsten Varianten-Synchronisierung aus (Shopify-Sync, Medien & Kollektionen)."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:501
+#, elixir-autogen, elixir-format
+msgid "cheapest variant"
+msgstr "günstigste Variante"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:502
+#, elixir-autogen, elixir-format
+msgid "never cheaper than Shopify"
+msgstr "nie günstiger als Shopify"
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:536
+#, elixir-autogen, elixir-format
+msgid "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}."
+msgstr "Preis angenähert (%{rule}): %{over} von %{total} Varianten liegen über Shopify, bis zu +%{max}."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:522
+#, elixir-autogen, elixir-format
+msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
+msgstr "Preis angenähert (%{rule}): %{under} von %{total} Varianten liegen unter Shopify, bis zu -%{max}."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:560
+#, elixir-autogen, elixir-format
+msgid "At the last variants sync the base price was %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
+msgstr "Beim letzten Varianten-Sync wich der Grundpreis um %{offset} von der günstigsten Shopify-Variante ab; übernehmen Sie die Preisänderung unter Shopify-Sync, Änderungen."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
+#, elixir-autogen, elixir-format
+msgid "%{under} below Shopify, up to -%{max}."
+msgstr "%{under} unter Shopify, bis zu -%{max}."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2533
+#, elixir-autogen, elixir-format
+msgid "%{count} with approximated prices."
+msgid_plural "%{count} with approximated prices."
+msgstr[0] "%{count} mit ungefähren Preisen."
+msgstr[1] "%{count} mit ungefähren Preisen."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2583
+#, elixir-autogen, elixir-format
+msgid "%{count} price warning"
+msgid_plural "%{count} price warnings"
+msgstr[0] "%{count} Preiswarnung"
+msgstr[1] "%{count} Preiswarnungen"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2598
+#, elixir-autogen, elixir-format
+msgid "warnings"
+msgstr "Warnungen"
