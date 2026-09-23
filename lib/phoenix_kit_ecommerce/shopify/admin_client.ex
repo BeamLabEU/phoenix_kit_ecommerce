@@ -25,9 +25,27 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   @default_retry_after_seconds 1
   @max_retry_after_seconds 60
 
+  # Shopify's REST product payloads (`products.json`, `products/{id}.json`)
+  # embed at most 100 variants whatever `limit` says — measured 2026-09-23:
+  # a 256-variant product came back with its first 100. The variants
+  # sub-resource pages normally (250 per page, `Link: rel="next"`), so any
+  # product AT the cap is re-read from there. "Exactly 100" and "cut at
+  # 100" look the same in the payload; the extra request is harmless.
+  @embedded_variant_cap 100
+  @variants_incomplete_key "_variants_incomplete"
+
   @doc """
   Fetches every product from the Shopify store connected via
   `integration_uuid`, following `Link: rel="next"` pagination.
+
+  Shopify's REST product payload embeds at most `#{@embedded_variant_cap}`
+  variants per product regardless of the request's `limit` — any product
+  whose embedded `"variants"` reaches that count is re-read in full from
+  the `variants.json` sub-resource (see `complete_variants/3`). A product
+  whose backfill fails is NOT dropped or failed as a whole call: it comes
+  back with its truncated list and `"_variants_incomplete" => <reason>`
+  (`variants_incomplete?/1`), so one bad product never stops the rest of
+  the catalog from syncing.
 
   ## Options
 
@@ -37,8 +55,10 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   @spec fetch_products(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def fetch_products(integration_uuid, opts \\ []) do
     with {:ok, {shop_domain, req}} <-
-           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
-      fetch_all(req, initial_url(shop_domain), [], @max_retries, "products")
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])),
+         {:ok, products} <-
+           fetch_all(req, initial_url(shop_domain), [], @max_retries, "products") do
+      {:ok, Enum.map(products, &complete_variants(req, shop_domain, &1))}
     end
   end
 
@@ -72,10 +92,22 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   def fetch_product(integration_uuid, product_id, opts \\ []) do
     with {:ok, product_id} <- numeric_id(product_id, :invalid_product_id),
          {:ok, {shop_domain, req}} <-
-           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])) do
-      fetch_one(req, product_url(shop_domain, product_id), @max_retries)
+           resolve_client(integration_uuid, Keyword.get(opts, :req_options, [])),
+         {:ok, product} <- fetch_one(req, product_url(shop_domain, product_id), @max_retries) do
+      {:ok, complete_variants(req, shop_domain, product)}
     end
   end
+
+  @doc """
+  True when `fetch_products/2`/`fetch_product/3` could not read this
+  product's full variant list (its `"variants"` is the capped first 100).
+  Price-writing and price-comparing callers must skip such a product.
+  """
+  @spec variants_incomplete?(map()) :: boolean()
+  def variants_incomplete?(product) when is_map(product),
+    do: Map.has_key?(product, @variants_incomplete_key)
+
+  def variants_incomplete?(_product), do: false
 
   # Shopify ids are numeric. An id is interpolated straight into the URL
   # path, so anything else — `"555/../shop"`, `"555?x=1"`, `""` — would
@@ -243,6 +275,39 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     query = URI.encode_query(%{"fields" => Enum.join(@product_fields, ",")})
 
     "https://#{shop_domain}/admin/api/#{@api_version}/products/#{product_id}.json?" <> query
+  end
+
+  # Re-reads a product's variants past the REST payload's cap (see
+  # `@embedded_variant_cap` above). "Exactly at the cap" and "truncated at
+  # the cap" are indistinguishable from the embedded list alone, so this
+  # always re-reads at the cap — the extra request returns the same list
+  # for a product that genuinely has exactly that many variants. A failed
+  # backfill flags only this product (`@variants_incomplete_key`) and
+  # keeps its truncated list rather than failing the whole
+  # `fetch_products/2`/`fetch_product/3` call.
+  defp complete_variants(req, shop_domain, %{"id" => id, "variants" => variants} = product)
+       when is_list(variants) and length(variants) >= @embedded_variant_cap do
+    case fetch_all(req, variants_url(shop_domain, id), [], @max_retries, "variants") do
+      {:ok, all_variants} ->
+        Map.put(product, "variants", all_variants)
+
+      {:error, reason} ->
+        Logger.warning(
+          "Shopify: could not read all variants of product #{id} (#{inspect(reason)}); " <>
+            "its prices are left as they are until a later sync reads it in full"
+        )
+
+        Map.put(product, @variants_incomplete_key, inspect(reason))
+    end
+  end
+
+  defp complete_variants(_req, _shop_domain, product), do: product
+
+  defp variants_url(shop_domain, product_id) do
+    query = URI.encode_query(%{"limit" => @page_limit})
+
+    "https://#{shop_domain}/admin/api/#{@api_version}/products/#{product_id}/variants.json?" <>
+      query
   end
 
   defp collections_url(shop_domain, resource) do

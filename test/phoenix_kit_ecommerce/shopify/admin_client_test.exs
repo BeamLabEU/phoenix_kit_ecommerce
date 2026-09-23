@@ -32,6 +32,11 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
     |> Plug.Conn.send_resp(status, JSON.encode!(body))
   end
 
+  defp variant_list(count, first_id \\ 1) do
+    for id <- first_id..(first_id + count - 1),
+        do: %{"id" => id, "option1" => "V#{id}", "price" => "10.00"}
+  end
+
   describe "fetch_products/2 credential resolution" do
     test "returns an error for an integration uuid that doesn't exist" do
       assert {:error, _reason} = AdminClient.fetch_products(Ecto.UUID.generate(), req_options())
@@ -168,6 +173,136 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
 
       assert {:ok, [%{"handle" => "product"}]} = AdminClient.fetch_products(uuid, req_options())
       assert Agent.get(counter, & &1) == 2
+    end
+  end
+
+  describe "fetch_products/2 — variant lists capped at 100" do
+    test "a product with fewer than 100 embedded variants is not re-read" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        refute conn.request_path =~ "/variants.json"
+
+        json_response(conn, 200, %{
+          "products" => [%{"id" => 1, "handle" => "small", "variants" => variant_list(99)}]
+        })
+      end)
+
+      assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
+      assert length(product["variants"]) == 99
+      refute AdminClient.variants_incomplete?(product)
+    end
+
+    test "a product at the 100 cap is completed from variants.json, across pages" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        cond do
+          String.ends_with?(conn.request_path, "/products.json") ->
+            json_response(conn, 200, %{
+              "products" => [
+                %{
+                  "id" => 1,
+                  "handle" => "big",
+                  "title" => "Big",
+                  "variants" => variant_list(100)
+                },
+                %{"id" => 2, "handle" => "small", "variants" => variant_list(3)}
+              ]
+            })
+
+          conn.request_path =~ "/products/1/variants.json" and
+              conn.query_string =~ "page_info=2" ->
+            json_response(conn, 200, %{"variants" => variant_list(6, 251)})
+
+          conn.request_path =~ "/products/1/variants.json" ->
+            conn
+            |> Plug.Conn.put_resp_header(
+              "link",
+              ~s(<https://test-shop.myshopify.com#{conn.request_path}?limit=250&page_info=2>; rel="next")
+            )
+            |> json_response(200, %{"variants" => variant_list(250)})
+        end
+      end)
+
+      assert {:ok, [big, small]} = AdminClient.fetch_products(uuid, req_options())
+      assert length(big["variants"]) == 256
+      assert big["title"] == "Big"
+      refute AdminClient.variants_incomplete?(big)
+      assert length(small["variants"]) == 3
+    end
+
+    test "exactly 100 real variants: one extra request, same list, no flag" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        if conn.request_path =~ "/variants.json",
+          do: json_response(conn, 200, %{"variants" => variant_list(100)}),
+          else:
+            json_response(conn, 200, %{
+              "products" => [%{"id" => 1, "handle" => "box", "variants" => variant_list(100)}]
+            })
+      end)
+
+      assert {:ok, [box]} = AdminClient.fetch_products(uuid, req_options())
+      assert length(box["variants"]) == 100
+      refute AdminClient.variants_incomplete?(box)
+    end
+
+    test "a failed backfill flags only that product and keeps the run going" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        cond do
+          conn.request_path =~ "/products/1/variants.json" ->
+            json_response(conn, 403, %{"errors" => "nope"})
+
+          conn.request_path =~ "/products/2/variants.json" ->
+            json_response(conn, 200, %{"variants" => variant_list(120)})
+
+          true ->
+            json_response(conn, 200, %{
+              "products" => [
+                %{"id" => 1, "handle" => "broken", "variants" => variant_list(100)},
+                %{"id" => 2, "handle" => "fine", "variants" => variant_list(100)}
+              ]
+            })
+        end
+      end)
+
+      assert {:ok, [broken, fine]} = AdminClient.fetch_products(uuid, req_options())
+      assert AdminClient.variants_incomplete?(broken)
+      assert broken["_variants_incomplete"] =~ "forbidden"
+      assert length(broken["variants"]) == 100
+      refute AdminClient.variants_incomplete?(fine)
+      assert length(fine["variants"]) == 120
+    end
+
+    # Review Focus #2: a rate limit that never clears must not hang the
+    # backfill or bring down the whole call — only the one product is
+    # flagged. `retry-after: 0` keeps this test from actually sleeping
+    # through `@max_retries` real seconds.
+    test "a persistent 429 on the variants endpoint flags the product after retries" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        if conn.request_path =~ "/variants.json" do
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "0")
+          |> Plug.Conn.send_resp(429, "")
+        else
+          json_response(conn, 200, %{
+            "products" => [
+              %{"id" => 1, "handle" => "rate-limited", "variants" => variant_list(100)}
+            ]
+          })
+        end
+      end)
+
+      assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
+      assert AdminClient.variants_incomplete?(product)
+      assert product["_variants_incomplete"] =~ "rate_limited"
+      assert length(product["variants"]) == 100
     end
   end
 
@@ -323,6 +458,24 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       end)
 
       assert {:error, :rate_limited} = AdminClient.fetch_product(uuid, 555, req_options())
+    end
+  end
+
+  describe "fetch_product/3 — variant lists capped at 100" do
+    test "completes the variant list the same way" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        if conn.request_path =~ "/variants.json",
+          do: json_response(conn, 200, %{"variants" => variant_list(160)}),
+          else:
+            json_response(conn, 200, %{
+              "product" => %{"id" => 5, "handle" => "horns", "variants" => variant_list(100)}
+            })
+      end)
+
+      assert {:ok, product} = AdminClient.fetch_product(uuid, 5, req_options())
+      assert length(product["variants"]) == 160
     end
   end
 
