@@ -146,6 +146,35 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
       assert html =~ "32.00"
     end
 
+    test "an over-only fit shows the amount without a below-Shopify sentence" do
+      data = %{
+        "ecommerce" => %{
+          "shopify" => %{
+            "price_fit" => %{
+              "rule" => "never_cheaper",
+              "variants" => 14,
+              "over" => 5,
+              "under" => 0,
+              "max_over" => "5.40",
+              "max_under" => "0.00"
+            }
+          }
+        }
+      }
+
+      html =
+        render_component(&Extension.item_section/1,
+          form: nil,
+          item: nil,
+          data: data,
+          current_language: "en"
+        )
+
+      assert html =~ ~s(id="ext-ecommerce-price-fit")
+      assert html =~ "5.40"
+      refute html =~ "below Shopify"
+    end
+
     test "no note for an exact product" do
       html =
         render_component(&Extension.item_section/1,

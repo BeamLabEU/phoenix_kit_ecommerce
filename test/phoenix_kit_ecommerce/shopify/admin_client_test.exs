@@ -345,10 +345,11 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
     # caller-supplied one — `complete_variants/3` must run it through the
     # same `numeric_id/2` check before ever building `variants_url/2`, or
     # a malformed "id" would be interpolated into the backfill request's
-    # path unchecked. Skipping the backfill leaves the product exactly as
-    # `complete_variants/3`'s own no-op clause would (truncated, no flag)
-    # — this is not a failed backfill, since no request is ever made.
-    test "a non-numeric product id skips the backfill instead of building a bad request" do
+    # path unchecked. No request is ever made for it, but it is still
+    # flagged incomplete — a product at the cap with an untrustworthy id
+    # must not read as complete to a caller that only ever checks the
+    # flag (`ProductDiff`, the variants writer), never the id itself.
+    test "a non-numeric product id is flagged incomplete instead of building a bad request" do
       uuid = connect_shopify()
 
       Req.Test.stub(@stub, fn conn ->
@@ -361,7 +362,8 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
 
       assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
       assert length(product["variants"]) == 100
-      refute AdminClient.variants_incomplete?(product)
+      assert AdminClient.variants_incomplete?(product)
+      assert product["_variants_incomplete"] =~ "invalid_product_id"
     end
   end
 

@@ -499,22 +499,29 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
       gettext(
         "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}.",
         rule: rule,
-        over: fit["over"] || 0,
-        total: fit["variants"] || 0,
-        max: fit["max_over"] || "0.00"
+        over: fit_value(fit, "over", 0),
+        total: fit_value(fit, "variants", 0),
+        max: fit_value(fit, "max_over", "0.00")
       )
 
-    if (fit["under"] || 0) > 0 do
+    under = fit_value(fit, "under", 0)
+
+    if under > 0 do
       above <>
         " " <>
         gettext("%{under} below Shopify, up to -%{max}.",
-          under: fit["under"],
-          max: fit["max_under"]
+          under: under,
+          max: fit_value(fit, "max_under", "0.00")
         )
     else
       above
     end
   end
+
+  # A malformed/partial `price_fit` (never expected from
+  # `Writer.finalize_variant_sync/4`, but the note must not crash on one)
+  # falls back the same way every field here does.
+  defp fit_value(fit, key, default), do: fit[key] || default
 
   # Prefill from the stored value, else the shop's base currency, else
   # blank. Never `"USD"`: an unconfigured shop must not silently stamp
