@@ -149,7 +149,18 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
          [{slug, field} | fields_acc]}
       end)
 
-    fields = Enum.reverse(fields)
+    # Tie-break for `fit_modifiers/5`'s candidate choice must go to the
+    # LOWER Shopify position (moduledoc), not whichever option happened
+    # to be listed first in the payload's own "options" array — those
+    # can differ. `field` is always `"option<position>"`, so sorting by
+    # the parsed suffix gives exactly that order; `Enum.min_by/3` then
+    # keeps the first (= lowest-position) candidate on a genuine tie.
+    # `sets`/`modifiers` (Shopify's own array order) are untouched.
+    fields =
+      fields
+      |> Enum.reverse()
+      |> Enum.sort_by(fn {_slug, "option" <> pos} -> String.to_integer(pos) end)
+
     priced = Enum.reject(variants, &is_nil(variant_price(&1)))
     {modifiers, applied_rule} = fit_modifiers(rule, modifiers, fields, priced, min_all_price)
     fit = fit_summary(applied_rule, modifiers, fields, priced, min_all_price)

@@ -222,7 +222,12 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapperTest do
       assert warning =~ "-3.00"
       assert log =~ "non-additive-tee"
 
-      assert_never_cheaper(product, VariantMapper.build(product))
+      # Size (position 1) and Color (position 2) tie on total overcharge
+      # here (3.00 either way) — the default rule must break the tie by
+      # position, so Size (not Color) is the one that absorbs.
+      default = VariantMapper.build(product)
+      assert Decimal.eq?(default.modifiers["size"]["Large"], Decimal.new("8.00"))
+      assert_never_cheaper(product, default)
     end
   end
 
@@ -333,6 +338,42 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapperTest do
       result = VariantMapper.build(product)
 
       assert result.fit.rule == :never_cheaper
+      # Color is disqualified (the S/Red variant lost its "option2"), so
+      # Size is the only candidate — asserted by NAME, not just by the
+      # invariant, so a regression that let Color absorb anyway (its
+      # lower total overcharge would otherwise win the tie-break) fails
+      # here instead of only tripping `assert_never_cheaper/2`.
+      assert strings(result.modifiers["size"]) == %{"S" => "0.00", "L" => "8.00"}
+      assert strings(result.modifiers["color"]) == %{"Red" => "5.00", "Blue" => "2.00"}
+      assert_never_cheaper(product, result)
+    end
+
+    test "a genuine absorber tie breaks by option position, not payload array order" do
+      # Same S/L x Red/Blue at 10/12/15/20 as the non-additive-tee test
+      # (both Size and Color tie at 3.00 total overcharge) — but here
+      # "options" lists Color (position 2) BEFORE Size (position 1), the
+      # reverse of their own `position`. Shopify position must still
+      # decide the tie: Size absorbs, not whichever option came first in
+      # the array.
+      product = %{
+        "id" => 44,
+        "handle" => "reversed-order-tee",
+        "options" => [
+          %{"name" => "Color", "position" => 2, "values" => ["Red", "Blue"]},
+          %{"name" => "Size", "position" => 1, "values" => ["Small", "Large"]}
+        ],
+        "variants" => [
+          %{"option1" => "Small", "option2" => "Red", "price" => "10.00"},
+          %{"option1" => "Small", "option2" => "Blue", "price" => "12.00"},
+          %{"option1" => "Large", "option2" => "Red", "price" => "15.00"},
+          %{"option1" => "Large", "option2" => "Blue", "price" => "20.00"}
+        ]
+      }
+
+      result = VariantMapper.build(product)
+
+      assert strings(result.modifiers["size"]) == %{"Small" => "0.00", "Large" => "8.00"}
+      assert strings(result.modifiers["color"]) == %{"Red" => "0.00", "Blue" => "2.00"}
       assert_never_cheaper(product, result)
     end
 
