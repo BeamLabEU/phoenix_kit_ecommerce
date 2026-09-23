@@ -304,6 +304,65 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert product["_variants_incomplete"] =~ "rate_limited"
       assert length(product["variants"]) == 100
     end
+
+    # Same shape as "a failed backfill flags only that product and keeps
+    # the run going" above, but for a rate limit that never clears rather
+    # than an outright 403 — a persistent 429 goes through `fetch_all/5`'s
+    # OWN retry loop before it gives up, so this proves that loop doesn't
+    # somehow affect (or get stuck on) the next product's own backfill.
+    test "a persistent 429 on one product's variants doesn't stop a sibling from completing" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        cond do
+          conn.request_path =~ "/products/1/variants.json" ->
+            conn
+            |> Plug.Conn.put_resp_header("retry-after", "0")
+            |> Plug.Conn.send_resp(429, "")
+
+          conn.request_path =~ "/products/2/variants.json" ->
+            json_response(conn, 200, %{"variants" => variant_list(120)})
+
+          true ->
+            json_response(conn, 200, %{
+              "products" => [
+                %{"id" => 1, "handle" => "rate-limited", "variants" => variant_list(100)},
+                %{"id" => 2, "handle" => "fine", "variants" => variant_list(100)}
+              ]
+            })
+        end
+      end)
+
+      assert {:ok, [limited, fine]} = AdminClient.fetch_products(uuid, req_options())
+      assert AdminClient.variants_incomplete?(limited)
+      assert limited["_variants_incomplete"] =~ "rate_limited"
+      assert length(limited["variants"]) == 100
+      refute AdminClient.variants_incomplete?(fine)
+      assert length(fine["variants"]) == 120
+    end
+
+    # `id` here comes straight off the payload, same as `fetch_product/3`'s
+    # caller-supplied one — `complete_variants/3` must run it through the
+    # same `numeric_id/2` check before ever building `variants_url/2`, or
+    # a malformed "id" would be interpolated into the backfill request's
+    # path unchecked. Skipping the backfill leaves the product exactly as
+    # `complete_variants/3`'s own no-op clause would (truncated, no flag)
+    # — this is not a failed backfill, since no request is ever made.
+    test "a non-numeric product id skips the backfill instead of building a bad request" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        refute conn.request_path =~ "/variants.json"
+
+        json_response(conn, 200, %{
+          "products" => [%{"id" => "abc", "handle" => "weird", "variants" => variant_list(100)}]
+        })
+      end)
+
+      assert {:ok, [product]} = AdminClient.fetch_products(uuid, req_options())
+      assert length(product["variants"]) == 100
+      refute AdminClient.variants_incomplete?(product)
+    end
   end
 
   describe "fetch_product/3 credential resolution" do

@@ -495,7 +495,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   defp apply_writer("variants", item, product, actor_uuid, opts, _reuse_index) do
     if AdminClient.variants_incomplete?(product) do
       Logger.warning(
-        "Shopify media sync (variants): #{product["handle"]} — variant list incomplete, prices left as they are"
+        "Shopify media sync (variants): #{product["handle"] || product_id_string(product) || "unknown"} — variant list incomplete, prices left as they are"
       )
 
       {:error, "variants incomplete: " <> product["_variants_incomplete"]}

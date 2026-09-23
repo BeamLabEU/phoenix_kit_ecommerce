@@ -285,23 +285,41 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   # backfill flags only this product (`@variants_incomplete_key`) and
   # keeps its truncated list rather than failing the whole
   # `fetch_products/2`/`fetch_product/3` call.
+  #
+  # `id` comes straight from Shopify's own JSON, same as a caller-supplied
+  # `product_id` — `numeric_id/2` (the same guard `fetch_product/3` runs
+  # on ITS id before it ever reaches a URL) must pass before it is
+  # interpolated into `variants_url/2`; a payload whose "id" is not a
+  # plain non-negative integer never should happen, but a stray id built
+  # from unchecked Shopify JSON is exactly what that check exists to
+  # catch. That product is left as `complete_variants/3`'s no-op clause
+  # would leave it — its truncated `"variants"` untouched, no backfill
+  # attempted, no flag added — not treated as a failed backfill, since no
+  # request was ever made in its name.
   defp complete_variants(req, shop_domain, %{"id" => id, "variants" => variants} = product)
        when is_list(variants) and length(variants) >= @embedded_variant_cap do
-    case fetch_all(req, variants_url(shop_domain, id), [], @max_retries, "variants") do
+    case numeric_id(id, :invalid_product_id) do
+      {:ok, product_id} -> backfill_variants(req, shop_domain, product_id, product)
+      {:error, _reason} -> product
+    end
+  end
+
+  defp complete_variants(_req, _shop_domain, product), do: product
+
+  defp backfill_variants(req, shop_domain, product_id, product) do
+    case fetch_all(req, variants_url(shop_domain, product_id), [], @max_retries, "variants") do
       {:ok, all_variants} ->
         Map.put(product, "variants", all_variants)
 
       {:error, reason} ->
         Logger.warning(
-          "Shopify: could not read all variants of product #{id} (#{inspect(reason)}); " <>
+          "Shopify: could not read all variants of product #{product_id} (#{inspect(reason)}); " <>
             "its prices are left as they are until a later sync reads it in full"
         )
 
         Map.put(product, @variants_incomplete_key, inspect(reason))
     end
   end
-
-  defp complete_variants(_req, _shop_domain, product), do: product
 
   defp variants_url(shop_domain, product_id) do
     query = URI.encode_query(%{"limit" => @page_limit})

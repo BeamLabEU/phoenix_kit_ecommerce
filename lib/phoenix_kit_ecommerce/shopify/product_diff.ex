@@ -438,7 +438,7 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
   defp maybe_put_prices(changes, product, shopify_product, only) do
     if AdminClient.variants_incomplete?(shopify_product) do
       Logger.warning(
-        "Shopify diff: #{shopify_product["handle"]} — variant list incomplete, price not compared"
+        "Shopify diff: #{product_label(shopify_product)} — variant list incomplete, price not compared"
       )
 
       changes
@@ -448,6 +448,13 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       |> maybe_put_compare_at(product.compare_at_price, shopify_product["variants"], only)
     end
   end
+
+  # Same "handle, else id, else unknown" fallback the sync worker's own
+  # log lines and error entries use — a product missing its handle
+  # (never expected from Shopify, but not worth crashing over) still
+  # names itself in the log instead of printing a blank.
+  defp product_label(shopify_product),
+    do: shopify_product["handle"] || shopify_product["id"] || "unknown"
 
   defp maybe_put_price(changes, current_price, variants, only) do
     if :price in only do
