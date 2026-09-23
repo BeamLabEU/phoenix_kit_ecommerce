@@ -105,6 +105,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         "skipped" => non_neg_integer(), "matched" => non_neg_integer(),
         "stats" => map(),
         "errors" => [%{"product" => String.t(), "reason" => String.t()}],
+        "warnings" => [%{"product" => String.t(), "reason" => String.t()}],
         "started_at" => iso8601, "finished_at" => iso8601 | nil,
         "result" => map() | nil}
 
@@ -114,11 +115,18 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   kind's own writer counts across the whole run: for `"images"`,
   `%{"downloaded" => n, "reused" => n, "attached" => n}` summed from
   every `Writer.sync_images/3` result; for `"variants"`,
-  `%{"values_created" => n}` summed from every `Writer.sync_variants/2`
-  result (`%{}` for `"collections"`, which carries its own summary under
-  `"result"` instead — see below). `"total"`/`"done"` still count every
-  Shopify product this run looked at (matched + skipped + unmatched
-  in-scope errors), same as before.
+  `%{"values_created" => n, "approximated" => n}` summed from every
+  `Writer.sync_variants/2` result — `"approximated"` counts products
+  whose `:fit` came out non-exact (`%{}` for `"collections"`, which
+  carries its own summary under `"result"` instead — see below).
+  `"total"`/`"done"` still count every Shopify product this run looked
+  at (matched + skipped + unmatched in-scope errors), same as before.
+
+  `"warnings"` — one entry per product whose price was written but only
+  approximated (`Writer.sync_variants/3`'s own `:warnings`, see
+  `VariantMapper`'s moduledoc): the write succeeded, by the rule the
+  item asked for, so it is kept apart from `"errors"` rather than
+  reported as a failure. Always `[]` for `"images"`/`"collections"`.
 
   A job in flight has `"finished_at" => nil`; a caller reading this to
   decide whether to disable a button matches `progress["kind"]` against
@@ -300,6 +308,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
 
       acc0 = %{
         errors: [],
+        warnings: [],
         reuse_index: reuse_index,
         skipped: 0,
         matched: 0,
@@ -322,8 +331,9 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
           end)
 
         errors = Enum.reverse(acc.errors)
+        warnings = Enum.reverse(acc.warnings)
         finish_progress(kind, total, done, acc, errors, started_at, nil)
-        {:ok, %{total: total, done: done, errors: errors}}
+        {:ok, %{total: total, done: done, errors: errors, warnings: warnings}}
       rescue
         exception ->
           fail_progress(kind, Exception.message(exception))
@@ -371,6 +381,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         %{
           acc
           | errors: merge_writer_errors(acc.errors, product, result),
+            warnings: merge_writer_warnings(acc.warnings, product, result),
             reuse_index: next_reuse_index(acc.reuse_index, result),
             stats: merge_stats(acc.stats, kind, result)
         }
@@ -401,12 +412,15 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   end
 
   defp merge_stats(stats, "variants", result) do
-    Map.update(
-      stats,
+    approximated = if match?(%{fit: %{exact?: false}}, result), do: 1, else: 0
+
+    stats
+    |> Map.update(
       "values_created",
       Map.get(result, :values_created, 0),
       &(&1 + Map.get(result, :values_created, 0))
     )
+    |> Map.update("approximated", approximated, &(&1 + approximated))
   end
 
   defp merge_stats(stats, _kind, _result), do: stats
@@ -432,23 +446,26 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   # failure (see its moduledoc: "a download failure skips that image ...
   # rather than aborting the whole product's images"). Without this, an
   # operator watching progress would never see that a specific image
-  # failed to download. `sync_variants/3` reports non-additive price
-  # matrices the same way, under `:warnings` (see `VariantMapper`'s
-  # moduledoc) — recorded here so the run never reads as clean when a
-  # variant was written under-priced.
+  # failed to download.
   defp merge_writer_errors(errors, product, result) do
     key = product["handle"] || product_id_string(product) || "unknown"
 
-    errors =
-      Enum.reduce(Map.get(result, :errors, []), errors, fn {image_id, reason}, acc ->
-        [
-          %{"product" => key, "reason" => "image #{image_id}: #{error_reason_string(reason)}"}
-          | acc
-        ]
-      end)
+    Enum.reduce(Map.get(result, :errors, []), errors, fn {image_id, reason}, acc ->
+      [
+        %{"product" => key, "reason" => "image #{image_id}: #{error_reason_string(reason)}"}
+        | acc
+      ]
+    end)
+  end
 
-    Enum.reduce(Map.get(result, :warnings, []), errors, fn warning, acc ->
-      [%{"product" => key, "reason" => "warning: #{warning}"} | acc]
+  # `Writer.sync_variants/3`'s `:warnings` — one line per product whose
+  # price is approximated (see `VariantMapper`'s moduledoc). Kept apart
+  # from `errors`: the product WAS written, by the rule the item asks for.
+  defp merge_writer_warnings(warnings, product, result) do
+    key = product["handle"] || product_id_string(product) || "unknown"
+
+    Enum.reduce(Map.get(result, :warnings, []), warnings, fn warning, acc ->
+      [%{"product" => key, "reason" => warning} | acc]
     end)
   end
 
@@ -694,6 +711,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
       "matched" => counts.matched,
       "stats" => counts.stats,
       "errors" => errors,
+      "warnings" => counts |> Map.get(:warnings, []) |> Enum.reverse(),
       "started_at" => started_at,
       "finished_at" => finished_at,
       "result" => result
