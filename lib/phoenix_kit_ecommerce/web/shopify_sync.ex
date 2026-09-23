@@ -172,7 +172,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
        |> assign(:pending, nil)
        |> assign(:active_tab, "changes")
        |> assign(:new_products_loaded, @new_products_page_size)
-       |> assign(:media_errors_loaded, %{})}
+       |> assign(:media_errors_loaded, %{})
+       |> assign(:media_warnings_loaded, %{})}
     else
       {:ok,
        socket
@@ -419,6 +420,23 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
        socket,
        :media_errors_loaded,
        Map.put(socket.assigns.media_errors_loaded, kind, loaded)
+     )}
+  end
+
+  # Own counter, own assign — sharing `@media_errors_loaded` would let a
+  # click on one list's "Load more" also grow the other's page size,
+  # since both would key off the same `kind`.
+  def handle_event("load_more_media_warnings", %{"kind" => kind}, socket)
+      when kind in ~w(images variants collections) do
+    loaded =
+      media_warnings_loaded(socket.assigns.media_warnings_loaded, kind) +
+        @media_errors_page_size
+
+    {:noreply,
+     assign(
+       socket,
+       :media_warnings_loaded,
+       Map.put(socket.assigns.media_warnings_loaded, kind, loaded)
      )}
   end
 
@@ -1208,6 +1226,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # skipped" for a run this page never actually measured those on.
   defp media_sync_status(progress) do
     errors = Map.get(progress, "errors") || []
+    warnings = Map.get(progress, "warnings") || []
     counts_recorded? = Map.has_key?(progress, "matched") and Map.has_key?(progress, "skipped")
     stats = Map.get(progress, "stats") || %{}
 
@@ -1218,6 +1237,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       skipped: Map.get(progress, "skipped", 0),
       errors: errors,
       error_count: length(errors),
+      warnings: warnings,
+      warning_count: length(warnings),
       stats: stats,
       counts_recorded?: counts_recorded?,
       # `matched > 0`: a run whose every product was skipped by the scope
@@ -1336,6 +1357,9 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # count under its own kind so one kind's "Load more" clicks never
   # affect another kind's list.
   defp media_errors_loaded(loaded_map, kind),
+    do: Map.get(loaded_map, kind, @media_errors_page_size)
+
+  defp media_warnings_loaded(loaded_map, kind),
     do: Map.get(loaded_map, kind, @media_errors_page_size)
 
   # Groups `changes` by field, in `@sections` order, dropping fields with
@@ -2029,6 +2053,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             media_sync_progress={@media_sync_progress}
             media_sync_rows={@media_sync_rows}
             media_errors_loaded={@media_errors_loaded}
+            media_warnings_loaded={@media_warnings_loaded}
           />
         </div>
 
@@ -2449,6 +2474,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   attr :media_sync_progress, :map, required: true
   attr :media_sync_rows, :list, required: true
   attr :media_errors_loaded, :map, required: true
+  attr :media_warnings_loaded, :map, required: true
 
   # Outside the "Changes" tab's field-diff report: these three writers act
   # directly on the catalogue (images, variants/prices, collections →
@@ -2502,6 +2528,14 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
               {gettext("Finished at %{time} (UTC).", time: status.finished_at)}
 
               <span :if={status.counts_recorded?}>{media_sync_finished_summary(status)}</span>
+              <span :if={status.counts_recorded? and status.warning_count > 0}>
+                {ngettext(
+                  "%{count} with approximated prices.",
+                  "%{count} with approximated prices.",
+                  status.warning_count,
+                  count: status.warning_count
+                )}
+              </span>
               <span :if={not status.counts_recorded?}>
                 {ngettext("%{count} error.", "%{count} errors.", status.error_count, count: status.error_count)}
                 {gettext("Counts not recorded by this run.")}
@@ -2535,6 +2569,33 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
             total={status.error_count}
             on_load_more="load_more_media_errors"
             noun_plural={gettext("errors")}
+            phx-value-kind={kind}
+          />
+        </details>
+
+        <details
+          :if={status.state == :finished and status.warning_count > 0}
+          id={"media-sync-warnings-#{kind}"}
+          class="mt-1 text-sm"
+        >
+          <summary class="cursor-pointer text-warning">
+            {ngettext(
+              "%{count} approximated price",
+              "%{count} approximated prices",
+              status.warning_count,
+              count: status.warning_count
+            )}
+          </summary>
+          <% loaded = min(media_warnings_loaded(@media_warnings_loaded, kind), status.warning_count) %>
+          <ul class="pl-4 list-disc">
+            <li :for={warning <- Enum.take(status.warnings, loaded)}>{media_error_line(warning)}</li>
+          </ul>
+          <.load_more
+            id={"media-sync-warnings-load-more-#{kind}"}
+            loaded={loaded}
+            total={status.warning_count}
+            on_load_more="load_more_media_warnings"
+            noun_plural={gettext("warnings")}
             phx-value-kind={kind}
           />
         </details>

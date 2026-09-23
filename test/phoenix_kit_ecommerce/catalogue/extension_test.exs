@@ -101,6 +101,63 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
       assert html =~ "Acme Co"
     end
 
+    test "renders the price-fit rule select, never_cheaper when unset" do
+      html =
+        render_component(&Extension.item_section/1,
+          form: nil,
+          item: nil,
+          data: %{"ecommerce" => %{}},
+          current_language: "en"
+        )
+
+      assert html =~ ~s(name="item[ecommerce][price_fit_rule]")
+
+      assert html =~
+               ~r/<option[^>]*selected[^>]*value="never_cheaper"|<option[^>]*value="never_cheaper"[^>]*selected/
+    end
+
+    test "shows the approximation note from shopify.price_fit" do
+      data = %{
+        "ecommerce" => %{
+          "price_fit_rule" => "cheapest",
+          "shopify" => %{
+            "price_fit" => %{
+              "rule" => "cheapest",
+              "variants" => 256,
+              "over" => 0,
+              "under" => 21,
+              "max_over" => "0.00",
+              "max_under" => "32.00"
+            }
+          }
+        }
+      }
+
+      html =
+        render_component(&Extension.item_section/1,
+          form: nil,
+          item: nil,
+          data: data,
+          current_language: "en"
+        )
+
+      assert html =~ ~s(id="ext-ecommerce-price-fit")
+      assert html =~ "21"
+      assert html =~ "32.00"
+    end
+
+    test "no note for an exact product" do
+      html =
+        render_component(&Extension.item_section/1,
+          form: nil,
+          item: nil,
+          data: %{"ecommerce" => %{"shopify" => %{}}},
+          current_language: "en"
+        )
+
+      refute html =~ ~s(id="ext-ecommerce-price-fit")
+    end
+
     test "carries every other language's price_unit forward as a hidden input" do
       html =
         render_component(&Extension.item_section/1,
