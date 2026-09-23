@@ -5984,9 +5984,9 @@ msgstr "%{under} ниже цены Shopify, до -%{max}."
 #, elixir-autogen, elixir-format
 msgid "%{count} with approximated prices."
 msgid_plural "%{count} with approximated prices."
-msgstr[0] "%{count} с приблизительными ценами."
-msgstr[1] "%{count} с приблизительными ценами."
-msgstr[2] "%{count} с приблизительными ценами."
+msgstr[0] "%{count} с приближённой ценой."
+msgstr[1] "%{count} с приближёнными ценами."
+msgstr[2] "%{count} с приближёнными ценами."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2583
 #, elixir-autogen, elixir-format
