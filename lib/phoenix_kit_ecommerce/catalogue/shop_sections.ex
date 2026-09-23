@@ -64,6 +64,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
       |> assign(:download_limit_errors, field_errors(form, :download_limit))
       |> assign(:download_expiry_days_errors, field_errors(form, :download_expiry_days))
       |> assign(:price_fit, get_in(ecommerce, ["shopify", "price_fit"]))
+      |> assign(:shopify_linked?, shopify_linked?(ecommerce))
       |> assign(:price_fit_rule_errors, field_errors(form, :price_fit_rule))
 
     ~H"""
@@ -213,7 +214,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
             />
           </div>
 
-          <div class="w-full">
+          <div :if={@shopify_linked?} class="w-full">
             <div
               :if={@price_fit}
               id="ext-ecommerce-price-fit"
@@ -489,6 +490,12 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   # sync_variants/3`'s moduledoc): absent for an exact product, so this is
   # only ever called from behind `:if={@price_fit}`.
   defp price_fit_note(fit) do
+    [price_fit_directions(fit), price_fit_base_offset(fit["base_offset"])]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(" ")
+  end
+
+  defp price_fit_directions(fit) do
     rule =
       case fit["rule"] do
         "cheapest" -> gettext("cheapest variant")
@@ -499,9 +506,8 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     under = fit_value(fit, "under", 0)
     total = fit_value(fit, "variants", 0)
 
-    # Each direction is said only when it happened: a "cheapest variant"
-    # fit has nothing above Shopify, and "0 of 256 above, up to +0.00"
-    # reads as noise next to the part that matters.
+    # Each direction is said only when it happened: "0 of 256 above, up to
+    # +0.00" reads as noise next to the part that matters.
     cond do
       over > 0 and under > 0 ->
         price_fit_above(rule, over, total, fit) <>
@@ -535,10 +541,39 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
     )
   end
 
+  # The variant sync never writes the base price, so a base that no longer
+  # equals Shopify's cheapest variant is said outright, with the one place
+  # that fixes it. Absent (a note written before the offset existed) or
+  # zero, there is nothing to say.
+  defp price_fit_base_offset(offset) when is_binary(offset) do
+    case Decimal.parse(offset) do
+      {decimal, ""} ->
+        if Decimal.eq?(decimal, 0),
+          do: "",
+          else:
+            gettext(
+              "The base price is %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes.",
+              offset: offset
+            )
+
+      _ ->
+        ""
+    end
+  end
+
+  defp price_fit_base_offset(_offset), do: ""
+
   # A malformed/partial `price_fit` (never expected from
   # `Writer.finalize_variant_sync/4`, but the note must not crash on one)
   # falls back the same way every field here does.
   defp fit_value(fit, key, default), do: fit[key] || default
+
+  # The price-fit control only means something for an item the Shopify
+  # variant sync writes — one linked by handle or product id.
+  defp shopify_linked?(ecommerce) do
+    shopify = Map.get(ecommerce, "shopify") || %{}
+    Enum.any?(["handle", "product_id"], &(shopify[&1] not in [nil, ""]))
+  end
 
   # Prefill from the stored value, else the shop's base currency, else
   # blank. Never `"USD"`: an unconfigured shop must not silently stamp

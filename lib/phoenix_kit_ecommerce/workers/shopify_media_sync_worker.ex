@@ -75,13 +75,15 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   and are entirely unaffected — the lookup isn't even attempted for
   them.
 
-  A per-product guard sits below the currency one: a product Shopify
+  A per-product guard is checked before the currency verdict: a product
   `AdminClient` could not read every variant of
   (`AdminClient.variants_incomplete?/1` — its `"variants"` is capped at
-  100 and the backfill to read the rest failed) is refused the same way,
-  with its own `"variants incomplete: <reason>"` error entry and
-  `Writer.sync_variants/3` never called for it; every other product in
-  the run is unaffected.
+  100 and the backfill to read the rest failed) is refused with its own
+  `"variants incomplete: <reason>"` error entry and
+  `Writer.sync_variants/3` is never called for it; every other product
+  in the run is unaffected. A `"variants"` run asks `fetch_products/2`
+  to re-read full lists only for products that match an item; an
+  `"images"` run asks for none (it never reads variants).
 
   ## `"collections"`
 
@@ -499,7 +501,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
         "Shopify media sync (variants): #{product["handle"] || product_id_string(product) || "unknown"} — variant list incomplete, prices left as they are"
       )
 
-      {:error, "variants incomplete: " <> product["_variants_incomplete"]}
+      {:error, "variants incomplete: #{product["_variants_incomplete"]}"}
     else
       case Keyword.fetch!(opts, :currency_verdict) do
         :match ->

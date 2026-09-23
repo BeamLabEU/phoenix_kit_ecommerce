@@ -175,7 +175,7 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapperTest do
     # M_o and the mismatch is reported as a fit warning (not per-variant
     # any more). Under the default :never_cheaper, Size absorbs the
     # shortfall so no variant is ever predicted below Shopify.
-    test "a non-additive matrix names the mismatching variant and logs a warning" do
+    test "a non-additive matrix gets one product-level warning and log line; default rule is never cheaper" do
       product = %{
         "id" => 42,
         "handle" => "non-additive-tee",

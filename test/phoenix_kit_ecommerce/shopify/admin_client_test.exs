@@ -232,7 +232,7 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert length(small["variants"]) == 3
     end
 
-    test "exactly 100 real variants: one extra request, same list, no flag" do
+    test "exactly 100 real variants: re-read, same list, no flag" do
       uuid = connect_shopify()
 
       Req.Test.stub(@stub, fn conn ->

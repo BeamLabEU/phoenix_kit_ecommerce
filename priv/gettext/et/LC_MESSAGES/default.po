@@ -5886,47 +5886,52 @@ msgstr "Shopify ühendus"
 msgid "The shop domain and the Admin API token are stored on the integration itself."
 msgstr "Poe domeen ja Admin API luba on salvestatud integratsiooni juurde."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:229
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:230
 #, elixir-autogen, elixir-format
 msgid "Never cheaper than Shopify"
 msgstr "Mitte kunagi odavam kui Shopify"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:230
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:231
 #, elixir-autogen, elixir-format
 msgid "Cheapest variant"
 msgstr "Odavaim variant"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:232
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:233
 #, elixir-autogen, elixir-format
 msgid "Price approximation when Shopify prices are not additive"
 msgstr "Hinna lähendamine, kui Shopify hinnad ei ole liidetavad"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:236
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:237
 #, elixir-autogen, elixir-format
 msgid "Applies on the next variants sync (Shopify sync, Media & collections)."
 msgstr "Rakendub järgmisel variantide sünkroonimisel (Shopify sünk, meedia ja kollektsioonid)."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:494
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:501
 #, elixir-autogen, elixir-format
 msgid "cheapest variant"
 msgstr "odavaim variant"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:495
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:502
 #, elixir-autogen, elixir-format
 msgid "never cheaper than Shopify"
 msgstr "mitte kunagi odavam kui Shopify"
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:530
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:536
 #, elixir-autogen, elixir-format
 msgid "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}."
 msgstr "Hind on lähendatud (%{rule}): %{over} %{total}-st variandist on Shopify hinnast kõrgemad, kuni +%{max}."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:516
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:522
 #, elixir-autogen, elixir-format
 msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
 msgstr "Hind on lähendatud (%{rule}): %{under} %{total}-st variandist on Shopify hinnast madalamad, kuni -%{max}."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:509
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:555
+#, elixir-autogen, elixir-format
+msgid "The base price is %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
+msgstr "Baashind erineb Shopify odavaimast variandist %{offset} võrra; rakendage hinnamuudatus jaotises Shopify sünkroonimine, Muudatused."
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
 #, elixir-autogen, elixir-format
 msgid "%{under} below Shopify, up to -%{max}."
 msgstr "%{under} Shopify hinnast madalamad, kuni -%{max}."

@@ -260,9 +260,30 @@ defmodule PhoenixKitEcommerce.Shopify.ProductDiff do
       handle = shopify_product["handle"]
 
       is_binary(handle) and handle != "" and not Map.has_key?(index, handle) and
-        not AdminClient.variants_incomplete?(shopify_product)
+        creatable?(shopify_product)
     end)
     |> Enum.map(&build_create_change(&1, base_locale))
+  end
+
+  # A product whose variant list is incomplete would be created at a price
+  # read from its first 100 variants only. One the caller never asked to
+  # re-read (`":not_requested"`) is skipped quietly — that is a choice, not
+  # a failure.
+  defp creatable?(shopify_product) do
+    cond do
+      not AdminClient.variants_incomplete?(shopify_product) ->
+        true
+
+      shopify_product["_variants_incomplete"] == inspect(:not_requested) ->
+        false
+
+      true ->
+        Logger.warning(
+          "Shopify diff: #{shopify_product["handle"]} — variant list incomplete, not offered as a new product"
+        )
+
+        false
+    end
   end
 
   defp build_create_change(shopify_product, base_locale) do
