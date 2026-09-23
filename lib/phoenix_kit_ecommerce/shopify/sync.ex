@@ -244,9 +244,16 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   # completely different reason than the legacy source's.
   defp new_product_changes(local_products, products, base_locale, :admin, scope) do
     if ProductSource.current() == ProductSource.Catalogue do
-      all_changes = ProductDiff.new_product_changes(local_products, products, base_locale)
-      {in_scope, out_of_scope} = SyncScope.partition(all_changes, scope, & &1.shopify_product)
-      {in_scope, length(out_of_scope)}
+      # Scope first, then build the changes: an out-of-scope product is
+      # never re-read past the 100-variant cap (`check/2` doesn't ask for
+      # it), and `new_product_changes/3` refuses a flagged product — so
+      # filtering by scope afterwards would drop such a product from the
+      # out-of-scope count instead of counting it.
+      {in_scope, out_of_scope} = SyncScope.partition(products, scope)
+      handles = ProductDiff.local_handles(local_products, base_locale)
+
+      {ProductDiff.new_product_changes(local_products, in_scope, base_locale),
+       Enum.count(out_of_scope, &unmatched?(&1, handles))}
     else
       {[], 0}
     end
@@ -254,6 +261,13 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
 
   defp new_product_changes(_local_products, _products, _base_locale, :storefront, _scope),
     do: {[], 0}
+
+  # Same "no local product answers to this handle" rule
+  # `ProductDiff.new_product_changes/3` applies.
+  defp unmatched?(%{"handle" => handle}, handles) when is_binary(handle) and handle != "",
+    do: not MapSet.member?(handles, handle)
+
+  defp unmatched?(_product, _handles), do: false
 
   @doc """
   Checks ONE local product against its matched Shopify product — see
