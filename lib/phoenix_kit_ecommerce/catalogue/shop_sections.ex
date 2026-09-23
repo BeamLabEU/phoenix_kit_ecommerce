@@ -495,27 +495,44 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
         _ -> gettext("never cheaper than Shopify")
       end
 
-    above =
-      gettext(
-        "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}.",
-        rule: rule,
-        over: fit_value(fit, "over", 0),
-        total: fit_value(fit, "variants", 0),
-        max: fit_value(fit, "max_over", "0.00")
-      )
-
+    over = fit_value(fit, "over", 0)
     under = fit_value(fit, "under", 0)
+    total = fit_value(fit, "variants", 0)
 
-    if under > 0 do
-      above <>
-        " " <>
-        gettext("%{under} below Shopify, up to -%{max}.",
+    # Each direction is said only when it happened: a "cheapest variant"
+    # fit has nothing above Shopify, and "0 of 256 above, up to +0.00"
+    # reads as noise next to the part that matters.
+    cond do
+      over > 0 and under > 0 ->
+        price_fit_above(rule, over, total, fit) <>
+          " " <>
+          gettext("%{under} below Shopify, up to -%{max}.",
+            under: under,
+            max: fit_value(fit, "max_under", "0.00")
+          )
+
+      under > 0 ->
+        gettext(
+          "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}.",
+          rule: rule,
           under: under,
+          total: total,
           max: fit_value(fit, "max_under", "0.00")
         )
-    else
-      above
+
+      true ->
+        price_fit_above(rule, over, total, fit)
     end
+  end
+
+  defp price_fit_above(rule, over, total, fit) do
+    gettext(
+      "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}.",
+      rule: rule,
+      over: over,
+      total: total,
+      max: fit_value(fit, "max_over", "0.00")
+    )
   end
 
   # A malformed/partial `price_fit` (never expected from

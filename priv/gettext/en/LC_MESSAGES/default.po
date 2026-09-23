@@ -5917,12 +5917,17 @@ msgstr ""
 msgid "never cheaper than Shopify"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:500
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:530
 #, elixir-autogen, elixir-format
 msgid "Price approximated (%{rule}): %{over} of %{total} variants above Shopify, up to +%{max}."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:510
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:516
+#, elixir-autogen, elixir-format
+msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:509
 #, elixir-autogen, elixir-format
 msgid "%{under} below Shopify, up to -%{max}."
 msgstr ""

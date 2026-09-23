@@ -142,8 +142,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
         )
 
       assert html =~ ~s(id="ext-ecommerce-price-fit")
-      assert html =~ "21"
-      assert html =~ "32.00"
+      # Nothing is priced above Shopify under this fit, so the note says
+      # only what is below — never "0 of 256 above, up to +0.00".
+      assert html =~ "21 of 256 variants below Shopify, up to -32.00"
+      refute html =~ "above Shopify"
     end
 
     test "an over-only fit shows the amount without a below-Shopify sentence" do
