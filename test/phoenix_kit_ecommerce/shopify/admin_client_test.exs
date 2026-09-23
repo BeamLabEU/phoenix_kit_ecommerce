@@ -451,6 +451,38 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert small["handle"] == "small"
       refute AdminClient.variants_incomplete?(small)
     end
+
+    # A caller's predicate may close over something large (the media sync's
+    # whole item index). It must run in the calling process: evaluated inside
+    # a spawned task, its environment would be copied into every task —
+    # thousands of copies for one store.
+    test "the predicate runs in the caller, never inside a backfill task" do
+      uuid = connect_shopify()
+      test_pid = self()
+      Req.Test.stub(@stub, capped_stub(test_pid))
+
+      predicate = fn product ->
+        send(test_pid, {:predicate_ran_in, self()})
+        product["handle"] == "wanted"
+      end
+
+      assert {:ok, _products} =
+               AdminClient.fetch_products(uuid, req_options() ++ [complete_variants: predicate])
+
+      assert_received {:predicate_ran_in, _pid}
+
+      pids =
+        Stream.repeatedly(fn ->
+          receive do
+            {:predicate_ran_in, pid} -> pid
+          after
+            0 -> nil
+          end
+        end)
+        |> Enum.take_while(& &1)
+
+      assert Enum.all?(pids, &(&1 == test_pid))
+    end
   end
 
   describe "fetch_product/3 credential resolution" do
@@ -623,6 +655,23 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
 
       assert {:ok, product} = AdminClient.fetch_product(uuid, 5, req_options())
       assert length(product["variants"]) == 160
+    end
+
+    test "a failed backfill flags the product instead of failing the call" do
+      uuid = connect_shopify()
+
+      Req.Test.stub(@stub, fn conn ->
+        if conn.request_path =~ "/variants.json",
+          do: json_response(conn, 403, %{"errors" => "nope"}),
+          else:
+            json_response(conn, 200, %{
+              "product" => %{"id" => 5, "handle" => "horns", "variants" => variant_list(100)}
+            })
+      end)
+
+      assert {:ok, product} = AdminClient.fetch_product(uuid, 5, req_options())
+      assert length(product["variants"]) == 100
+      assert product["_variants_incomplete"] =~ "forbidden"
     end
   end
 

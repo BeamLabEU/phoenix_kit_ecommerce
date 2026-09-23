@@ -1239,6 +1239,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
       error_count: length(errors),
       warnings: warnings,
       warning_count: length(warnings),
+      approximated: Map.get(stats, "approximated", 0),
       stats: stats,
       counts_recorded?: counts_recorded?,
       # `matched > 0`: a run whose every product was skipped by the scope
@@ -2528,12 +2529,12 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
               {gettext("Finished at %{time} (UTC).", time: status.finished_at)}
 
               <span :if={status.counts_recorded?}>{media_sync_finished_summary(status)}</span>
-              <span :if={status.counts_recorded? and status.warning_count > 0}>
+              <span :if={status.counts_recorded? and status.approximated > 0}>
                 {ngettext(
                   "%{count} with approximated prices.",
                   "%{count} with approximated prices.",
-                  status.warning_count,
-                  count: status.warning_count
+                  status.approximated,
+                  count: status.approximated
                 )}
               </span>
               <span :if={not status.counts_recorded?}>
@@ -2580,8 +2581,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         >
           <summary class="cursor-pointer text-warning">
             {ngettext(
-              "%{count} approximated price",
-              "%{count} approximated prices",
+              "%{count} price warning",
+              "%{count} price warnings",
               status.warning_count,
               count: status.warning_count
             )}

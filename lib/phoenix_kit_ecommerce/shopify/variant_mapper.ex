@@ -74,6 +74,9 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
   variants there are, how many ended up predicted above (`:over`) or
   below (`:under`) their Shopify price, and the largest such gap in
   each direction (`:max_over`/`:max_under`, both non-negative). A
+  `:approximated?` says whether the modifiers themselves miss Shopify
+  (an approximation under the rule); a fit that is non-exact only because
+  of `:base_offset` is NOT an approximation. A
   non-exact product gets exactly ONE line in `:warnings` (and one
   `Logger.warning` call) naming the rule, the count and the largest
   gaps — never one line per variant; a caller writing an approximated
@@ -110,7 +113,8 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
           under: non_neg_integer(),
           max_over: Decimal.t(),
           max_under: Decimal.t(),
-          base_offset: Decimal.t()
+          base_offset: Decimal.t(),
+          approximated?: boolean()
         }
   @type t :: %{
           sets: [set()],
@@ -180,7 +184,7 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
 
     priced = Enum.reject(variants, &is_nil(variant_price(&1)))
     {modifiers, applied_rule} = fit_modifiers(rule, modifiers, fields, priced, min_all_price)
-    anchor = anchor(Keyword.get(opts, :base_price), min_all_price)
+    anchor = anchor(Keyword.get(opts, :base_price), min_all_price, fields)
     fit = fit_summary(applied_rule, modifiers, fields, priced, {min_all_price, anchor})
 
     %{
@@ -262,8 +266,12 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
   # The price the storefront starts from: the item's stored base when the
   # caller passed one, else Shopify's own cheapest variant (the modifiers'
   # anchor). `nil` when there is nothing priced at all.
-  defp anchor(%Decimal{} = base_price, _min_all), do: base_price
-  defp anchor(_base_price, min_all), do: min_all
+  # A product with no real options has no modifiers for this sync to
+  # re-anchor — a base that differs from its one Shopify price is a plain
+  # pending price change, which the Changes tab already reports.
+  defp anchor(_base_price, min_all, []), do: min_all
+  defp anchor(%Decimal{} = base_price, _min_all, _fields), do: base_price
+  defp anchor(_base_price, min_all, _fields), do: min_all
 
   defp fit_summary(rule, modifiers, fields, priced, {min_all, anchor}) do
     devs =
@@ -271,11 +279,19 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
         do: [],
         else: deviations(modifiers, fields, priced, anchor)
 
+    # Whether the MODIFIERS reproduce Shopify (against its own cheapest
+    # variant) — as opposed to the base having drifted, which is reported
+    # separately (`:base_offset`) and is not an approximation.
+    approximated? =
+      fields != [] and not is_nil(min_all) and
+        Enum.any?(deviations(modifiers, fields, priced, min_all), &(not Decimal.eq?(&1, 0)))
+
     overs = Enum.filter(devs, &Decimal.gt?(&1, 0))
     unders = devs |> Enum.filter(&Decimal.lt?(&1, 0)) |> Enum.map(&Decimal.abs/1)
 
     %{
       exact?: overs == [] and unders == [],
+      approximated?: approximated?,
       rule: rule,
       variants: length(priced),
       over: length(overs),
@@ -296,21 +312,25 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapper do
 
   defp fit_warnings(product, fit) do
     label = product["handle"] || product["id"] || product["title"] || "unknown"
-
-    message =
-      "prices approximated (#{fit.rule}): #{fit.over + fit.under} of #{fit.variants} variants " <>
-        "differ from Shopify, up to +#{fit.max_over} / -#{fit.max_under}" <>
-        base_offset_note(fit.base_offset)
-
+    message = fit_message(fit)
     Logger.warning("Shopify variant sync: product #{label}, #{message}")
     [message]
   end
 
-  defp base_offset_note(offset) do
+  defp fit_message(%{approximated?: true} = fit) do
+    "prices approximated (#{fit.rule}): #{fit.over + fit.under} of #{fit.variants} variants " <>
+      "differ from Shopify, up to +#{fit.max_over} / -#{fit.max_under}" <>
+      base_offset_note(fit.base_offset, "; ")
+  end
+
+  defp fit_message(fit), do: base_offset_note(fit.base_offset, "")
+
+  defp base_offset_note(offset, prefix) do
     if Decimal.eq?(offset, 0),
       do: "",
       else:
-        "; the base price is #{offset} off Shopify's cheapest variant — " <>
+        prefix <>
+          "the base price is #{offset} off Shopify's cheapest variant — " <>
           "apply the price change under Shopify sync, Changes"
   end
 

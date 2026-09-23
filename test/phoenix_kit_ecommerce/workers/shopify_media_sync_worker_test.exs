@@ -649,7 +649,8 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
             "_primary_language" => "en",
             "ecommerce" => %{
               "shop_status" => "active",
-              "shopify" => %{"handle" => "two-option-mug"}
+              "shopify" => %{"handle" => "two-option-mug"},
+              "price_modifiers" => %{"size" => %{"small" => "0.00", "large" => "7.00"}}
             }
           }
         })
@@ -663,7 +664,9 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
       assert reason =~ "variants incomplete"
       assert reason =~ "rate_limited"
       assert AttributeSets.list_attachments(item.uuid) == []
-      assert get_in(reload(item).data, ["ecommerce", "price_modifiers"]) in [nil, %{}]
+      # Pre-seeded modifiers prove "untouched", not merely "never written".
+      assert get_in(reload(item).data, ["ecommerce", "price_modifiers"]) ==
+               %{"size" => %{"small" => "0.00", "large" => "7.00"}}
     end
 
     test "full variant lists are asked for only where a run writes prices",

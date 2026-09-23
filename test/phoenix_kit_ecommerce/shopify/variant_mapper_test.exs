@@ -464,9 +464,31 @@ defmodule PhoenixKitEcommerce.Shopify.VariantMapperTest do
       assert %{exact?: false, over: 0, under: 6, variants: 6} = result.fit
       assert Decimal.to_string(result.fit.max_under) == "5.00"
       assert Decimal.to_string(result.fit.base_offset) == "-5.00"
+      # The modifiers match Shopify — only the base drifted, which is not an
+      # approximation and must not be labelled or counted as one.
+      refute result.fit.approximated?
       assert [warning] = result.warnings
-      assert warning =~ "base price is -5.00 off"
+      assert warning =~ "the base price is -5.00 off"
+      refute warning =~ "prices approximated"
       assert log =~ "base price is -5.00 off"
+    end
+
+    test "a non-additive product with a drifted base is both approximated and offset" do
+      result = VariantMapper.build(personalized(), base_price: Decimal.new("10.00"))
+      assert result.fit.approximated?
+      assert [warning] = result.warnings
+      assert warning =~ "prices approximated"
+      assert warning =~ "base price is -19.28 off"
+    end
+
+    # No options, no modifiers for the sync to re-anchor: a base that differs
+    # from the one Shopify price is a plain pending price change, and the
+    # Changes tab already reports it.
+    test "a product with no options never reports a base offset" do
+      product = %{"handle" => "plain", "variants" => [%{"price" => "9.99"}]}
+      result = VariantMapper.build(product, base_price: Decimal.new("8.00"))
+      assert result.fit.exact?
+      assert result.warnings == []
     end
   end
 end

@@ -344,7 +344,12 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
 
       assert warning =~ "base price is -5.00 off"
 
-      assert %{"base_offset" => "-5.00", "under" => 6, "max_under" => "5.00"} =
+      assert %{
+               "base_offset" => "-5.00",
+               "under" => 6,
+               "max_under" => "5.00",
+               "approximated" => false
+             } =
                get_in(Catalogue.get_item!(item.uuid).data, ["ecommerce", "shopify", "price_fit"])
     end
   end

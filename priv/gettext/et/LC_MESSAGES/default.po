@@ -5926,10 +5926,10 @@ msgstr "Hind on lähendatud (%{rule}): %{over} %{total}-st variandist on Shopify
 msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
 msgstr "Hind on lähendatud (%{rule}): %{under} %{total}-st variandist on Shopify hinnast madalamad, kuni -%{max}."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:555
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:560
 #, elixir-autogen, elixir-format
-msgid "The base price is %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
-msgstr "Baashind erineb Shopify odavaimast variandist %{offset} võrra; rakendage hinnamuudatus jaotises Shopify sünkroonimine, Muudatused."
+msgid "At the last variants sync the base price was %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
+msgstr "Viimase variantide sünkroonimise ajal erines baashind Shopify odavaimast variandist %{offset} võrra; rakendage hinnamuudatus jaotises Shopify sünkroonimine, Muudatused."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
 #, elixir-autogen, elixir-format
@@ -5945,10 +5945,10 @@ msgstr[1] "%{count} ligikaudsete hindadega."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2583
 #, elixir-autogen, elixir-format
-msgid "%{count} approximated price"
-msgid_plural "%{count} approximated prices"
-msgstr[0] "%{count} lähendatud hind"
-msgstr[1] "%{count} lähendatud hinda"
+msgid "%{count} price warning"
+msgid_plural "%{count} price warnings"
+msgstr[0] "%{count} hinnahoiatus"
+msgstr[1] "%{count} hinnahoiatust"
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2598
 #, elixir-autogen, elixir-format

@@ -490,7 +490,12 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   # sync_variants/3`'s moduledoc): absent for an exact product, so this is
   # only ever called from behind `:if={@price_fit}`.
   defp price_fit_note(fit) do
-    [price_fit_directions(fit), price_fit_base_offset(fit["base_offset"])]
+    # `"approximated" => false`: only the base drifted — the modifiers match
+    # Shopify, so there is no approximation to describe. A note written
+    # before the key existed was always an approximation.
+    directions = if fit["approximated"] == false, do: "", else: price_fit_directions(fit)
+
+    [directions, price_fit_base_offset(fit["base_offset"])]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join(" ")
   end
@@ -552,7 +557,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
           do: "",
           else:
             gettext(
-              "The base price is %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes.",
+              "At the last variants sync the base price was %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes.",
               offset: offset
             )
 

@@ -5928,10 +5928,10 @@ msgstr "Preis angenähert (%{rule}): %{over} von %{total} Varianten liegen über
 msgid "Price approximated (%{rule}): %{under} of %{total} variants below Shopify, up to -%{max}."
 msgstr "Preis angenähert (%{rule}): %{under} von %{total} Varianten liegen unter Shopify, bis zu -%{max}."
 
-#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:555
+#: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:560
 #, elixir-autogen, elixir-format
-msgid "The base price is %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
-msgstr "Der Grundpreis weicht um %{offset} von der günstigsten Shopify-Variante ab; übernehmen Sie die Preisänderung unter Shopify-Sync, Änderungen."
+msgid "At the last variants sync the base price was %{offset} off Shopify's cheapest variant; apply the price change under Shopify sync, Changes."
+msgstr "Beim letzten Varianten-Sync wich der Grundpreis um %{offset} von der günstigsten Shopify-Variante ab; übernehmen Sie die Preisänderung unter Shopify-Sync, Änderungen."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
 #, elixir-autogen, elixir-format
@@ -5947,10 +5947,10 @@ msgstr[1] "%{count} mit ungefähren Preisen."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2583
 #, elixir-autogen, elixir-format
-msgid "%{count} approximated price"
-msgid_plural "%{count} approximated prices"
-msgstr[0] "%{count} angenäherter Preis"
-msgstr[1] "%{count} angenäherte Preise"
+msgid "%{count} price warning"
+msgid_plural "%{count} price warnings"
+msgstr[0] "%{count} Preiswarnung"
+msgstr[1] "%{count} Preiswarnungen"
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2598
 #, elixir-autogen, elixir-format

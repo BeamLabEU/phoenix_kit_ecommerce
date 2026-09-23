@@ -379,6 +379,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       "max_over" => Decimal.to_string(fit.max_over),
       "max_under" => Decimal.to_string(fit.max_under),
       "base_offset" => Decimal.to_string(fit.base_offset),
+      "approximated" => fit.approximated?,
       "synced_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
     })
   end

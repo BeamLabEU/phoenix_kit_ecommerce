@@ -292,6 +292,57 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
     "https://#{shop_domain}/admin/api/#{@api_version}/products/#{product_id}.json?" <> query
   end
 
+  # Which capped products to re-read is decided HERE, in the calling
+  # process: `wanted` is the caller's (a predicate may close over something
+  # big, like the media sync's whole item index), and a closure evaluated
+  # inside a task has its environment copied into that task. Only the
+  # products that need a request become tasks, each capturing just `req`
+  # and `shop_domain`; the rest keep their place in the list untouched.
+  defp complete_all(req, shop_domain, products, wanted) do
+    planned = products |> Enum.map(&{plan(&1, wanted), &1}) |> Enum.with_index()
+
+    fetched =
+      planned
+      |> Enum.flat_map(fn
+        {{:fetch, product}, index} -> [{index, product}]
+        _other -> []
+      end)
+      |> Task.async_stream(
+        fn {index, product} -> {index, complete_variants(req, shop_domain, product)} end,
+        max_concurrency: @backfill_concurrency,
+        timeout: :infinity
+      )
+      |> Map.new(fn {:ok, indexed} -> indexed end)
+
+    Enum.map(planned, fn
+      {{:fetch, _product}, index} ->
+        Map.fetch!(fetched, index)
+
+      {{:mark, product}, _index} ->
+        Map.put(product, @variants_incomplete_key, inspect(:not_requested))
+
+      {{:keep, product}, _index} ->
+        product
+    end)
+  end
+
+  defp plan(product, wanted) do
+    cond do
+      not at_cap?(product) -> :keep
+      wanted?(wanted, product) -> :fetch
+      true -> :mark
+    end
+  end
+
+  defp at_cap?(%{"variants" => variants}) when is_list(variants),
+    do: length(variants) >= @embedded_variant_cap
+
+  defp at_cap?(_product), do: false
+
+  defp wanted?(true, _product), do: true
+  defp wanted?(false, _product), do: false
+  defp wanted?(fun, product) when is_function(fun, 1), do: fun.(product) == true
+
   # Re-reads a product's variants past the REST payload's cap (see
   # `@embedded_variant_cap` above). "Exactly at the cap" and "truncated at
   # the cap" are indistinguishable from the embedded list alone, so this
@@ -314,33 +365,6 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClient do
   # variants writer, which only ever check the flag, never the id. A
   # payload with no "id" at all takes the same path (`numeric_id(nil, _)`
   # is an error), so no product at the cap ever passes through unflagged.
-  defp complete_all(req, shop_domain, products, wanted) do
-    products
-    |> Task.async_stream(&complete_or_mark(req, shop_domain, &1, wanted),
-      max_concurrency: @backfill_concurrency,
-      ordered: true,
-      timeout: :infinity
-    )
-    |> Enum.map(fn {:ok, product} -> product end)
-  end
-
-  defp complete_or_mark(req, shop_domain, product, wanted) do
-    cond do
-      not at_cap?(product) -> product
-      wanted?(wanted, product) -> complete_variants(req, shop_domain, product)
-      true -> Map.put(product, @variants_incomplete_key, inspect(:not_requested))
-    end
-  end
-
-  defp at_cap?(%{"variants" => variants}) when is_list(variants),
-    do: length(variants) >= @embedded_variant_cap
-
-  defp at_cap?(_product), do: false
-
-  defp wanted?(true, _product), do: true
-  defp wanted?(false, _product), do: false
-  defp wanted?(fun, product) when is_function(fun, 1), do: fun.(product) == true
-
   defp complete_variants(req, shop_domain, %{"variants" => variants} = product)
        when is_list(variants) and length(variants) >= @embedded_variant_cap do
     case numeric_id(product["id"], :invalid_product_id) do

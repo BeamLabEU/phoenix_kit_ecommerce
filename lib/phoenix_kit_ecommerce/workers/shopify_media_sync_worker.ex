@@ -119,16 +119,19 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   every `Writer.sync_images/3` result; for `"variants"`,
   `%{"values_created" => n, "approximated" => n}` summed from every
   `Writer.sync_variants/2` result — `"approximated"` counts products
-  whose `:fit` came out non-exact (`%{}` for `"collections"`, which
+  whose modifiers only approximate Shopify (`:fit.approximated?`; a base
+  price that merely drifted is a warning but not counted here) (`%{}` for `"collections"`, which
   carries its own summary under `"result"` instead — see below).
   `"total"`/`"done"` still count every Shopify product this run looked
   at (matched + skipped + unmatched in-scope errors), same as before.
 
-  `"warnings"` — one entry per product whose price was written but only
-  approximated (`Writer.sync_variants/3`'s own `:warnings`, see
-  `VariantMapper`'s moduledoc): the write succeeded, by the rule the
-  item asked for, so it is kept apart from `"errors"` rather than
-  reported as a failure. Always `[]` for `"images"`/`"collections"`.
+  `"warnings"` — one entry per product whose storefront price does not
+  reproduce Shopify: its modifiers only approximate a non-additive grid
+  (by the rule the item asked for), or its base price no longer equals
+  Shopify's cheapest variant (`Writer.sync_variants/3`'s own `:warnings`,
+  see `VariantMapper`'s moduledoc). The write succeeded, so it is kept
+  apart from `"errors"` rather than reported as a failure. Always `[]`
+  for `"images"`/`"collections"`.
 
   A job in flight has `"finished_at" => nil`; a caller reading this to
   decide whether to disable a button matches `progress["kind"]` against
@@ -415,7 +418,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   end
 
   defp merge_stats(stats, "variants", result) do
-    approximated = if match?(%{fit: %{exact?: false}}, result), do: 1, else: 0
+    approximated = if match?(%{fit: %{approximated?: true}}, result), do: 1, else: 0
 
     stats
     |> Map.update(

@@ -213,8 +213,23 @@ defmodule PhoenixKitEcommerce.Catalogue.ExtensionTest do
     test "a base price off Shopify's cheapest variant is named with its fix" do
       html = render_fit(%{"under" => 14, "max_under" => "19.28", "base_offset" => "-19.28"})
 
-      assert html =~ "The base price is -19.28 off Shopify&#39;s cheapest variant"
+      assert html =~
+               "At the last variants sync the base price was -19.28 off Shopify&#39;s cheapest variant"
+
       assert html =~ "Changes"
+    end
+
+    test "a base that only drifted says so, without calling the price approximated" do
+      html =
+        render_fit(%{
+          "approximated" => false,
+          "under" => 9,
+          "max_under" => "34.00",
+          "base_offset" => "-34.00"
+        })
+
+      assert html =~ "base price was -34.00 off"
+      refute html =~ "Price approximated"
     end
 
     test "a zero base offset adds nothing" do
