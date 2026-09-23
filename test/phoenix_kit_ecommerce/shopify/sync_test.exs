@@ -151,10 +151,12 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
     end
 
     # A whole store holds far more products at the REST payload's
-    # 100-variant cap than a check compares: only a matched product (its
-    # price is diffed) or an in-scope newcomer (creating it writes a price)
-    # is worth re-reading. The rest come back flagged, never re-read.
-    test "re-reads full variant lists only for matched and in-scope products" do
+    # 100-variant cap than a check compares: under the Legacy source only a
+    # matched product (its price is diffed) is worth re-reading — no
+    # newcomer is ever offered, so even an in-scope one's price is never
+    # read. The rest come back flagged, never re-read. (The catalogue
+    # source's in-scope newcomer is pinned in `SyncCatalogueTest`.)
+    test "re-reads full variant lists only for matched products under the legacy source" do
       uuid = connect_shopify()
       create_product(%{"slug" => %{"en" => "planter"}})
       test_pid = self()
@@ -187,7 +189,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncTest do
       assert {:ok, _result} = Sync.check(uuid, check_opts(scope: scope))
 
       assert_received {:backfilled, "1"}
-      assert_received {:backfilled, "2"}
+      refute_received {:backfilled, "2"}
       refute_received {:backfilled, "3"}
     end
   end

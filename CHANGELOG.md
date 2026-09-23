@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.14 - 2026-09-23
+
+### Added
+
+- **Shopify variant prices are fitted by a per-item rule** (#68). A
+  Shopify price grid that per-option modifiers can't reproduce is now
+  fitted "never cheaper than Shopify" by default: one option absorbs the
+  shortfall, so no combination sells below Shopify's price. Items can
+  choose "cheapest variant" instead. The fit is stored on the item, shown
+  as a note on its form, and listed as a price warning on the sync run,
+  kept separate from errors. The note also flags a base price that no
+  longer equals Shopify's cheapest variant.
+
+### Fixed
+
+- **Products with more than 100 variants were read from their first 100
+  only** (#68). Shopify's REST payload embeds at most 100 variants, so the
+  cheapest price could be missed. A capped product whose prices are read
+  is now re-read in full, four at a time. If that re-read fails, the
+  product's prices are neither compared nor written that run, and the
+  rest of the catalog syncs normally.
+- **A Legacy-source check no longer re-reads unmatched products.** Under
+  the Legacy product source no new products are offered, so capped
+  unmatched products are no longer re-read for a price nothing uses.
+
 ## 0.5.13 - 2026-09-22
 
 ### Added
