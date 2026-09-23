@@ -118,10 +118,11 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   `%{"downloaded" => n, "reused" => n, "attached" => n}` summed from
   every `Writer.sync_images/3` result; for `"variants"`,
   `%{"values_created" => n, "approximated" => n}` summed from every
-  `Writer.sync_variants/2` result — `"approximated"` counts products
-  whose modifiers only approximate Shopify (`:fit.approximated?`; a base
-  price that merely drifted is a warning but not counted here) (`%{}` for `"collections"`, which
-  carries its own summary under `"result"` instead — see below).
+  `Writer.sync_variants/2` result, where `"approximated"` counts products
+  whose modifiers only approximate Shopify (`:fit.approximated?`) — a base
+  price that merely drifted is a warning but is not counted there. It is
+  `%{}` for `"collections"`, which carries its own summary under
+  `"result"` instead (see below).
   `"total"`/`"done"` still count every Shopify product this run looked
   at (matched + skipped + unmatched in-scope errors), same as before.
 

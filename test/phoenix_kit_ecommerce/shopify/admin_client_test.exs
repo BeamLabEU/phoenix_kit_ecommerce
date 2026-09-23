@@ -469,7 +469,7 @@ defmodule PhoenixKitEcommerce.Shopify.AdminClientTest do
       assert {:ok, _products} =
                AdminClient.fetch_products(uuid, req_options() ++ [complete_variants: predicate])
 
-      assert_received {:predicate_ran_in, _pid}
+      assert_received {:predicate_ran_in, ^test_pid}
 
       pids =
         Stream.repeatedly(fn ->
