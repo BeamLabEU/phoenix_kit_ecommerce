@@ -689,11 +689,13 @@ defmodule PhoenixKitEcommerce.Options do
   Use this for displaying option selectors in the product UI.
   """
   def get_selectable_specs_for_product(product) do
+    schema = get_option_schema_for_product(product)
+
     schema_specs =
-      product
-      |> get_option_schema_for_product()
+      schema
       |> get_selectable_specs()
       |> filter_by_product_option_values(product)
+      |> require_keys_priced_as_required(price_affecting_specs(schema, product))
 
     # Discover additional options from product metadata (without price requirement)
     discovered_specs = discover_selectable_options_from_metadata(product)
@@ -783,9 +785,14 @@ defmodule PhoenixKitEcommerce.Options do
   but are not defined in the schema (e.g., imported products with custom options).
   """
   def get_price_affecting_specs_for_product(product) do
+    product
+    |> get_option_schema_for_product()
+    |> price_affecting_specs(product)
+  end
+
+  defp price_affecting_specs(schema, product) do
     schema_specs =
-      product
-      |> get_option_schema_for_product()
+      schema
       |> get_price_affecting_specs()
       |> filter_by_product_option_values(product)
 
@@ -794,6 +801,25 @@ defmodule PhoenixKitEcommerce.Options do
 
     # Merge: schema specs take priority over discovered
     merge_discovered_specs(schema_specs, discovered_specs)
+  end
+
+  # The picker must require every key the PRICE LIST requires. The two
+  # lists merge schema over discovered separately, so an admin's option
+  # that does not itself affect price (global `liquid_color`, optional)
+  # takes the picker while the price list keeps the discovered, required
+  # +32.00 spec for the same key — and that option was then neither
+  # pre-selected nor enforced, re-opening the carted-at-base-price
+  # defect. A price-affecting admin option is on both lists, so its own
+  # flag still decides.
+  defp require_keys_priced_as_required(specs, price_specs) do
+    required_keys =
+      for %{"key" => key, "required" => true} <- price_specs, into: MapSet.new(), do: key
+
+    Enum.map(specs, fn spec ->
+      if MapSet.member?(required_keys, spec["key"]),
+        do: Map.put(spec, "required", true),
+        else: spec
+    end)
   end
 
   # Filters options - keeps only those for which product has values in metadata.

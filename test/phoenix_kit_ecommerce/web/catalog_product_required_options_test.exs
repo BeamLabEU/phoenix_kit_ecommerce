@@ -24,6 +24,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductRequiredOptionsTest do
   use PhoenixKitEcommerce.LiveCase, async: false
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Options
 
   defp lang do
     PhoenixKitEcommerce.SlugResolver.normalize_language_public(
@@ -136,6 +137,58 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductRequiredOptionsTest do
     view |> element("button[phx-click=add_to_cart]") |> render_click()
 
     assert has_element?(view, "legend.text-error", "Liquid Color")
+    assert cart_lines(session_id) == []
+  end
+
+  test "an admin's price-neutral option on the priced key still starts selected", %{
+    conn: conn,
+    product: product
+  } do
+    # The picker shows the admin's spec for `liquid_color`; the price list
+    # still prices it from the discovered +32.00.
+    {:ok, _} =
+      Options.update_global_options([
+        %{
+          "key" => "liquid_color",
+          "label" => "Liquid",
+          "type" => "select",
+          "options" => ["Black", "Blue"],
+          "required" => false,
+          "position" => 0
+        }
+      ])
+
+    view = open(conn, product)
+
+    assert has_element?(view, option("liquid_color", "Black") <> ".btn-primary")
+    assert headline(view) =~ "67.52"
+  end
+
+  test "a required option the context adds after the page opened is refused by its label", %{
+    conn: conn,
+    product: product,
+    session_id: session_id
+  } do
+    view = open(conn, product)
+
+    # Made required after mount: the page's own check cannot see it, the
+    # context's does, and names it by its key.
+    {:ok, _} =
+      Options.update_global_options([
+        %{
+          "key" => "surface_finish",
+          "label" => "Finish",
+          "type" => "select",
+          "options" => ["Matte", "Gloss"],
+          "required" => true,
+          "position" => 0
+        }
+      ])
+
+    html = view |> element("button[phx-click=add_to_cart]") |> render_click()
+
+    assert html =~ "Missing required option: Finish."
+    refute html =~ "surface_finish"
     assert cart_lines(session_id) == []
   end
 end

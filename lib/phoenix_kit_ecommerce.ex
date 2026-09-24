@@ -2432,7 +2432,17 @@ defmodule PhoenixKitEcommerce do
   Adds item to cart.
 
   ## Options
-  - `:selected_specs` - Map of selected specifications (for dynamic pricing)
+  - `:selected_specs` - Map of selected specifications (for dynamic pricing).
+    Checked by `validate_selected_specs/2` — empty or not — so a product with
+    a required option is refused with `{:error, :missing_required_option, key}`
+    until every one is chosen.
+  - `:skip_spec_validation` - `true` skips that check (default `false`): the
+    line is carted with whatever `:selected_specs` holds, even nothing for a
+    product with required options, and priced from it. Trusted callers only.
+  - `:language` - the language the shopper's page used. The product is re-read
+    in it before pricing, so `:selected_specs` values (option labels, which
+    differ per language on the catalogue source) match its price modifiers,
+    and the line's product title is snapshotted in it.
 
   ## Examples
 

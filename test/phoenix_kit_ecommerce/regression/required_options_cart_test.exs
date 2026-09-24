@@ -111,6 +111,38 @@ defmodule PhoenixKitEcommerce.Regression.RequiredOptionsCartTest do
       assert lines(cart) == []
     end
 
+    test "is refused when an admin's non-price option of the same key shadows the priced one",
+         %{product: product} do
+      # Global `liquid_color`, optional and price-neutral: the picker gets
+      # the admin's spec, the price list still gets the discovered +32.00.
+      {:ok, _} =
+        Options.update_global_options([
+          %{
+            "key" => "liquid_color",
+            "label" => "Liquid",
+            "type" => "select",
+            "options" => ["Black", "Blue"],
+            "required" => false,
+            "position" => 0
+          }
+        ])
+
+      cart = cart()
+
+      assert {:error, :missing_required_option, "liquid_color"} =
+               Shop.add_to_cart(cart, product, 1, selected_specs: %{"cup_color" => "White"})
+
+      assert lines(cart) == []
+    end
+
+    test "is carted with nothing chosen only when the caller opts out of validation",
+         %{product: product} do
+      assert {:ok, cart} = Shop.add_to_cart(cart(), product, 1, skip_spec_validation: true)
+
+      assert [line] = cart.items
+      assert line.selected_specs == %{}
+    end
+
     test "is priced from the full selection once every option is chosen", %{product: product} do
       specs = %{"liquid_color" => "Blue", "cup_color" => "Gold"}
 

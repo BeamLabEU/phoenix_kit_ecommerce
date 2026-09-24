@@ -13,7 +13,11 @@ defmodule PhoenixKitEcommerce.Options.DiscoveredRequiredTest do
   chosen at all.
 
   A schema option keeps the admin's own `"required"` flag, narrowed or
-  not — only the discovered specs change.
+  not — unless the option's PRICE still comes from the discovered spec:
+  a schema option that does not itself affect price leaves the price
+  list to the discovered one, and the picker must then require what the
+  price list requires, or the +32.00 is charged only when the shopper
+  happens to pick a colour.
 
   `DataCase` because the spec builders read the global option schema
   through `Repo` even when it is empty (see `option_labels_test.exs`).
@@ -54,6 +58,57 @@ defmodule PhoenixKitEcommerce.Options.DiscoveredRequiredTest do
     assert specs["liquid_color"]["required"] == true
     assert specs["cup_color"]["required"] == true
     refute specs["cup_color"]["affects_price"]
+  end
+
+  defp configure_liquid_color(attrs) do
+    {:ok, _} =
+      Options.update_global_options([
+        Map.merge(
+          %{
+            "key" => "liquid_color",
+            "label" => "Liquid",
+            "type" => "select",
+            "options" => ["Black", "Blue"],
+            "required" => false,
+            "position" => 0
+          },
+          attrs
+        )
+      ])
+  end
+
+  test "a schema option that leaves its key's price to a discovered option is required" do
+    configure_liquid_color(%{})
+    product = product(@metadata)
+
+    assert [%{"key" => "liquid_color", "_discovered" => true}] =
+             Options.get_price_affecting_specs_for_product(product)
+
+    specs = product |> Options.get_selectable_specs_for_product() |> by_key()
+
+    # Still the admin's spec (its label), but required like the price list's.
+    assert specs["liquid_color"]["label"] == "Liquid"
+    refute Map.has_key?(specs["liquid_color"], "_discovered")
+    assert specs["liquid_color"]["required"] == true
+  end
+
+  test "a price-affecting schema option keeps the admin's required flag over discovered modifiers" do
+    configure_liquid_color(%{
+      "affects_price" => true,
+      "modifier_type" => "fixed",
+      "allow_override" => true,
+      "price_modifiers" => %{"Black" => "0", "Blue" => "5.00"}
+    })
+
+    product = product(@metadata)
+
+    assert [%{"key" => "liquid_color"} = price_spec] =
+             Options.get_price_affecting_specs_for_product(product)
+
+    refute Map.has_key?(price_spec, "_discovered")
+
+    specs = product |> Options.get_selectable_specs_for_product() |> by_key()
+    assert specs["liquid_color"]["required"] == false
   end
 
   test "a schema option narrowed to the product's values keeps the admin's required flag" do
