@@ -599,7 +599,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         )
 
         # Show user-friendly message based on error code
-        user_message = get_user_friendly_error_message(code, detail)
+        user_message =
+          get_user_friendly_error_message(code, labelled_detail(code, detail, product))
 
         {:noreply,
          socket
@@ -607,6 +608,19 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> put_flash(:error, user_message)}
     end
   end
+
+  # The context names a missing option by its KEY ("surface_finish"); the
+  # shopper knows it by the label the picker shows. Read off the product's
+  # CURRENT specs: the context only refuses what the page's own check let
+  # through, i.e. when the options changed after mount.
+  defp labelled_detail(:missing_required_option, key, product) when is_binary(key) do
+    case Enum.find(Shop.get_selectable_specs(product), &(&1["key"] == key)) do
+      %{"label" => label} when is_binary(label) and label != "" -> label
+      _ -> key
+    end
+  end
+
+  defp labelled_detail(_code, detail, _product), do: detail
 
   # Get user-friendly error message based on error code and details
   # Keep messages concise for toast display (max ~80 chars per line)
