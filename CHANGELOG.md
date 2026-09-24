@@ -4,6 +4,113 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.14 - 2026-09-23
+
+### Added
+
+- **Shopify variant prices are fitted by a per-item rule** (#68). A
+  Shopify price grid that per-option modifiers can't reproduce is now
+  fitted "never cheaper than Shopify" by default: one option absorbs the
+  shortfall, so no combination sells below Shopify's price. Items can
+  choose "cheapest variant" instead. The fit is stored on the item, shown
+  as a note on its form, and listed as a price warning on the sync run,
+  kept separate from errors. The note also flags a base price that no
+  longer equals Shopify's cheapest variant.
+
+### Fixed
+
+- **Products with more than 100 variants were read from their first 100
+  only** (#68). Shopify's REST payload embeds at most 100 variants, so the
+  cheapest price could be missed. A capped product whose prices are read
+  is now re-read in full, four at a time. If that re-read fails, the
+  product's prices are neither compared nor written that run, and the
+  rest of the catalog syncs normally.
+- **A Legacy-source check no longer re-reads unmatched products.** Under
+  the Legacy product source no new products are offered, so capped
+  unmatched products are no longer re-read for a price nothing uses.
+
+## 0.5.13 - 2026-09-22
+
+### Added
+
+- **Shopify sync Settings tab links the connected integration** (#67).
+  The shop domain and Admin API token live on the integration, and once a
+  connection existed nothing on the page pointed there; the Settings tab
+  now links `/admin/settings/integrations/<connection uuid>`.
+
+### Fixed
+
+- **The "Shopify isn't connected yet" link opened an error.** It pointed
+  at `/admin/settings/integrations/website`, which core's edit route
+  reads as a connection uuid, flashing "Integration not found" before
+  redirecting. It now links the Integrations list.
+- **Integration links are shown only to viewers core admits.** Core gates
+  its Integrations pages on `integrations_system`, which no `shop.*` key
+  implies; a shop-only role no longer sees links that bounce off an
+  access-denied redirect.
+
+## 0.5.12 - 2026-09-22
+
+### Added
+
+- **Shopify sync page tabs** (#65). The page splits into Changes, New in
+  Shopify, Media & collections and Settings, driven by a `?tab=` query
+  param and patch links, so switching never remounts the LiveView and
+  never drops in-flight state (media-sync progress, the check result).
+  The New in Shopify list and each media kind's error list gain
+  "load more" instead of a hard 50-row cap.
+
+### Fixed
+
+- **Shopify status differences that no apply could close** (#66). The
+  sync diff compared `product.status`, which under the catalogue source
+  is a DERIVED visibility value — forced to `archived` whenever the
+  catalogue itself retired the item — while an apply writes
+  `shop_status`. A retired product whose stored merchant status already
+  matched Shopify was reported as differing and stayed reported through
+  every apply. `%Product{}` gains a virtual `:merchant_status`, filled
+  from `shop_status` by the catalogue view, and the diff compares that;
+  the legacy source is unaffected, where `:status` already is the
+  merchant status.
+- **An incoming Shopify status the apply cannot store is no longer
+  offered.** `Catalogue.Writer` coerces anything outside
+  `draft`/`active`/`archived` to `draft`, so reporting such a difference
+  offered an apply that would silently retire the product and still
+  report a difference on the next check. The diff now skips it.
+
+## 0.5.11 - 2026-09-22
+
+### Added
+
+- **Shopify sync scope** (#62). An allowlist by tags and/or product types
+  (`phoenix_kit_shop_config["shopify_sync_scope"]`, default: the whole
+  store) that decides what an *unmatched* Shopify product means. When
+  out of scope, the media sync counts it as skipped instead of raising a
+  `no_matching_item` error, and "Check for changes" does not offer it for
+  import. Products the catalogue already has always sync. Scope saves are
+  logged as `shop.shopify_sync_scope_saved`.
+- **"New in Shopify" panel** on the sync page (catalogue source). It lists
+  in-scope Shopify products with no local match, each with an Add button,
+  plus an Add all button. Both go through the page's usual confirm step
+  and currency guard.
+- **Per-kind media-sync progress.** Images, variants and collections each
+  keep their own last result (`shopify_media_sync:<kind>`), with
+  matched/skipped counts, per-kind stats and a collapsible error list.
+  Running one kind no longer erases another kind's result. The old single
+  record is still read as a fallback.
+
+### Fixed
+
+- **Applying any Shopify field other than status no longer resets the
+  product's shop status to draft** (#63). An absent `:status` now leaves
+  the stored `shop_status` untouched. An unrecognised status still falls
+  back to draft.
+- **A malformed sync-scope row can no longer crash the sync page, the
+  check or the media sync.** Non-string tag and product-type entries are
+  dropped.
+- **An images run where the scope skipped every product no longer reports
+  "Nothing new — all images already present".**
+
 ## 0.5.10 - 2026-09-20
 
 ### Changed

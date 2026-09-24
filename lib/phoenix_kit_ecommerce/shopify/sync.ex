@@ -106,6 +106,7 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   alias PhoenixKitEcommerce.Shopify.ProductDiff
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Source
+  alias PhoenixKitEcommerce.Shopify.SyncScope
   alias PhoenixKitEcommerce.Translations
 
   @localized_fields [:title, :body_html, :description]
@@ -161,12 +162,25 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   (e.g. in tests), same reason `ProductDiff.diff/4` takes it. The rest
   of `opts` (`:admin_options`, `:storefront_options`) is forwarded to
   `Source.fetch/2`.
+
+  `:new_products` is additionally filtered through
+  `PhoenixKitEcommerce.Shopify.SyncScope` (`opts[:scope]`, default
+  `SyncScope.get/0` — loaded once per call, not once per unmatched
+  product): only products the scope considers in-scope are offered as
+  create-`Change`s; the rest are dropped and counted in
+  `:new_products_out_of_scope` instead, so a store that deliberately
+  syncs a subset of its Shopify catalog never has the remainder offered
+  for import. The field diff of a MATCHED product (`:changes`) is never
+  scoped — see `Workers.ShopifyMediaSyncWorker`'s own moduledoc for why
+  this same rule applies there: the scope only ever decides what an
+  UNMATCHED product means.
   """
   @spec check(String.t(), keyword()) ::
           {:ok,
            %{
              changes: [Change.t()],
              new_products: [Change.t()],
+             new_products_out_of_scope: non_neg_integer(),
              source: :admin | :storefront,
              fallback_reason: term() | nil,
              total_shopify_products: non_neg_integer(),
@@ -174,20 +188,33 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
            }}
           | {:error, term()}
   def check(integration_uuid, opts \\ []) do
-    {base_locale, source_opts} =
+    {base_locale, opts} =
       Keyword.pop_lazy(opts, :base_locale, &Translations.default_language/0)
+
+    {scope, source_opts} = Keyword.pop_lazy(opts, :scope, &SyncScope.get/0)
+
+    # Loaded before the fetch so the Admin client re-reads a capped
+    # product's full variant list only where this check reads its price: a
+    # matched product (price diff) or an in-scope newcomer (a create writes
+    # its price — catalogue source only, the one `new_product_changes/5`
+    # builds creates for). A caller's own `admin_options[:complete_variants]`
+    # wins.
+    local_products = Shop.list_products()
+    source_opts = put_complete_variants(source_opts, local_products, base_locale, scope)
 
     with {:ok, %{source: source, products: products, only: only, fallback_reason: reason}} <-
            Source.fetch(integration_uuid, source_opts) do
-      local_products = Shop.list_products()
       changes = ProductDiff.diff(local_products, products, base_locale, only: only)
       matched = ProductDiff.matched_count(local_products, products, base_locale)
-      new_products = new_product_changes(local_products, products, base_locale, source)
+
+      {new_products, out_of_scope} =
+        new_product_changes(local_products, products, base_locale, source, scope)
 
       {:ok,
        %{
          changes: changes,
          new_products: new_products,
+         new_products_out_of_scope: out_of_scope,
          source: source,
          fallback_reason: reason,
          total_shopify_products: length(products),
@@ -196,21 +223,59 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
     end
   end
 
+  defp put_complete_variants(source_opts, local_products, base_locale, scope) do
+    handles = ProductDiff.local_handles(local_products, base_locale)
+    # Under the Legacy source no newcomer is ever offered, so an in-scope
+    # unmatched product's prices are never read — re-reading every capped
+    # product in scope (the whole store under `mode: :all`) would be
+    # requests spent on nothing.
+    creates? = ProductSource.current() == ProductSource.Catalogue
+
+    wanted = fn product ->
+      MapSet.member?(handles, product["handle"]) or
+        (creates? and SyncScope.in_scope?(product, scope))
+    end
+
+    Keyword.update(
+      source_opts,
+      :admin_options,
+      [complete_variants: wanted],
+      &Keyword.put_new(&1, :complete_variants, wanted)
+    )
+  end
+
   # New-handle creation is a catalogue-source-only path (see this module's
   # moduledoc) and only meaningful against a complete Admin API listing —
   # the `:storefront` fallback only ever carries price data for products it
   # ALREADY matched by handle (see `check/2`'s own moduledoc), so treating
   # its unmatched remainder as "new in Shopify" would be wrong for a
   # completely different reason than the legacy source's.
-  defp new_product_changes(local_products, products, base_locale, :admin) do
+  defp new_product_changes(local_products, products, base_locale, :admin, scope) do
     if ProductSource.current() == ProductSource.Catalogue do
-      ProductDiff.new_product_changes(local_products, products, base_locale)
+      # Scope first, then build the changes: an out-of-scope product is
+      # never re-read past the 100-variant cap (`check/2` doesn't ask for
+      # it), and `new_product_changes/3` refuses a flagged product — so
+      # filtering by scope afterwards would drop such a product from the
+      # out-of-scope count instead of counting it.
+      {in_scope, out_of_scope} = SyncScope.partition(products, scope)
+      handles = ProductDiff.local_handles(local_products, base_locale)
+
+      {ProductDiff.new_product_changes(local_products, in_scope, base_locale),
+       Enum.count(out_of_scope, &unmatched?(&1, handles))}
     else
-      []
+      {[], 0}
     end
   end
 
-  defp new_product_changes(_local_products, _products, _base_locale, :storefront), do: []
+  defp new_product_changes(_local_products, _products, _base_locale, :storefront, _scope),
+    do: {[], 0}
+
+  # Same "no local product answers to this handle" rule
+  # `ProductDiff.new_product_changes/3` applies.
+  defp unmatched?(%{"handle" => handle}, handles) when is_binary(handle) and handle != "",
+    do: not MapSet.member?(handles, handle)
+
+  defp unmatched?(_product, _handles), do: false
 
   @doc """
   Checks ONE local product against its matched Shopify product — see

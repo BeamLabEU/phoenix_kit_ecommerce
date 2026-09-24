@@ -94,16 +94,46 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     end
   end
 
+  # Per-kind progress key, unlike `seed_progress/2`'s legacy single key —
+  # lets a test set `"warnings"`/`"stats"["approximated"]` directly, the
+  # way a real `ShopifyMediaSyncWorker` run would write them.
+  defp seed_kind_progress(kind, extra) do
+    value =
+      Map.merge(
+        %{
+          "kind" => kind,
+          "total" => 3,
+          "done" => 3,
+          "matched" => 3,
+          "skipped" => 0,
+          "stats" => %{},
+          "errors" => [],
+          "started_at" => "2026-01-01T00:00:00Z",
+          "finished_at" => "2026-01-01T00:05:00Z",
+          "result" => nil
+        },
+        extra
+      )
+
+    key = "shopify_media_sync:" <> kind
+
+    %ShopConfig{}
+    |> ShopConfig.changeset(%{key: key, value: value})
+    |> Repo.insert!()
+  end
+
+  defp count_li(html), do: Regex.scan(~r/<li>/, html) |> length()
+
   test "the panel is absent under the legacy source", %{conn: conn} do
     set_product_source("legacy")
-    {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync")
+    {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
     refute html =~ ~s(id="media-sync-panel")
   end
 
   describe "catalogue source" do
     test "shows all three buttons, none disabled", %{conn: conn} do
-      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       assert html =~ ~s(id="media-sync-panel")
 
@@ -113,7 +143,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     end
 
     test "shows the active collections filter — \"none\" when never configured", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, _view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=settings")
 
       assert html =~ ~s(id="media-sync-collections-filter")
       assert html =~ "Collections filter: none"
@@ -127,7 +157,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       })
       |> Repo.insert!()
 
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=settings")
 
       filter_html = view |> element("#media-sync-collections-filter") |> render()
 
@@ -138,7 +168,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     test "clicking a button enqueues a job with that kind and the current user", %{conn: conn} do
       user_uuid = Ecto.UUID.generate()
       conn = put_test_scope(conn, fake_scope(user_uuid: user_uuid))
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       render_click(element(view, "#sync-media-images"))
 
@@ -150,7 +180,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
     test "a second click before the first job starts hits Oban's own uniqueness — no second job, an info flash instead of the success wording",
          %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       html1 = render_click(element(view, "#sync-media-images"))
       assert html1 =~ "Sync queued"
@@ -171,7 +201,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
     test "denied without shop.run_imports — no flash success, nothing enqueued", %{conn: conn} do
       conn = put_test_scope(conn, fake_scope(permissions: ["shop"]))
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       html = render_click(element(view, "#sync-media-variants"))
 
@@ -183,7 +213,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
          %{conn: conn} do
       seed_progress("images", nil)
 
-      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       assert has_element?(view, "#sync-media-images[disabled]")
       refute has_element?(view, "#sync-media-variants[disabled]")
@@ -202,7 +232,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     test "a finished progress record does not disable the button", %{conn: conn} do
       seed_progress("collections", "2026-01-01T00:05:00Z")
 
-      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
 
       refute has_element?(view, "#sync-media-collections[disabled]")
     end
@@ -210,6 +240,29 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
     test "a PubSub progress broadcast updates the panel live, without a page reload", %{
       conn: conn
     } do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
+
+      Manager.broadcast(
+        ShopifyMediaSyncWorker.topic(),
+        {:media_sync_progress,
+         %{
+           "kind" => "variants",
+           "total" => 10,
+           "done" => 4,
+           "errors" => [],
+           "started_at" => "2026-01-01T00:00:00Z",
+           "finished_at" => nil,
+           "result" => nil
+         }}
+      )
+
+      html = render(view)
+      assert html =~ "4 / 10"
+      assert has_element?(view, "#sync-media-variants[disabled]")
+    end
+
+    test "a broadcast while on another tab doesn't crash, and is visible after switching to media",
+         %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync")
 
       Manager.broadcast(
@@ -227,8 +280,69 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       )
 
       html = render(view)
-      assert html =~ "4/10"
+      refute html =~ ~s(id="media-sync-panel")
+
+      html =
+        view
+        |> element(~s(a[href$="?tab=media"]))
+        |> render_click()
+
+      assert html =~ "4 / 10"
       assert has_element?(view, "#sync-media-variants[disabled]")
+    end
+
+    test "approximated prices are listed apart from errors", %{conn: conn} do
+      seed_kind_progress("variants", %{
+        "stats" => %{"values_created" => 0, "approximated" => 1},
+        "warnings" => [
+          %{
+            "product" => "sculpture",
+            "reason" => "prices approximated (cheapest): 21 of 256 variants differ"
+          }
+        ]
+      })
+
+      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
+
+      assert html =~ "1 with approximated prices"
+      assert has_element?(view, "#media-sync-warnings-variants")
+      refute has_element?(view, "#media-sync-errors-variants")
+      assert html =~ "sculpture"
+    end
+
+    test "a record from before warnings existed renders without them", %{conn: conn} do
+      seed_kind_progress("variants", %{"stats" => %{"values_created" => 0}})
+
+      {:ok, view, html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
+
+      refute has_element?(view, "#media-sync-warnings-variants")
+      refute html =~ "approximated"
+    end
+
+    test "warnings and errors load-more counters are independent", %{conn: conn} do
+      warnings =
+        for n <- 1..30,
+            do: %{"product" => "wp#{n}", "reason" => "prices approximated: reason #{n}"}
+
+      errors = for n <- 1..30, do: %{"product" => "ep#{n}", "reason" => "boom #{n}"}
+
+      seed_kind_progress("variants", %{
+        "stats" => %{"values_created" => 0, "approximated" => 30},
+        "warnings" => warnings,
+        "errors" => errors
+      })
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shopify-sync?tab=media")
+
+      assert view |> element("#media-sync-warnings-variants") |> render() |> count_li() == 25
+      assert view |> element("#media-sync-errors-variants") |> render() |> count_li() == 25
+
+      view
+      |> element("#media-sync-warnings-load-more-variants button", "Load more")
+      |> render_click()
+
+      assert view |> element("#media-sync-warnings-variants") |> render() |> count_li() == 30
+      assert view |> element("#media-sync-errors-variants") |> render() |> count_li() == 25
     end
   end
 end
