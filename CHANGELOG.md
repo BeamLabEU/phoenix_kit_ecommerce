@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.15 - 2026-09-24
+
+### Fixed
+
+- **A product could be carted without the options it is sold in** (#69).
+  An option that comes from the product's own metadata (catalogue
+  attribute sets, imported options) was never required, and an empty
+  selection skipped validation. A product at base 35.52, with every
+  liquid colour at +32.00, went into the cart at 35.52 with no colour.
+  Every discovered option is now required and starts on its first
+  value. `add_to_cart/4` validates an empty selection too. An admin's
+  price-neutral option that shares a key with a priced discovered
+  option is required on the picker as well.
+- **The product page's "Please select:" message is translated.** It
+  was English in every locale.
+
+### Changed
+
+- **`add_to_cart/3,4` without `:selected_specs` refuses products that
+  list option values** (#69). The error is
+  `{:error, :missing_required_option, key}`. This covers every product
+  whose metadata carries `_option_values`, Legacy CSV imports included.
+  Hosts that cart through the context must pass the options, or
+  `skip_spec_validation: true` if they really mean to cart a bare line.
+
 ## 0.5.14 - 2026-09-23
 
 ### Added

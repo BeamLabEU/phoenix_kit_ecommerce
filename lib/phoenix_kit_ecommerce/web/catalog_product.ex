@@ -468,7 +468,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         do_add_to_cart_impl(socket)
 
       {:error, missing_labels} ->
-        message = "Please select: #{Enum.join(missing_labels, ", ")}"
+        message = gettext("Please select: %{options}", options: Enum.join(missing_labels, ", "))
         {:noreply, put_flash(socket, :error, message)}
     end
   end
