@@ -2472,6 +2472,7 @@ defmodule PhoenixKitEcommerce do
       when is_integer(quantity) do
     with :ok <- validate_shop_enabled(),
          :ok <- validate_cart_currency(cart, product),
+         :ok <- validate_selected_specs(product, %{}),
          {:ok, cart} <- rebase_cart(cart) do
       add_simple_product_to_cart(cart, product, quantity, nil)
     end
@@ -3056,8 +3057,11 @@ defmodule PhoenixKitEcommerce do
   # ============================================
 
   defp maybe_validate_specs(_product, _specs, true), do: :ok
-  defp maybe_validate_specs(_product, specs, _skip) when specs == %{}, do: :ok
 
+  # An EMPTY selection is validated too: it is exactly the one that
+  # leaves every required option unchosen, and skipping it put a
+  # 35.52 line with no colour into the cart for a product whose every
+  # combination costs 67.52.
   defp maybe_validate_specs(product, selected_specs, _skip) do
     validate_selected_specs(product, selected_specs)
   end
