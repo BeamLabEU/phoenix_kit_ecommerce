@@ -5985,6 +5985,11 @@ msgstr[2] "%{count} предупреждений о цене"
 msgid "warnings"
 msgstr "предупреждений"
 
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:471
+#, elixir-autogen, elixir-format
+msgid "Please select: %{options}"
+msgstr "Пожалуйста, выберите: %{options}"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:2135
 #, elixir-autogen, elixir-format
 msgid "%{count} held back after a recent failure"

@@ -5931,6 +5931,11 @@ msgstr[1] "%{count} hinnahoiatust"
 msgid "warnings"
 msgstr "hoiatust"
 
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:471
+#, elixir-autogen, elixir-format
+msgid "Please select: %{options}"
+msgstr "Palun valige: %{options}"
+
 #: lib/phoenix_kit_ecommerce/web/translations.ex:2135
 #, elixir-autogen, elixir-format
 msgid "%{count} held back after a recent failure"
