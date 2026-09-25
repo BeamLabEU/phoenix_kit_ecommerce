@@ -59,7 +59,7 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
     if engine?(),
-      do: @engine.perform(__MODULE__),
+      do: scheduled_tick(),
       else: {:snooze, SweepSettings.interval_minutes() * 60}
   end
 
@@ -104,6 +104,8 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   @spec run_manual_tick() :: {atom(), map()}
   def run_manual_tick, do: tick(:manual)
 
+  @tick_lock_key "phoenix_kit_ecommerce:translation_sweep_tick"
+
   # One direct tick at a time. The engine sees an executing Oban sweep job
   # (`:sweep_running`), not another direct call: two tabs pressing Run
   # sweep at once would both select the same candidates and enqueue them
@@ -122,7 +124,27 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
     result
   end
 
-  @tick_lock_key "phoenix_kit_ecommerce:translation_sweep_tick"
+  # The scheduled tick waits for a direct one to commit. The engine only
+  # refuses a direct tick while a scheduled one executes, not the other way
+  # round, and a direct tick's jobs are invisible until its transaction
+  # commits — without the wait, a scheduled tick starting mid-run reads
+  # them as not in flight and enqueues the same pairs again. The successor
+  # is scheduled first and outside the lock's transaction, as the engine's
+  # own `perform/1` does, so a tick that raises cannot roll the chain back.
+  defp scheduled_tick do
+    _ = @engine.ensure_scheduled(__MODULE__)
+
+    {:ok, _result} =
+      PhoenixKit.RepoHelper.repo().transaction(fn ->
+        PhoenixKit.RepoHelper.repo().query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          @tick_lock_key
+        ])
+
+        @engine.run_tick(__MODULE__, :interval)
+      end)
+
+    :ok
+  end
 
   defp tick_lock? do
     %{rows: [[locked?]]} =

@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.16 - 2026-09-25
+
+### Fixed
+
+- **Two opposite category re-parents could commit a cycle** (#70). Every
+  re-parent, single or bulk (moves to the top level included), and every
+  category delete now take one lock on the shop's category tree. Bulk
+  broadcasts go out after the commit.
+- **Two Run sweep presses at once enqueued the same translations twice**
+  (#70). The second one now answers "A sweep is already running". A
+  scheduled tick that starts during a manual one waits for it to finish
+  and does not re-enqueue its pairs.
+- **The sweep buttons took a double click** (#70). Run sweep and Save
+  sweep settings are disabled while their event runs.
+
+### Changed
+
+- **The translation sweep runs on `PhoenixKitAI.TranslationSweep`**
+  (#70). The worker's name and public functions are unchanged. When a
+  resource is missing more languages than the ceiling has room for, it
+  is admitted for the languages that fit, so a ceiling below the
+  target-language count is accepted now. A pair whose latest job was
+  discarded in the last day is held back, and the page reports how many
+  were. The last outcome is stored under the engine's key. Without the
+  engine, the sweep reports "unavailable".
+- **Activity logging and the actor go through core** (#70), via
+  `PhoenixKit.Activity.log/3` and `PhoenixKitWeb.Actor`. The Shopify
+  media sync reads its actor the same way.
+- **Every shop admin page sets the admin header trail** (#70): the
+  E-Commerce section, the list it sits under, and the page itself.
+- **Dependency floors:** `phoenix_kit >= 2.38.0 and < 3.0.0`,
+  `phoenix_kit_ai ~> 0.24` (optional).
+
 ## 0.5.15 - 2026-09-24
 
 ### Fixed
