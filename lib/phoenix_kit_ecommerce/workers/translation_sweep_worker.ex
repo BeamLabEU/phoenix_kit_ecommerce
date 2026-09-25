@@ -110,21 +110,21 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   # twice. A transaction-scoped try-lock makes the second one answer
   # `:sweep_running` instead, the wording the page already has.
   defp tick(trigger) do
-    if engine?() do
-      {:ok, result} =
-        PhoenixKit.RepoHelper.repo().transaction(fn ->
-          if tick_lock?(), do: @engine.run_tick(__MODULE__, trigger), else: {:sweep_running, %{}}
-        end)
+    if engine?(), do: locked_tick(trigger), else: {:ai_unavailable, %{}}
+  end
 
-      result
-    else
-      {:ai_unavailable, %{}}
-    end
+  defp locked_tick(trigger) do
+    {:ok, result} =
+      PhoenixKit.RepoHelper.repo().transaction(fn ->
+        if tick_lock?(), do: @engine.run_tick(__MODULE__, trigger), else: {:sweep_running, %{}}
+      end)
+
+    result
   end
 
   @tick_lock_key "phoenix_kit_ecommerce:translation_sweep_tick"
 
-  defp tick_lock?() do
+  defp tick_lock? do
     %{rows: [[locked?]]} =
       PhoenixKit.RepoHelper.repo().query!("SELECT pg_try_advisory_xact_lock(hashtext($1))", [
         @tick_lock_key
