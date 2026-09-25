@@ -104,8 +104,34 @@ defmodule PhoenixKitEcommerce.Workers.TranslationSweepWorker do
   @spec run_manual_tick() :: {atom(), map()}
   def run_manual_tick, do: tick(:manual)
 
-  defp tick(trigger),
-    do: if(engine?(), do: @engine.run_tick(__MODULE__, trigger), else: {:ai_unavailable, %{}})
+  # One direct tick at a time. The engine sees an executing Oban sweep job
+  # (`:sweep_running`), not another direct call: two tabs pressing Run
+  # sweep at once would both select the same candidates and enqueue them
+  # twice. A transaction-scoped try-lock makes the second one answer
+  # `:sweep_running` instead, the wording the page already has.
+  defp tick(trigger) do
+    if engine?() do
+      {:ok, result} =
+        PhoenixKit.RepoHelper.repo().transaction(fn ->
+          if tick_lock?(), do: @engine.run_tick(__MODULE__, trigger), else: {:sweep_running, %{}}
+        end)
+
+      result
+    else
+      {:ai_unavailable, %{}}
+    end
+  end
+
+  @tick_lock_key "phoenix_kit_ecommerce:translation_sweep_tick"
+
+  defp tick_lock?() do
+    %{rows: [[locked?]]} =
+      PhoenixKit.RepoHelper.repo().query!("SELECT pg_try_advisory_xact_lock(hashtext($1))", [
+        @tick_lock_key
+      ])
+
+    locked?
+  end
 
   @doc ~s(The last tick's outcome — `%{"reason" => …, "since" => …}`, `since` being when ticks began ending this way — or `nil`.)
   @spec last_run() :: map() | nil

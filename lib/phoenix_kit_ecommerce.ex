@@ -1730,7 +1730,9 @@ defmodule PhoenixKitEcommerce do
   def delete_category(%Category{} = category) do
     category_uuid = category.uuid
 
-    case repo().delete(category) do
+    # Under the tree lock: the FK's ON DELETE SET NULL re-parents the
+    # children, which must not happen under a re-parent deciding a cycle.
+    case in_category_tree(true, fn -> repo().delete(category) end) do
       {:ok, _} = result ->
         Events.broadcast_category_deleted(category_uuid)
         result
@@ -1883,18 +1885,22 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp do_bulk_delete_categories(ids) do
-    # Nullify category references on products to prevent orphans
-    orphan_query = Product |> where([p], p.category_uuid in ^ids)
+    # Under the tree lock, like a single delete: the FK re-parents children.
+    {:ok, count} =
+      in_category_tree(true, fn ->
+        # Nullify category references on products to prevent orphans
+        orphan_query = Product |> where([p], p.category_uuid in ^ids)
 
-    repo().update_all(orphan_query,
-      set: [category_uuid: nil, updated_at: UtilsDate.utc_now()]
-    )
+        repo().update_all(orphan_query,
+          set: [category_uuid: nil, updated_at: UtilsDate.utc_now()]
+        )
 
-    # Delete categories
-    category_query = Category |> where([c], c.uuid in ^ids)
+        category_query = Category |> where([c], c.uuid in ^ids)
+        {count, _} = repo().delete_all(category_query)
+        {:ok, count}
+      end)
 
-    {count, _} = repo().delete_all(category_query)
-
+    # After the commit: nobody hears of a delete that could still roll back.
     if count > 0 do
       Events.broadcast_categories_bulk_deleted(ids)
     end

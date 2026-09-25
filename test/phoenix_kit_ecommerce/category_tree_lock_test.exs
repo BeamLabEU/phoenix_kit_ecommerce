@@ -71,4 +71,20 @@ defmodule PhoenixKitEcommerce.CategoryTreeLockTest do
     assert Task.await(up) == 1
     assert Repo.reload(a).parent_uuid == nil
   end
+
+  test "a delete waits for the lock too (the FK re-parents its children)" do
+    [a, b] = [category!("A"), category!("B")]
+    {:ok, _} = Shop.create_category(%{name: %{"en" => "A child"}, parent_uuid: a.uuid})
+    conn = holder()
+    Postgrex.query!(conn, "SELECT pg_advisory_lock(hashtext($1))", [@key])
+
+    del = Task.async(fn -> Shop.delete_category(a) end)
+    assert Task.yield(del, 300) == nil
+    bulk = Task.async(fn -> Shop.bulk_delete_categories([b.uuid]) end)
+    assert Task.yield(bulk, 300) == nil
+
+    Postgrex.query!(conn, "SELECT pg_advisory_unlock(hashtext($1))", [@key])
+    assert {:ok, _} = Task.await(del)
+    assert Task.await(bulk) == 1
+  end
 end
