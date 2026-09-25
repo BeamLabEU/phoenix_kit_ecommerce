@@ -12,8 +12,10 @@ and checkout hands off to `phoenix_kit_billing` for orders and payment. It
 ships admin LiveViews for the whole workflow plus the public storefront
 pages.
 
-- **Depends on:** `phoenix_kit` `~> 2.16` (Hex), `phoenix_kit_billing`
-  `~> 0.13` (hard), `phoenix_kit_ai` `~> 0.20` (optional — the
+- **Depends on:** `phoenix_kit` `>= 2.38.0 and < 3.0.0` (Hex — the release
+  that carries `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound form
+  keeps the ceiling open across later 2.x minors), `phoenix_kit_billing`
+  `~> 0.13` (hard), `phoenix_kit_ai` `~> 0.24` (optional — the
   AI-translate UI, both translation adapters, the sweep worker and the
   translations page use it, and all of them compile out when it is absent;
   0.20 is the first engine that binds `{{SourceFields}}` and forwards
@@ -189,11 +191,11 @@ Repo-local aliases:
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
   Rows carry no PII.
-- **The core pin floor is two-segment (`~> 2.16`) on purpose.** The
-  three-segment form (`~> 2.6.4`) expands to `< 2.7.0` and breaks CONSUMERS —
-  a host on a newer core minor gets an unsolvable dependency set — while
-  nothing in this repo's own run notices, which is why a test guards it.
-  Raising the floor is fine and expected; raise it in `mix.exs` and in
+- **The core pin keeps the compound form (`>= 2.38.0 and < 3.0.0`) on
+  purpose.** A three-segment `~> 2.38.0` expands to `< 2.39.0` and breaks
+  CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
+  — while nothing in this repo's own run notices, which is why a test guards
+  it. Raising the floor is fine and expected; raise it in `mix.exs` and in
   `test/core_pin_conformance_test.exs` together whenever a newly-adopted core
   or billing API needs it.
 - **Assigns available in admin LiveViews:** `@phoenix_kit_current_scope`,

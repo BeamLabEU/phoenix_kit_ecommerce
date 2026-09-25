@@ -1215,7 +1215,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
       # "0 jobs queued" — indistinguishable from "nothing needed doing",
       # on the operator's primary entry point. Same fold the sweep tick
       # does (`PhoenixKitAI.TranslationSweep`); tolerant `Map.get`
-      # because phoenix_kit_ai is an optional dep with a `~> 0.18` floor.
+      # because phoenix_kit_ai is an optional dep.
       {:ok, %{enqueued: n, conflicts: c} = result} ->
         lang_errors = Enum.map(Map.get(result, :errors, []), &{uuid, &1})
         {enq + n, conf + c, lang_errors ++ errs}

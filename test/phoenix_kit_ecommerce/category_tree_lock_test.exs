@@ -4,7 +4,9 @@ defmodule PhoenixKitEcommerce.CategoryTreeLockTest do
   cycle check, so two in opposite directions at once cannot both pass and
   commit a loop. The sandbox runs every test on one connection and cannot
   race, so this holds the lock from a second, real connection and watches
-  a re-parent wait.
+  a re-parent wait. That pins "the lock is taken on a re-parent, a move to
+  the top level included, and not on a rename"; the two-writer race itself
+  was proved on a live node, not here.
   """
   use PhoenixKitEcommerce.DataCase, async: false
 
@@ -38,5 +40,35 @@ defmodule PhoenixKitEcommerce.CategoryTreeLockTest do
     Postgrex.query!(conn, "SELECT pg_advisory_unlock(hashtext($1))", [@key])
     assert {:ok, moved} = Task.await(move)
     assert moved.parent_uuid == b.uuid
+  end
+
+  # The child is created under its parent: a re-parent here would hold the
+  # transaction-level lock for the rest of this sandboxed test.
+  test "a move to the top level waits for the lock too" do
+    b = category!("B")
+    {:ok, a} = Shop.create_category(%{name: %{"en" => "A"}, parent_uuid: b.uuid})
+    conn = holder()
+    Postgrex.query!(conn, "SELECT pg_advisory_lock(hashtext($1))", [@key])
+
+    up = Task.async(fn -> Shop.update_category(a, %{"parent_uuid" => ""}) end)
+    assert Task.yield(up, 300) == nil
+
+    Postgrex.query!(conn, "SELECT pg_advisory_unlock(hashtext($1))", [@key])
+    assert {:ok, moved} = Task.await(up)
+    assert moved.parent_uuid == nil
+  end
+
+  test "a bulk move to the top level waits for the lock too" do
+    b = category!("B")
+    {:ok, a} = Shop.create_category(%{name: %{"en" => "A"}, parent_uuid: b.uuid})
+    conn = holder()
+    Postgrex.query!(conn, "SELECT pg_advisory_lock(hashtext($1))", [@key])
+
+    up = Task.async(fn -> Shop.bulk_update_category_parent([a.uuid], nil) end)
+    assert Task.yield(up, 300) == nil
+
+    Postgrex.query!(conn, "SELECT pg_advisory_unlock(hashtext($1))", [@key])
+    assert Task.await(up) == 1
+    assert Repo.reload(a).parent_uuid == nil
   end
 end

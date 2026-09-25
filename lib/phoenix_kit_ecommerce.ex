@@ -146,6 +146,9 @@ defmodule PhoenixKitEcommerce do
   defp recover_translation_sweep do
     case TranslationSweepWorker.ensure_scheduled() do
       {:ok, _job} -> :ok
+      # No engine to schedule on: not a failure of the shop, and the
+      # translations page says so itself.
+      {:error, :ai_unavailable} -> :ok
       {:error, reason} -> log_sweep_recovery_failure(reason)
     end
   rescue
@@ -546,7 +549,7 @@ defmodule PhoenixKitEcommerce do
   customer's confirmation is never governed by an admin-facing preference.
 
   ⚠️ The actions registered here are the NOTIFY actions. The audit trail
-  uses different action strings on purpose: `Activity.log/1` auto-derives
+  uses different action strings on purpose: core's `Activity.log` auto-derives
   notifications from registered actions, so an audit row written with a
   notify action would deliver a second, duplicate notification.
   """
@@ -1782,15 +1785,10 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp do_bulk_update_category_parent(ids, parent_uuid) do
-    {count, moved} =
-      if is_nil(parent_uuid) do
-        set_category_parents(ids, nil)
-      else
-        {:ok, result} =
-          in_category_tree(true, fn -> {:ok, set_category_parents(ids, parent_uuid)} end)
-
-        result
-      end
+    # To the top level too: no cycle can come of it, but the paths that
+    # decide a subtree under the lock must not see the tree change under them.
+    {:ok, {count, moved}} =
+      in_category_tree(true, fn -> {:ok, set_category_parents(ids, parent_uuid)} end)
 
     # After the commit: nobody hears of a move that could still roll back.
     if count > 0, do: Events.broadcast_categories_bulk_parent_changed(moved, parent_uuid)
@@ -1815,12 +1813,15 @@ defmodule PhoenixKitEcommerce do
     end)
   end
 
+  # Any change of parent counts, a move to the top level included: it closes
+  # no cycle, but it must not slip past the lock the other tree writers hold.
   defp reparenting?(%Category{parent_uuid: current}, attrs) do
-    case Map.get(attrs, :parent_uuid, Map.get(attrs, "parent_uuid", current)) do
-      parent when parent in [nil, ""] -> false
-      parent -> to_string(parent) != to_string(current)
-    end
+    parent = Map.get(attrs, :parent_uuid, Map.get(attrs, "parent_uuid", current))
+    normalize_parent(parent) != normalize_parent(current)
   end
+
+  defp normalize_parent(parent) when parent in [nil, ""], do: nil
+  defp normalize_parent(parent), do: to_string(parent)
 
   defp set_category_parents(ids, parent_uuid) do
     # Exclude the target parent and its ancestors from update set to prevent cycles
