@@ -22,4 +22,20 @@ defmodule PhoenixKitEcommerce.TranslationSweepTickLockTest do
     {reason, _info} = TranslationSweepWorker.run_manual_tick()
     refute reason == :sweep_running
   end
+
+  # A direct tick's jobs are invisible until it commits, and the engine
+  # never refuses a scheduled tick for a direct one: the scheduled tick
+  # must wait for the lock, or it re-enqueues the direct tick's pairs.
+  test "a scheduled tick waits for a direct tick to finish" do
+    opts = Keyword.take(Repo.config(), [:hostname, :port, :username, :password, :database])
+    {:ok, conn} = Postgrex.start_link(opts)
+    Postgrex.query!(conn, "SELECT pg_advisory_lock(hashtext($1))", [@key])
+
+    job = %Oban.Job{id: 1, args: %{}, attempt: 1, max_attempts: 1}
+    tick = Task.async(fn -> TranslationSweepWorker.perform(job) end)
+    assert Task.yield(tick, 300) == nil
+
+    Postgrex.query!(conn, "SELECT pg_advisory_unlock(hashtext($1))", [@key])
+    assert Task.await(tick) == :ok
+  end
 end
