@@ -211,7 +211,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
         {:ok,
          socket
-         |> assign(:page_title, gettext("Shop Translations"))
+         |> assign_shop_trail(gettext("Translations"))
          |> assign(:categories, Shop.list_categories())
          |> assign(:enabled_languages, Translations.enabled_languages())
          |> assign(:pending, nil)

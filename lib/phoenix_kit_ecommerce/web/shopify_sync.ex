@@ -142,7 +142,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
 
       {:ok,
        socket
-       |> assign(:page_title, gettext("Shopify Sync"))
+       |> assign_shop_trail(gettext("Shopify Sync"))
        |> assign(:connection, shopify_connection())
        |> assign(
          :can_manage_integrations?,
