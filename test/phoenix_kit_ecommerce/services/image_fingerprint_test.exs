@@ -4,8 +4,8 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
   fingerprint `ImageDownloader` uses to recognise a re-encoded or resized
   copy of a picture it already stored.
 
-  `match/2`, `match?/2` and `compare/2` are pure and run everywhere. `compute/1`
-  shells out to ImageMagick, so its tests draw real images with `convert`
+  `match/2`, `match?/2` and `compare/2` are pure and run everywhere. `compute/1`,
+  `same_picture?/2` and `local_difference/2` shell out to ImageMagick, so its tests draw real images with `convert`
   and are skipped where ImageMagick is not installed.
   """
 
@@ -214,6 +214,49 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
       {:ok, b} = ImageFingerprint.compute(jpeg)
 
       assert ImageFingerprint.match?(a, b)
+    end
+
+    # The live case that needed step 2: one version of a measuring chart
+    # carries an extra thin line and label. The fingerprint is 1-2 bits
+    # off; the pictures differ.
+    test "a thin added line keeps the fingerprint but is not the same picture", %{dir: dir} do
+      original = draw(dir, "a.png", 7)
+
+      with_line =
+        reencode(original, Path.join(dir, "line.png"), [
+          "-stroke",
+          "black",
+          "-strokewidth",
+          "2",
+          "-draw",
+          "line 60,170 260,170"
+        ])
+
+      {:ok, a} = ImageFingerprint.compute(original)
+      {:ok, b} = ImageFingerprint.compute(with_line)
+
+      assert ImageFingerprint.match?(a, b)
+      refute ImageFingerprint.same_picture?(original, with_line)
+    end
+
+    test "a re-encoded or downscaled copy is the same picture", %{dir: dir} do
+      original = draw(dir, "a.png", 7)
+      jpeg = reencode(original, Path.join(dir, "a.jpg"), ["-quality", "70"])
+      small = reencode(original, Path.join(dir, "small.png"), ["-resize", "50%"])
+
+      assert ImageFingerprint.same_picture?(original, jpeg)
+      assert ImageFingerprint.same_picture?(original, small)
+      assert {:ok, difference} = ImageFingerprint.local_difference(original, jpeg)
+      assert difference < 10
+    end
+
+    test "an unreadable file is never the same picture", %{dir: dir} do
+      original = draw(dir, "a.png", 7)
+      svg = Path.join(dir, "x.jpg")
+      File.write!(svg, "<svg xmlns='http://www.w3.org/2000/svg'/>")
+
+      refute ImageFingerprint.same_picture?(original, svg)
+      assert {:error, _} = ImageFingerprint.local_difference(original, svg)
     end
 
     test "a file that is not an image is an error, not a fingerprint", %{dir: dir} do

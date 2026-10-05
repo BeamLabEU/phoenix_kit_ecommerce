@@ -96,9 +96,10 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
        `original_file_name`);
     2. failing that, the same picture — a re-encoded, re-saved or
        downscaled copy — among the files this module imported (they carry
-       `metadata["source_url"]`), by `ImageFingerprint.match/2` against
-       their `metadata["image_fingerprint"]`. Of several matches the
-       closest wins, then the earliest stored.
+       `metadata["source_url"]`): candidates by `ImageFingerprint.match/2`
+       against their `metadata["image_fingerprint"]`, closest first, then
+       the earliest stored; the first of the best three whose original
+       also passes `ImageFingerprint.same_picture?/2` wins.
 
   A trashed file is never picked by either step. If the bytes are new to
   both steps but core's own per-uploader dedup in `Storage.store_file/2`
@@ -113,7 +114,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
 
   Step 2 reads the fingerprint of every imported image once per download
   that step 1 did not answer — linear in the library (about 25 ms of CPU
-  for 3,000 images), fine for a shop's library, not meant for millions.
+  for 3,000 images), fine for a shop's library, not meant for millions —
+  and reads a candidate's original from Storage only when its fingerprint
+  matches.
 
   ## Options
 
@@ -166,7 +169,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     %{url: url, temp_path: temp_path, size: size} = download
     fingerprint = fingerprint(temp_path, opts)
 
-    case find_near_duplicate(fingerprint) do
+    case find_near_duplicate(fingerprint, temp_path) do
       {existing_uuid, distances} ->
         Logger.info(
           "[ImageDownloader] Reusing #{existing_uuid} for #{url}: same picture (#{inspect(distances)})"
@@ -284,12 +287,16 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   defp put_fingerprint(metadata, fingerprint),
     do: Map.put(metadata, "image_fingerprint", fingerprint)
 
-  # The closest fingerprint match among active imported images —
-  # `{uuid, distances}` — ties going to the earliest stored, then the
-  # lowest uuid, so the choice is stable.
-  defp find_near_duplicate(nil), do: nil
+  # The closest confirmed match among active imported images —
+  # `{uuid, distances}`. Candidates are the fingerprint matches, closest
+  # first, ties to the earliest stored, then the lowest uuid; the first of
+  # them (at most `@confirm_attempts`) whose original passes
+  # `ImageFingerprint.same_picture?/2` against the download wins.
+  @confirm_attempts 3
 
-  defp find_near_duplicate(fingerprint) do
+  defp find_near_duplicate(nil, _temp_path), do: nil
+
+  defp find_near_duplicate(fingerprint, temp_path) do
     import Ecto.Query
 
     from(f in PhoenixKit.Modules.Storage.File,
@@ -313,10 +320,33 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
           []
       end
     end)
-    |> Enum.min_by(&elem(&1, 0), fn -> nil end)
-    |> case do
-      nil -> nil
-      {_rank, found} -> found
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.take(@confirm_attempts)
+    |> Enum.find_value(fn {_rank, {uuid, _distances} = found} ->
+      if same_picture_as_stored?(temp_path, uuid), do: found
+    end)
+  end
+
+  # Step 2 against the stored original. A candidate that cannot be read is
+  # not reused — storing one more copy is the safe side.
+  defp same_picture_as_stored?(temp_path, file_uuid) do
+    case Storage.retrieve_file(file_uuid) do
+      {:ok, stored_path, _file} ->
+        same? = ImageFingerprint.same_picture?(temp_path, stored_path)
+        cleanup_temp_file(stored_path)
+
+        unless same?,
+          do:
+            Logger.info("[ImageDownloader] #{file_uuid} matches by fingerprint only, not reused")
+
+        same?
+
+      {:error, reason} ->
+        Logger.warning(
+          "[ImageDownloader] Could not read #{file_uuid} to confirm: #{inspect(reason)}"
+        )
+
+        false
     end
   end
 

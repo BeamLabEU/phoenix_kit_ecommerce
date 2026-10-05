@@ -42,6 +42,17 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
       banner: File.read!(banner),
       banner_jpeg: File.read!(reencode(banner, Path.join(dir, "banner.jpg"), ["-quality", "70"])),
       other: File.read!(draw(dir, "other.png", 8)),
+      with_line:
+        File.read!(
+          reencode(banner, Path.join(dir, "line.png"), [
+            "-stroke",
+            "black",
+            "-strokewidth",
+            "2",
+            "-draw",
+            "line 60,170 260,170"
+          ])
+        ),
       third: File.read!(draw(dir, "third.png", 9))
     }
   end
@@ -125,6 +136,20 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
              ImageDownloader.download_and_store("#{@host}/copy.jpg?v=8", user.uuid, opts)
 
     assert file!(original).metadata["source_url_aliases"] == ["#{@host}/copy.jpg"]
+  end
+
+  test "a version with an added detail is stored as a new file though its fingerprint matches", %{
+    user: user,
+    banner: banner,
+    with_line: with_line
+  } do
+    opts = serve(%{"/a.png" => {"image/png", banner}, "/line.png" => {"image/png", with_line}})
+
+    {:ok, original} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    {:ok, version} = ImageDownloader.download_and_store("#{@host}/line.png", user.uuid, opts)
+
+    refute version == original
+    refute Map.has_key?(file!(original).metadata, "source_url_aliases")
   end
 
   test "a different picture is stored as a new file", %{user: user, banner: banner, other: other} do
@@ -225,27 +250,35 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
     refute Map.has_key?(file!(uploaded).metadata || %{}, "source_url_aliases")
   end
 
+  # Candidates hold re-encodes of the banner (so step 2 confirms each of
+  # them) under crafted fingerprints (so their rank is known).
   describe "choosing among several matches" do
     setup %{banner_path: banner_path} do
       {:ok, fingerprint} = ImageFingerprint.compute(banner_path)
-      %{fingerprint: fingerprint}
+      dir = Path.dirname(banner_path)
+
+      %{
+        fingerprint: fingerprint,
+        q60: File.read!(reencode(banner_path, Path.join(dir, "q60.jpg"), ["-quality", "60"])),
+        q80: File.read!(reencode(banner_path, Path.join(dir, "q80.jpg"), ["-quality", "80"]))
+      }
     end
 
     test "the closest match wins over an earlier, farther one", %{
       user: user,
       banner: banner,
-      other: other,
-      third: third,
+      q60: q60,
+      q80: q80,
       fingerprint: fingerprint
     } do
       _farther =
-        store_raw(other, "near.png", user.uuid, %{
+        store_raw(q60, "near.png", user.uuid, %{
           "source_url" => "#{@host}/near.png",
           "image_fingerprint" => flip_bits(fingerprint, 3)
         })
 
       closer =
-        store_raw(third, "exact.png", user.uuid, %{
+        store_raw(q80, "exact.png", user.uuid, %{
           "source_url" => "#{@host}/exact.png",
           "image_fingerprint" => fingerprint
         })
@@ -259,18 +292,18 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
     test "an equally close match goes to the earliest stored", %{
       user: user,
       banner: banner,
-      other: other,
-      third: third,
+      q60: q60,
+      q80: q80,
       fingerprint: fingerprint
     } do
       earlier =
-        store_raw(other, "first.png", user.uuid, %{
+        store_raw(q60, "first.png", user.uuid, %{
           "source_url" => "#{@host}/first.png",
           "image_fingerprint" => fingerprint
         })
 
       _later =
-        store_raw(third, "second.png", user.uuid, %{
+        store_raw(q80, "second.png", user.uuid, %{
           "source_url" => "#{@host}/second.png",
           "image_fingerprint" => fingerprint
         })

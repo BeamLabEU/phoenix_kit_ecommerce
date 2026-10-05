@@ -27,16 +27,27 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
 
   Stored as `"v2:<64 hex hash>:<96 hex colors>"`.
 
-  ## The match
+  ## The match — two steps
 
-  Two fingerprints match when the hashes differ in at most 8 bits, the
-  colors differ by at most 4 on average and by at most 12 in any single
-  cell. Measured on a live library of 3,121 images: this joins 373 of the
-  376 redundant copies of 13 shared banners and 139 groups of duplicated
-  product photos, and no pair of different pictures — the single-cell
-  bound is what keeps two color variants of one product photo apart, the
-  256-bit hash what keeps two objects photographed on the same plain
-  background apart (an 8×8 hash with no color check joined both).
+  1. **Fingerprints** (`match/2`): the hashes differ in at most 8 bits,
+     the colors by at most 4 on average and by at most 12 in any single
+     cell. Cheap, and stored, so it picks candidates out of a whole
+     library. The single-cell bound keeps two color variants of one
+     product photo apart, the 256-bit hash two objects photographed on
+     the same plain background (an 8×8 hash with no color check joined
+     both).
+  2. **The pictures themselves** (`same_picture?/2`): both scaled to
+     256×256 grey, the absolute difference averaged over 5×5 pixels; the
+     largest of those local averages must stay within 24 (of 255). A
+     fingerprint cannot see a thin line or a small label added to an
+     otherwise identical picture; this can.
+
+  Measured on a live library of 3,121 images. Step 1 joined 376 redundant
+  banner copies and 139 groups of duplicated product photos — and also 24
+  copies of a measuring chart that carries an extra "Chin width" line
+  into the version without it (fingerprints 2 bits apart). Step 2 puts
+  every true copy at or below 6.8, the two chart versions at 75 and a
+  cropped re-save of a chart at 106.
 
   ImageMagick runs with core's resource limits and with its decoder
   pinned to the format the file's bytes sniff as
@@ -56,6 +67,9 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   @max_hash_bits 8
   @max_mean_color 4
   @max_cell_color 12
+
+  @detail_size 256
+  @max_local_difference 24
 
   @typedoc "`\"v2:<64 hex>:<96 hex>\"`"
   @type t :: String.t()
@@ -200,6 +214,78 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   @doc "Whether two fingerprints are the same picture (`match/2` as a boolean)."
   @spec match?(term(), term()) :: boolean()
   def match?(a, b), do: match(a, b) != :nomatch
+
+  @doc """
+  Step 2 of the match (see the module doc): whether the images at
+  `path_a` and `path_b` are the same picture down to a thin line or a
+  small label. Meant for a pair whose fingerprints already `match/2` —
+  it costs one ImageMagick call over both full images. `false` when
+  either cannot be read.
+  """
+  @spec same_picture?(Path.t(), Path.t()) :: boolean()
+  def same_picture?(path_a, path_b) do
+    case local_difference(path_a, path_b) do
+      {:ok, difference} -> difference <= @max_local_difference
+      {:error, _reason} -> false
+    end
+  end
+
+  @doc """
+  The largest 5×5 local mean of the absolute difference between the two
+  images scaled to 256×256 grey, in 0..255 — what `same_picture?/2`
+  bounds.
+  """
+  @spec local_difference(Path.t(), Path.t()) :: {:ok, float()} | {:error, term()}
+  def local_difference(path_a, path_b) when is_binary(path_a) and is_binary(path_b) do
+    with {:ok, input_a} <- ImageProcessor.pinned_input(path_a, "[0]"),
+         {:ok, input_b} <- ImageProcessor.pinned_input(path_b, "[0]") do
+      args =
+        ImageProcessor.limit_args() ++
+          [
+            "-quiet",
+            input_a,
+            input_b,
+            "-auto-orient",
+            "-background",
+            "white",
+            "-alpha",
+            "remove",
+            "-alpha",
+            "off",
+            "-colorspace",
+            "Gray",
+            "-resize",
+            "#{@detail_size}x#{@detail_size}!",
+            "-compose",
+            "difference",
+            "-composite",
+            "-statistic",
+            "Mean",
+            "5x5",
+            "-format",
+            "%[fx:maxima*255]",
+            "info:"
+          ]
+
+      run_difference(args)
+    end
+  rescue
+    e -> {:error, {:compare_failed, Exception.message(e)}}
+  end
+
+  defp run_difference(args) do
+    case System.cmd("convert", args, stderr_to_stdout: false) do
+      {out, 0} -> parse_difference(out)
+      {_out, code} -> {:error, {:convert_failed, code}}
+    end
+  end
+
+  defp parse_difference(out) do
+    case Float.parse(String.trim(out)) do
+      {difference, ""} -> {:ok, difference}
+      _ -> {:error, :unexpected_output}
+    end
+  end
 
   defp decode(@version <> ":" <> rest) do
     with [hash_hex, colors_hex] <- String.split(rest, ":"),
