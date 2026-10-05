@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.18 - 2026-10-05
+
+### Fixed
+
+- **A product read before it gained required options could be carted
+  without them** (follow-up to #69). `add_to_cart/3,4` validated the
+  caller's copy of the product, then priced from a freshly locked one. A
+  product that required a colour after the page loaded went into the cart
+  at its base price with none chosen, and a value removed since the read
+  was still accepted. The fresh product is now the one validated, inside
+  the pricing transaction, before any line is written. The error tuples and
+  `skip_spec_validation: true` are unchanged.
+- **Two different animations that open on the same frame were treated as
+  one picture** (#71). Multi-frame images (GIF, WebP) are no longer
+  fingerprinted or matched; they are stored as before, and identical bytes
+  are still reused. A static image can no longer resolve to an animation.
+- **A picture stretched to other proportions matched its original** (#71).
+  The confirming comparison squashed both images into a square, which hid
+  the distortion and recorded the original as the stretched copy's file.
+  It now fits each image into the square with white padding, keeping its
+  aspect ratio. Fingerprints already stored stay valid.
+
+### Notes
+
+- Aliases and attachments a 0.5.17 import made for a false match are not
+  repaired by this release.
+- `mix phoenix_kit_ecommerce.backfill_image_fingerprints` now reports each
+  animated image as failed, since it is excluded from matching.
+
 ## 0.5.17 - 2026-10-05
 
 ### Added
