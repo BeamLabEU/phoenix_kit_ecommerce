@@ -269,6 +269,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
         {:ok, fingerprint} ->
           fingerprint
 
+        {:error, :multiple_frames} ->
+          nil
+
         {:error, reason} ->
           # Loud on purpose: without a fingerprint the near-duplicate check
           # is off for this download (ImageMagick missing, an unreadable

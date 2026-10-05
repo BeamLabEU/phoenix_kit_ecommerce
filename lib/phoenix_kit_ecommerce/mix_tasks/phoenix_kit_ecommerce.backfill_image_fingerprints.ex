@@ -19,8 +19,8 @@ defmodule Mix.Tasks.PhoenixKitEcommerce.BackfillImageFingerprints do
 
       mix phoenix_kit_ecommerce.backfill_image_fingerprints
 
-  Reads each image's original from Storage once (one ImageMagick call
-  each) and walks every such file in one run. A file that cannot be read
+  Reads each image's original from Storage once, checks it has one frame,
+  computes its fingerprint and walks every such file in one run. A file that cannot be read
   or fingerprinted is left as it is, logged and counted as failed; running
   the task again retries only what is still missing. It writes nothing but
   that one metadata key.
