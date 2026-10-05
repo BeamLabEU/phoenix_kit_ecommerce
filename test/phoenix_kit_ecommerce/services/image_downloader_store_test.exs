@@ -162,6 +162,79 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
     refute Map.has_key?(file!(a).metadata, "source_url_aliases")
   end
 
+  test "a stretched copy is stored separately", %{user: user, banner_path: path, banner: banner} do
+    stretched =
+      reencode(path, Path.join(Path.dirname(path), "stretched.png"), ["-resize", "320x120!"])
+
+    opts =
+      serve(%{
+        "/a.png" => {"image/png", banner},
+        "/stretched.png" => {"image/png", File.read!(stretched)}
+      })
+
+    {:ok, original} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    {:ok, copy} = ImageDownloader.download_and_store("#{@host}/stretched.png", user.uuid, opts)
+
+    refute copy == original
+    refute Map.has_key?(file!(original).metadata, "source_url_aliases")
+  end
+
+  test "an animation with an old first-frame fingerprint cannot replace a static image", %{
+    user: user,
+    banner_path: path
+  } do
+    dir = Path.dirname(path)
+    other = draw(dir, "other-frame.png", 8)
+    animation = Path.join(dir, "animation.gif")
+    {_, 0} = System.cmd("convert", [path, other, animation])
+    first = reencode(animation <> "[0]", Path.join(dir, "first.png"), [])
+    {:ok, fingerprint} = ImageFingerprint.compute(first)
+    bytes = File.read!(animation)
+
+    original =
+      store_raw(bytes, "animation.gif", user.uuid, %{
+        "source_url" => "#{@host}/animation.gif",
+        "image_fingerprint" => fingerprint
+      })
+
+    opts =
+      serve(%{
+        "/first.png" => {"image/png", File.read!(first)},
+        "/copy.gif" => {"image/gif", bytes}
+      })
+
+    {:ok, copy} = ImageDownloader.download_and_store("#{@host}/first.png", user.uuid, opts)
+    refute copy == original
+    refute Map.has_key?(file!(original).metadata, "source_url_aliases")
+
+    # Exact bytes may still reuse the animation through core's checksum dedup.
+    assert {:ok, ^original} =
+             ImageDownloader.download_and_store("#{@host}/copy.gif", user.uuid, opts)
+  end
+
+  test "different animations with the same opening frame are stored separately", %{
+    user: user,
+    banner_path: path
+  } do
+    dir = Path.dirname(path)
+    other = draw(dir, "other-frame.png", 8)
+    third = draw(dir, "third-frame.png", 9)
+    a = Path.join(dir, "a.gif")
+    b = Path.join(dir, "b.gif")
+    {_, 0} = System.cmd("convert", [path, other, a])
+    {_, 0} = System.cmd("convert", [path, third, b])
+
+    opts =
+      serve(%{"/a.gif" => {"image/gif", File.read!(a)}, "/b.gif" => {"image/gif", File.read!(b)}})
+
+    {:ok, original} = ImageDownloader.download_and_store("#{@host}/a.gif", user.uuid, opts)
+    {:ok, copy} = ImageDownloader.download_and_store("#{@host}/b.gif", user.uuid, opts)
+
+    refute copy == original
+    refute Map.has_key?(file!(original).metadata, "image_fingerprint")
+    refute Map.has_key?(file!(original).metadata, "source_url_aliases")
+  end
+
   test "a trashed file is never handed back, by checksum or by fingerprint", %{
     user: user,
     banner: banner,

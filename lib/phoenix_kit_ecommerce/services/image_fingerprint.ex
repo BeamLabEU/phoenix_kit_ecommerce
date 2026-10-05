@@ -36,8 +36,9 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
      product photo apart, the 256-bit hash two objects photographed on
      the same plain background (an 8×8 hash with no color check joined
      both).
-  2. **The pictures themselves** (`same_picture?/2`): both scaled to
-     256×256 grey, the absolute difference averaged over 5×5 pixels; the
+  2. **The pictures themselves** (`same_picture?/2`): both fitted into
+     256×256 grey with white padding, preserving their aspect ratios,
+     the absolute difference averaged over 5×5 pixels; the
      largest of those local averages must stay within 24 (of 255). A
      fingerprint cannot see a line or a label added to an otherwise
      identical picture; this sees one that survives scaling to 256 px —
@@ -47,7 +48,8 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   Measured on a live library of 3,121 images. Step 1 joined 376 redundant
   banner copies and 139 groups of duplicated product photos — and also 24
   copies of a measuring chart that carries an extra "Chin width" line
-  into the version without it (fingerprints 2 bits apart). Step 2 puts
+  into the version without it (fingerprints 2 bits apart). The original
+  step 2, which stretched both images to a square, put
   every true copy at or below 6.8, the two chart versions at 75 and a
   cropped re-save of a chart at 106. (Those figures are for that library:
   a half-size JPEG re-save measured 7.2 elsewhere, a GIF frame 11.)
@@ -56,6 +58,10 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   pinned to the format the file's bytes sniff as
   (`PhoenixKit.Modules.Storage.ImageProcessor`), the same envelope every
   other ImageMagick call in PhoenixKit runs in.
+
+  Multi-frame images are excluded from perceptual reuse. Their first
+  frames can agree while the rest of the animation differs; byte-based
+  reuse in `ImageDownloader` remains available for identical files.
   """
 
   require Logger
@@ -96,17 +102,32 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
 
   Returns `{:error, reason}` for anything ImageMagick cannot read as a
   raster image (SVG included — the decoder is pinned to the sniffed
-  format) and when ImageMagick is not installed.
+  format), for multi-frame images (`:multiple_frames`), and when
+  ImageMagick is not installed.
   """
   @spec compute(Path.t()) :: {:ok, t()} | {:error, term()}
   def compute(path) when is_binary(path) do
-    with {:ok, input} <- ImageProcessor.pinned_input(path, "[0]"),
+    with {:ok, input} <- single_frame_input(path),
          {:ok, raw} <- scale(input) do
       {:ok, encode(raw)}
     end
   rescue
     # `System.cmd/3` raises when the executable is missing altogether.
     e -> {:error, {:fingerprint_failed, Exception.message(e)}}
+  end
+
+  # Inspect all frames through the pinned decoder, without decoding the
+  # full pixels. Selecting [0] first would hide an animation's other frames.
+  defp single_frame_input(path) do
+    with {:ok, input} <- ImageProcessor.pinned_input(path) do
+      args = ImageProcessor.limit_args() ++ ["-quiet", "-ping", input, "-format", "%n", "info:"]
+
+      case System.cmd("convert", args, stderr_to_stdout: false) do
+        {"1", 0} -> {:ok, input}
+        {_out, 0} -> {:error, :multiple_frames}
+        {_out, code} -> {:error, {:convert_failed, code}}
+      end
+    end
   end
 
   defp scale(input) do
@@ -222,8 +243,8 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   Step 2 of the match (see the module doc): whether the images at
   `path_a` and `path_b` are the same picture down to a thin line or a
   small label. Meant for a pair whose fingerprints already `match/2` —
-  it costs one ImageMagick call over both full images. `false` when
-  either cannot be read.
+  it checks the frame counts, then compares the full images. `false`
+  when either cannot be read or contains multiple frames.
   """
   @spec same_picture?(Path.t(), Path.t()) :: boolean()
   def same_picture?(path_a, path_b) do
@@ -235,13 +256,13 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
 
   @doc """
   The largest 5×5 local mean of the absolute difference between the two
-  images scaled to 256×256 grey, in 0..255 — what `same_picture?/2`
+  images fitted into 256×256 grey with white padding, in 0..255 — what `same_picture?/2`
   bounds.
   """
   @spec local_difference(Path.t(), Path.t()) :: {:ok, float()} | {:error, term()}
   def local_difference(path_a, path_b) when is_binary(path_a) and is_binary(path_b) do
-    with {:ok, input_a} <- ImageProcessor.pinned_input(path_a, "[0]"),
-         {:ok, input_b} <- ImageProcessor.pinned_input(path_b, "[0]") do
+    with {:ok, input_a} <- single_frame_input(path_a),
+         {:ok, input_b} <- single_frame_input(path_b) do
       args =
         ImageProcessor.limit_args() ++
           [
@@ -258,7 +279,11 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
             "-colorspace",
             "Gray",
             "-resize",
-            "#{@detail_size}x#{@detail_size}!",
+            "#{@detail_size}x#{@detail_size}",
+            "-gravity",
+            "center",
+            "-extent",
+            "#{@detail_size}x#{@detail_size}",
             "-compose",
             "difference",
             "-composite",

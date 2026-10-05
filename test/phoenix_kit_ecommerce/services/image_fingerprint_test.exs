@@ -259,6 +259,43 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
       assert {:error, _} = ImageFingerprint.local_difference(original, svg)
     end
 
+    test "a stretched picture is not the same picture", %{dir: dir} do
+      original = draw(dir, "a.png", 7)
+      stretched = reencode(original, Path.join(dir, "stretched.png"), ["-resize", "320x120!"])
+
+      {:ok, a} = ImageFingerprint.compute(original)
+      {:ok, b} = ImageFingerprint.compute(stretched)
+      assert ImageFingerprint.match?(a, b)
+      refute ImageFingerprint.same_picture?(original, stretched)
+    end
+
+    test "animations are never reused based on their first frame", %{dir: dir} do
+      first = draw(dir, "first.png", 7)
+      second = draw(dir, "second.png", 8)
+      third = draw(dir, "third.png", 9)
+
+      for format <- ["gif", "webp"] do
+        a = Path.join(dir, "a.#{format}")
+        b = Path.join(dir, "b.#{format}")
+        {_, 0} = System.cmd("convert", [first, second, a])
+        {_, 0} = System.cmd("convert", [first, third, b])
+
+        assert {:error, :multiple_frames} = ImageFingerprint.compute(a)
+        refute ImageFingerprint.same_picture?(a, b)
+        refute ImageFingerprint.same_picture?(a, first)
+      end
+    end
+
+    test "single-frame GIF and WebP images remain eligible for reuse", %{dir: dir} do
+      original = draw(dir, "a.png", 7)
+
+      for format <- ["gif", "webp"] do
+        copy = reencode(original, Path.join(dir, "copy.#{format}"), [])
+        assert {:ok, _fingerprint} = ImageFingerprint.compute(copy)
+        assert ImageFingerprint.same_picture?(original, copy)
+      end
+    end
+
     test "a file that is not an image is an error, not a fingerprint", %{dir: dir} do
       path = Path.join(dir, "not-an-image.jpg")
       File.write!(path, "<svg xmlns='http://www.w3.org/2000/svg'/>")

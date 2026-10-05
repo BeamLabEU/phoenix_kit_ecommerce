@@ -165,6 +165,14 @@ Repo-local aliases:
   stored `unit_price` (typically `0`) and renders "0.00" where the customer
   agreed to "price on request".
 - **Money is `Decimal`.** Never floats for currency.
+- **Cart option validation uses the fresh product inside the pricing
+  transaction.** A caller's product can predate required options or removed
+  values. Both add-to-cart paths validate the same product they price;
+  `skip_spec_validation: true` is the explicit trusted-caller opt-out.
+- **Perceptual image reuse excludes multi-frame images and preserves
+  aspect ratio in the confirmation.** An identical first frame does not
+  establish identical animation; stretching both inputs to a square hides
+  changes to their proportions. Exact-byte reuse remains available.
 - **Async work is Oban.** CSV import, image migration and the Shopify
   media/variants/collections sync run as workers, all on the single
   `shop_imports` queue — a host that configures no such queue leaves
