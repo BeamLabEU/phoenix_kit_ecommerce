@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
 
   alias PhoenixKit.Modules.Storage
   alias PhoenixKitEcommerce.Services.ImageDownloader
+  alias PhoenixKitEcommerce.Services.ImageFingerprint
   alias PhoenixKitEcommerce.Test.Repo
 
   @moduletag skip:
@@ -37,9 +38,11 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
 
     %{
       user: fixture_user(),
+      banner_path: banner,
       banner: File.read!(banner),
       banner_jpeg: File.read!(reencode(banner, Path.join(dir, "banner.jpg"), ["-quality", "70"])),
-      other: File.read!(draw(dir, "other.png", 8))
+      other: File.read!(draw(dir, "other.png", 8)),
+      third: File.read!(draw(dir, "third.png", 9))
     }
   end
 
@@ -78,6 +81,17 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
 
   defp file!(uuid), do: Storage.get_file(uuid)
 
+  defp current_version?(fingerprint),
+    do: String.starts_with?(fingerprint || "", ImageFingerprint.version() <> ":")
+
+  # `fingerprint` with its last `n` (<= 8) hash bits flipped.
+  defp flip_bits(fingerprint, n) do
+    [version, hash, colors] = String.split(fingerprint, ":")
+    <<head::binary-size(31), last>> = Base.decode16!(hash, case: :lower)
+    flipped = Bitwise.bxor(last, Bitwise.bsl(1, n) - 1)
+    Enum.join([version, Base.encode16(head <> <<flipped>>, case: :lower), colors], ":")
+  end
+
   test "a new picture is stored with its fingerprint and source", %{user: user, banner: banner} do
     opts = serve(%{"/a.png" => {"image/png", banner}})
 
@@ -86,7 +100,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
     file = file!(uuid)
     assert file.status == "active"
     assert file.metadata["source_url"] == "#{@host}/a.png?v=1"
-    assert "v1:" <> _ = file.metadata["image_fingerprint"]
+    assert current_version?(file.metadata["image_fingerprint"])
   end
 
   test "a re-encoded copy at another URL reuses the stored file and remembers that URL", %{
@@ -173,7 +187,102 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
     refute Map.has_key?(file!(copy).metadata, "image_fingerprint")
   end
 
-  describe "backfill_fingerprints/1" do
+  test "a trashed copy core hands back for the same uploader is restored", %{
+    user: user,
+    banner: banner
+  } do
+    opts = serve(%{"/a.png" => {"image/png", banner}})
+
+    {:ok, trashed} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    {:ok, _} = Storage.trash_file(trashed)
+
+    # Neither lookup here picks the trashed row; core's own per-uploader
+    # dedup in `store_file` does — and the row comes back to life rather
+    # than an import pointing at a file in the trash.
+    assert {:ok, ^trashed} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    assert file!(trashed).status == "active"
+  end
+
+  test "a file is not given its own URL as an alias", %{user: user, banner: banner} do
+    opts = serve(%{"/a.png" => {"image/png", banner}})
+
+    {:ok, uuid} = ImageDownloader.download_and_store("#{@host}/a.png?v=1", user.uuid, opts)
+
+    assert {:ok, ^uuid} =
+             ImageDownloader.download_and_store("#{@host}/a.png?v=2", user.uuid, opts)
+
+    refute Map.has_key?(file!(uuid).metadata, "source_url_aliases")
+  end
+
+  test "a reused file that was not imported gets no aliases", %{user: user, banner: banner} do
+    uploader = fixture_user()
+    uploaded = store_raw(banner, "a.png", uploader.uuid, %{})
+    opts = serve(%{"/a.png" => {"image/png", banner}})
+
+    assert {:ok, ^uploaded} =
+             ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+
+    refute Map.has_key?(file!(uploaded).metadata || %{}, "source_url_aliases")
+  end
+
+  describe "choosing among several matches" do
+    setup %{banner_path: banner_path} do
+      {:ok, fingerprint} = ImageFingerprint.compute(banner_path)
+      %{fingerprint: fingerprint}
+    end
+
+    test "the closest match wins over an earlier, farther one", %{
+      user: user,
+      banner: banner,
+      other: other,
+      third: third,
+      fingerprint: fingerprint
+    } do
+      _farther =
+        store_raw(other, "near.png", user.uuid, %{
+          "source_url" => "#{@host}/near.png",
+          "image_fingerprint" => flip_bits(fingerprint, 3)
+        })
+
+      closer =
+        store_raw(third, "exact.png", user.uuid, %{
+          "source_url" => "#{@host}/exact.png",
+          "image_fingerprint" => fingerprint
+        })
+
+      opts = serve(%{"/a.png" => {"image/png", banner}})
+
+      assert {:ok, ^closer} =
+               ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    end
+
+    test "an equally close match goes to the earliest stored", %{
+      user: user,
+      banner: banner,
+      other: other,
+      third: third,
+      fingerprint: fingerprint
+    } do
+      earlier =
+        store_raw(other, "first.png", user.uuid, %{
+          "source_url" => "#{@host}/first.png",
+          "image_fingerprint" => fingerprint
+        })
+
+      _later =
+        store_raw(third, "second.png", user.uuid, %{
+          "source_url" => "#{@host}/second.png",
+          "image_fingerprint" => fingerprint
+        })
+
+      opts = serve(%{"/a.png" => {"image/png", banner}})
+
+      assert {:ok, ^earlier} =
+               ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    end
+  end
+
+  describe "backfill_fingerprints/0" do
     test "fingerprints imported images that predate fingerprints, and only those", %{
       user: user,
       banner: banner,
@@ -183,11 +292,37 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
       uploaded = store_raw(other, "own.png", user.uuid, %{})
 
       assert %{fingerprinted: 1, failed: 0} = ImageDownloader.backfill_fingerprints()
-      assert "v1:" <> _ = file!(imported).metadata["image_fingerprint"]
+      assert current_version?(file!(imported).metadata["image_fingerprint"])
       refute Map.has_key?(file!(uploaded).metadata || %{}, "image_fingerprint")
 
       # Nothing left to do on a second run.
       assert %{fingerprinted: 0, failed: 0} = ImageDownloader.backfill_fingerprints()
+    end
+
+    test "re-stamps an older fingerprint version and skips trashed and non-image files", %{
+      user: user,
+      banner: banner,
+      other: other,
+      third: third
+    } do
+      stale =
+        store_raw(banner, "stale.png", user.uuid, %{
+          "source_url" => "#{@host}/stale.png",
+          "image_fingerprint" => "v1:00:00"
+        })
+
+      trashed = store_raw(other, "trashed.png", user.uuid, %{"source_url" => "#{@host}/t.png"})
+      {:ok, _} = Storage.trash_file(trashed)
+
+      document = store_raw(third, "doc.png", user.uuid, %{"source_url" => "#{@host}/doc.png"})
+
+      from(f in Storage.File, where: f.uuid == ^document)
+      |> Repo.update_all(set: [file_type: "document"])
+
+      assert %{fingerprinted: 1, failed: 0} = ImageDownloader.backfill_fingerprints()
+      assert current_version?(file!(stale).metadata["image_fingerprint"])
+      refute Map.has_key?(file!(trashed).metadata, "image_fingerprint")
+      refute Map.has_key?(file!(document).metadata, "image_fingerprint")
     end
 
     test "a backfilled file is then found as the same picture", %{

@@ -13,16 +13,19 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
 
   ## The fingerprint
 
-  One ImageMagick call scales the image to 17×16 RGB. From those pixels:
+  One ImageMagick call turns the image upright (EXIF orientation),
+  flattens any transparency onto white — a shape drawn only in the alpha
+  channel is the picture, and its RGB underneath is meaningless — and
+  scales it to 17×16 RGB. From those pixels:
 
     * a 256-bit difference hash (dHash) of the luma: for each of the 16
-      rows, whether each pixel is darker than its right-hand neighbour —
+      rows, whether each pixel is darker than its right-hand neighbor —
       the picture's structure, insensitive to re-encoding and scale;
     * a 4×4 grid of mean RGB values (48 bytes) — its colors, which the
       luma hash cannot see (the same room with a pink and with a grey
       wall hashes alike).
 
-  Stored as `"v1:<64 hex hash>:<96 hex colors>"`.
+  Stored as `"v2:<64 hex hash>:<96 hex colors>"`.
 
   ## The match
 
@@ -45,7 +48,7 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
 
   alias PhoenixKit.Modules.Storage.ImageProcessor
 
-  @version "v1"
+  @version "v2"
   @width 17
   @height 16
   @raw_size @width * @height * 3
@@ -54,8 +57,16 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   @max_mean_color 4
   @max_cell_color 12
 
-  @typedoc "`\"v1:<64 hex>:<96 hex>\"`"
+  @typedoc "`\"v2:<64 hex>:<96 hex>\"`"
   @type t :: String.t()
+
+  @doc """
+  The version prefix of the fingerprints this module computes and
+  compares. A fingerprint of another version never matches; stored ones
+  are re-stamped by `ImageDownloader.backfill_fingerprints/0`.
+  """
+  @spec version() :: String.t()
+  def version, do: @version
 
   @doc """
   Computes the fingerprint of the image at `path`.
@@ -79,7 +90,15 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
     args =
       ImageProcessor.limit_args() ++
         [
+          "-quiet",
           input,
+          "-auto-orient",
+          "-background",
+          "white",
+          "-alpha",
+          "remove",
+          "-alpha",
+          "off",
           "-colorspace",
           "sRGB",
           "-resize",
@@ -153,20 +172,28 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   end
 
   @doc """
-  Whether two fingerprints are the same picture (see the module doc for
-  the bounds and the measurement behind them). Anything malformed, or of
-  another version, never matches.
+  The distances (as `compare/2`) when two fingerprints are the same
+  picture — see the module doc for the bounds and the measurement behind
+  them — `:nomatch` otherwise. Anything malformed, or of another version,
+  never matches.
   """
-  @spec match?(term(), term()) :: boolean()
-  def match?(a, b) do
+  @spec match(term(), term()) ::
+          {:ok, %{bits: non_neg_integer(), mean_color: float(), max_color: non_neg_integer()}}
+          | :nomatch
+  def match(a, b) do
     case compare(a, b) do
-      {:ok, %{bits: bits, mean_color: mean, max_color: max}} ->
-        bits <= @max_hash_bits and mean <= @max_mean_color and max <= @max_cell_color
+      {:ok, %{bits: bits, mean_color: mean, max_color: max} = distances}
+      when bits <= @max_hash_bits and mean <= @max_mean_color and max <= @max_cell_color ->
+        {:ok, distances}
 
-      :error ->
-        false
+      _ ->
+        :nomatch
     end
   end
+
+  @doc "Whether two fingerprints are the same picture (`match/2` as a boolean)."
+  @spec match?(term(), term()) :: boolean()
+  def match?(a, b), do: match(a, b) != :nomatch
 
   defp decode(@version <> ":" <> rest) do
     with [hash_hex, colors_hex] <- String.split(rest, ":"),

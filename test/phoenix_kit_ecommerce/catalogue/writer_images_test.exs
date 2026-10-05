@@ -635,6 +635,38 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
     end
   end
 
+  describe "build_reuse_index/0" do
+    test "a file's own source URL outranks another file's alias for it", %{user_uuid: user_uuid} do
+      earlier = store_linked_file("https://cdn.example/a.jpg", user_uuid)
+
+      {:ok, _} =
+        Storage.update_file_metadata(
+          earlier.uuid,
+          &Map.put(&1, "source_url_aliases", ["https://cdn.example/b.jpg"])
+        )
+
+      later = store_linked_file("https://cdn.example/b.jpg?v=2", user_uuid)
+
+      %{url_index: index} = Writer.build_reuse_index()
+
+      assert index["https://cdn.example/a.jpg"] == earlier.uuid
+      assert index["https://cdn.example/b.jpg"] == later.uuid
+    end
+
+    test "an alias no file owns resolves to the file that answers to it", %{user_uuid: user_uuid} do
+      file = store_linked_file("https://cdn.example/a.jpg", user_uuid)
+
+      {:ok, _} =
+        Storage.update_file_metadata(
+          file.uuid,
+          &Map.put(&1, "source_url_aliases", ["https://cdn.example/copy.jpg"])
+        )
+
+      %{url_index: index} = Writer.build_reuse_index()
+      assert index["https://cdn.example/copy.jpg"] == file.uuid
+    end
+  end
+
   # The seam between `ImageDownloader` (writes `source_url_aliases`) and
   # this module (reads them into the reuse index): the same banner listed
   # under a second Shopify src — its own file in Shopify, a few bytes

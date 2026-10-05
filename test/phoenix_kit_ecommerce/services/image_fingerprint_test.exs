@@ -4,7 +4,7 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
   fingerprint `ImageDownloader` uses to recognise a re-encoded or resized
   copy of a picture it already stored.
 
-  `match?/2` and `compare/2` are pure and run everywhere. `compute/1`
+  `match/2`, `match?/2` and `compare/2` are pure and run everywhere. `compute/1`
   shells out to ImageMagick, so its tests draw real images with `convert`
   and are skipped where ImageMagick is not installed.
   """
@@ -17,7 +17,8 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
 
   # A fingerprint built by hand: 32 bytes of hash, 48 bytes of color.
   defp fp(hash_bytes, color_bytes) do
-    "v1:" <>
+    ImageFingerprint.version() <>
+      ":" <>
       Base.encode16(hash_bytes, case: :lower) <> ":" <> Base.encode16(color_bytes, case: :lower)
   end
 
@@ -25,12 +26,22 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
   defp zero_hash, do: <<0::256>>
   defp grey(value), do: :binary.copy(<<value>>, 48)
 
-  describe "compare/2 and match?/2" do
+  describe "compare/2, match/2 and match?/2" do
     test "an identical fingerprint matches with zero distance" do
       a = fp(zero_hash(), grey(100))
 
       assert {:ok, %{bits: 0, mean_color: +0.0, max_color: 0}} = ImageFingerprint.compare(a, a)
+      assert {:ok, %{bits: 0}} = ImageFingerprint.match(a, a)
       assert ImageFingerprint.match?(a, a)
+    end
+
+    test "match/2 hands back the distances of a match and :nomatch otherwise" do
+      a = fp(zero_hash(), grey(100))
+
+      assert {:ok, %{bits: 3, max_color: 2}} =
+               ImageFingerprint.match(a, fp(hash_with_bits_set(3), grey(102)))
+
+      assert ImageFingerprint.match(a, fp(hash_with_bits_set(9), grey(100))) == :nomatch
     end
 
     test "up to 8 differing hash bits match, 9 do not" do
@@ -62,10 +73,21 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
     test "a malformed or foreign-version fingerprint never matches" do
       a = fp(zero_hash(), grey(100))
 
-      refute ImageFingerprint.match?(a, "v0:" <> String.slice(a, 3..-1//1))
-      refute ImageFingerprint.match?(a, "v1:abc:def")
+      [_version, hash, colors] = String.split(a, ":")
+
+      refute ImageFingerprint.match?(a, Enum.join(["v0", hash, colors], ":"))
+
+      refute ImageFingerprint.match?(
+               a,
+               Enum.join([ImageFingerprint.version(), "abc", "def"], ":")
+             )
+
       refute ImageFingerprint.match?(a, nil)
       assert ImageFingerprint.compare(a, "garbage") == :error
+
+      # Valid hex of the wrong length is refused too, not compared.
+      short = Enum.join([ImageFingerprint.version(), String.slice(hash, 2..-1//1), colors], ":")
+      assert ImageFingerprint.compare(a, short) == :error
     end
   end
 
@@ -106,8 +128,9 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
     end
 
     test "returns a versioned fingerprint", %{dir: dir} do
-      assert {:ok, "v1:" <> rest} = ImageFingerprint.compute(draw(dir, "a.png", 7))
-      assert [hash, color] = String.split(rest, ":")
+      assert {:ok, fingerprint} = ImageFingerprint.compute(draw(dir, "a.png", 7))
+      assert [version, hash, color] = String.split(fingerprint, ":")
+      assert version == ImageFingerprint.version()
       assert byte_size(hash) == 64
       assert byte_size(color) == 96
     end
@@ -149,6 +172,48 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprintTest do
 
       refute ImageFingerprint.match?(a, b)
       refute ImageFingerprint.match?(a, mirrored)
+    end
+
+    # A shape drawn only in the alpha channel — black on transparent, as
+    # icons, line art and stencils are — is the picture. Unflattened, every
+    # such image reads as all-black RGB and they all match each other.
+    defp icon(dir, name, shape) do
+      path = Path.join(dir, name)
+
+      {_, 0} =
+        System.cmd(
+          "convert",
+          ["-size", "240x240", "xc:none", "-fill", "black", "-draw", shape, path],
+          stderr_to_stdout: true
+        )
+
+      path
+    end
+
+    test "different shapes on a transparent background do not match", %{dir: dir} do
+      {:ok, circle} = ImageFingerprint.compute(icon(dir, "circle.png", "circle 120,120 120,40"))
+      {:ok, square} = ImageFingerprint.compute(icon(dir, "square.png", "rectangle 50,50 190,190"))
+
+      refute ImageFingerprint.match?(circle, square)
+    end
+
+    test "a transparent icon matches itself flattened onto white", %{dir: dir} do
+      png = icon(dir, "circle.png", "circle 120,120 120,40")
+
+      jpeg =
+        reencode(png, Path.join(dir, "circle.jpg"), [
+          "-background",
+          "white",
+          "-alpha",
+          "remove",
+          "-quality",
+          "80"
+        ])
+
+      {:ok, a} = ImageFingerprint.compute(png)
+      {:ok, b} = ImageFingerprint.compute(jpeg)
+
+      assert ImageFingerprint.match?(a, b)
     end
 
     test "a file that is not an image is an error, not a fingerprint", %{dir: dir} do

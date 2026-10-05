@@ -425,11 +425,12 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   re-downloads the identical URL because an item-scoped index can only
   ever see files already attached to THAT item. Every active file in
   Storage carries `metadata["source_url"]` already — `ImageDownloader.
-  download_and_store/3` is the only writer of that key and of the aliases
-  — so this is
-  never a guess: it is the exact same provable exact-URL binding (b)
-  always was, just no longer artificially narrowed to one item's own
-  attachments.
+  download_and_store/3` is the only writer of that key and of the aliases.
+  A file's own `source_url` is the provable exact-URL binding (b) always
+  was, just no longer artificially narrowed to one item's own
+  attachments; an alias is the URL of a copy `ImageDownloader` matched
+  to that file as the same picture (`ImageFingerprint.match/2`), and
+  never outranks another file's own `source_url`.
 
   `opts[:user_uuid]` is the Storage file owner for anything downloaded;
   when omitted it falls back to `PhoenixKit.Users.Auth.
@@ -701,26 +702,38 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   # second-precision, so a `uuid` tie-break keeps the choice
   # deterministic for two rows inserted in the same second.
   defp source_url_index(files) do
-    files
-    |> Enum.filter(&is_binary(get_in(&1.metadata || %{}, ["source_url"])))
-    |> Enum.sort_by(&{&1.inserted_at, &1.uuid}, fn {ts_a, uuid_a}, {ts_b, uuid_b} ->
-      case DateTime.compare(ts_a, ts_b) do
-        :eq -> uuid_a <= uuid_b
-        :lt -> true
-        :gt -> false
-      end
-    end)
-    |> Enum.reduce(%{}, fn file, acc ->
-      # A file also answers to the URLs `ImageDownloader` resolved to it as
-      # the same picture (`source_url_aliases`, stored query-stripped), so
-      # a copy it already recognised once is not downloaded again.
-      aliases = List.wrap(file.metadata["source_url_aliases"])
+    files =
+      files
+      |> Enum.filter(&is_binary(get_in(&1.metadata || %{}, ["source_url"])))
+      |> Enum.sort_by(&{&1.inserted_at, &1.uuid}, fn {ts_a, uuid_a}, {ts_b, uuid_b} ->
+        case DateTime.compare(ts_a, ts_b) do
+          :eq -> uuid_a <= uuid_b
+          :lt -> true
+          :gt -> false
+        end
+      end)
 
-      [file.metadata["source_url"] | aliases]
-      |> Enum.map(&normalize_image_url/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.reduce(acc, &Map.put_new(&2, &1, file.uuid))
+    # Every file's own download URL first, then the URLs `ImageDownloader`
+    # resolved to it as the same picture (`source_url_aliases`, stored
+    # query-stripped) — so a URL that is some file's own source is always
+    # bound to that file, never to another file that once answered to it.
+    by_source =
+      Enum.reduce(files, %{}, fn file, acc ->
+        put_url(acc, file.metadata["source_url"], file.uuid)
+      end)
+
+    Enum.reduce(files, by_source, fn file, acc ->
+      file.metadata["source_url_aliases"]
+      |> List.wrap()
+      |> Enum.reduce(acc, &put_url(&2, &1, file.uuid))
     end)
+  end
+
+  defp put_url(index, url, uuid) do
+    case normalize_image_url(url) do
+      nil -> index
+      key -> Map.put_new(index, key, uuid)
+    end
   end
 
   defp normalize_image_url(url), do: ImageDownloader.source_key(url)
