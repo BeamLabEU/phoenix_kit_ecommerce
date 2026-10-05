@@ -276,7 +276,10 @@ defmodule PhoenixKitEcommerce.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib priv .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
+      # `priv/gettext`, not `priv`: Hex ignores .gitignore, and the test
+      # Storage writes real files into `priv/media`, which pushed a release
+      # tarball past Hex's 16 MB limit.
+      files: ~w(lib priv/gettext .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 
