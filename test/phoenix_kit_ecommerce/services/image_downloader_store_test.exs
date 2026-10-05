@@ -289,6 +289,51 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderStoreTest do
                ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
     end
 
+    test "a closer candidate that fails the picture check gives way to the next", %{
+      user: user,
+      banner: banner,
+      with_line: with_line,
+      q80: q80,
+      fingerprint: fingerprint
+    } do
+      _closest_but_other_version =
+        store_raw(with_line, "line.png", user.uuid, %{
+          "source_url" => "#{@host}/line.png",
+          "image_fingerprint" => fingerprint
+        })
+
+      next =
+        store_raw(q80, "q80.jpg", user.uuid, %{
+          "source_url" => "#{@host}/q80.jpg",
+          "image_fingerprint" => flip_bits(fingerprint, 2)
+        })
+
+      opts = serve(%{"/a.png" => {"image/png", banner}})
+      assert {:ok, ^next} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+    end
+
+    test "a candidate whose original cannot be read is not reused", %{
+      user: user,
+      banner: banner,
+      q80: q80,
+      fingerprint: fingerprint
+    } do
+      unreadable =
+        store_raw(q80, "q80.jpg", user.uuid, %{
+          "source_url" => "#{@host}/q80.jpg",
+          "image_fingerprint" => fingerprint
+        })
+
+      from(i in PhoenixKit.Modules.Storage.FileInstance,
+        where: i.file_uuid == ^unreadable and i.variant_name == "original"
+      )
+      |> Repo.delete_all()
+
+      opts = serve(%{"/a.png" => {"image/png", banner}})
+      assert {:ok, stored} = ImageDownloader.download_and_store("#{@host}/a.png", user.uuid, opts)
+      refute stored == unreadable
+    end
+
     test "an equally close match goes to the earliest stored", %{
       user: user,
       banner: banner,

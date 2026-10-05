@@ -39,15 +39,18 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   2. **The pictures themselves** (`same_picture?/2`): both scaled to
      256×256 grey, the absolute difference averaged over 5×5 pixels; the
      largest of those local averages must stay within 24 (of 255). A
-     fingerprint cannot see a thin line or a small label added to an
-     otherwise identical picture; this can.
+     fingerprint cannot see a line or a label added to an otherwise
+     identical picture; this sees one that survives scaling to 256 px —
+     a detail thinner than about 0.2% of the image's side (a 2 px rule on
+     a 2000 px picture) can stay under the bound.
 
   Measured on a live library of 3,121 images. Step 1 joined 376 redundant
   banner copies and 139 groups of duplicated product photos — and also 24
   copies of a measuring chart that carries an extra "Chin width" line
   into the version without it (fingerprints 2 bits apart). Step 2 puts
   every true copy at or below 6.8, the two chart versions at 75 and a
-  cropped re-save of a chart at 106.
+  cropped re-save of a chart at 106. (Those figures are for that library:
+  a half-size JPEG re-save measured 7.2 elsewhere, a GIF frame 11.)
 
   ImageMagick runs with core's resource limits and with its decoder
   pinned to the format the file's bytes sniff as
