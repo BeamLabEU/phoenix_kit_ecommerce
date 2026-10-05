@@ -297,7 +297,8 @@ lib/phoenix_kit_ecommerce/
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
 │                     # ShopifyMediaSyncWorker, TranslationSweepWorker
 ├── mix_tasks/        # install, deduplicate_products,
-│                     # backfill_translation_fingerprints (one-shot)
+│                     # backfill_translation_fingerprints (one-shot),
+│                     # backfill_image_fingerprints (after upgrading)
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
 ├── policy.ex         # secure-by-default admin policy settings
