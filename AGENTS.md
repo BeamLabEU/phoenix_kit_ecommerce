@@ -12,8 +12,10 @@ and checkout hands off to `phoenix_kit_billing` for orders and payment. It
 ships admin LiveViews for the whole workflow plus the public storefront
 pages.
 
-- **Depends on:** `phoenix_kit` `>= 2.38.0 and < 3.0.0` (Hex — the release
-  that carries `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound form
+- **Depends on:** `phoenix_kit` `>= 2.43.0 and < 3.0.0` (Hex — the release
+  that carries `ImageProcessor.limit_args/0` and `pinned_input/2`, which
+  `ImageFingerprint` runs ImageMagick through, above 2.38.0's
+  `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound form
   keeps the ceiling open across later 2.x minors), `phoenix_kit_billing`
   `~> 0.13` (hard), `phoenix_kit_ai` `~> 0.24` (optional — the
   AI-translate UI, both translation adapters, the sweep worker and the
@@ -191,8 +193,8 @@ Repo-local aliases:
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
   Rows carry no PII.
-- **The core pin keeps the compound form (`>= 2.38.0 and < 3.0.0`) on
-  purpose.** A three-segment `~> 2.38.0` expands to `< 2.39.0` and breaks
+- **The core pin keeps the compound form (`>= 2.43.0 and < 3.0.0`) on
+  purpose.** A three-segment `~> 2.43.0` expands to `< 2.44.0` and breaks
   CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
   — while nothing in this repo's own run notices, which is why a test guards
   it. Raising the floor is fine and expected; raise it in `mix.exs` and in
