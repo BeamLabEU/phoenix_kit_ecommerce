@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.17 - 2026-10-05
+
+### Added
+
+- **A re-encoded copy of a stored picture is reused on import** (#71).
+  An Etsy-filled Shopify store keeps one banner as a separate file on
+  every listing; an import keyed on URL or checksum stored every copy.
+  `ImageDownloader.download_and_store/3` now matches a download against
+  the imported images by a perceptual fingerprint (`ImageFingerprint`),
+  confirms the match on the pictures themselves, and hands back the
+  existing file. A reused URL is recorded in
+  `metadata["source_url_aliases"]`, which `Catalogue.Writer` indexes.
+  A trashed copy core's dedup hands back is restored rather than attached
+  from the trash.
+- **`mix phoenix_kit_ecommerce.backfill_image_fingerprints`.** Run it once
+  after upgrading, before the next Shopify media sync: images imported
+  earlier carry no fingerprint, so until it has run no stored image is a
+  candidate and every copy is stored again.
+
+### Changed
+
+- **Dependency floor:** `phoenix_kit >= 2.43.0 and < 3.0.0`, for the
+  ImageMagick helpers the fingerprint runs through.
+
 ## 0.5.16 - 2026-09-25
 
 ### Fixed
