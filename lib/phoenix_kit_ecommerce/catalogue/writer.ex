@@ -407,11 +407,14 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   ["ecommerce"]["shopify"]["image_ids"]` (`%{"<shopify image id>" =>
   file_uuid}`) reuses its file uuid; (b) failing that, ANY active Storage
   file in the whole shop — not only ones already linked to `item` —
-  whose `metadata["source_url"]` matches the Shopify image's `src` once
+  whose `metadata["source_url"]`, or one of its
+  `metadata["source_url_aliases"]`, matches the Shopify image's `src` once
   both are stripped of their `?v=`-style query string reuses that file
   instead of downloading a second copy of it; (c) otherwise downloads via
   `opts[:downloader]` (default `&ImageDownloader.download_and_store/3`,
-  `(url, user_uuid, opts) -> {:ok, file_uuid} | {:error, reason}`).
+  `(url, user_uuid, opts) -> {:ok, file_uuid} | {:error, reason}`), which
+  itself hands back an existing file for a re-encoded copy of a picture
+  Storage already holds and records `src` as that file's alias.
 
   (b) is shop-wide, not item-scoped, because a live run against 665
   products found 582 of them re-downloading images that Storage already
@@ -422,7 +425,8 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   re-downloads the identical URL because an item-scoped index can only
   ever see files already attached to THAT item. Every active file in
   Storage carries `metadata["source_url"]` already — `ImageDownloader.
-  download_and_store/3` is the only writer of that key — so this is
+  download_and_store/3` is the only writer of that key and of the aliases
+  — so this is
   never a guess: it is the exact same provable exact-URL binding (b)
   always was, just no longer artificially narrowed to one item's own
   attachments.
@@ -707,15 +711,19 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
       end
     end)
     |> Enum.reduce(%{}, fn file, acc ->
-      Map.put_new(acc, normalize_image_url(file.metadata["source_url"]), file.uuid)
+      # A file also answers to the URLs `ImageDownloader` resolved to it as
+      # the same picture (`source_url_aliases`, stored query-stripped), so
+      # a copy it already recognised once is not downloaded again.
+      aliases = List.wrap(file.metadata["source_url_aliases"])
+
+      [file.metadata["source_url"] | aliases]
+      |> Enum.map(&normalize_image_url/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.reduce(acc, &Map.put_new(&2, &1, file.uuid))
     end)
   end
 
-  defp normalize_image_url(url) when is_binary(url) do
-    url |> URI.parse() |> Map.put(:query, nil) |> URI.to_string()
-  end
-
-  defp normalize_image_url(_url), do: nil
+  defp normalize_image_url(url), do: ImageDownloader.source_key(url)
 
   # ============================================================
   # Update: localized fields
