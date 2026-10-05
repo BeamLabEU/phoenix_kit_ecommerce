@@ -132,7 +132,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
 
   """
   @spec download_and_store(String.t(), String.t() | nil, keyword()) ::
-          {:ok, String.t()} | {:error, atom() | String.t()}
+          {:ok, String.t()} | {:error, term()}
   def download_and_store(url, user_uuid, opts \\ []) when is_binary(url) do
     metadata = Keyword.get(opts, :metadata, %{})
 
@@ -296,7 +296,11 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       where:
         f.status == "active" and
           fragment("(?->>'source_url') IS NOT NULL", f.metadata) and
-          fragment("(?->>'image_fingerprint') IS NOT NULL", f.metadata),
+          fragment(
+            "(?->>'image_fingerprint') LIKE ?",
+            f.metadata,
+            ^(ImageFingerprint.version() <> ":%")
+          ),
       select: {f.uuid, f.inserted_at, fragment("?->>'image_fingerprint'", f.metadata)}
     )
     |> PhoenixKit.Config.get_repo().all()
@@ -370,17 +374,23 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # bytes whatever its status; a trashed one is brought back (see
   # `download_and_store/3`).
   defp handle_storage_result({:ok, %{status: "trashed"} = file}) do
-    case Storage.restore_file(file) do
+    # Into no folder — core's rule for trashed bytes uploaded again: they
+    # are wanted where they are being used now, not back where they were
+    # removed from. `:not_trashed` means another upload restored it first.
+    case Storage.restore_file_into(file, nil) do
       {:ok, restored} ->
         Logger.info("[ImageDownloader] Restored trashed file #{restored.uuid} for the same bytes")
         {:ok, restored.uuid}
 
-      {:error, reason} ->
-        Logger.error(
-          "[ImageDownloader] Could not restore trashed file #{file.uuid}: #{inspect(reason)}"
-        )
+      {:error, :not_trashed} ->
+        case Storage.get_file(file.uuid) do
+          %{status: "active"} ->
+            {:ok, file.uuid}
 
-        {:error, {:trashed_duplicate, file.uuid}}
+          _gone ->
+            Logger.error("[ImageDownloader] Trashed duplicate #{file.uuid} vanished mid-restore")
+            {:error, {:trashed_duplicate, file.uuid}}
+        end
     end
   end
 

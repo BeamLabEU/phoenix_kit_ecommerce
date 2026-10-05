@@ -64,6 +64,12 @@ defmodule PhoenixKitEcommerce.Services.ImageFingerprint do
   The version prefix of the fingerprints this module computes and
   compares. A fingerprint of another version never matches; stored ones
   are re-stamped by `ImageDownloader.backfill_fingerprints/0`.
+
+  Run that backfill right after deploying a new version and before the
+  next media sync: until it has run, no stored image is a candidate, so
+  every copy is fetched again — including the URL of a copy someone
+  trashed, whose bytes core's own dedup then hands back and the download
+  restores.
   """
   @spec version() :: String.t()
   def version, do: @version
