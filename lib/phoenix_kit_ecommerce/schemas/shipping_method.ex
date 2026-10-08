@@ -19,6 +19,8 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   - `position` - Sort order
   - `estimated_days_min`, `estimated_days_max` - Delivery estimate
   - `tracking_supported` - Tracking available
+  - `metadata["pay_on_delivery"]` - The buyer pays the carrier's own rates on
+    delivery; the shop charges nothing (see `pay_on_delivery?/1`)
   """
 
   use Ecto.Schema
@@ -31,6 +33,8 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   alias PhoenixKitEcommerce.LocalizedSlug
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
+
+  @pay_on_delivery_key "pay_on_delivery"
 
   schema "phoenix_kit_shop_shipping_methods" do
     field :name, :string
@@ -91,9 +95,12 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   """
   def changeset(method, attrs) do
     attrs = normalize_booleans(attrs, [:active, :tracking_supported])
+    {pay_on_delivery, attrs} = pop_pay_on_delivery(attrs)
 
     method
     |> cast(attrs, @required_fields ++ @optional_fields)
+    |> put_pay_on_delivery(pay_on_delivery)
+    |> zero_pay_on_delivery_price()
     |> validate_required(@required_fields)
     |> validate_length(:name, max: 255)
     |> validate_length(:currency, is: 3)
@@ -192,6 +199,18 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   end
 
   @doc """
+  Whether the buyer pays the carrier's own rates on delivery
+  (`metadata["pay_on_delivery"]`).
+
+  The shop charges nothing for such a method, so its price is 0 — but it is
+  not free shipping, and nothing may present it as such. `false` for `nil`
+  and an unloaded association, so a cart's `shipping_method` can be passed
+  as is.
+  """
+  def pay_on_delivery?(%__MODULE__{metadata: %{@pay_on_delivery_key => true}}), do: true
+  def pay_on_delivery?(_), do: false
+
+  @doc """
   Returns true if method is active.
   """
   def active?(%__MODULE__{active: true}), do: true
@@ -229,6 +248,63 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   defp country_ok?(%{countries: allowed, excluded_countries: excluded}, country) do
     (is_nil(country) or country in allowed) and
       (is_nil(country) or country not in excluded)
+  end
+
+  # The admin form submits the flag as a top-level `pay_on_delivery` param:
+  # rendering it as `shipping_method[metadata][pay_on_delivery]` would make
+  # `cast/3` replace the whole metadata map and erase every other key in it.
+  # `:unset` (no param) leaves whatever the metadata already says.
+  defp pop_pay_on_delivery(attrs) when is_map(attrs) do
+    cond do
+      Map.has_key?(attrs, :pay_on_delivery) ->
+        {value, attrs} = Map.pop(attrs, :pay_on_delivery)
+        {to_boolean(value) == true, attrs}
+
+      Map.has_key?(attrs, @pay_on_delivery_key) ->
+        {value, attrs} = Map.pop(attrs, @pay_on_delivery_key)
+        {to_boolean(value) == true, attrs}
+
+      true ->
+        {:unset, attrs}
+    end
+  end
+
+  defp pop_pay_on_delivery(attrs), do: {:unset, attrs}
+
+  # Stored only while true, as a real boolean, so a method that never had
+  # the flag does not gain a key and a "true" string from a form or import
+  # cannot slip past `pay_on_delivery?/1`'s strict match.
+  defp put_pay_on_delivery(changeset, value) do
+    metadata = get_field(changeset, :metadata) || %{}
+
+    flag =
+      case value do
+        :unset -> to_boolean(Map.get(metadata, @pay_on_delivery_key)) == true
+        flag -> flag
+      end
+
+    normalized =
+      if flag,
+        do: Map.put(metadata, @pay_on_delivery_key, true),
+        else: Map.delete(metadata, @pay_on_delivery_key)
+
+    if normalized == metadata, do: changeset, else: put_change(changeset, :metadata, normalized)
+  end
+
+  # Forced rather than validated: the shop charges nothing for a
+  # pay-on-delivery method, so a price left in the form (or sent by an
+  # import) would otherwise be added to the order ON TOP of the carrier's
+  # fee, and a free-shipping threshold has nothing to waive. Coercing keeps
+  # that invariant on every write path without making the admin clear two
+  # fields before the checkbox can be saved.
+  defp zero_pay_on_delivery_price(changeset) do
+    if pay_on_delivery?(apply_changes(changeset)) do
+      changeset
+      |> put_change(:price, Decimal.new("0"))
+      |> put_change(:free_above_amount, nil)
+    else
+      changeset
+    end
   end
 
   defp normalize_booleans(attrs, fields) when is_map(attrs) do

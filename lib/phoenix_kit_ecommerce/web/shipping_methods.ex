@@ -67,7 +67,14 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
           items={@methods}
           card_fields={fn method ->
             [
-              %{label: "Price", value: format_price(method.price, @currency)},
+              %{
+                label: "Price",
+                value:
+                  if(PhoenixKitEcommerce.ShippingMethod.pay_on_delivery?(method),
+                    do: gettext("Paid on delivery"),
+                    else: format_price(method.price, @currency)
+                  )
+              },
               %{
                 label: "Delivery",
                 value:
@@ -134,7 +141,11 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
                     <% end %>
                   </.table_default_cell>
                   <.table_default_cell>
-                    <div class="font-semibold">{format_price(method.price, @currency)}</div>
+                    <%= if PhoenixKitEcommerce.ShippingMethod.pay_on_delivery?(method) do %>
+                      <div class="font-semibold">{gettext("Paid on delivery")}</div>
+                    <% else %>
+                      <div class="font-semibold">{format_price(method.price, @currency)}</div>
+                    <% end %>
                     <%= if method.free_above_amount do %>
                       <div class="text-xs text-success">
                         Free above {format_price(method.free_above_amount, @currency)}

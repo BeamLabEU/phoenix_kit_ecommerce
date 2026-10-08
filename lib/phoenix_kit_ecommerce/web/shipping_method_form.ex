@@ -218,6 +218,22 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   />
                 </div>
               </div>
+
+              <div class="divider my-2"></div>
+
+              <div class="fieldset">
+                <.checkbox
+                  name="shipping_method[pay_on_delivery]"
+                  checked={ShippingMethod.pay_on_delivery?(Ecto.Changeset.apply_changes(@changeset))}
+                >
+                  <span class="font-medium">{gettext("Paid on delivery at carrier rates")}</span>
+                </.checkbox>
+                <p class="text-sm text-base-content/60 mt-1">
+                  {gettext(
+                    "The customer pays the carrier at their rates on delivery. The shop charges nothing for shipping: the price is saved as 0 and the free-shipping threshold is cleared."
+                  )}
+                </p>
+              </div>
             </div>
           </div>
 
