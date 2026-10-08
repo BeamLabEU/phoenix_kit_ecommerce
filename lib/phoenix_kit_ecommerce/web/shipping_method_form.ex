@@ -85,7 +85,11 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
           actor_role: Activity.actor_role(socket),
           resource_type: "shipping_method",
           resource_uuid: method.uuid,
-          metadata: %{"slug" => method.slug, "active" => method.active}
+          metadata: %{
+            "slug" => method.slug,
+            "active" => method.active,
+            "pay_on_delivery" => ShippingMethod.pay_on_delivery?(method)
+          }
         )
 
         {:noreply,
@@ -106,7 +110,11 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
           actor_role: Activity.actor_role(socket),
           resource_type: "shipping_method",
           resource_uuid: method.uuid,
-          metadata: %{"slug" => method.slug, "active" => method.active}
+          metadata: %{
+            "slug" => method.slug,
+            "active" => method.active,
+            "pay_on_delivery" => ShippingMethod.pay_on_delivery?(method)
+          }
         )
 
         {:noreply,
@@ -180,7 +188,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                     label={gettext("Price") <> " *"}
                     step="0.01"
                     min="0"
-                    required
+                    required={!@pay_on_delivery}
+                    disabled={@pay_on_delivery}
+                    {if @pay_on_delivery, do: %{value: "0"}, else: %{}}
                   />
                 </div>
 
@@ -215,6 +225,8 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                     step="0.01"
                     min="0"
                     placeholder={gettext("No threshold")}
+                    disabled={@pay_on_delivery}
+                    {if @pay_on_delivery, do: %{value: nil}, else: %{}}
                   />
                 </div>
               </div>
@@ -224,7 +236,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
               <div class="fieldset">
                 <.checkbox
                   name="shipping_method[pay_on_delivery]"
-                  checked={ShippingMethod.pay_on_delivery?(Ecto.Changeset.apply_changes(@changeset))}
+                  checked={@pay_on_delivery}
                 >
                   <span class="font-medium">{gettext("Paid on delivery at carrier rates")}</span>
                 </.checkbox>
@@ -376,8 +388,15 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   end
 
   defp assign_form(socket, %Ecto.Changeset{} = changeset) do
+    # Drives the checkbox and locks Price / Free above while it is on: the
+    # changeset forces both (0 and none) on save, so an editable field would
+    # show a value that is never stored. Disabled inputs are not submitted,
+    # which the changeset is fine with.
+    pay_on_delivery = ShippingMethod.pay_on_delivery?(Ecto.Changeset.apply_changes(changeset))
+
     socket
     |> assign(:changeset, changeset)
+    |> assign(:pay_on_delivery, pay_on_delivery)
     |> assign(:form, to_form(changeset))
   end
 
