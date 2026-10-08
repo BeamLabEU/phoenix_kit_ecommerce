@@ -32,6 +32,22 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
       assert has_element?(view, "#cart-shipping-pay-on-delivery-note")
     end
 
+    test "a cart still charging a method that became pay-on-delivery is re-priced on mount",
+         %{conn: conn, cart: cart} do
+      method = method!("Nova Poshta", price: "5.00")
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, nil)
+      assert Decimal.equal?(cart.total, Decimal.new("30.00"))
+
+      {:ok, _} = Shop.update_shipping_method(method, %{"pay_on_delivery" => "true"})
+
+      {:ok, view, _html} = live(conn, "/cart")
+
+      assert view |> element("#cart-summary-shipping") |> render() =~ "Paid on delivery"
+      assert has_element?(view, "#cart-shipping-pay-on-delivery-note")
+      assert view |> element("#cart-summary-total") |> render() =~ "25.00"
+      refute view |> element("#cart-summary-total") |> render() =~ "30.00"
+    end
+
     test "a method over its free threshold still reads FREE", %{conn: conn} do
       method = method!("Free Over 10", price: "5.00", free_above_amount: "10.00")
 
@@ -86,6 +102,21 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
       assert has_element?(view, "#checkout-shipping-pay-on-delivery-note")
     end
 
+    test "a cart still charging a method that became pay-on-delivery is re-priced on mount",
+         %{conn: conn, cart: cart} do
+      method = method!("Nova Poshta", price: "5.00")
+      {:ok, _cart} = Shop.set_cart_shipping(cart, method, nil)
+
+      {:ok, _} = Shop.update_shipping_method(method, %{"pay_on_delivery" => "true"})
+
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      assert view |> element("#checkout-summary-shipping") |> render() =~ "Paid on delivery"
+      assert has_element?(view, "#checkout-shipping-pay-on-delivery-note")
+      assert view |> element("#checkout-summary-total") |> render() =~ "25.00"
+      refute view |> element("#checkout-summary-total") |> render() =~ "30.00"
+    end
+
     test "a free method still reads FREE on the shipping step", %{conn: conn} do
       PhoenixKit.Settings.update_setting_with_module(
         "shop_shipping_selection_position",
@@ -132,6 +163,32 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
     end
   end
 
+  describe "user order details page" do
+    test "the shipping line says paid on delivery once", %{conn: conn} do
+      PhoenixKit.Settings.update_boolean_setting_with_module("billing_enabled", true, "billing")
+
+      method = method!("Carrier Rates", pay_on_delivery: true, description: "Branch pickup")
+
+      {:ok, cart} =
+        Shop.create_cart(session_id: "pod-details-#{System.unique_integer([:positive])}")
+
+      {:ok, cart} = Shop.add_to_cart(cart, physical_product!(), 1)
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
+
+      {:ok, order} =
+        Shop.convert_cart_to_order(cart, billing_data: complete_billing("EE", "pod-details"))
+
+      conn = put_test_scope(conn, fake_scope(user_uuid: order.user_uuid))
+
+      {:ok, view, _html} = live(conn, "/dashboard/orders/#{order.uuid}")
+
+      line = view |> element("#order-line-shipping") |> render()
+      assert line =~ "Branch pickup"
+      assert length(String.split(line, ~r/paid on delivery/i)) == 2
+      assert has_element?(view, "#order-shipping-pay-on-delivery-note")
+    end
+  end
+
   describe "admin" do
     setup %{conn: conn} do
       %{conn: put_test_scope(conn, fake_scope())}
@@ -158,6 +215,48 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
       assert Decimal.equal?(method.price, Decimal.new("0"))
     end
 
+    test "checking the box disables the price and threshold inputs", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+
+      assert has_element?(view, "input[name='shipping_method[price]'][required]")
+      refute has_element?(view, "input[name='shipping_method[price]'][disabled]")
+
+      view
+      |> form("form", %{
+        "shipping_method" => %{
+          "name" => "Nova Poshta",
+          "price" => "3.00",
+          "pay_on_delivery" => "true"
+        }
+      })
+      |> render_change()
+
+      assert has_element?(view, "input[name='shipping_method[price]'][disabled]")
+      refute has_element?(view, "input[name='shipping_method[price]'][required]")
+      assert has_element?(view, "input[name='shipping_method[free_above_amount]'][disabled]")
+    end
+
+    test "the activity log records the flag", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+
+      view
+      |> form("form", %{
+        "shipping_method" => %{
+          "name" => "Logged Carrier",
+          "price" => "0",
+          "pay_on_delivery" => "true"
+        }
+      })
+      |> render_submit()
+
+      method = Enum.find(Shop.list_shipping_methods(), &(&1.name == "Logged Carrier"))
+
+      assert_activity_logged("shop.shipping_method_created",
+        resource_uuid: method.uuid,
+        metadata_has: %{"pay_on_delivery" => true}
+      )
+    end
+
     test "the list shows paid on delivery instead of a price", %{conn: conn} do
       method!("Carrier Rates", pay_on_delivery: true)
 
@@ -171,9 +270,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
     session_id = "pod-lv-#{System.unique_integer([:positive])}"
 
     {:ok, cart} = Shop.create_cart(session_id: session_id)
-    {:ok, _cart} = Shop.add_to_cart(cart, physical_product!(), 1)
+    {:ok, cart} = Shop.add_to_cart(cart, physical_product!(), 1)
 
-    %{conn: Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})}
+    %{conn: Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id}), cart: cart}
   end
 
   defp physical_product! do
@@ -198,6 +297,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
         "name" => "#{name} #{System.unique_integer([:positive])}",
         "price" => Keyword.get(opts, :price, "0"),
         "free_above_amount" => Keyword.get(opts, :free_above_amount),
+        "description" => Keyword.get(opts, :description),
         "pay_on_delivery" => Keyword.get(opts, :pay_on_delivery, false),
         "countries" => Keyword.get(opts, :countries, []),
         "active" => true

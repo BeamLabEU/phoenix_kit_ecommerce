@@ -76,6 +76,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp mount_with_cart(socket, cart, session_id, current_language) do
+    cart = refresh_pay_on_delivery_shipping(cart)
+
     # Subscribe to cart events for real-time sync across tabs
     if connected?(socket) do
       Events.subscribe_to_cart(cart)
@@ -625,7 +627,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <%= cond do %>
                       <% is_nil(@cart.shipping_method_uuid) -> %>
                         <span class="text-base-content/50">{gettext("Select method")}</span>
-                      <% ShippingMethod.pay_on_delivery?(@cart.shipping_method) -> %>
+                      <% PriceDisplay.cart_shipping_pay_on_delivery?(@cart) -> %>
                         <span>{gettext("Paid on delivery")}</span>
                       <% Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq -> %>
                         <span class="text-success">{gettext("FREE")}</span>
@@ -651,7 +653,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
                   <div class="divider my-2"></div>
 
-                  <div class="flex justify-between text-lg font-bold">
+                  <div id="cart-summary-total" class="flex justify-between text-lg font-bold">
                     <span>{gettext("Total")}</span>
                     <span>{format_price(@cart.total, @currency)}</span>
                   </div>
@@ -668,8 +670,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     </p>
                   <% end %>
 
-                  <%= if @requires_shipping && @cart.shipping_method_uuid &&
-                           ShippingMethod.pay_on_delivery?(@cart.shipping_method) do %>
+                  <%= if @requires_shipping && PriceDisplay.cart_shipping_pay_on_delivery?(@cart) do %>
                     <p id="cart-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
                       {gettext(
                         "Shipping is not included in this total: you pay the carrier at their rates on delivery."
@@ -706,6 +707,17 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   # Private helpers
+
+  # A method switched to pay-on-delivery after this cart picked it leaves
+  # the old fee in the cart's stored totals. A failed refresh (the cart was
+  # converted meanwhile) keeps the cart as loaded; the summary then shows
+  # the amount it actually holds - see `PriceDisplay.cart_shipping_pay_on_delivery?/1`.
+  defp refresh_pay_on_delivery_shipping(cart) do
+    case Shop.refresh_pay_on_delivery_shipping(cart) do
+      {:ok, refreshed} -> refreshed
+      _ -> cart
+    end
+  end
 
   defp generate_session_id do
     :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)

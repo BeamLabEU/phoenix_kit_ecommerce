@@ -18,7 +18,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
-  alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
 
@@ -63,7 +62,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
 
       cart ->
-        handle_cart_validation(socket, cart, user)
+        handle_cart_validation(socket, refresh_pay_on_delivery_shipping(cart), user)
+    end
+  end
+
+  # Same as the cart page: a method switched to pay-on-delivery after the
+  # cart picked it leaves the old fee in the stored totals the summary shows.
+  defp refresh_pay_on_delivery_shipping(cart) do
+    case Shop.refresh_pay_on_delivery_shipping(cart) do
+      {:ok, refreshed} -> refreshed
+      _ -> cart
     end
   end
 
@@ -1692,7 +1700,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
               </div>
               <div id="checkout-review-shipping-price" class="font-semibold">
                 <%= cond do %>
-                  <% ShippingMethod.pay_on_delivery?(@cart.shipping_method) -> %>
+                  <% PriceDisplay.cart_shipping_pay_on_delivery?(@cart) -> %>
                     {gettext("Paid on delivery")}
                   <% Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq -> %>
                     <span class="text-success">{gettext("FREE")}</span>
@@ -1875,7 +1883,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             <%= cond do %>
               <% is_nil(@cart.shipping_method_uuid) -> %>
                 <span class="text-base-content/50">{gettext("Select method")}</span>
-              <% ShippingMethod.pay_on_delivery?(@cart.shipping_method) -> %>
+              <% PriceDisplay.cart_shipping_pay_on_delivery?(@cart) -> %>
                 <span>{gettext("Paid on delivery")}</span>
               <% Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq -> %>
                 <span class="text-success">{gettext("FREE")}</span>
@@ -1901,7 +1909,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
           <div class="divider my-2"></div>
 
-          <div class="flex justify-between text-lg font-bold">
+          <div id="checkout-summary-total" class="flex justify-between text-lg font-bold">
             <span>{gettext("Total")}</span>
             <span>{format_price(@cart.total, @currency)}</span>
           </div>
@@ -1914,8 +1922,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             </p>
           <% end %>
 
-          <%= if @requires_shipping && @cart.shipping_method_uuid &&
-                 ShippingMethod.pay_on_delivery?(@cart.shipping_method) do %>
+          <%= if @requires_shipping && PriceDisplay.cart_shipping_pay_on_delivery?(@cart) do %>
             <p id="checkout-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
               {gettext(
                 "Shipping is not included in this total: you pay the carrier at their rates on delivery."

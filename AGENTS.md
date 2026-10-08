@@ -244,7 +244,13 @@ Repo-local aliases:
   `ShippingMethod.pay_on_delivery?/1` (or `present_shipping_method/2`'s
   `pay_on_delivery?`) first. Orders carry it as
   `metadata["shipping_pay_on_delivery"]` and on the shipping line as
-  `"pay_on_delivery"`.
+  `"pay_on_delivery"`; read them through `PriceDisplay`
+  (`line_pay_on_delivery?/1`, `order_shipping_pay_on_delivery?/1`,
+  `cart_shipping_pay_on_delivery?/1`). Billing does not read the flag: its
+  plain-text email prints the line as 0, and its admin order edit drops the
+  key. A cart that picked a method before it was flagged keeps the old fee
+  in its stored totals until `refresh_pay_on_delivery_shipping/1` (the cart
+  and checkout pages call it on mount).
 - `compat/shop.ex` redefines `PhoenixKit.Modules.Shop`, which is why
   `elixirc_options: [ignore_module_conflict: true]` is set. That suppression
   also hides a genuine redefinition warning, and a new public function without

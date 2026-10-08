@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.ShippingPayOnDeliveryTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.ShippingMethod
 
   setup do
     {:ok, product} =
@@ -35,6 +37,18 @@ defmodule PhoenixKitEcommerce.ShippingPayOnDeliveryTest do
       assert %{pay_on_delivery?: true, free?: false} = Shop.present_shipping_method(cart, method)
     end
 
+    # The changeset clears the threshold, so only a row written around it
+    # (SQL, an import) can carry both - the guard is what keeps it off FREE.
+    test "a flagged method that still carries a threshold is never free", %{cart: cart} do
+      method = %ShippingMethod{
+        price: Decimal.new("0"),
+        free_above_amount: Decimal.new("10.00"),
+        metadata: %{"pay_on_delivery" => true}
+      }
+
+      assert %{pay_on_delivery?: true, free?: false} = Shop.present_shipping_method(cart, method)
+    end
+
     test "a method whose free threshold the cart clears is still free", %{cart: cart} do
       method = method!("Free Over 10", price: "5.00", free_above_amount: "10.00")
 
@@ -57,6 +71,55 @@ defmodule PhoenixKitEcommerce.ShippingPayOnDeliveryTest do
 
       assert {:ok, cart} = Shop.auto_select_shipping_method(cart, [pod])
       assert cart.shipping_method_uuid == pod.uuid
+    end
+  end
+
+  describe "refresh_pay_on_delivery_shipping/1" do
+    test "re-prices a cart still charging a method that became pay-on-delivery",
+         %{cart: cart} do
+      method = method!("Nova Poshta", price: "5.00")
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
+      assert Decimal.equal?(cart.shipping_amount, Decimal.new("5.00"))
+
+      {:ok, _} = Shop.update_shipping_method(method, %{"pay_on_delivery" => "true"})
+      stale = Shop.get_cart(cart.uuid)
+      refute PriceDisplay.cart_shipping_pay_on_delivery?(stale)
+
+      assert {:ok, refreshed} = Shop.refresh_pay_on_delivery_shipping(stale)
+      assert Decimal.equal?(refreshed.shipping_amount, Decimal.new("0"))
+      assert Decimal.equal?(refreshed.total, Decimal.sub(stale.total, Decimal.new("5.00")))
+      assert PriceDisplay.cart_shipping_pay_on_delivery?(refreshed)
+
+      persisted = Shop.get_cart(cart.uuid)
+      assert Decimal.equal?(persisted.shipping_amount, Decimal.new("0"))
+    end
+
+    test "leaves a cart with nothing stale untouched", %{cart: cart} do
+      method = method!("Courier", price: "5.00")
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
+
+      assert {:ok, ^cart} = Shop.refresh_pay_on_delivery_shipping(cart)
+    end
+  end
+
+  describe "PriceDisplay.cart_shipping_pay_on_delivery?/1" do
+    test "only while the selected method is flagged AND the stored amount is 0" do
+      pod = %ShippingMethod{uuid: "m", metadata: %{"pay_on_delivery" => true}}
+      cart = %{shipping_method_uuid: "m", shipping_method: pod, shipping_amount: Decimal.new("0")}
+
+      assert PriceDisplay.cart_shipping_pay_on_delivery?(cart)
+
+      refute PriceDisplay.cart_shipping_pay_on_delivery?(%{
+               cart
+               | shipping_amount: Decimal.new("5")
+             })
+
+      refute PriceDisplay.cart_shipping_pay_on_delivery?(%{cart | shipping_method_uuid: nil})
+
+      refute PriceDisplay.cart_shipping_pay_on_delivery?(%{
+               cart
+               | shipping_method: %ShippingMethod{uuid: "m"}
+             })
     end
   end
 

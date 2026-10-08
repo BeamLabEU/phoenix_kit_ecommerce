@@ -302,7 +302,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                           split as the cart page. --%>
                     <% line_por = PriceDisplay.line_on_request?(item) %>
                     <div class="font-medium text-right">
-                      <%= if item["pay_on_delivery"] == true do %>
+                      <%= if PriceDisplay.line_pay_on_delivery?(item) do %>
                         {gettext("Paid on delivery")}
                       <% else %>
                         {PriceDisplay.render(nil, @currency, :order,
@@ -361,7 +361,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 </p>
               <% end %>
 
-              <%= if @order.metadata["shipping_pay_on_delivery"] == true do %>
+              <%= if PriceDisplay.order_shipping_pay_on_delivery?(@order) do %>
                 <p id="order-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
                   {gettext(
                     "Shipping is not included in this total: you pay the carrier at their rates on delivery."

@@ -99,6 +99,18 @@ defmodule PhoenixKitEcommerce.Schemas.ShippingMethodTest do
       assert ShippingMethod.pay_on_delivery?(apply_changes(cs))
     end
 
+    test "an atom-key flag works like the form's string key" do
+      cs =
+        ShippingMethod.changeset(%ShippingMethod{}, %{
+          name: "Carrier",
+          price: Decimal.new("5"),
+          pay_on_delivery: true
+        })
+
+      assert ShippingMethod.pay_on_delivery?(apply_changes(cs))
+      assert Decimal.equal?(get_field(cs, :price), Decimal.new("0"))
+    end
+
     test "a metadata-level flag is normalized to a boolean" do
       cs =
         ShippingMethod.changeset(

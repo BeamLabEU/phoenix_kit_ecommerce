@@ -3402,6 +3402,53 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Re-prices a cart whose selected shipping method was switched to
+  pay-on-delivery after the cart picked it.
+
+  The cart keeps the `shipping_amount` it was charged when the method was
+  selected, and nothing recalculates it until the cart changes, so the
+  storefront would show "Paid on delivery" beside a total that still
+  includes the old fee. The cart and checkout pages call this on mount: a
+  cart whose method is pay-on-delivery but whose stored amount is not 0 is
+  recalculated under the cart row lock (refused once the cart is no longer
+  active, e.g. mid-conversion). Any other cart comes back unchanged, with no
+  write.
+  """
+  @spec refresh_pay_on_delivery_shipping(Cart.t()) :: {:ok, Cart.t()} | {:error, term()}
+  def refresh_pay_on_delivery_shipping(%Cart{} = cart) do
+    if stale_pay_on_delivery_shipping?(cart) do
+      result =
+        repo().transaction(fn ->
+          cart.uuid
+          |> lock_active_cart!()
+          |> recalculate_cart_totals!()
+        end)
+
+      case result do
+        {:ok, updated_cart} ->
+          Events.broadcast_cart_updated(updated_cart)
+          {:ok, updated_cart}
+
+        error ->
+          error
+      end
+    else
+      {:ok, cart}
+    end
+  end
+
+  defp stale_pay_on_delivery_shipping?(%Cart{
+         shipping_method_uuid: uuid,
+         shipping_method: %ShippingMethod{uuid: uuid} = method,
+         shipping_amount: amount
+       })
+       when not is_nil(uuid) and not is_nil(amount) do
+    ShippingMethod.pay_on_delivery?(method) and not Decimal.eq?(amount, 0)
+  end
+
+  defp stale_pay_on_delivery_shipping?(_cart), do: false
+
+  @doc """
   Sets payment option for cart.
   """
   def set_cart_payment_option(%Cart{} = cart, option) when is_map(option) do
@@ -3481,7 +3528,11 @@ defmodule PhoenixKitEcommerce do
 
   If cart already has a shipping method selected, does nothing.
   If only one method is available, selects it.
-  If multiple methods are available, selects the cheapest one.
+  If multiple methods are available, selects the cheapest one. A
+  pay-on-delivery method (`ShippingMethod.pay_on_delivery?/1`) is ranked
+  with the unpriced methods - its 0 is what the shop charges, not what the
+  buyer pays the carrier - so it is picked only when no priced or free
+  method is available.
   """
   def auto_select_shipping_method(%Cart{} = cart, shipping_methods) do
     cond do
@@ -4286,9 +4337,11 @@ defmodule PhoenixKitEcommerce do
             "base_unit_price" => nil,
             "type" => "shipping",
             # The line's 0 is what the shop charges, not free shipping: the
-            # buyer pays the carrier on delivery. Flagged (and described) so
-            # the confirmation page, emails and invoices do not print a bare
-            # 0.00 as if delivery cost nothing.
+            # buyer pays the carrier on delivery. The shop's confirmation and
+            # order pages read the flag. Billing does not: its HTML emails
+            # and invoice/receipt pages show the explaining description next
+            # to the 0.00, its plain-text email part prints no description,
+            # and its admin order edit rebuilds lines without this key.
             "pay_on_delivery" => pay_on_delivery?
           }
         ]
