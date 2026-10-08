@@ -161,7 +161,7 @@ defmodule PhoenixKitEcommerce.I18nTest do
     #
     # `en` is excluded on purpose: its msgstrs are empty by design (the
     # msgid already is the English text) and merging leaves them so.
-    @translated_locales ~w(de fr ru et)
+    @translated_locales ~w(de fr ru et uk)
 
     for locale <- @translated_locales do
       test "#{locale} has no untranslated message" do
