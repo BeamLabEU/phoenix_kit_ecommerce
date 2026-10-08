@@ -180,6 +180,22 @@ defmodule PhoenixKitEcommerce.I18nTest do
     # Fuzzy entries ship. The completeness check above only looks at empty
     # msgstrs, so a `--no-fuzzy`-skipped merge that still left guesses
     # flagged `fuzzy` (the shop-section strings after #61) passed it.
+    # Ukrainian sends 1, 21, 31, 101… to msgstr[0], so a form 0 that spells
+    # out "1" (or drops the number) shows one item for 21 of them. Pinned for
+    # every plural entry rather than a fixture list, because the entries that
+    # broke were ones nobody thought to list.
+    test "every uk plural form carries the msgid_plural's %{count}" do
+      missing =
+        "uk"
+        |> catalogue_path()
+        |> File.read!()
+        |> String.split("\n\n")
+        |> Enum.flat_map(&plural_forms_without_count/1)
+
+      assert missing == [],
+             "uk plural forms without %{count}: #{inspect(missing)}"
+    end
+
     test "no shipped catalogue carries a fuzzy translation" do
       for locale <- ["en" | @translated_locales] do
         fuzzies = locale |> catalogue_path() |> fuzzy_msgids()
@@ -244,6 +260,40 @@ defmodule PhoenixKitEcommerce.I18nTest do
     else
       _ -> []
     end
+  end
+
+  defp plural_forms_without_count(block) do
+    fields = po_fields(block)
+
+    with plural when is_binary(plural) <- fields["msgid_plural"],
+         true <- String.contains?(plural, "%{count}") do
+      for {"msgstr[" <> _ = key, value} <- fields,
+          not String.contains?(value, "%{count}"),
+          do: {fields["msgid"], key}
+    else
+      _ -> []
+    end
+  end
+
+  # Keyword -> value for one entry, joining continuation lines (`msgid ""`
+  # followed by `"..."` lines). Escapes are left as they are.
+  defp po_fields(block) do
+    block
+    |> String.split("\n")
+    |> Enum.reduce({%{}, nil}, fn line, {acc, current} ->
+      cond do
+        match = Regex.run(~r/^(msgid_plural|msgid|msgstr\[\d+\]|msgstr) "(.*)"$/, line) ->
+          [_, key, value] = match
+          {Map.put(acc, key, value), key}
+
+        current && String.starts_with?(line, "\"") ->
+          {Map.update!(acc, current, &(&1 <> String.slice(line, 1..-2//1))), current}
+
+        true ->
+          {acc, nil}
+      end
+    end)
+    |> elem(0)
   end
 
   defp fuzzy_msgids(path) do
