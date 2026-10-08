@@ -285,7 +285,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               <div class="space-y-3">
                 <%= for item <- @order.line_items || [] do %>
                   <% display_name = NamePrefix.strip(item["name"]) %>
-                  <div class="flex justify-between items-center text-sm">
+                  <div
+                    id={item["type"] == "shipping" && "order-line-shipping"}
+                    class="flex justify-between items-center text-sm"
+                  >
                     <div>
                       <span class="font-medium">{display_name}</span>
                       <%= if item["type"] != "shipping" do %>
@@ -299,10 +302,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                           split as the cart page. --%>
                     <% line_por = PriceDisplay.line_on_request?(item) %>
                     <div class="font-medium text-right">
-                      {PriceDisplay.render(nil, @currency, :order,
-                        amount: item["total"],
-                        on_request: line_por
-                      )}
+                      <%= if item["pay_on_delivery"] == true do %>
+                        {gettext("Paid on delivery")}
+                      <% else %>
+                        {PriceDisplay.render(nil, @currency, :order,
+                          amount: item["total"],
+                          on_request: line_por
+                        )}
+                      <% end %>
                       <%= if !line_por and item["price_unit"] not in [nil, ""] do %>
                         <div class="text-xs font-normal text-base-content/50">
                           {gettext("%{price} each",
@@ -351,6 +358,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               <%= if PriceDisplay.any_line_on_request?(@order.line_items) do %>
                 <p class="text-xs text-base-content/60">
                   {gettext("Items priced on request are not included in this total.")}
+                </p>
+              <% end %>
+
+              <%= if @order.metadata["shipping_pay_on_delivery"] == true do %>
+                <p id="order-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
+                  {gettext(
+                    "Shipping is not included in this total: you pay the carrier at their rates on delivery."
+                  )}
                 </p>
               <% end %>
             </div>

@@ -332,6 +332,16 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
     end
   end
 
+  @doc """
+  The description an order's shipping line carries for a pay-on-delivery
+  method (`ShippingMethod.pay_on_delivery?/1`), so an email or invoice that
+  prints the line's 0.00 also says why it is not free shipping.
+
+  Resolved in the locale of the process converting the cart, i.e. the
+  buyer's, and stored on the line like the rest of its snapshot.
+  """
+  def pay_on_delivery_description, do: gettext("Carrier rates, paid on delivery")
+
   defp append_unit(price, nil), do: price
   defp append_unit(price, ""), do: price
   defp append_unit(price, unit), do: "#{price} #{unit}"

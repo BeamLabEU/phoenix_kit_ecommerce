@@ -237,6 +237,14 @@ Repo-local aliases:
 - Reading `price_on_request` live from the product instead of the stored line
   turns a committed "price on request" order into a "0.00" order; the product
   row is `ON DELETE SET NULL`, so deleting a product is enough to trigger it.
+- A shipping method flagged `metadata["pay_on_delivery"]` (the buyer pays the
+  carrier's own rates on delivery) is stored with price 0 —
+  `ShippingMethod.changeset/2` forces it and clears `free_above_amount`.
+  Reading that 0 as "FREE" is the bug the flag exists to prevent: ask
+  `ShippingMethod.pay_on_delivery?/1` (or `present_shipping_method/2`'s
+  `pay_on_delivery?`) first. Orders carry it as
+  `metadata["shipping_pay_on_delivery"]` and on the shipping line as
+  `"pay_on_delivery"`.
 - `compat/shop.ex` redefines `PhoenixKit.Modules.Shop`, which is why
   `elixirc_options: [ignore_module_conflict: true]` is set. That suppression
   also hides a genuine redefinition warning, and a new public function without

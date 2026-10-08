@@ -577,13 +577,18 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                           <%!-- `method.price` and the free threshold are BASE
                                amounts; the cart is in its own currency. --%>
                           <% presented = Shop.present_shipping_method(@cart, method) %>
-                          <div class="text-right">
-                            <%= if presented.free? do %>
-                              <span class="badge badge-success">{gettext("FREE")}</span>
-                            <% else %>
-                              <span class="font-semibold">
-                                {format_price(presented.price, @currency)}
-                              </span>
+                          <div id={"cart-shipping-price-#{method.uuid}"} class="text-right">
+                            <%= cond do %>
+                              <% presented.pay_on_delivery? -> %>
+                                <span class="badge badge-info badge-soft whitespace-nowrap">
+                                  {gettext("Paid on delivery")}
+                                </span>
+                              <% presented.free? -> %>
+                                <span class="badge badge-success">{gettext("FREE")}</span>
+                              <% true -> %>
+                                <span class="font-semibold">
+                                  {format_price(presented.price, @currency)}
+                                </span>
                             <% end %>
                           </div>
                         </label>
@@ -612,19 +617,20 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <span>{format_price(@cart.subtotal, @currency)}</span>
                   </div>
 
-                  <div class="flex justify-between">
+                  <div id="cart-summary-shipping" class="flex justify-between">
                     <span class="text-base-content/70">{gettext("Shipping")}</span>
                     <%= if !@requires_shipping do %>
                       <span class="text-base-content/50">{gettext("Not needed")}</span>
                     <% else %>
-                    <%= if is_nil(@cart.shipping_method_uuid) do %>
-                      <span class="text-base-content/50">{gettext("Select method")}</span>
-                    <% else %>
-                      <%= if Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq do %>
+                    <%= cond do %>
+                      <% is_nil(@cart.shipping_method_uuid) -> %>
+                        <span class="text-base-content/50">{gettext("Select method")}</span>
+                      <% ShippingMethod.pay_on_delivery?(@cart.shipping_method) -> %>
+                        <span>{gettext("Paid on delivery")}</span>
+                      <% Decimal.compare(@cart.shipping_amount || Decimal.new("0"), Decimal.new("0")) == :eq -> %>
                         <span class="text-success">{gettext("FREE")}</span>
-                      <% else %>
+                      <% true -> %>
                         <span>{format_price(@cart.shipping_amount, @currency)}</span>
-                      <% end %>
                     <% end %>
                     <% end %>
                   </div>
@@ -658,6 +664,15 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                     <p class="text-xs text-base-content/60">
                       {gettext(
                         "Items priced on request are not included in this total."
+                      )}
+                    </p>
+                  <% end %>
+
+                  <%= if @requires_shipping && @cart.shipping_method_uuid &&
+                           ShippingMethod.pay_on_delivery?(@cart.shipping_method) do %>
+                    <p id="cart-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
+                      {gettext(
+                        "Shipping is not included in this total: you pay the carrier at their rates on delivery."
                       )}
                     </p>
                   <% end %>

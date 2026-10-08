@@ -62,6 +62,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Options.MetadataValidator
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ShippingMethod
@@ -3522,10 +3523,13 @@ defmodule PhoenixKitEcommerce do
     methods
     |> Enum.min_by(
       fn method ->
-        if ShippingMethod.free_for?(method, subtotal) do
-          Decimal.new("0")
-        else
-          method.price || Decimal.new("999999")
+        cond do
+          # Its 0 is what the SHOP charges; the buyer still pays the carrier
+          # an amount nobody here knows, so it is no cheaper than a priced
+          # method - rank it with the unpriced ones.
+          ShippingMethod.pay_on_delivery?(method) -> Decimal.new("999999")
+          ShippingMethod.free_for?(method, subtotal) -> Decimal.new("0")
+          true -> method.price || Decimal.new("999999")
         end
       end,
       &(Decimal.compare(&1, &2) != :gt)
@@ -4266,10 +4270,12 @@ defmodule PhoenixKitEcommerce do
     # association loaded); its charge is already zeroed by the totals.
     shipping_item =
       if cart.shipping_method && items_require_shipping?(cart.items) do
+        pay_on_delivery? = ShippingMethod.pay_on_delivery?(cart.shipping_method)
+
         [
           %{
             "name" => "Shipping: #{cart.shipping_method.name}",
-            "description" => cart.shipping_method.description || "",
+            "description" => shipping_line_description(cart.shipping_method, pay_on_delivery?),
             "quantity" => 1,
             "unit_price" => Decimal.to_string(cart.shipping_amount || Decimal.new(0)),
             "total" => Decimal.to_string(cart.shipping_amount || Decimal.new(0)),
@@ -4278,7 +4284,12 @@ defmodule PhoenixKitEcommerce do
             # cart's own `base_currency`/`exchange_rate` on the order cover
             # it if a base figure is ever needed.
             "base_unit_price" => nil,
-            "type" => "shipping"
+            "type" => "shipping",
+            # The line's 0 is what the shop charges, not free shipping: the
+            # buyer pays the carrier on delivery. Flagged (and described) so
+            # the confirmation page, emails and invoices do not print a bare
+            # 0.00 as if delivery cost nothing.
+            "pay_on_delivery" => pay_on_delivery?
           }
         ]
       else
@@ -4286,6 +4297,15 @@ defmodule PhoenixKitEcommerce do
       end
 
     product_items ++ shipping_item
+  end
+
+  defp shipping_line_description(%ShippingMethod{description: description}, false),
+    do: description || ""
+
+  defp shipping_line_description(%ShippingMethod{description: description}, true) do
+    [description, PriceDisplay.pay_on_delivery_description()]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" — ")
   end
 
   defp build_product_line_item(item) do
@@ -4380,7 +4400,8 @@ defmodule PhoenixKitEcommerce do
             # (see that function) is never persisted.
             "shipping_skipped" =>
               items_require_shipping?(cart.items) and is_nil(cart.shipping_method_uuid),
-            "shipping_skip_reason" => (cart.metadata || %{})["shipping_skip_reason"]
+            "shipping_skip_reason" => (cart.metadata || %{})["shipping_skip_reason"],
+            "shipping_pay_on_delivery" => shipping_pay_on_delivery?(cart)
           }
           |> Map.merge(payment_option_metadata(cart))
       }
@@ -4399,6 +4420,13 @@ defmodule PhoenixKitEcommerce do
       true ->
         base_attrs
     end
+  end
+
+  # The order-level record that the shipping on it is settled with the
+  # carrier on delivery, outside this order's total. Same digital-only
+  # guard as the shipping line itself.
+  defp shipping_pay_on_delivery?(%Cart{} = cart) do
+    items_require_shipping?(cart.items) and ShippingMethod.pay_on_delivery?(cart.shipping_method)
   end
 
   # Get shipping country from billing profile, billing data, or cart
@@ -5533,7 +5561,10 @@ defmodule PhoenixKitEcommerce do
   @doc """
   What a shopper sees for a shipping method on THIS cart: the method's
   price in the cart's currency, and whether the cart's subtotal already
-  clears its free-shipping threshold.
+  clears its free-shipping threshold. A pay-on-delivery method
+  (`ShippingMethod.pay_on_delivery?/1`) is flagged as such and is never
+  `free?`: its 0 is what the shop charges, while the buyer still pays the
+  carrier on delivery.
 
   `ShippingMethod.price` and `free_above_amount` are BASE authoring
   amounts (§4.7); `cart.subtotal` is the cart's own display-currency
@@ -5545,13 +5576,15 @@ defmodule PhoenixKitEcommerce do
   `shipping_amount` cannot disagree.
   """
   @spec present_shipping_method(Cart.t(), ShippingMethod.t()) ::
-          %{price: Decimal.t() | nil, free?: boolean()}
+          %{price: Decimal.t() | nil, free?: boolean(), pay_on_delivery?: boolean()}
   def present_shipping_method(%Cart{} = cart, %ShippingMethod{} = method) do
     base_subtotal = to_base(cart, cart.subtotal || Decimal.new("0"))
+    pay_on_delivery? = ShippingMethod.pay_on_delivery?(method)
 
     %{
       price: method.price && from_base(method.price, cart),
-      free?: ShippingMethod.free_for?(method, base_subtotal)
+      free?: not pay_on_delivery? and ShippingMethod.free_for?(method, base_subtotal),
+      pay_on_delivery?: pay_on_delivery?
     }
   end
 
