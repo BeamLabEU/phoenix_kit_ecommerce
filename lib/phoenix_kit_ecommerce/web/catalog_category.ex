@@ -46,7 +46,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     current_language =
       params |> Helpers.get_language_from_params_or_default() |> Helpers.put_content_locale()
 
-    case Shop.get_category_by_slug_localized(slug, current_language, preload: [:parent]) do
+    case Shop.get_category_by_slug_localized(slug, current_language,
+           # `:featured_product` is the share image's fallback when the
+           # category has no image of its own (`SEOHelpers.category_seo/2`).
+           preload: [:parent, :featured_product]
+         ) do
       {:error, :not_found} ->
         # Slug not found in current language - try cross-language lookup
         handle_cross_language_redirect(slug, current_language, socket)
