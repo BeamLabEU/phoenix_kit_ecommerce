@@ -57,6 +57,10 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
 
   @key "_price_display"
 
+  # Between a shipping method's description and the pay-on-delivery note on
+  # a stored order line - see `pay_on_delivery_line_description/1`.
+  @line_description_joiner " — "
+
   @doc """
   The reserved metadata key. Consumers that copy metadata around (the CSV
   upsert, the product form) use this to preserve the namespace.
@@ -386,6 +390,18 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
   def pay_on_delivery_description, do: gettext("Carrier rates, paid on delivery")
 
   @doc """
+  The description stored on a pay-on-delivery order shipping line: the
+  method's own description (if any), then `pay_on_delivery_description/0`.
+  `line_description/1` is its inverse - both use the same joiner, so they
+  cannot drift apart.
+  """
+  def pay_on_delivery_line_description(method_description) do
+    [method_description, pay_on_delivery_description()]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(@line_description_joiner)
+  end
+
+  @doc """
   An order line's description for a page that also renders the line's
   amount column. A pay-on-delivery shipping line's stored description ends
   with `pay_on_delivery_description/0` for billing's sake; a page whose
@@ -401,7 +417,7 @@ defmodule PhoenixKitEcommerce.PriceDisplay do
 
       if description == note,
         do: "",
-        else: String.replace_suffix(description, " — " <> note, "")
+        else: String.replace_suffix(description, @line_description_joiner <> note, "")
     else
       description
     end

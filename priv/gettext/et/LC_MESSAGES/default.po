@@ -3146,7 +3146,7 @@ msgstr "Pood ei ole hetkel saadaval"
 msgid "e.g. per hour, per m², per litre"
 msgstr "nt tunnis, m² kohta, liitri kohta"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:416
+#: lib/phoenix_kit_ecommerce/price_display.ex:432
 #, elixir-autogen, elixir-format
 msgid "From"
 msgstr "Alates"
@@ -3510,7 +3510,7 @@ msgstr "Avalda"
 msgid "Failed to update status"
 msgstr "Staatuse muutmine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:419
+#: lib/phoenix_kit_ecommerce/price_display.ex:435
 #, elixir-autogen, elixir-format
 msgid "Price on request"
 msgstr "Hind kokkuleppel"
@@ -5989,7 +5989,7 @@ msgstr "Uus tarneviis"
 msgid "Test shop"
 msgstr "Testpood"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:386
+#: lib/phoenix_kit_ecommerce/price_display.ex:390
 #, elixir-autogen, elixir-format
 msgid "Carrier rates, paid on delivery"
 msgstr "Vedaja hinnakirja järgi, tasumine kättesaamisel"

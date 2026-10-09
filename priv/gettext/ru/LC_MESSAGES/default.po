@@ -3154,7 +3154,7 @@ msgstr "Магазин временно недоступен"
 msgid "e.g. per hour, per m², per litre"
 msgstr "напр. в час, за м², за литр"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:416
+#: lib/phoenix_kit_ecommerce/price_display.ex:432
 #, elixir-autogen, elixir-format
 msgid "From"
 msgstr "От"
@@ -3518,7 +3518,7 @@ msgstr "Опубликовать"
 msgid "Failed to update status"
 msgstr "Не удалось изменить статус"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:419
+#: lib/phoenix_kit_ecommerce/price_display.ex:435
 #, elixir-autogen, elixir-format
 msgid "Price on request"
 msgstr "Цена договорная"
@@ -6044,7 +6044,7 @@ msgstr "Новый способ доставки"
 msgid "Test shop"
 msgstr "Тестовый магазин"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:386
+#: lib/phoenix_kit_ecommerce/price_display.ex:390
 #, elixir-autogen, elixir-format
 msgid "Carrier rates, paid on delivery"
 msgstr "По тарифам перевозчика, оплата при получении"

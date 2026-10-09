@@ -185,7 +185,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   <.input
                     field={@form[:price]}
                     type="number"
-                    label={gettext("Price") <> " *"}
+                    label={gettext("Price")}
                     step="0.01"
                     min="0"
                     required={!@pay_on_delivery}

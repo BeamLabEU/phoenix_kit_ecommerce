@@ -94,6 +94,25 @@ defmodule PhoenixKitEcommerce.ShippingPayOnDeliveryTest do
       assert Decimal.equal?(persisted.shipping_amount, Decimal.new("0"))
     end
 
+    # A row flagged around the changeset keeps its price; recalculating
+    # stores the same amount again, so it must not count as stale or every
+    # page view would lock, write and broadcast.
+    test "leaves a cart alone when the flagged method still has a price", %{cart: cart} do
+      method = method!("Imported Carrier", price: "5.00")
+      {:ok, _cart} = Shop.set_cart_shipping(cart, method, "EE")
+
+      ShippingMethod
+      |> where([m], m.uuid == ^method.uuid)
+      |> Repo.update_all(set: [metadata: %{"pay_on_delivery" => true}])
+
+      cart = Shop.get_cart(cart.uuid)
+      assert ShippingMethod.pay_on_delivery?(cart.shipping_method)
+      PhoenixKitEcommerce.Events.subscribe_to_cart(cart)
+
+      assert {:ok, ^cart} = Shop.refresh_pay_on_delivery_shipping(cart)
+      refute_receive {:cart_updated, _}
+    end
+
     test "leaves a cart with nothing stale untouched", %{cart: cart} do
       method = method!("Courier", price: "5.00")
       {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
@@ -120,6 +139,22 @@ defmodule PhoenixKitEcommerce.ShippingPayOnDeliveryTest do
                cart
                | shipping_method: %ShippingMethod{uuid: "m"}
              })
+    end
+  end
+
+  describe "PriceDisplay shipping line description" do
+    test "line_description/1 strips exactly what the stored description added" do
+      stored = PriceDisplay.pay_on_delivery_line_description("Branch pickup")
+      assert stored == "Branch pickup — Carrier rates, paid on delivery"
+
+      line = %{"description" => stored, "pay_on_delivery" => true}
+      assert PriceDisplay.line_description(line) == "Branch pickup"
+
+      bare = PriceDisplay.pay_on_delivery_line_description(nil)
+      assert bare == "Carrier rates, paid on delivery"
+      assert PriceDisplay.line_description(%{line | "description" => bare}) == ""
+
+      assert PriceDisplay.line_description(%{"description" => stored}) == stored
     end
   end
 

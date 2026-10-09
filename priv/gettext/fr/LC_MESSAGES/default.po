@@ -3148,7 +3148,7 @@ msgstr "La boutique est actuellement indisponible"
 msgid "e.g. per hour, per m², per litre"
 msgstr "p. ex. par heure, par m², par litre"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:416
+#: lib/phoenix_kit_ecommerce/price_display.ex:432
 #, elixir-autogen, elixir-format
 msgid "From"
 msgstr "À partir de"
@@ -3512,7 +3512,7 @@ msgstr "Cliquez pour publier"
 msgid "Failed to update status"
 msgstr "Échec de la mise à jour du statut"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:419
+#: lib/phoenix_kit_ecommerce/price_display.ex:435
 #, elixir-autogen, elixir-format
 msgid "Price on request"
 msgstr "Prix sur demande"
@@ -5991,7 +5991,7 @@ msgstr "Nouvelle méthode de livraison"
 msgid "Test shop"
 msgstr "Boutique de test"
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:386
+#: lib/phoenix_kit_ecommerce/price_display.ex:390
 #, elixir-autogen, elixir-format
 msgid "Carrier rates, paid on delivery"
 msgstr "Aux tarifs du transporteur, paiement à la livraison"

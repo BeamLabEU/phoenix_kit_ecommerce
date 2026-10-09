@@ -3443,7 +3443,11 @@ defmodule PhoenixKitEcommerce do
          shipping_amount: amount
        })
        when not is_nil(uuid) and not is_nil(amount) do
-    ShippingMethod.pay_on_delivery?(method) and not Decimal.eq?(amount, 0)
+    # The method's own price must be 0 too: a row flagged around the
+    # changeset (SQL, an import) still charges its price, so recalculating
+    # would store the same amount again on every page view.
+    ShippingMethod.pay_on_delivery?(method) and Decimal.eq?(method.price || 0, 0) and
+      not Decimal.eq?(amount, 0)
   end
 
   defp stale_pay_on_delivery_shipping?(_cart), do: false
@@ -4355,11 +4359,8 @@ defmodule PhoenixKitEcommerce do
   defp shipping_line_description(%ShippingMethod{description: description}, false),
     do: description || ""
 
-  defp shipping_line_description(%ShippingMethod{description: description}, true) do
-    [description, PriceDisplay.pay_on_delivery_description()]
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join(" — ")
-  end
+  defp shipping_line_description(%ShippingMethod{description: description}, true),
+    do: PriceDisplay.pay_on_delivery_line_description(description)
 
   defp build_product_line_item(item) do
     metadata = item.metadata || %{}

@@ -3147,7 +3147,7 @@ msgstr ""
 msgid "e.g. per hour, per m², per litre"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:416
+#: lib/phoenix_kit_ecommerce/price_display.ex:432
 #, elixir-autogen, elixir-format
 msgid "From"
 msgstr ""
@@ -3511,7 +3511,7 @@ msgstr ""
 msgid "Failed to update status"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:419
+#: lib/phoenix_kit_ecommerce/price_display.ex:435
 #, elixir-autogen, elixir-format
 msgid "Price on request"
 msgstr ""
@@ -5990,7 +5990,7 @@ msgstr ""
 msgid "Test shop"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/price_display.ex:386
+#: lib/phoenix_kit_ecommerce/price_display.ex:390
 #, elixir-autogen, elixir-format
 msgid "Carrier rates, paid on delivery"
 msgstr ""

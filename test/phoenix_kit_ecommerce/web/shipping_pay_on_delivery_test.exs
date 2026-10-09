@@ -218,6 +218,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
     test "checking the box disables the price and threshold inputs", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
 
+      # One required marker while editable (core adds it), none while locked.
+      assert price_label_asterisks(view) == 1
+
       assert has_element?(view, "input[name='shipping_method[price]'][required]")
       refute has_element?(view, "input[name='shipping_method[price]'][disabled]")
 
@@ -234,6 +237,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
       assert has_element?(view, "input[name='shipping_method[price]'][disabled]")
       refute has_element?(view, "input[name='shipping_method[price]'][required]")
       assert has_element?(view, "input[name='shipping_method[free_above_amount]'][disabled]")
+      assert price_label_asterisks(view) == 0
     end
 
     test "the activity log records the flag", %{conn: conn} do
@@ -264,6 +268,14 @@ defmodule PhoenixKitEcommerce.Web.ShippingPayOnDeliveryTest do
 
       assert render(view) =~ "Paid on delivery"
     end
+  end
+
+  defp price_label_asterisks(view) do
+    view
+    |> element("label[for='shipping_method_price']")
+    |> render()
+    |> String.graphemes()
+    |> Enum.count(&(&1 == "*"))
   end
 
   defp shippable_cart_session(%{conn: conn}) do
