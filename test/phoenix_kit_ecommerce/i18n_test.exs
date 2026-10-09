@@ -180,6 +180,16 @@ defmodule PhoenixKitEcommerce.I18nTest do
     # Fuzzy entries ship. The completeness check above only looks at empty
     # msgstrs, so a `--no-fuzzy`-skipped merge that still left guesses
     # flagged `fuzzy` (the shop-section strings after #61) passed it.
+    test "no shipped catalogue carries a fuzzy translation" do
+      for locale <- ["en" | @translated_locales] do
+        fuzzies = locale |> catalogue_path() |> fuzzy_msgids()
+
+        assert fuzzies == [],
+               "#{locale} still has fuzzy entries: #{inspect(Enum.take(fuzzies, 10))}. " <>
+                 "Unfuzzy and correct the msgstr, or re-merge with --no-fuzzy."
+      end
+    end
+
     # Ukrainian sends 1, 21, 31, 101… to msgstr[0], so a form 0 that spells
     # out "1" (or drops the number) shows one item for 21 of them. Pinned for
     # every plural entry rather than a fixture list, because the entries that
@@ -194,16 +204,6 @@ defmodule PhoenixKitEcommerce.I18nTest do
 
       assert missing == [],
              "uk plural forms without %{count}: #{inspect(missing)}"
-    end
-
-    test "no shipped catalogue carries a fuzzy translation" do
-      for locale <- ["en" | @translated_locales] do
-        fuzzies = locale |> catalogue_path() |> fuzzy_msgids()
-
-        assert fuzzies == [],
-               "#{locale} still has fuzzy entries: #{inspect(Enum.take(fuzzies, 10))}. " <>
-                 "Unfuzzy and correct the msgstr, or re-merge with --no-fuzzy."
-      end
     end
 
     # The two label sets the Shopify Sync page renders — plural section
