@@ -5,6 +5,7 @@
 - **PR:** https://github.com/BeamLabEU/phoenix_kit_ecommerce/pull/75
 - **Head SHA:** `f779ca0` (3 commits on `main` `1a168f1`)
 - **Status:** Draft, mergeable
+- **Round 2:** head `47f28bb`, **approve** — see "Round 2" at the end.
 - **Verdict:** request changes, one small fix. The flag, the changeset,
   the order data and the translations are correct, and nothing changes
   any amount. One storefront contradiction (BUG - MEDIUM) should be fixed
@@ -328,3 +329,157 @@ NITPICKs are optional, and they can also be done after merge. The core
 of the PR is correct and the tests are real: the flag storage, the
 forced price, the order snapshot, the unchanged totals, compatibility
 with existing orders, and the translations.
+
+---
+
+## Round 2
+
+- **Head SHA:** `47f28bb` (on top of round 1's `f779ca0`)
+- **New commits:**
+  - `a6923b0` Add review notes for PR #75
+  - `f699908` Lock price fields in the shipping form for pay-on-delivery
+    methods
+  - `47f28bb` Fix pay-on-delivery label shown beside a stale shipping
+    total
+- **Verdict:** **approve.** Every round-1 finding is closed or explicitly
+  accepted. Round 2 adds no bug. Four new nitpicks, none blocking.
+
+### Round-1 findings: status
+
+| Round-1 finding | Status | Where |
+|---|---|---|
+| BUG - MEDIUM: the label and note sat beside a stale total | **Fixed, two ways** | `PriceDisplay.cart_shipping_pay_on_delivery?/1` (`price_display.ex:162-171`) shows the label and note only while the method is flagged AND the stored amount is 0, so the summary can no longer contradict its total. `refresh_pay_on_delivery_shipping/1` (`phoenix_kit_ecommerce.ex:3418-3449`) corrects the total itself on mount (`cart_page.ex:79`, `checkout_page.ex:65`). Tests: `/cart` and `/checkout` now show 25.00, not 30.00, after the method is flipped. |
+| IMPROVEMENT - MEDIUM: the form showed a price that is never saved | **Fixed** | `shipping_method_form.ex:188-192, 228`: Price and Free above are `disabled` with a forced display value. Price is no longer `required`. `@pay_on_delivery` is derived once in `assign_form/2` (`:394-399`). Test checks `disabled`/`required` before and after `render_change`. |
+| The `free?` guard was untested | **Fixed** | A struct with both the flag and a threshold, built without the changeset, stays `free?: false`. |
+| User order details: no test, wording doubled | **Fixed** | `PriceDisplay.line_description/1` (`:396-408`) drops the stored suffix. A test-only route `/dashboard/orders/:uuid` (`test/support/test_router.ex`) plus a test assert exactly one "paid on delivery" on the line. |
+| The comment promised more than billing delivers | **Fixed** | `phoenix_kit_ecommerce.ex:4339-4343` and the AGENTS.md landmine now say billing does not read the flag: the plain-text email prints 0 and the admin order edit drops the key. |
+| `auto_select_shipping_method/2` docs | **Fixed** | `:3527-3535`. |
+| The same read repeated in several templates | **Fixed** | `line_pay_on_delivery?/1`, `order_shipping_pay_on_delivery?/1`, `cart_shipping_pay_on_delivery?/1` sit beside `line_on_request?/1`, and every template goes through them. The `cond` still appears three times, but each copy is a one-line helper call. |
+| The activity log did not record the flag | **Fixed** | Both create and update log `"pay_on_delivery"`. A test uses `assert_activity_logged`. |
+| Flag parsing details | **Partly** | The atom-key branch is now tested. `"on"`/`"yes"` → `false` is intended and stays as is. |
+| The description is stored in the buyer's locale | **Accepted** | Documented in `line_description/1`. In another locale the suffix is not stripped, so it is repeated but not wrong. |
+
+### Checks (round 2)
+
+- **The refresh has no cost on the common path.**
+  `stale_pay_on_delivery_shipping?/1` is a pure pattern match on the
+  already-preloaded cart. It needs `shipping_method.uuid ==
+  shipping_method_uuid`, so a leftover preload after a cleared selection
+  does not count. A cart that is not stale comes back as the same struct
+  with no query. The test `{:ok, ^cart}` pins that.
+- **A DB write on mount.** It writes only when the cart is stale, which
+  is a one-off after an admin flips a method. The disconnected render
+  writes, and the connected mount then sees a fresh cart and does
+  nothing. The shop's GET mounts already write (`get_or_create_cart/1`
+  creates the cart, `auto_select_shipping_method/2` sets shipping), so
+  this does not introduce a new pattern.
+- **Concurrent conversion.** `lock_active_cart!/1` takes the cart row
+  `FOR UPDATE` and rolls back `:cart_not_active` once conversion has
+  flipped the status. The pages then keep the cart as loaded, and the
+  summary falls back to the stored amount, which is consistent.
+  - If the refresh holds the lock first, the conversion's atomic
+    `active→converting` UPDATE waits. It then still matches `active` and
+    recalculates under its own lock anyway.
+  - There is no deadlock: both paths take the cart row first, and the
+    refresh never locks product rows.
+  - The same lock serializes the refresh with
+    `add_to_cart`/`update_cart_item`.
+- **No broadcast loop.** The refresh broadcasts `cart_updated` once, only
+  after a write. Neither page's `handle_info({:cart_updated, _})` calls
+  the refresh. `CartPage.assign_cart_state/2` does not, and
+  `CheckoutPage.assign_cart_repriced/2` reaches `preview_checkout_totals/2`,
+  which does not broadcast. Each page subscribes after its mount-time
+  refresh.
+- **Guests and other people's carts.** The pages pass only the cart they
+  resolved from the visitor's own user or session
+  (`get_or_create_cart/1`, `find_active_cart/1`). No uuid comes from
+  params. The context function is scope-less like the rest of the public
+  API. All it can do to any cart is recompute that cart's own totals,
+  which is idempotent and corrective. The compat delegate is added
+  (`compat/shop.ex:146`).
+- **Disabled fields keep their values.**
+  - Disabled inputs are not serialized, so `validate` and `save` send no
+    price or threshold. The changeset forces 0 and `nil` while the box is
+    checked.
+  - `validate` always rebuilds from `socket.assigns.method`. So
+    unchecking before save on an existing priced method brings back its
+    stored price and threshold (not the forced 0). Unchecking on an
+    existing pay-on-delivery method shows its stored 0, ready to edit.
+  - The only thing lost is a price typed into a *new* method before the
+    box was checked. That is expected, since the lock discards it.
+  - The `value` override works: core `input/1` declares `attr :value`
+    with no default and uses `assign_new(:value, …)`. So `%{value: "0"}`
+    and `%{value: nil}` win over `field.value`.
+- **i18n.** No new msgids. The round-2 `.po`/`.pot` diff is `#:`
+  reference churn only, there are no `fuzzy` flags, and
+  `gettext.extract --check-up-to-date` is clean.
+
+### New findings (round 2)
+
+#### NITPICK: the refresh repeats on every mount for a flagged row with a non-zero price
+
+`phoenix_kit_ecommerce.ex:3440-3447`.
+
+"Stale" means "flagged and stored amount ≠ 0". A row written around the
+changeset with the flag set and `price > 0` breaks that assumption. Such
+rows exist: round 2's own `free?` test is built for one, "SQL, an
+import". The recalculation then stores the same non-zero amount again,
+so every cart and checkout mount takes the row lock, writes and
+broadcasts. Nothing is shown wrongly: the summary shows the stored
+amount. But the write repeats on every page view.
+
+Fix: add `Decimal.eq?(method.price || 0, 0)` to
+`stale_pay_on_delivery_shipping?/1`, or compare against the computed
+charge.
+
+#### NITPICK: the " — " joiner lives in two modules
+
+The stored description is joined in `shipping_line_description/2`
+(`phoenix_kit_ecommerce.ex:4361`, `Enum.join(" — ")`). It is stripped in
+`PriceDisplay.line_description/1` (`price_display.ex:404`,
+`replace_suffix(" — " <> note)`). If someone changes one, the suffix
+quietly stops being stripped. Build the stored description in
+`PriceDisplay` too, next to its inverse.
+
+#### NITPICK: "Price *" keeps its asterisk while the field is locked
+
+`shipping_method_form.ex:188` hard-codes `" *"` in the label. While the
+field is disabled and not required, the label still says required.
+(Already true before this PR: when the field *is* required, core
+`input/1` adds its own red marker, so the label reads "Price * *".)
+Dropping the manual `" *"` fixes both.
+
+#### NITPICK (process): the round-1 review is committed into the PR
+
+`a6923b0` adds `dev_docs/pull_requests/2026/75-pay-on-delivery-shipping/CLAUDE_REVIEW.md`
+with round 1's "Status: Draft" and "Verdict: request changes". If it
+merges as is, `main` records a rejection for a PR it accepted. Two
+options:
+
+- Update the file with this round.
+- Drop it and let the maintainer add the review after merge, as for
+  #59–#71 ("Review PR #N …" commits on `main`).
+
+### Validation (round 2)
+
+All runs used `MIX_ENV=test PGDATABASE=pkecom_test_domovych_pod PGPOOL=10`,
+except the gates that need no database.
+
+- The PR's three test files: 42 tests, 0 failures.
+- Full `mix test`: 1630 tests, 0 failures (276 excluded). This matches
+  the author's figure.
+- `mix format --check-formatted`, `mix compile --warnings-as-errors
+  --force` and `mix gettext.extract --check-up-to-date`: clean.
+- `mix credo --strict`: no issues (4612 mods/funs).
+- `mix dialyzer`: passed.
+- The working tree was unchanged after all runs.
+
+### Verdict (round 2)
+
+**Approve.** The stale-total contradiction is gone in both directions:
+the label is gated on the stored amount, and the total is repaired on
+mount under the cart lock. The race and broadcast behaviour hold up. The
+form lock does not lose stored values. Every round-1 item is closed or
+deliberately accepted. The four nitpicks above are optional; the
+committed round-1 review file is the one worth sorting out before or at
+merge.
