@@ -6,6 +6,7 @@
 - **Head SHA:** `f779ca0` (3 commits on `main` `1a168f1`)
 - **Status:** Draft, mergeable
 - **Round 2:** head `47f28bb`, **approve** — see "Round 2" at the end.
+- **Round 3:** head `2dfd618`, **approve** — see "Round 3" at the end.
 - **Verdict:** request changes, one small fix. The flag, the changeset,
   the order data and the translations are correct, and nothing changes
   any amount. One storefront contradiction (BUG - MEDIUM) should be fixed
@@ -483,3 +484,83 @@ form lock does not lose stored values. Every round-1 item is closed or
 deliberately accepted. The four nitpicks above are optional; the
 committed round-1 review file is the one worth sorting out before or at
 merge.
+
+---
+
+## Round 3
+
+- **Head SHA:** `2dfd618`, on top of round 2's `47f28bb`.
+- **New commits:**
+  - `ab27436`: updates the committed review file with rounds 1–2. It is
+    identical to this file as of round 2.
+  - `2dfd618`: "Fix round-2 review nitpicks for pay-on-delivery shipping".
+- **Verdict:** **approve.** All three code nitpicks are fixed and each
+  has a test that would fail without the fix. The process nitpick is
+  resolved. No regressions, and nothing new found in the PR's own code.
+
+### Round-2 findings: status
+
+| Round-2 finding | Status | Where |
+|---|---|---|
+| The refresh repeated on every mount for a flagged row with a non-zero price | **Fixed** | `stale_pay_on_delivery_shipping?/1` (`phoenix_kit_ecommerce.ex:3440-3451`) now also requires `method.price == 0`. |
+| The " — " joiner lived in two modules | **Fixed** | One `@line_description_joiner` in `PriceDisplay`, used by `pay_on_delivery_line_description/1` (the stored form) and its inverse `line_description/1`. |
+| "Price *" kept its asterisk while locked | **Fixed** | The manual `" *"` is gone (`shipping_method_form.ex:188`). Core `input/1` now draws the only marker, and only while the field is `required`. |
+| The round-1 review was committed into the PR | **Resolved** | `ab27436` brings the committed file up to round 2. If the file stays in the PR, add this round before merge so `main` records the final verdict. |
+
+### What each fix and its test show
+
+- **The refresh is now idempotent for every row.**
+  - When a flagged method's price is 0, `calculate_cost/2` returns 0 in
+    every branch. That holds with or without a stray threshold and
+    whether or not the method is still available. So one recalculation
+    always leaves the cart non-stale.
+  - A flagged row that still has a price (written by SQL or an import) is
+    now left alone. Its summary shows the stored amount, which matches
+    the total, because the round-2 label gate needs a stored 0.
+  - Test `"leaves a cart alone when the flagged method still has a
+    price"`: it sets the flag with `Repo.update_all`, which goes around
+    the changeset, then subscribes to the cart topics. It asserts `{:ok,
+    ^cart}` (the same struct back, no write) and `refute_receive
+    {:cart_updated, _}`.
+  - The `refute_receive` checks something real. The test env starts
+    `PhoenixKit.PubSub.Manager` (`test_helper.exs:151`), and other suites
+    receive `Events` broadcasts (`ai_translatable_test.exs:743`). Without
+    the new clause the cart comes back recalculated and the broadcast
+    arrives, so both assertions fail.
+- **The joiner round-trip.** The test builds the stored form with
+  `pay_on_delivery_line_description/1` and strips it with
+  `line_description/1`. It covers a method with a description, one
+  without (strips to `""`), and a line without the flag (left unchanged).
+  What gets stored is unchanged ("Branch pickup — Carrier rates, paid on
+  delivery"), and the round-1 conversion test still pins it.
+- **Asterisks.** The test counts `*` inside
+  `label[for='shipping_method_price']`: 1 while editable, 0 after the box
+  is checked. The msgid is the existing `"Price"`. The `.po`/`.pot`
+  diff is only reference-line churn, and there are no `fuzzy` flags.
+
+### Not changed, pre-existing
+
+- `Name` (`shipping_method_form.ex:151`) still has a manual `" *"` and is
+  `required`, so it reads "Name * *". The PR does not touch it. The same
+  one-line fix as for Price would apply.
+
+### Validation (round 3)
+
+All runs used `MIX_ENV=test PGDATABASE=pkecom_test_domovych_pod PGPOOL=10`,
+except the gates that need no database.
+
+- The PR's three test files: 44 tests, 0 failures.
+- Full `mix test`: 1632 tests, 0 failures (276 excluded). This matches
+  the author's figure.
+- `mix format --check-formatted`, `mix compile --warnings-as-errors
+  --force` and `mix gettext.extract --check-up-to-date`: clean. No
+  `fuzzy` in any catalogue.
+- `mix credo --strict`: no issues (4614 mods/funs).
+- `mix dialyzer`: passed.
+- The working tree was unchanged after all runs.
+
+### Verdict (round 3)
+
+**Approve.** Every finding from rounds 1 and 2 is closed. The PR is
+ready to leave draft once the committed review file carries this round,
+if it is kept in the PR.
