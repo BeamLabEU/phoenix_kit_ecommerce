@@ -12,8 +12,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKit.Utils.CountryData
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
+  alias PhoenixKitBilling.BillingProfile
   alias PhoenixKitBilling.PaymentOption
+  alias PhoenixKitBilling.Web.Components.BillingProfileFields
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.NamePrefix
@@ -226,15 +229,26 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:use_new_profile, assigns.is_guest or assigns.billing_profiles == [])
     |> assign(:needs_profile_selection, assigns.needs_profile_selection)
     |> assign(:needs_billing, assigns.needs_billing)
-    |> assign(:billing_data, initial_billing_data(assigns.user, assigns.cart))
-    |> assign(:countries, CountryData.list_countries())
+    |> assign(:countries, CountryData.countries_for_select())
     |> assign(:checkout_shipping_methods, [])
     |> assign(:shipping_fallback, false)
     |> assign(:step, assigns.initial_step)
     |> assign(:processing, false)
     |> assign(:error_message, nil)
     |> assign(:email_exists_error, false)
-    |> assign(:form_errors, %{})
+    |> assign_new_billing_details(assigns.user)
+  end
+
+  # A blank billing form: individual, nothing typed, the account email and the
+  # best-guess country, and "save as a billing profile" ticked (it is only
+  # ever offered to a logged-in shopper).
+  defp assign_new_billing_details(socket, user) do
+    socket
+    |> assign(:billing_data, initial_billing_data(user, socket.assigns.cart))
+    |> assign(:billing_type, "individual")
+    |> assign(:billing_validate?, false)
+    |> assign(:save_billing_profile, true)
+    |> assign_billing_form()
   end
 
   # Select payment option with smart defaults
@@ -310,31 +324,91 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       "address_line1" => "",
       "city" => "",
       "postal_code" => "",
-      "country" => cart.shipping_country || Shop.default_checkout_country()
+      "country" => cart.shipping_country || Shop.default_checkout_country() || ""
     }
   end
 
-  defp profile_to_billing_data(profile, cart) do
-    profile
-    |> profile_base_data()
-    |> Map.put(
-      "country",
-      profile.country || cart.shipping_country || Shop.default_checkout_country()
+  defp proceed_with_new_billing(socket) do
+    # From the first attempt on, the form shows its errors and keeps
+    # re-validating as the shopper types.
+    socket = socket |> assign(:billing_validate?, true) |> assign_billing_form()
+
+    if billing_changeset(socket).valid? do
+      billing_data = clean_for_type(socket.assigns.billing_data, socket.assigns.billing_type)
+
+      {:noreply,
+       socket
+       |> assign(:billing_data, billing_data)
+       |> assign_billing_form()
+       |> advance_after_billing()}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Please fill in all required fields"))}
+    end
+  end
+
+  # The billing form state is a changeset over a blank profile - the same
+  # rules billing applies when it saves one - behind `to_form/2` under the
+  # `billing[...]` namespace. `billing_data` stays the plain string-keyed map
+  # the context takes; the form is derived from it on every change.
+  defp assign_billing_form(socket) do
+    changeset = billing_changeset(socket)
+
+    changeset =
+      if socket.assigns.billing_validate?, do: %{changeset | action: :validate}, else: changeset
+
+    socket
+    |> assign(:billing_form, to_form(changeset, as: :billing))
+    |> assign(:require_billing_address, Shop.cart_requires_shipping?(socket.assigns.cart))
+    |> assign(
+      :subdivision_label,
+      CountryData.get_subdivision_label(socket.assigns.billing_data["country"])
     )
   end
 
-  defp profile_base_data(profile) do
-    %{
-      "type" => profile.type || "individual",
-      "first_name" => profile.first_name || "",
-      "last_name" => profile.last_name || "",
-      "email" => profile.email || "",
-      "phone" => profile.phone || "",
-      "address_line1" => profile.address_line1 || "",
-      "city" => profile.city || "",
-      "postal_code" => profile.postal_code || ""
-    }
+  # The shop adds to billing's rules: the country is always needed (it drives
+  # tax and shipping), and a cart that ships needs the full address.
+  defp billing_changeset(socket) do
+    %{billing_data: data, billing_type: type, cart: cart} = socket.assigns
+
+    params =
+      data
+      |> Map.put("type", type)
+      |> Map.put("save_profile", to_string(socket.assigns.save_billing_profile))
+
+    %BillingProfile{}
+    |> BillingProfile.fields_changeset(params,
+      require_email: true,
+      require_address: Shop.cart_requires_shipping?(cart)
+    )
+    |> keep_blank_country(data["country"])
+    |> Ecto.Changeset.validate_required([:country])
   end
+
+  # `cast/3` turns a blank param into the schema default, and a billing
+  # profile's country defaults to "EE" - so a shopper who has not picked a
+  # country would silently get one. Keep it blank so it is reported missing.
+  defp keep_blank_country(changeset, country) when country in [nil, ""] do
+    Ecto.Changeset.force_change(changeset, :country, nil)
+  end
+
+  defp keep_blank_country(changeset, _country), do: changeset
+
+  defp billing_field_names, do: Enum.map(BillingProfile.form_fields(), &to_string/1)
+
+  # An unticked checkbox still posts its hidden "false", so absence only
+  # happens for a payload that does not carry the checkbox at all.
+  defp save_profile_param(%{"save_profile" => value}, _socket), do: value == "true"
+  defp save_profile_param(_params, socket), do: socket.assigns.save_billing_profile
+
+  # Fields of the type that is NOT selected stay in the form state while the
+  # shopper flips between the two (so nothing typed is lost), but must not
+  # reach the order or the saved profile.
+  @individual_only_fields ~w(first_name last_name middle_name)
+  @company_only_fields ~w(company_name company_vat_number company_registration_number
+                          company_legal_address)
+
+  defp clean_for_type(data, "company"), do: Map.drop(data, @individual_only_fields)
+  defp clean_for_type(data, _individual), do: Map.drop(data, @company_only_fields)
 
   defp redirect_to_cart(socket, message) do
     socket
@@ -417,20 +491,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_event("use_new_profile", _params, socket) do
-    # Pre-fill form from selected profile if available
-    billing_data =
-      case Enum.find(
-             socket.assigns.billing_profiles,
-             &(to_string(&1.uuid) == to_string(socket.assigns.selected_profile_uuid))
-           ) do
-        nil -> socket.assigns.billing_data
-        profile -> profile_to_billing_data(profile, socket.assigns.cart)
-      end
-
+    # A blank form (account email and default country only) rather than a
+    # copy of the selected profile: the shopper chose "new details" to type
+    # something different, and a prefilled copy would be saved right back as
+    # a duplicate.
     {:noreply,
      socket
+     |> assign_new_billing_details(get_current_user(socket))
      |> assign(:use_new_profile, true)
-     |> assign(:billing_data, billing_data)
      |> assign(:selected_profile_uuid, nil)}
   end
 
@@ -448,24 +516,33 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_event("update_billing", %{"billing" => params}, socket) do
-    billing_data = Map.merge(socket.assigns.billing_data, params)
-    {:noreply, assign(socket, :billing_data, billing_data)}
+    # Only profile fields reach the order's snapshot, and the type changes
+    # through `change_type` alone - a change event still in flight from before
+    # a type click must not flip it back.
+    fields = Map.take(params, billing_field_names()) |> Map.delete("type")
+    billing_data = Map.merge(socket.assigns.billing_data, fields)
+
+    {:noreply,
+     socket
+     |> assign(:billing_data, billing_data)
+     |> assign(:save_billing_profile, save_profile_param(params, socket))
+     |> assign_billing_form()}
+  end
+
+  @impl true
+  def handle_event("change_type", %{"type" => type}, socket)
+      when type in ["individual", "company"] do
+    {:noreply,
+     socket
+     |> assign(:billing_type, type)
+     |> assign(:billing_data, Map.put(socket.assigns.billing_data, "type", type))
+     |> assign_billing_form()}
   end
 
   @impl true
   def handle_event("proceed_to_review", _params, socket) do
     if socket.assigns.use_new_profile do
-      # Validate billing data
-      errors = validate_billing_data(socket.assigns.billing_data)
-
-      if Enum.empty?(errors) do
-        {:noreply, socket |> advance_after_billing() |> assign(:form_errors, %{})}
-      else
-        {:noreply,
-         socket
-         |> assign(:form_errors, errors)
-         |> put_flash(:error, gettext("Please fill in all required fields"))}
-      end
+      proceed_with_new_billing(socket)
     else
       if is_nil(socket.assigns.selected_profile_uuid) do
         {:noreply, put_flash(socket, :error, gettext("Please select a billing profile"))}
@@ -539,15 +616,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         _ -> nil
       end
 
-    # Build options for convert_cart_to_order
-    opts =
-      if socket.assigns.use_new_profile do
-        # Guest or new profile - use billing_data directly
-        [billing_data: socket.assigns.billing_data, user_uuid: user_uuid]
-      else
-        # Logged-in user with existing profile
-        [billing_profile_uuid: socket.assigns.selected_profile_uuid, user_uuid: user_uuid]
-      end
+    # Only a logged-in shopper typing new details is offered (and can ask
+    # for) a saved profile - the context refuses it for anyone else too.
+    save_profile? =
+      socket.assigns.use_new_profile and not is_nil(user_uuid) and
+        socket.assigns.save_billing_profile
 
     # Re-check ownership at the point of USE, not just at selection. The
     # selection handler guards the normal path, but `selected_profile_uuid`
@@ -556,7 +629,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # address. Cheap check, last line of defence.
     if socket.assigns.use_new_profile or
          owned_profile_uuid?(socket, socket.assigns.selected_profile_uuid) do
-      result = Shop.convert_cart_to_order(cart, opts)
+      result = Shop.convert_cart_to_order(cart, convert_opts(socket, user_uuid, save_profile?))
+      if save_profile?, do: log_billing_profile_saved(result, socket)
       {:noreply, handle_order_result(result, socket)}
     else
       {:noreply,
@@ -566,6 +640,33 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
        |> put_flash(:error, gettext("That billing profile is not available."))}
     end
   end
+
+  # Options for `convert_cart_to_order/2`.
+  defp convert_opts(%{assigns: %{use_new_profile: true}} = socket, user_uuid, save_profile?) do
+    # Guest or new profile - use billing_data directly
+    [billing_data: socket.assigns.billing_data, user_uuid: user_uuid] ++
+      if(save_profile?, do: [save_billing_profile: true], else: [])
+  end
+
+  defp convert_opts(socket, user_uuid, _save_profile?) do
+    # Logged-in user with existing profile
+    [billing_profile_uuid: socket.assigns.selected_profile_uuid, user_uuid: user_uuid]
+  end
+
+  # The profile was created inside the conversion transaction, so an order
+  # that came back carrying a profile uuid means it was saved and committed.
+  defp log_billing_profile_saved({:ok, %{billing_profile_uuid: profile_uuid} = order}, socket)
+       when not is_nil(profile_uuid) do
+    Activity.log("shop.checkout_billing_profile_saved",
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "billing_profile",
+      resource_uuid: profile_uuid,
+      metadata: %{"order_uuid" => order.uuid}
+    )
+  end
+
+  defp log_billing_profile_saved(_result, _socket), do: :ok
 
   # The single decision point for "billing is settled, what's next" - reached
   # both from the billing form (`proceed_to_review`, either path: an existing
@@ -874,12 +975,28 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     )
   end
 
-  defp handle_order_result({:error, :billing_profile_not_found}, socket) do
+  defp handle_order_result({:error, reason}, socket)
+       when reason in [:billing_profile_not_found, :billing_profile_not_owned] do
     socket
     |> assign(:processing, false)
     |> assign(:selected_profile_uuid, nil)
     |> assign(:step, :billing)
     |> put_flash(:error, gettext("That billing profile is not available."))
+  end
+
+  # The entered details did not make a valid profile - the whole conversion
+  # rolled back, so no order exists. Back to the editable form, which now
+  # shows its errors.
+  defp handle_order_result({:error, {:billing_profile_invalid, _changeset}}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> assign(:step, :billing)
+    |> assign(:billing_validate?, true)
+    |> assign_billing_form()
+    |> put_flash(
+      :error,
+      gettext("The billing details could not be saved - please check the highlighted fields")
+    )
   end
 
   defp handle_order_result({:error, :payment_option_unavailable}, socket) do
@@ -908,7 +1025,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   # Seed the editable billing form from the profile the customer had
   # selected, so completing an address-less saved profile is a fill-in,
-  # not a retype.
+  # not a retype. The profile already exists, so saving it again is off by
+  # default, and the form opens showing what is still missing.
   defp prefill_from_selected_profile(socket) do
     case Enum.find(
            socket.assigns.billing_profiles,
@@ -918,13 +1036,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         socket
 
       profile ->
-        assign(socket, :billing_data, profile_form_data(profile, socket.assigns.billing_data))
+        socket
+        |> assign(:billing_data, profile_form_data(profile, socket.assigns.billing_data))
+        |> assign(:billing_type, profile.type || "individual")
+        |> assign(:billing_validate?, true)
+        |> assign(:save_billing_profile, false)
+        |> assign_billing_form()
     end
   end
 
   # Field-for-field copy of a saved profile into the editable form's shape.
-  @profile_form_fields ~w(first_name last_name phone company_name address_line1
-                          address_line2 city state postal_code country)a
+  @profile_form_fields ~w(type first_name last_name middle_name phone company_name
+                          company_vat_number company_registration_number
+                          company_legal_address address_line1 address_line2 city state
+                          postal_code country)a
 
   defp profile_form_data(profile, current) do
     base =
@@ -936,45 +1061,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     # a profile, so a blank profile email must not wipe it.
     Map.put(base, "email", profile.email || current["email"] || "")
   end
-
-  defp validate_billing_data(data) do
-    errors = %{}
-
-    errors =
-      if blank?(data["first_name"]),
-        do: Map.put(errors, :first_name, "is required"),
-        else: errors
-
-    errors =
-      if blank?(data["last_name"]),
-        do: Map.put(errors, :last_name, "is required"),
-        else: errors
-
-    errors =
-      if blank?(data["email"]),
-        do: Map.put(errors, :email, "is required"),
-        else: errors
-
-    errors =
-      if blank?(data["address_line1"]),
-        do: Map.put(errors, :address_line1, "is required"),
-        else: errors
-
-    errors =
-      if blank?(data["city"]), do: Map.put(errors, :city, "is required"), else: errors
-
-    errors =
-      if blank?(data["country"]),
-        do: Map.put(errors, :country, "is required"),
-        else: errors
-
-    errors
-  end
-
-  defp blank?(nil), do: true
-  defp blank?(""), do: true
-  defp blank?(str) when is_binary(str), do: String.trim(str) == ""
-  defp blank?(_), do: false
 
   # ============================================
   # PUBSUB EVENT HANDLERS
@@ -1141,9 +1227,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   selected_profile_uuid={@selected_profile_uuid}
                   use_new_profile={@use_new_profile}
                   needs_profile_selection={@needs_profile_selection}
-                  billing_data={@billing_data}
-                  form_errors={@form_errors}
+                  billing_form={@billing_form}
+                  billing_type={@billing_type}
                   countries={@countries}
+                  subdivision_label={@subdivision_label}
+                  require_address={@require_billing_address}
                   payment_options={@payment_options}
                 />
               <% :shipping -> %>
@@ -1241,7 +1329,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     <div class="card bg-base-100 shadow-lg">
       <div class="card-body">
         <h2 class="card-title mb-4">
-          <%= if @is_guest or @billing_profiles == [] do %>
+          <%= if @use_new_profile do %>
             {gettext("Billing Information")}
           <% else %>
             {gettext("Select Billing Profile")}
@@ -1249,11 +1337,24 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         </h2>
 
         <%= if @use_new_profile do %>
-          <%!-- Guest checkout or no profiles - show billing form --%>
+          <%!-- Guest checkout, no profiles, or "use new details" - show billing form --%>
+          <button
+            :if={@billing_profiles != []}
+            type="button"
+            id="checkout-use-saved-billing"
+            phx-click="use_existing_profile"
+            class="btn btn-ghost btn-sm mb-4"
+          >
+            <.icon name="hero-arrow-left" class="w-4 h-4" /> {gettext("Back to saved profiles")}
+          </button>
+
           <.billing_form
-            billing_data={@billing_data}
-            form_errors={@form_errors}
+            billing_form={@billing_form}
+            billing_type={@billing_type}
             countries={@countries}
+            subdivision_label={@subdivision_label}
+            require_address={@require_address}
+            show_save_profile={not @is_guest}
           />
         <% else %>
           <%!-- Authenticated user with multiple profiles - show selector --%>
@@ -1346,129 +1447,48 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <% end %>
         </div>
       <% end %>
+
+      <button
+        type="button"
+        id="checkout-use-new-billing"
+        phx-click="use_new_profile"
+        class="btn btn-ghost btn-sm"
+      >
+        <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Use new details")}
+      </button>
     </div>
     """
   end
 
+  # The fields are billing's own component, so the checkout form and the
+  # profile forms cannot drift. The type radios click through to
+  # `change_type`; everything else is the form's `phx-change`.
   defp billing_form(assigns) do
     ~H"""
-    <form id="checkout-billing-form" phx-change="update_billing" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("First Name *")}</legend>
-          <input
-            type="text"
-            name="billing[first_name]"
-            value={@billing_data["first_name"]}
-            class={["input", @form_errors[:first_name] && "input-error"]}
-            required
-          />
-          <%= if @form_errors[:first_name] do %>
-            <p class="fieldset-label text-error">{@form_errors[:first_name]}</p>
-          <% end %>
-        </fieldset>
-
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Last Name *")}</legend>
-          <input
-            type="text"
-            name="billing[last_name]"
-            value={@billing_data["last_name"]}
-            class={["input", @form_errors[:last_name] && "input-error"]}
-            required
-          />
-          <%= if @form_errors[:last_name] do %>
-            <p class="fieldset-label text-error">{@form_errors[:last_name]}</p>
-          <% end %>
-        </fieldset>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Email *")}</legend>
-          <input
-            type="email"
-            name="billing[email]"
-            value={@billing_data["email"]}
-            class={["input", @form_errors[:email] && "input-error"]}
-            required
-          />
-          <%= if @form_errors[:email] do %>
-            <p class="fieldset-label text-error">{@form_errors[:email]}</p>
-          <% end %>
-        </fieldset>
-
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Phone")}</legend>
-          <input
-            type="tel"
-            name="billing[phone]"
-            value={@billing_data["phone"]}
-            class="input"
-          />
-        </fieldset>
-      </div>
-
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">{gettext("Address *")}</legend>
-        <input
-          type="text"
-          name="billing[address_line1]"
-          value={@billing_data["address_line1"]}
-          class={["input", @form_errors[:address_line1] && "input-error"]}
-          placeholder={gettext("Street address")}
-          required
+    <.form
+      for={@billing_form}
+      id="checkout-billing-form"
+      phx-change="update_billing"
+      phx-submit="proceed_to_review"
+    >
+      <BillingProfileFields.billing_profile_fields
+        form={@billing_form}
+        type={@billing_type}
+        countries={@countries}
+        subdivision_label={@subdivision_label}
+        id_prefix="checkout-billing"
+        show_options={false}
+        require_email
+        require_address={@require_address}
+      >
+        <.checkbox
+          :if={@show_save_profile}
+          field={@billing_form[:save_profile]}
+          id="checkout-save-billing-profile"
+          label={gettext("Save as a billing profile")}
         />
-        <%= if @form_errors[:address_line1] do %>
-          <p class="fieldset-label text-error">{@form_errors[:address_line1]}</p>
-        <% end %>
-      </fieldset>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("City *")}</legend>
-          <input
-            type="text"
-            name="billing[city]"
-            value={@billing_data["city"]}
-            class={["input", @form_errors[:city] && "input-error"]}
-            required
-          />
-          <%= if @form_errors[:city] do %>
-            <p class="fieldset-label text-error">{@form_errors[:city]}</p>
-          <% end %>
-        </fieldset>
-
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Postal Code")}</legend>
-          <input
-            type="text"
-            name="billing[postal_code]"
-            value={@billing_data["postal_code"]}
-            class="input"
-          />
-        </fieldset>
-
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">{gettext("Country *")}</legend>
-          <select
-            name="billing[country]"
-            class={["select", @form_errors[:country] && "select-error"]}
-            required
-          >
-            <option value="">{gettext("Select country...")}</option>
-            <%= for country <- @countries do %>
-              <option value={country.alpha2} selected={@billing_data["country"] == country.alpha2}>
-                {country.name}
-              </option>
-            <% end %>
-          </select>
-          <%= if @form_errors[:country] do %>
-            <p class="fieldset-label text-error">{@form_errors[:country]}</p>
-          <% end %>
-        </fieldset>
-      </div>
-    </form>
+      </BillingProfileFields.billing_profile_fields>
+    </.form>
     """
   end
 
@@ -1649,19 +1669,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
             <div class="text-sm">
               <%= if @use_new_profile do %>
-                <div class="font-medium">
-                  {@billing_data["first_name"]} {@billing_data["last_name"]}
-                </div>
-                <div class="text-base-content/60">
-                  {[
-                    @billing_data["address_line1"],
-                    @billing_data["city"],
-                    @billing_data["postal_code"],
-                    @billing_data["country"]
-                  ]
-                  |> Enum.filter(&(&1 && &1 != ""))
-                  |> Enum.join(", ")}
-                </div>
+                <div class="font-medium">{profile_display_name(@billing_data)}</div>
+                <div class="text-base-content/60">{profile_address(@billing_data)}</div>
                 <div class="text-base-content/60">{@billing_data["email"]}</div>
                 <%= if @billing_data["phone"] && @billing_data["phone"] != "" do %>
                   <div class="text-base-content/60">{@billing_data["phone"]}</div>
