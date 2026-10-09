@@ -213,7 +213,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
       refute_activity_logged("shop.checkout_billing_profile_saved")
     end
 
-    test "an error no field shows hints at unticking the save box, which then places the order",
+    test "an error no field shows hints at unticking the save box, and unticking clears the hint",
          %{conn: conn} do
       # A signed-in user the database does not know: the profile's owner is
       # rejected, which no form field can show.
