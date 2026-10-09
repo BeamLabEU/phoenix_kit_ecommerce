@@ -6035,24 +6035,24 @@ msgstr "Покупець сплачує доставку перевізнику 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1415
 #, elixir-autogen, elixir-format
 msgid "Back to saved profiles"
-msgstr ""
+msgstr "Назад до збережених профілів"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1556
 #, elixir-autogen, elixir-format
 msgid "Save as a billing profile"
-msgstr ""
+msgstr "Зберегти як платіжний профіль"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1063
 #, elixir-autogen, elixir-format
 msgid "The billing details could not be saved - please check the highlighted fields"
-msgstr ""
+msgstr "Не вдалося зберегти платіжні дані — перевірте виділені поля"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1525
 #, elixir-autogen, elixir-format
 msgid "Use new details"
-msgstr ""
+msgstr "Ввести нові дані"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1563
 #, elixir-autogen, elixir-format
 msgid "This profile could not be saved. Untick \"Save as a billing profile\" to place the order without saving it."
-msgstr ""
+msgstr "Не вдалося зберегти цей профіль. Зніміть позначку «Зберегти як платіжний профіль», щоб оформити замовлення без збереження."
