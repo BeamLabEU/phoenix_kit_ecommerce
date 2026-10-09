@@ -168,3 +168,17 @@ guest-checkout account notices are all right.
 ("Fuzzy entries ship. The completeness check above only looks at empty msgstrs…") now runs straight into the
 plural comment and sits above the new plural test. The fuzzy test at `:199` is left without its explanation.
 Move the new test (with its own comment) below the fuzzy test, or move the fuzzy comment back down.
+
+---
+
+## Round 3 (2026-10-09): head `9cb4619`
+
+- **Verdict:** **APPROVE** (confirmed; the round-2 NITPICK is fixed).
+- **The NITPICK is closed.** In `c12338e` the fuzzy test returns directly under its own comment
+  (`i18n_test.exs:180-191`), and the uk plural test follows with its own comment. The test bodies are
+  unchanged; the commit only moves code.
+- **Diff against `main` (`1a168f1`):** the declared files plus the review file (byte-identical to rounds 1–2).
+  GitHub reports `MERGEABLE`.
+- **Re-checked:** the catalogue is byte-identical to `mix gettext.merge` output (1097 unchanged); checker 0
+  errors; `MIX_ENV=test PGDATABASE=pkecom_test_domovych_uk PGPOOL=10 mix test
+  test/phoenix_kit_ecommerce/i18n_test.exs` → 18 tests, 0 failures.
