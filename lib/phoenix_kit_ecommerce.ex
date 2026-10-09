@@ -3925,6 +3925,14 @@ defmodule PhoenixKitEcommerce do
 
   - `billing_profile_uuid: uuid` - Use existing billing profile (for logged-in users)
   - `billing_data: map` - Use direct billing data (for guest checkout)
+  - `user_uuid: uuid` - The logged-in user placing the order, when the cart is
+    still a guest cart (it is adopted by that user). Without it the order is a
+    guest checkout and a guest user is created from `billing_data`.
+  - `save_billing_profile: true` - With `billing_data`, also save those details
+    as a billing profile of the `:user_uuid` user, in the same transaction, and
+    reference it from the order instead of a snapshot. Billing makes a user's
+    first profile their default. Ignored for guests, without `billing_data`,
+    and when `billing_profile_uuid` is given.
 
   ## Returns
 
@@ -4195,14 +4203,12 @@ defmodule PhoenixKitEcommerce do
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:error, {:billing_profile_invalid, changeset}}
-
-        {:error, reason} ->
-          {:error, reason}
       end
     end
   end
 
-  @unsaved_profile_fields ~w(user_uuid is_default name metadata)
+  # `name` is a form field but not a checkout one: billing derives it.
+  @unsaved_profile_fields ~w(name)
 
   defp billing_profile_attrs(billing_data) do
     PhoenixKitBilling.BillingProfile.form_fields()

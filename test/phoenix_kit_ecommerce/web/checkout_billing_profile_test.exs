@@ -196,24 +196,116 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
       fill_and_continue(view)
       assert has_element?(view, "button[phx-click='confirm_order']")
 
-      # Review accepted these details; make them unsavable behind the form's
-      # back, as a crafted or stale socket state would.
-      :sys.replace_state(view.pid, fn state ->
-        socket = state.socket
-        data = Map.put(socket.assigns.billing_data, "last_name", "")
-        %{state | socket: Phoenix.Component.assign(socket, :billing_data, data)}
-      end)
+      # A stale or crafted change event after review blanks a required field.
+      render_change(view, "update_billing", %{"billing" => %{"last_name" => ""}})
+      view |> element("button[phx-click='confirm_order']") |> render_click()
 
-      html = view |> element("button[phx-click='confirm_order']") |> render_click()
-
-      assert html =~ "could not be saved"
+      # The context's own error is on the form, which is editable again.
+      assert has_element?(view, "#test-flash-error")
       assert has_element?(view, @form)
       assert has_element?(view, "#checkout-billing-last_name.input-error")
+      refute has_element?(view, "#checkout-save-billing-profile-hint")
       refute has_element?(view, "button[phx-click='confirm_order']")
 
       assert Billing.list_user_billing_profiles(user.uuid) == []
       assert Billing.list_user_orders(user.uuid) == []
       assert Shop.get_cart!(cart.uuid).status == "active"
+      refute_activity_logged("shop.checkout_billing_profile_saved")
+    end
+
+    test "an error no field shows hints at unticking the save box, which then places the order",
+         %{conn: conn} do
+      # A signed-in user the database does not know: the profile's owner is
+      # rejected, which no form field can show.
+      unknown = fake_scope()
+      {conn, cart} = guest_checkout(conn)
+      conn = put_test_scope(conn, unknown)
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      fill_and_continue(view)
+      view |> element("button[phx-click='confirm_order']") |> render_click()
+
+      assert has_element?(view, "#test-flash-error")
+      assert has_element?(view, "#checkout-save-billing-profile-hint")
+      assert has_element?(view, @form)
+      assert Shop.get_cart!(cart.uuid).status == "active"
+
+      view |> form(@form, billing: %{save_profile: false}) |> render_change()
+      refute has_element?(view, "#checkout-save-billing-profile-hint")
+    end
+
+    test "over-long input is an error on the form, not a failed order", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      view
+      |> form(@form,
+        billing: complete_billing("EE") |> Map.put("postal_code", String.duplicate("1", 21))
+      )
+      |> render_change()
+
+      view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+      assert has_element?(view, "#checkout-billing-postal_code.input-error")
+      refute has_element?(view, "button[phx-click='confirm_order']")
+    end
+
+    for {locale, message} <- [
+          {"ru", "обязательно для физических лиц"},
+          {"de", "ist für Privatpersonen erforderlich"}
+        ] do
+      test "validation errors render in #{locale}", %{conn: conn} do
+        {:ok, view, _html} = live(put_test_locale(conn, unquote(locale)), "/checkout")
+
+        view |> form(@form, billing: %{first_name: ""}) |> render_change()
+        view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+        assert has_element?(view, "#checkout-billing-form p", unquote(message))
+      end
+    end
+
+    test "Enter in the form moves on to review like the button does", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      view |> form(@form, billing: complete_billing("EE", "enter")) |> render_submit()
+
+      assert has_element?(view, "button[phx-click='confirm_order']")
+      refute has_element?(view, @form)
+    end
+
+    test "labels follow the page locale, billing's own catalogue included", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(put_test_locale(conn, "ru"), "/checkout")
+
+      assert has_element?(view, "label[for='checkout-billing-first_name']", "Имя")
+    end
+  end
+
+  describe "logged-in shopper whose payment option needs no billing step" do
+    setup :logged_in_checkout
+
+    test "places the order without trying to save the blank form", %{
+      conn: conn,
+      user: user,
+      cart: cart
+    } do
+      # Only one active option, and it needs no billing profile: mount lands
+      # on review with the form never filled in.
+      case Billing.get_payment_option_by_code("cod") do
+        nil -> :ok
+        cod -> {:ok, _} = Billing.update_payment_option(cod, %{"active" => false})
+      end
+
+      {:ok, stripe} = billing_less_option()
+      assert stripe.requires_billing_profile == false
+
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      refute has_element?(view, @form)
+      confirm_order(view)
+
+      assert Billing.list_user_billing_profiles(user.uuid) == []
+      assert is_nil(placed_order(cart).billing_profile_uuid)
       refute_activity_logged("shop.checkout_billing_profile_saved")
     end
   end
@@ -356,17 +448,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
 
   describe "guest" do
     test "is not offered a saved profile and the order carries a snapshot", %{conn: conn} do
-      conn = guest_checkout(conn)
+      {conn, cart} = guest_checkout(conn)
       {:ok, view, _html} = live(conn, "/checkout")
 
       assert has_element?(view, @form)
       refute has_element?(view, @save_checkbox)
 
       fill_and_continue(view, %{"middle_name" => "Quentin"})
-      cart_uuid = checkout_cart_uuid(view)
       confirm_order(view)
 
-      order = placed_order(cart_uuid)
+      order = placed_order(cart)
 
       assert is_nil(order.billing_profile_uuid)
       assert order.billing_snapshot["middle_name"] == "Quentin"
@@ -375,16 +466,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
     end
 
     test "cannot save a profile with a crafted save flag", %{conn: conn} do
-      conn = guest_checkout(conn)
+      {conn, cart} = guest_checkout(conn)
       {:ok, view, _html} = live(conn, "/checkout")
 
       fill_and_continue(view)
 
       render_change(view, "update_billing", %{"billing" => %{"save_profile" => "true"}})
-      cart_uuid = checkout_cart_uuid(view)
       confirm_order(view)
 
-      order = placed_order(cart_uuid)
+      order = placed_order(cart)
       assert is_nil(order.billing_profile_uuid)
       assert Billing.list_user_billing_profiles(order.user_uuid) == []
     end
@@ -433,9 +523,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
 
       assert has_element?(view, "label.select-error #checkout-billing-country")
 
-      # No "EE" leaked in through billing's schema default, neither into the
-      # form state nor onto the cart.
-      assert :sys.get_state(view.pid).socket.assigns.billing_data["country"] == ""
+      # No "EE" leaked in through billing's schema default.
       assert is_nil(Shop.get_cart!(cart.uuid).shipping_country)
 
       refute has_element?(view, "button[phx-click='confirm_order']")
@@ -527,15 +615,35 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
   defp guest_checkout(conn) do
     session_id = "checkout-billing-profile-#{System.unique_integer([:positive])}"
     {:ok, cart} = Shop.create_cart(session_id: session_id)
-    {:ok, _cart} = Shop.add_to_cart(cart, digital_product(), 1)
+    {:ok, cart} = Shop.add_to_cart(cart, digital_product(), 1)
 
-    Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})
+    {Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id}), cart}
+  end
+
+  # Core seeds a row per payment option code; flip one to "no billing profile".
+  defp billing_less_option do
+    attrs = %{"active" => true, "requires_billing_profile" => false}
+
+    case Billing.get_payment_option_by_code("stripe") do
+      nil ->
+        Billing.create_payment_option(
+          Map.merge(attrs, %{
+            "name" => "stripe",
+            "code" => "stripe",
+            "type" => "online",
+            "provider" => "stripe"
+          })
+        )
+
+      option ->
+        Billing.update_payment_option(option, Map.put(attrs, "provider", "stripe"))
+    end
   end
 
   defp digital_product do
     {:ok, product} =
       Shop.create_product(%{
-        "title" => %{"en" => "Billing Profile Widget"},
+        "title" => %{"en" => "Billing Profile Widget #{System.unique_integer([:positive])}"},
         "price" => Decimal.new("10.00"),
         "status" => "active",
         "currency" => "USD",
@@ -596,10 +704,5 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
     assert cart.status == "converted"
     assert [order] = Billing.list_user_orders(cart.user_uuid)
     order
-  end
-
-  # A guest's cart is only known by its session; find it through the view.
-  defp checkout_cart_uuid(view) do
-    :sys.get_state(view.pid).socket.assigns.cart.uuid
   end
 end

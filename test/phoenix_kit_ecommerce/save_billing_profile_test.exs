@@ -178,4 +178,66 @@ defmodule PhoenixKitEcommerce.SaveBillingProfileTest do
     assert Shop.get_cart!(cart.uuid).status == "active"
     assert is_nil(Shop.get_cart!(cart.uuid).shipping_country)
   end
+
+  test "a profile created before a later failure is rolled back with the order", %{} do
+    user = fixture_user()
+
+    {:ok, physical} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Parcel Widget"},
+        "price" => Decimal.new("25.00"),
+        "status" => "active",
+        "currency" => "USD",
+        "product_type" => "physical",
+        "requires_shipping" => true,
+        "weight_grams" => 500
+      })
+
+    {:ok, method} =
+      Shop.create_shipping_method(%{
+        "name" => "Estonia Only",
+        "price" => Decimal.new("5.00"),
+        "active" => true,
+        "countries" => ["EE"]
+      })
+
+    {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+    {:ok, cart} = Shop.add_to_cart(cart, physical, 1)
+    {:ok, cart} = Shop.set_cart_shipping(cart, method, "EE")
+
+    # The profile is created first; the US address then rules the chosen
+    # method out, which fails the conversion further down the same transaction.
+    assert {:error, :shipping_method_unavailable} =
+             Shop.convert_cart_to_order(cart,
+               billing_data: billing_data(%{"country" => "US"}),
+               user_uuid: user.uuid,
+               save_billing_profile: true
+             )
+
+    assert Billing.list_user_billing_profiles(user.uuid) == []
+    assert Billing.list_user_orders(user.uuid) == []
+    assert Shop.get_cart!(cart.uuid).status == "active"
+  end
+
+  test "the flag is ignored when an existing profile is given", %{product: product} do
+    user = fixture_user()
+
+    {:ok, existing} =
+      Billing.create_billing_profile(user, %{
+        "first_name" => "Old",
+        "last_name" => "Profile",
+        "email" => "old@example.com"
+      })
+
+    assert {:ok, order} =
+             Shop.convert_cart_to_order(user_cart(user, product),
+               billing_profile_uuid: existing.uuid,
+               billing_data: billing_data(),
+               user_uuid: user.uuid,
+               save_billing_profile: true
+             )
+
+    assert order.billing_profile_uuid == existing.uuid
+    assert [_only] = Billing.list_user_billing_profiles(user.uuid)
+  end
 end

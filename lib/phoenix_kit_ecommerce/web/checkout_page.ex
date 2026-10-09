@@ -248,6 +248,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> assign(:billing_type, "individual")
     |> assign(:billing_validate?, false)
     |> assign(:save_billing_profile, true)
+    |> assign(:billing_collected?, false)
+    |> assign(:save_profile_hint?, false)
     |> assign_billing_form()
   end
 
@@ -328,17 +330,37 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     }
   end
 
+  # Only profile fields reach the order's snapshot, and the type changes
+  # through `change_type` alone - a change event still in flight from before
+  # a type click must not flip it back.
+  defp merge_billing_params(socket, params) do
+    fields =
+      params
+      |> Map.take(billing_field_names())
+      |> Map.delete("type")
+      |> Map.filter(fn {_field, value} -> is_binary(value) end)
+
+    socket
+    |> assign(:billing_data, Map.merge(socket.assigns.billing_data, fields))
+    |> assign(:save_billing_profile, save_profile_param(params, socket))
+    |> assign_billing_form()
+  end
+
   defp proceed_with_new_billing(socket) do
     # From the first attempt on, the form shows its errors and keeps
     # re-validating as the shopper types.
     socket = socket |> assign(:billing_validate?, true) |> assign_billing_form()
 
     if billing_changeset(socket).valid? do
-      billing_data = clean_for_type(socket.assigns.billing_data, socket.assigns.billing_type)
+      billing_data =
+        socket.assigns.billing_data
+        |> clean_for_type(socket.assigns.billing_type)
+        |> normalize_vat_number()
 
       {:noreply,
        socket
        |> assign(:billing_data, billing_data)
+       |> assign(:billing_collected?, true)
        |> assign_billing_form()
        |> advance_after_billing()}
     else
@@ -350,8 +372,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # rules billing applies when it saves one - behind `to_form/2` under the
   # `billing[...]` namespace. `billing_data` stays the plain string-keyed map
   # the context takes; the form is derived from it on every change.
-  defp assign_billing_form(socket) do
-    changeset = billing_changeset(socket)
+  defp assign_billing_form(socket, extra_errors \\ []) do
+    changeset = Enum.reduce(extra_errors, billing_changeset(socket), &add_missing_error/2)
 
     changeset =
       if socket.assigns.billing_validate?, do: %{changeset | action: :validate}, else: changeset
@@ -364,6 +386,26 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       CountryData.get_subdivision_label(socket.assigns.billing_data["country"])
     )
   end
+
+  # An error the context reported that the form's own validation did not.
+  defp add_missing_error({field, {message, opts}}, changeset) do
+    if Enum.any?(changeset.errors, &match?({^field, {^message, _}}, &1)) do
+      changeset
+    else
+      Ecto.Changeset.add_error(changeset, field, message, opts)
+    end
+  end
+
+  # The fields the form actually renders for the chosen type.
+  @shared_billing_fields ~w(email phone country address_line1 address_line2 city state
+                            postal_code)a
+  defp visible_billing_fields(%{assigns: %{billing_type: "company"}}) do
+    @shared_billing_fields ++
+      ~w(company_name company_vat_number company_registration_number company_legal_address)a
+  end
+
+  defp visible_billing_fields(_socket),
+    do: @shared_billing_fields ++ ~w(first_name middle_name last_name)a
 
   # The shop adds to billing's rules: the country is always needed (it drives
   # tax and shipping), and a cart that ships needs the full address.
@@ -387,11 +429,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # `cast/3` turns a blank param into the schema default, and a billing
   # profile's country defaults to "EE" - so a shopper who has not picked a
   # country would silently get one. Keep it blank so it is reported missing.
-  defp keep_blank_country(changeset, country) when country in [nil, ""] do
-    Ecto.Changeset.force_change(changeset, :country, nil)
+  defp keep_blank_country(changeset, country) do
+    if is_nil(country) or String.trim(country) == "" do
+      Ecto.Changeset.force_change(changeset, :country, nil)
+    else
+      changeset
+    end
   end
-
-  defp keep_blank_country(changeset, _country), do: changeset
 
   defp billing_field_names, do: Enum.map(BillingProfile.form_fields(), &to_string/1)
 
@@ -406,6 +450,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   @individual_only_fields ~w(first_name last_name middle_name)
   @company_only_fields ~w(company_name company_vat_number company_registration_number
                           company_legal_address)
+
+  # Billing stores the VAT number upper-cased; the order snapshot gets the
+  # same form.
+  defp normalize_vat_number(%{"company_vat_number" => vat} = data) when is_binary(vat) do
+    Map.put(data, "company_vat_number", vat |> String.trim() |> String.upcase())
+  end
+
+  defp normalize_vat_number(data), do: data
 
   defp clean_for_type(data, "company"), do: Map.drop(data, @individual_only_fields)
   defp clean_for_type(data, _individual), do: Map.drop(data, @company_only_fields)
@@ -516,17 +568,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
   @impl true
   def handle_event("update_billing", %{"billing" => params}, socket) do
-    # Only profile fields reach the order's snapshot, and the type changes
-    # through `change_type` alone - a change event still in flight from before
-    # a type click must not flip it back.
-    fields = Map.take(params, billing_field_names()) |> Map.delete("type")
-    billing_data = Map.merge(socket.assigns.billing_data, fields)
-
-    {:noreply,
-     socket
-     |> assign(:billing_data, billing_data)
-     |> assign(:save_billing_profile, save_profile_param(params, socket))
-     |> assign_billing_form()}
+    {:noreply, socket |> merge_billing_params(params) |> assign(:save_profile_hint?, false)}
   end
 
   @impl true
@@ -540,8 +582,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   @impl true
-  def handle_event("proceed_to_review", _params, socket) do
+  def handle_event("proceed_to_review", params, socket) do
     if socket.assigns.use_new_profile do
+      # A form submit (Enter) carries the values itself; the button's click
+      # does not, and relies on the change events that already merged them.
+      socket =
+        case params do
+          %{"billing" => billing} -> merge_billing_params(socket, billing)
+          _ -> socket
+        end
+
       proceed_with_new_billing(socket)
     else
       if is_nil(socket.assigns.selected_profile_uuid) do
@@ -618,9 +668,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
 
     # Only a logged-in shopper typing new details is offered (and can ask
     # for) a saved profile - the context refuses it for anyone else too.
+    # Only when the form was actually filled in: a payment option that needs
+    # no billing step reaches review with a blank form, and saving THAT would
+    # fail and take the whole order down with it.
     save_profile? =
       socket.assigns.use_new_profile and not is_nil(user_uuid) and
-        socket.assigns.save_billing_profile
+        socket.assigns.save_billing_profile and socket.assigns.billing_collected?
 
     # Re-check ownership at the point of USE, not just at selection. The
     # selection handler guards the normal path, but `selected_profile_uuid`
@@ -660,6 +713,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     Activity.log("shop.checkout_billing_profile_saved",
       actor_uuid: Activity.actor_uuid(socket),
       actor_role: Activity.actor_role(socket),
+      mode: "checkout",
       resource_type: "billing_profile",
       resource_uuid: profile_uuid,
       metadata: %{"order_uuid" => order.uuid}
@@ -985,14 +1039,25 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   # The entered details did not make a valid profile - the whole conversion
-  # rolled back, so no order exists. Back to the editable form, which now
-  # shows its errors.
-  defp handle_order_result({:error, {:billing_profile_invalid, _changeset}}, socket) do
+  # rolled back, so no order exists. Back to the editable form with the
+  # context's own errors on it. An error no field shows (the profile's owner,
+  # its name) gets a hint next to the save box instead: unticking it places
+  # the order without the profile.
+  defp handle_order_result({:error, {:billing_profile_invalid, changeset}}, socket) do
+    socket =
+      socket
+      |> assign(:processing, false)
+      |> assign(:step, :billing)
+      |> assign(:billing_validate?, true)
+      |> assign_billing_form(changeset.errors)
+
+    hint? =
+      Enum.any?(changeset.errors, fn {field, _} ->
+        field not in visible_billing_fields(socket)
+      end)
+
     socket
-    |> assign(:processing, false)
-    |> assign(:step, :billing)
-    |> assign(:billing_validate?, true)
-    |> assign_billing_form()
+    |> assign(:save_profile_hint?, hint?)
     |> put_flash(
       :error,
       gettext("The billing details could not be saved - please check the highlighted fields")
@@ -1041,6 +1106,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         |> assign(:billing_type, profile.type || "individual")
         |> assign(:billing_validate?, true)
         |> assign(:save_billing_profile, false)
+        |> assign(:billing_collected?, false)
         |> assign_billing_form()
     end
   end
@@ -1232,6 +1298,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   countries={@countries}
                   subdivision_label={@subdivision_label}
                   require_address={@require_billing_address}
+                  save_profile_hint={@save_profile_hint?}
                   payment_options={@payment_options}
                 />
               <% :shipping -> %>
@@ -1355,6 +1422,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             subdivision_label={@subdivision_label}
             require_address={@require_address}
             show_save_profile={not @is_guest}
+            save_profile_hint={@save_profile_hint}
           />
         <% else %>
           <%!-- Authenticated user with multiple profiles - show selector --%>
@@ -1487,6 +1555,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           id="checkout-save-billing-profile"
           label={gettext("Save as a billing profile")}
         />
+        <p
+          :if={@show_save_profile and @save_profile_hint}
+          id="checkout-save-billing-profile-hint"
+          class="text-sm text-error"
+        >
+          {gettext(
+            "This profile could not be saved. Untick \"Save as a billing profile\" to place the order without saving it."
+          )}
+        </p>
       </BillingProfileFields.billing_profile_fields>
     </.form>
     """
