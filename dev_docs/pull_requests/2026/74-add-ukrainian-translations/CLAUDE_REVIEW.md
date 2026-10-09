@@ -124,3 +124,47 @@ The cart, checkout, order-confirmation and storefront strings are natural and co
 %{shown} із %{total} товару/товарів» genitive forms (`:3317`, `:3134`), «Знайдено %{count} позицію/послугу»
 (accusative), «Проміжна сума (%{count} товар)», the stock and option errors with their `\n`, and the
 guest-checkout account notices are all right.
+
+---
+
+## Round 2 (2026-10-09): head `e7e239d`
+
+- **Verdict:** **APPROVE.** Every round-1 finding is closed, the new test proves it catches the original bug,
+  and the wording changes introduced no regressions. One NITPICK about where the new test sits; it does not
+  block.
+
+### Verified
+
+- **Branch.** It is up to date with `main` (`1a168f1`), and the diff against `main` is the declared files plus
+  `dev_docs/pull_requests/2026/74-add-ukrainian-translations/CLAUDE_REVIEW.md` (the round-1 review).
+- **Literal `mix gettext.merge` output.** Re-running the merge on a copy reports "0 new, 0 removed, 1097
+  unchanged" and produces a byte-identical file.
+- **Full checker re-run.** 1,097/1,097 entries, 0 errors. Every form of all 55 plural entries carries the
+  `msgid_plural` bindings. The language heuristics show no new hits.
+- **Tests.** `MIX_ENV=test PGDATABASE=pkecom_test_domovych_uk PGPOOL=10 mix test
+  test/phoenix_kit_ecommerce/i18n_test.exs` → 18 tests, 0 failures.
+- **The new test catches the real bug.** I extracted its logic and ran it against the round-1 catalogue
+  (`eca408c`). It reports exactly `[{"1 category", "msgstr[0]"}, {"1 day", "msgstr[0]"}, {"1 product",
+  "msgstr[0]"}, {"Apply the selected %{field} change from Shopify?", "msgstr[0]"}]`. Against the current
+  catalogue it reports `[]`.
+- **Runtime under `uk`.** n = 21 → «21 товар», «21 категорія», «Застосувати 21 вибрану зміну поля «Ціна»
+  із Shopify?»; n = 101 → «101 товар».
+
+### Round-1 findings
+
+| finding | status |
+|---|---|
+| BUG: four plural entries hard-code "1" | **closed**, and guarded by `i18n_test.exs` ("every uk plural form carries the msgid_plural's %{count}") |
+| IMPROVEMENT: `#,` flags stripped | **closed.** Byte-identical to merge output |
+| IMPROVEMENT: «Переоцінити» | **closed.** «Перерахувати ціни за поточним курсом», «…перерахувати ціни в кошику…», «…доки ви не перерахуєте їх.» |
+| NITPICK: storefront (Proceed to Checkout, physical order, guest, email) | **applied.** «Оформити замовлення» etc. |
+| NITPICK: cart status filter | **applied.** All masculine singular, agreeing with «кошик»: «Активний / Оформлений / Покинутий / Прострочений / Об'єднаний» (each msgid except the shared "Active" is used only in `carts.ex:144-148`) |
+| NITPICK: admin wording table | **applied in full**, including «Невдалі», «Проаналізувати й налаштувати», «Можна змінювати», «Підпис», «піктограми» throughout, «Нараховувати податок…», «Ціни», «Нові в Shopify», «За замовчуванням» |
+| Consistency with core and billing | **aligned.** "Pending" «Очікує» in both modules; "Street address" «Вулиця, будинок» in all three; «валюта за замовчуванням» for default and «базова» for base currency, matching billing |
+
+### NITPICK: the new test was inserted under the fuzzy test's comment
+
+`test/phoenix_kit_ecommerce/i18n_test.exs:180-186`. The three-line comment that explains the fuzzy test
+("Fuzzy entries ship. The completeness check above only looks at empty msgstrs…") now runs straight into the
+plural comment and sits above the new plural test. The fuzzy test at `:199` is left without its explanation.
+Move the new test (with its own comment) below the fuzzy test, or move the fuzzy comment back down.
