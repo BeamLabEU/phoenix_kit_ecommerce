@@ -84,6 +84,8 @@ defmodule PhoenixKitEcommerce.DependencyFloorTest do
     # Checkout renders the component and validates over `fields_changeset/3`;
     # both arrived in billing 0.20. Below it the page fails at runtime.
     assert Code.ensure_loaded?(PhoenixKitBilling.Web.Components.BillingProfileFields)
+    # function_exported?/3 is false for a module that is not loaded yet.
+    assert Code.ensure_loaded?(PhoenixKitBilling.BillingProfile)
     assert function_exported?(PhoenixKitBilling.BillingProfile, :fields_changeset, 3)
     assert function_exported?(PhoenixKitBilling.BillingProfile, :form_fields, 0)
     assert Code.ensure_loaded?(PhoenixKitBilling.Gettext)
