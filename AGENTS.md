@@ -125,7 +125,7 @@ Repo-local aliases:
   LiveViews do not wrap themselves in a layout; core's admin shell supplies
   it.
 - **Gettext** is this module's own backend (`PhoenixKitEcommerce.Gettext`,
-  catalogues under `priv/gettext/{en,et,ru,de,fr}`). A `gettext("…")` added
+  catalogues under `priv/gettext/{en,et,ru,de,fr,uk}`). A `gettext("…")` added
   anywhere under `web/` lands in THIS catalogue, so it needs
   `mix gettext.extract && mix gettext.merge priv/gettext --no-fuzzy` here,
   not in core. Merge with `--no-fuzzy`: fuzzy entries are live at runtime, so
