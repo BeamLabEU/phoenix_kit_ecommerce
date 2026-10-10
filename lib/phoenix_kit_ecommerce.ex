@@ -282,7 +282,7 @@ defmodule PhoenixKitEcommerce do
     Enum.find_value(
       [
         &company_country/0,
-        &Policy.default_tax_country/0,
+        &tax_country/0,
         &shipping_methods_country/0,
         &priority_country/0
       ],
@@ -300,12 +300,16 @@ defmodule PhoenixKitEcommerce do
     error -> checkout_country_source_failed(:company_country, error)
   end
 
+  defp tax_country do
+    Policy.default_tax_country()
+  rescue
+    error -> checkout_country_source_failed(:default_tax_country, error)
+  end
+
   defp shipping_methods_country do
     case [active: true]
          |> list_shipping_methods()
-         |> Enum.map(fn method ->
-           method.countries |> List.wrap() |> Enum.map(&country_code/1)
-         end)
+         |> Enum.map(&method_country_codes/1)
          |> Enum.uniq() do
       [[country]] -> country
       _ -> nil
@@ -321,6 +325,15 @@ defmodule PhoenixKitEcommerce do
     |> List.first()
   rescue
     error -> checkout_country_source_failed(:country_select_priority, error)
+  end
+
+  defp method_country_codes(method) do
+    method.countries
+    |> List.wrap()
+    |> Enum.map(&country_code/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   # A failing source must not break checkout, but it must not pass silently

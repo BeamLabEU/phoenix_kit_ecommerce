@@ -64,6 +64,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutDefaultCountryTest do
       assert Shop.default_checkout_country() == "UA"
     end
 
+    test "a method listing its country twice still counts as that one country" do
+      shipping_method(countries: ["UA", "ua"])
+      shipping_method(countries: ["UA"])
+
+      assert Shop.default_checkout_country() == "UA"
+    end
+
     test "skips a code that names no country" do
       Settings.update_json_setting("company_info", %{"country" => "XX"})
       Settings.update_setting("country_select_priority", "PL")
