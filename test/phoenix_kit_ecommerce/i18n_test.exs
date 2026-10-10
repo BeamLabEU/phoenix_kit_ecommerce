@@ -177,6 +177,22 @@ defmodule PhoenixKitEcommerce.I18nTest do
       end
     end
 
+    # The check above only sees entries that exist. A catalogue merged before
+    # a later change extracted new msgids simply lacks them, and passes: #74
+    # (uk) and #75 (pay-on-delivery strings) each passed alone and the uk
+    # catalogue shipped five strings short once both were on main.
+    for locale <- @translated_locales do
+      test "#{locale} carries every msgid in the template" do
+        missing =
+          catalogue_msgids(template_path()) -- catalogue_msgids(catalogue_path(unquote(locale)))
+
+        assert missing == [],
+               "#{unquote(locale)} lacks #{length(missing)} msgid(s) from default.pot: " <>
+                 "#{inspect(Enum.take(missing, 10))}. " <>
+                 "Run: mix gettext.merge priv/gettext --no-fuzzy, then translate them."
+      end
+    end
+
     # Fuzzy entries ship. The completeness check above only looks at empty
     # msgstrs, so a `--no-fuzzy`-skipped merge that still left guesses
     # flagged `fuzzy` (the shop-section strings after #61) passed it.
@@ -246,6 +262,20 @@ defmodule PhoenixKitEcommerce.I18nTest do
   # whose `msgstr`/`msgstr[N]` is empty. Deliberately not a full parser —
   # it only has to distinguish "" from anything else, and the header
   # entry (whose msgid is "") is skipped.
+  defp template_path, do: Application.app_dir(:phoenix_kit_ecommerce, "priv/gettext/default.pot")
+
+  defp catalogue_msgids(path) do
+    path
+    |> File.read!()
+    |> String.split("\n\n")
+    |> Enum.flat_map(fn block ->
+      case Regex.run(~r/^msgid "(.+)"$/m, block) do
+        [_, msgid] -> [msgid]
+        _ -> []
+      end
+    end)
+  end
+
   defp untranslated_msgids(path) do
     path
     |> File.read!()
