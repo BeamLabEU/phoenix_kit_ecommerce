@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.5.18"
+  @version "0.5.19"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do

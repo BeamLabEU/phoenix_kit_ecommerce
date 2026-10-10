@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.19 - 2026-10-10
+
+### Added
+
+- **Ukrainian (`uk`) translations** (#74). A full `priv/gettext/uk`
+  catalogue with the three Ukrainian plural forms; every plural form
+  carries `%{count}`, which a test pins.
+- **Pay-on-delivery shipping methods** (#75). A shipping method can be
+  marked as paid to the carrier at their own rates on delivery
+  (`metadata["pay_on_delivery"]`, no migration). The shop charges nothing
+  for it, so its price is forced to 0 and its free-shipping threshold is
+  cleared. The storefront says "Paid on delivery" and notes that shipping
+  is not in the total, instead of "FREE", on the cart, checkout, order
+  confirmation and order details pages. Orders record the flag on the
+  shipping line and as `metadata["shipping_pay_on_delivery"]`.
+  Auto-selection no longer treats such a method's 0 as the cheapest.
+  A cart that picked a method before it was flagged is re-priced on the
+  cart and checkout pages (`refresh_pay_on_delivery_shipping/1`).
+
+### Fixed
+
+- **The `uk` catalogue was missing the five pay-on-delivery strings.**
+  #75 added them for de/et/fr/ru before `uk` existed on its base, so
+  Ukrainian shoppers saw English for them. They are translated, and a
+  test now checks that every translated catalogue carries every msgid in
+  `default.pot`.
+
 ## 0.5.18 - 2026-10-05
 
 ### Fixed
