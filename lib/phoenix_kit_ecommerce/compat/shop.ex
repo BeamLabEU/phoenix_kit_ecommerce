@@ -143,6 +143,7 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate set_cart_shipping_country(cart, country_code), to: PhoenixKitEcommerce
   defdelegate set_cart_payment_option(cart, payment_option_uuid), to: PhoenixKitEcommerce
   defdelegate auto_select_shipping_method(cart, shipping_methods), to: PhoenixKitEcommerce
+  defdelegate refresh_pay_on_delivery_shipping(cart), to: PhoenixKitEcommerce
   defdelegate auto_select_payment_option(cart, payment_options), to: PhoenixKitEcommerce
   defdelegate convert_cart_to_order(cart, opts), to: PhoenixKitEcommerce
   defdelegate list_carts_with_count(opts), to: PhoenixKitEcommerce

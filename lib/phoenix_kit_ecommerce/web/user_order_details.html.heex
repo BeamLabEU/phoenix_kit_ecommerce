@@ -40,14 +40,18 @@
             <div class="space-y-4">
               <%= for item <- @order.line_items || [] do %>
                 <% display_name = NamePrefix.strip(item["name"]) %>
-                <div class="flex justify-between items-center py-2 border-b last:border-0 border-base-200">
+                <div
+                  id={item["type"] == "shipping" && "order-line-shipping"}
+                  class="flex justify-between items-center py-2 border-b last:border-0 border-base-200"
+                >
                   <div class="flex-1">
                     <span class="font-medium">{display_name}</span>
                     <%= if item["type"] != "shipping" do %>
                       <span class="text-base-content/60 ml-2">x {item["quantity"]}</span>
                     <% end %>
-                    <%= if item["description"] && item["description"] != "" do %>
-                      <div class="text-sm text-base-content/50">{item["description"]}</div>
+                    <% description = PriceDisplay.line_description(item) %>
+                    <%= if description != "" do %>
+                      <div class="text-sm text-base-content/50">{description}</div>
                     <% end %>
                   </div>
                   <%!-- The unit belongs to the UNIT price, never to the line
@@ -57,10 +61,14 @@
                         as the cart page. --%>
                   <% line_por = PriceDisplay.line_on_request?(item) %>
                   <div class="font-medium text-right">
-                    {PriceDisplay.render(nil, @currency, :order,
-                      amount: item["total"],
-                      on_request: line_por
-                    )}
+                    <%= if PriceDisplay.line_pay_on_delivery?(item) do %>
+                      {gettext("Paid on delivery")}
+                    <% else %>
+                      {PriceDisplay.render(nil, @currency, :order,
+                        amount: item["total"],
+                        on_request: line_por
+                      )}
+                    <% end %>
                     <%!-- Suppressed for an on-request line: there is no rate to
                           state, and "Price on request each" reads as nonsense. --%>
                     <%= if !line_por and item["price_unit"] not in [nil, ""] do %>
@@ -112,6 +120,14 @@
               <%= if PriceDisplay.any_line_on_request?(@order.line_items) do %>
                 <p class="text-xs text-base-content/60">
                   {gettext("Items priced on request are not included in this total.")}
+                </p>
+              <% end %>
+
+              <%= if PriceDisplay.order_shipping_pay_on_delivery?(@order) do %>
+                <p id="order-shipping-pay-on-delivery-note" class="text-xs text-base-content/60">
+                  {gettext(
+                    "Shipping is not included in this total: you pay the carrier at their rates on delivery."
+                  )}
                 </p>
               <% end %>
             </div>
