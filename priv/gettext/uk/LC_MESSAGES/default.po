@@ -48,9 +48,9 @@ msgid "Categories"
 msgstr "Категорії"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:623
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1073
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1481
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1879
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1228
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1581
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1968
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:23
 #: lib/phoenix_kit_ecommerce/web/trail.ex:47
 #, elixir-autogen
@@ -394,8 +394,8 @@ msgstr "Основна інформація"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:246
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:259
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1242
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1637
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1400
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1737
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:140
 #, elixir-autogen, elixir-format
 msgid "Billing Information"
@@ -879,7 +879,7 @@ msgstr "Цифрові товари"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:642
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:346
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1905
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1994
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:108
 #, elixir-autogen, elixir-format
 msgid "Discount"
@@ -1673,7 +1673,7 @@ msgstr "Замовлення %{number}"
 msgid "Order Date"
 msgstr "Дата замовлення"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1720
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1809
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:39
 #, elixir-autogen, elixir-format
 msgid "Order Items"
@@ -1686,7 +1686,7 @@ msgid "Order Number"
 msgstr "Номер замовлення"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:609
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1863
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1952
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:187
 #, elixir-autogen, elixir-format
 msgid "Order Summary"
@@ -2241,7 +2241,7 @@ msgstr "Теги:"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:649
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:339
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1898
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1987
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:101
 #, elixir-autogen, elixir-format
 msgid "Tax"
@@ -2301,7 +2301,7 @@ msgstr "Назва:"
 #: lib/phoenix_kit_ecommerce/web/carts.ex:162
 #: lib/phoenix_kit_ecommerce/web/carts.ex:181
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:352
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1913
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2002
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:114
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:219
 #, elixir-autogen, elixir-format
@@ -3076,9 +3076,9 @@ msgstr "Країна для розрахунку податку за замов�
 msgid "Tax fallback country updated"
 msgstr "Країну для розрахунку податку за замовчуванням оновлено"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:411
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:563
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:879
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:540
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:693
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1038
 #, elixir-autogen, elixir-format
 msgid "That billing profile is not available."
 msgstr "Цей платіжний профіль недоступний."
@@ -3093,13 +3093,13 @@ msgstr "Типово вибрано безпечний варіант. Змін�
 msgid "e.g. EE"
 msgstr "напр. EE"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:838
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:845
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:996
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1003
 #, elixir-autogen, elixir-format
 msgid "An item in your cart is no longer available"
 msgstr "Товар у вашому кошику більше недоступний"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:870
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1028
 #, elixir-autogen, elixir-format
 msgid "Please complete the billing address - a physical order needs one"
 msgstr "Заповніть адресу для рахунку — для замовлення з фізичними товарами вона обов'язкова"
@@ -3126,13 +3126,13 @@ msgstr "Показувати «Від» перед ціною"
 msgid "Shown after the price (%{lang}). Leave empty for none."
 msgstr "Показується після ціни (%{lang}). Залиште порожнім, щоб нічого не показувати."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:887
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1072
 #, elixir-autogen, elixir-format
 msgid "The selected payment method is no longer available - please pick another"
 msgstr "Вибраний спосіб оплати більше недоступний — виберіть інший"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:694
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:828
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:852
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:986
 #, elixir-autogen, elixir-format
 msgid "The selected shipping method is not available for your address - please pick another"
 msgstr "Вибраний спосіб доставки недоступний для вашої адреси — виберіть інший"
@@ -3143,8 +3143,8 @@ msgstr "Вибраний спосіб доставки недоступний д
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:46
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:509
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:561
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:48
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:895
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:51
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1080
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:33
 #, elixir-autogen, elixir-format
 msgid "The shop is currently unavailable"
@@ -3289,9 +3289,9 @@ msgstr "Не бачите листа? Перевірте папку «Спам»
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:589
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:633
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1521
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1706
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1889
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1621
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1795
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1978
 #, elixir-autogen, elixir-format
 msgid "FREE"
 msgstr "Безкоштовно"
@@ -3352,7 +3352,7 @@ msgid "No shipping methods available for your selection"
 msgstr "Для вашого вибору немає доступних способів доставки"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:625
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1881
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1970
 #, elixir-autogen, elixir-format
 msgid "Not needed"
 msgstr "Не потрібно"
@@ -3388,8 +3388,8 @@ msgid "Order Status"
 msgstr "Статус замовлення"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:177
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:86
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:809
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:89
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:967
 #, elixir-autogen, elixir-format
 msgid "Please select a shipping method"
 msgstr "Виберіть спосіб доставки"
@@ -3426,13 +3426,13 @@ msgid "Secure checkout powered by PhoenixKit"
 msgstr "Безпечне оформлення замовлення на платформі PhoenixKit"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:629
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1885
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1974
 #, elixir-autogen, elixir-format
 msgid "Select method"
 msgstr "Виберіть спосіб"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:544
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1687
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1776
 #, elixir-autogen, elixir-format
 msgid "Shipping Method"
 msgstr "Спосіб доставки"
@@ -3449,7 +3449,7 @@ msgid "Thank you for your order. We've received your order and will process it s
 msgstr "Дякуємо за замовлення. Ми отримали його й невдовзі обробимо."
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:261
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:92
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:95
 #, elixir-autogen, elixir-format
 msgid "The selected shipping method is no longer available for this cart - please pick another"
 msgstr "Вибраний спосіб доставки більше недоступний для цього кошика — виберіть інший"
@@ -3486,10 +3486,10 @@ msgstr "Ваш обліковий запис буде активовано, і �
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:173
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:385
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:62
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:83
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:994
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1024
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:65
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:86
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1149
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1179
 #, elixir-autogen, elixir-format
 msgid "Your cart is empty"
 msgstr "Ваш кошик порожній"
@@ -3724,63 +3724,63 @@ msgstr "Не вдалося додати цю послугу в кошик. Он
 msgid "What the storefront calls what you sell. Each option is separately translated, not a swapped word, so it reads correctly in every language."
 msgstr "Як вітрина називає те, що ви продаєте. Кожен варіант перекладено окремо, а не підстановкою слова, тож він звучить правильно будь-якою мовою."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1797
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1886
 #, elixir-autogen, elixir-format
 msgid "Account already exists"
 msgstr "Обліковий запис уже існує"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1116
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1271
 #, elixir-autogen, elixir-format
 msgid "After placing your order, we'll send a confirmation email to verify your address. Check your inbox and click the link to activate your account and track your order."
 msgstr "Після оформлення замовлення ми надішлемо лист для підтвердження адреси. Перевірте пошту та перейдіть за посиланням, щоб активувати обліковий запис і стежити за замовленням."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1799
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1888
 #, elixir-autogen, elixir-format
 msgid "An account with this email is already registered. Please log in to complete your order."
 msgstr "Обліковий запис із цією адресою email уже зареєстровано. Увійдіть, щоб завершити замовлення."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1114
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1269
 #, elixir-autogen, elixir-format
 msgid "Checking out as a guest"
 msgstr "Ви оформлюєте замовлення як гість"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1809
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1898
 #, elixir-autogen, elixir-format
 msgid "Log in to continue"
 msgstr "Увійти, щоб продовжити"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1062
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1217
 #, elixir-autogen, elixir-format
 msgid "Payment"
 msgstr "Оплата"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1244
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1402
 #, elixir-autogen, elixir-format
 msgid "Select Billing Profile"
 msgstr "Виберіть платіжний профіль"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:212
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1052
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:215
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1207
 #, elixir-autogen, elixir-format
 msgid "Checkout"
 msgstr "Оформлення замовлення"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:903
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1088
 #, elixir-autogen, elixir-format
 msgid "Failed to create order"
 msgstr "Не вдалося створити замовлення"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:364
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:493
 #, elixir-autogen, elixir-format
 msgid "Failed to set payment option"
 msgstr "Не вдалося вибрати спосіб оплати"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:464
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:367
 #, elixir-autogen, elixir-format
 msgid "Please fill in all required fields"
 msgstr "Заповніть усі обов'язкові поля"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:468
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:598
 #, elixir-autogen, elixir-format
 msgid "Please select a billing profile"
 msgstr "Виберіть платіжний профіль"
@@ -3859,28 +3859,18 @@ msgstr[2] "Знайдено %{count} послуг"
 msgid "Access denied"
 msgstr "Доступ заборонено"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1410
-#, elixir-autogen, elixir-format
-msgid "Address *"
-msgstr "Адреса *"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1067
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1222
 #, elixir-autogen, elixir-format
 msgid "Billing"
 msgstr "Платіжні дані"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1608
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1643
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1689
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1708
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1743
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1778
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2290
 #, elixir-autogen, elixir-format
 msgid "Change"
 msgstr "Змінити"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1426
-#, elixir-autogen, elixir-format
-msgid "City *"
-msgstr "Місто *"
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2274
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:48
@@ -3893,33 +3883,28 @@ msgstr "Очистити"
 msgid "Completed"
 msgstr "Виконано"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1848
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1937
 #, elixir-autogen, elixir-format
 msgid "Confirm Order"
 msgstr "Підтвердити замовлення"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1223
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1381
 #, elixir-autogen, elixir-format
 msgid "Continue to Billing"
 msgstr "Далі: платіжні дані"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1226
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1273
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1384
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1445
 #, elixir-autogen, elixir-format
 msgid "Continue to Review"
 msgstr "Далі: перевірка"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1450
-#, elixir-autogen, elixir-format
-msgid "Country *"
-msgstr "Країна *"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1320
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1492
 #, elixir-autogen, elixir-format
 msgid "Default"
 msgstr "За замовчуванням"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1722
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1811
 #, elixir-autogen, elixir-format
 msgid "Edit Cart"
 msgstr "Змінити кошик"
@@ -3935,20 +3920,10 @@ msgstr "Редагувати категорію"
 msgid "Edit Product"
 msgstr "Редагувати товар"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1385
-#, elixir-autogen, elixir-format
-msgid "Email *"
-msgstr "Email *"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:902
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1087
 #, elixir-autogen, elixir-format
 msgid "Failed to create order. Please try again."
 msgstr "Не вдалося створити замовлення. Спробуйте ще раз."
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1355
-#, elixir-autogen, elixir-format
-msgid "First Name *"
-msgstr "Ім'я *"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:673
 #, elixir-autogen, elixir-format
@@ -3957,16 +3932,11 @@ msgstr "Недостатньо на складі (доступно лише %{co
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:667
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:360
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1921
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2010
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:122
 #, elixir-autogen, elixir-format
 msgid "Items priced on request are not included in this total."
 msgstr "Позиції з ціною за запитом не враховано в цій сумі."
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1369
-#, elixir-autogen, elixir-format
-msgid "Last Name *"
-msgstr "Прізвище *"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:661
 #, elixir-autogen, elixir-format
@@ -3989,51 +3959,36 @@ msgstr "Опції «%{option}» не існує.\nТовар було змін�
 msgid "Option \"%{option}: %{value}\" is no longer available.\nPlease refresh the page for current options."
 msgstr "Опція «%{option}: %{value}» більше недоступна.\nОновіть сторінку, щоб побачити актуальні опції."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1605
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1705
 #, elixir-autogen, elixir-format
 msgid "Payment Method"
 msgstr "Спосіб оплати"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1399
-#, elixir-autogen, elixir-format
-msgid "Phone"
-msgstr "Телефон"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1440
-#, elixir-autogen, elixir-format
-msgid "Postal Code"
-msgstr "Поштовий індекс"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1846
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1935
 #, elixir-autogen, elixir-format
 msgid "Processing..."
 msgstr "Обробка..."
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1085
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1764
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1853
 #, elixir-autogen, elixir-format
 msgid "Qty: %{count}"
 msgstr "К-сть: %{count}"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1766
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1855
 #, elixir-autogen, elixir-format
 msgid "Qty: %{count} × %{price}"
 msgstr "К-сть: %{count} × %{price}"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1076
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1231
 #, elixir-autogen, elixir-format
 msgid "Review & Confirm"
 msgstr "Перевірка та підтвердження"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1189
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1347
 #, elixir-autogen, elixir-format
 msgid "Select Payment Method"
 msgstr "Виберіть спосіб оплати"
-
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1456
-#, elixir-autogen, elixir-format
-msgid "Select country..."
-msgstr "Виберіть країну..."
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:638
 #, elixir-autogen, elixir-format
@@ -4056,13 +4011,8 @@ msgstr[0] "Показано %{shown} із %{total} послуги"
 msgstr[1] "Показано %{shown} із %{total} послуг"
 msgstr[2] "Показано %{shown} із %{total} послуг"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1416
-#, elixir-autogen, elixir-format
-msgid "Street address"
-msgstr "Вулиця, будинок"
-
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:614
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1870
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1959
 #, elixir-autogen, elixir-format
 msgid "Subtotal (%{count} item)"
 msgid_plural "Subtotal (%{count} items)"
@@ -4085,7 +4035,7 @@ msgstr "Цієї позиції немає в наявності.\nСпробу�
 msgid "Unable to add to cart.\nPlease try again or contact support."
 msgstr "Не вдалося додати в кошик.\nСпробуйте ще раз або зверніться до підтримки."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1290
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1462
 #, elixir-autogen, elixir-format
 msgid "You have multiple billing profiles. Please select one or"
 msgstr "У вас кілька платіжних профілів. Виберіть один або"
@@ -4095,7 +4045,7 @@ msgstr "У вас кілька платіжних профілів. Вибері
 msgid "required option"
 msgstr "обов'язкова опція"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1292
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1464
 #, elixir-autogen, elixir-format
 msgid "set a default in your account settings"
 msgstr "задайте профіль за замовчуванням у налаштуваннях облікового запису"
@@ -4105,8 +4055,8 @@ msgstr "задайте профіль за замовчуванням у нал�
 msgid "Buyer proceeded to checkout"
 msgstr "Покупець перейшов до оформлення замовлення"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1535
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1550
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1635
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1650
 #, elixir-autogen, elixir-format
 msgid "Continue"
 msgstr "Продовжити"
@@ -4133,7 +4083,7 @@ msgstr "Не вдалося оновити отримувачів"
 msgid "First item added to a cart"
 msgstr "Перший товар, доданий у кошик"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1557
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1657
 #, elixir-autogen, elixir-format
 msgid "No shipping methods are available for your country."
 msgstr "Для вашої країни немає доступних способів доставки."
@@ -4165,7 +4115,7 @@ msgstr "Отримувачі"
 msgid "Save recipients"
 msgstr "Зберегти отримувачів"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1543
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1643
 #, elixir-autogen, elixir-format
 msgid "Shipping to your country will be arranged individually - we will contact you to confirm delivery and details after you place the order."
 msgstr "Доставку до вашої країни буде погоджено індивідуально — після оформлення замовлення ми зв'яжемося з вами, щоб уточнити доставку та деталі."
@@ -4205,7 +4155,7 @@ msgstr "У вас немає доступу до цього замовлення
 msgid "Allow the order through when nothing covers the country - contact the buyer afterwards"
 msgstr "Дозволити оформлення замовлення, якщо жоден спосіб не охоплює країну — зв'язатися з покупцем пізніше"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1581
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1681
 #, elixir-autogen, elixir-format
 msgid "Back"
 msgstr "Назад"
@@ -4719,27 +4669,27 @@ msgstr "Валюту за замовчуванням не налаштовано
 msgid "This item is priced in a different currency and cannot be added right now."
 msgstr "Цей товар має ціну в іншій валюті, тому зараз його не можна додати."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1104
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1259
 #, elixir-autogen, elixir-format
 msgid "Reprice at the current rate"
 msgstr "Перерахувати ціни за поточним курсом"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:522
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:652
 #, elixir-autogen, elixir-format
 msgid "The cart could not be repriced — please try again"
 msgstr "Не вдалося перерахувати ціни в кошику — спробуйте ще раз"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1087
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1242
 #, elixir-autogen, elixir-format
 msgid "The exchange rate has changed since you started this cart"
 msgstr "Курс змінився відтоді, як ви почали наповнювати кошик"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:518
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:648
 #, elixir-autogen, elixir-format
 msgid "Your cart has been repriced at the current exchange rate"
 msgstr "Ціни у вашому кошику перераховано за поточним курсом"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1090
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1245
 #, elixir-autogen, elixir-format
 msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{pct}% apart). Your prices stay as shown unless you reprice."
 msgstr "Ціни у вашому кошику розраховано за курсом %{frozen}; поточний курс — %{current} (різниця %{pct}%). Ціни залишаться без змін, доки ви не перерахуєте їх."
@@ -6054,9 +6004,9 @@ msgstr "За тарифами перевізника, оплата при отр
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:586
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:631
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:306
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1518
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1704
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1887
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1618
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1793
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1976
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:74
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:145
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:65
@@ -6071,7 +6021,7 @@ msgstr "Оплата при отриманні за тарифами перев�
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:675
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:366
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1927
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2016
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:128
 #, elixir-autogen, elixir-format
 msgid "Shipping is not included in this total: you pay the carrier at their rates on delivery."
@@ -6081,3 +6031,28 @@ msgstr "Доставка не входить до цієї суми: ви спл
 #, elixir-autogen, elixir-format
 msgid "The customer pays the carrier at their rates on delivery. The shop charges nothing for shipping: the price is saved as 0 and the free-shipping threshold is cleared."
 msgstr "Покупець сплачує доставку перевізнику за його тарифами при отриманні. Магазин нічого не бере за доставку: ціна зберігається як 0, а поріг безкоштовної доставки скидається."
+
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1415
+#, elixir-autogen, elixir-format
+msgid "Back to saved profiles"
+msgstr "Назад до збережених профілів"
+
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1556
+#, elixir-autogen, elixir-format
+msgid "Save as a billing profile"
+msgstr "Зберегти як платіжний профіль"
+
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1063
+#, elixir-autogen, elixir-format
+msgid "The billing details could not be saved - please check the highlighted fields"
+msgstr "Не вдалося зберегти платіжні дані — перевірте виділені поля"
+
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1525
+#, elixir-autogen, elixir-format
+msgid "Use new details"
+msgstr "Ввести нові дані"
+
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1563
+#, elixir-autogen, elixir-format
+msgid "This profile could not be saved. Untick \"Save as a billing profile\" to place the order without saving it."
+msgstr "Не вдалося зберегти цей профіль. Зніміть позначку «Зберегти як платіжний профіль», щоб оформити замовлення без збереження."

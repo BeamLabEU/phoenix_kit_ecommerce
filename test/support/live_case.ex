@@ -132,6 +132,15 @@ defmodule PhoenixKitEcommerce.LiveCase do
   end
 
   @doc """
+  Plugs a locale (e.g. `"ru"`) into the test conn's session so the
+  `:assign_locale` `on_mount` hook can set `:current_locale` at mount time,
+  as core's live_session does for a real visitor.
+  """
+  def put_test_locale(conn, locale) do
+    Plug.Test.init_test_session(conn, %{"phoenix_kit_test_locale" => locale})
+  end
+
+  @doc """
   Plugs a display-currency CODE into the test conn's session so the
   `:assign_currency` `on_mount` hook can set it as the request-scoped
   currency at mount time (Э1-E4) — the test double for a host's own
