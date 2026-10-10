@@ -48,6 +48,7 @@ defmodule PhoenixKitEcommerce.Test.Router do
       live("/checkout", CheckoutPage, :index, as: :shop_checkout)
 
       live("/checkout/complete/:uuid", CheckoutComplete, :show, as: :shop_checkout_complete)
+      live("/dashboard/orders/:uuid", UserOrderDetails, :show, as: :shop_user_order_details)
 
       # `Shop.catalog_url/1` resolves to the locale-prefixed form in the
       # test env, so patches from filter events land here.
