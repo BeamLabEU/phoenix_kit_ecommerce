@@ -268,24 +268,12 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   the connected mount, so the whole lifecycle of that LiveView is covered.
   """
   def put_content_locale(language) when is_binary(language) do
-    known = Gettext.known_locales(PhoenixKitEcommerce.Gettext)
-    base = language |> String.split(~r/[-_]/) |> List.first()
-
-    cond do
-      language in known ->
-        Gettext.put_locale(PhoenixKitEcommerce.Gettext, language)
-
-      base in known ->
-        Gettext.put_locale(PhoenixKitEcommerce.Gettext, base)
-
-      true ->
-        # Reset rather than no-op. `put_locale/2` is process-scoped, and the dead
-        # render runs in a connection process that is reused across keep-alive
-        # requests — leaving it untouched means a request for an unsupported
-        # locale inherits whatever the PREVIOUS request on that connection set,
-        # so a French visitor could be served a Russian storefront.
-        Gettext.put_locale(PhoenixKitEcommerce.Gettext, default_gettext_locale())
-    end
+    # Billing's own backend too: checkout renders billing's profile form, and
+    # its labels would otherwise stay English beside a translated page.
+    Enum.each(
+      [PhoenixKitEcommerce.Gettext, PhoenixKitBilling.Gettext],
+      &put_backend_locale(&1, language)
+    )
 
     language
   end
@@ -304,15 +292,36 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
     put_content_locale(socket.assigns[:current_locale] || Translations.default_language())
   end
 
-  defp default_gettext_locale do
-    known = Gettext.known_locales(PhoenixKitEcommerce.Gettext)
+  defp put_backend_locale(backend, language) do
+    known = Gettext.known_locales(backend)
+    base = language |> String.split(~r/[-_]/) |> List.first()
+
+    cond do
+      language in known ->
+        Gettext.put_locale(backend, language)
+
+      base in known ->
+        Gettext.put_locale(backend, base)
+
+      true ->
+        # Reset rather than no-op. `put_locale/2` is process-scoped, and the dead
+        # render runs in a connection process that is reused across keep-alive
+        # requests — leaving it untouched means a request for an unsupported
+        # locale inherits whatever the PREVIOUS request on that connection set,
+        # so a French visitor could be served a Russian storefront.
+        Gettext.put_locale(backend, default_gettext_locale(backend))
+    end
+  end
+
+  defp default_gettext_locale(backend) do
+    known = Gettext.known_locales(backend)
     default = Translations.default_language()
     base = default |> to_string() |> String.split(~r/[-_]/) |> List.first()
 
     cond do
       default in known -> default
       base in known -> base
-      true -> Gettext.get_locale(PhoenixKitEcommerce.Gettext)
+      true -> Gettext.get_locale(backend)
     end
   end
 

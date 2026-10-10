@@ -3925,6 +3925,14 @@ defmodule PhoenixKitEcommerce do
 
   - `billing_profile_uuid: uuid` - Use existing billing profile (for logged-in users)
   - `billing_data: map` - Use direct billing data (for guest checkout)
+  - `user_uuid: uuid` - The logged-in user placing the order, when the cart is
+    still a guest cart (it is adopted by that user). Without it the order is a
+    guest checkout and a guest user is created from `billing_data`.
+  - `save_billing_profile: true` - With `billing_data`, also save those details
+    as a billing profile of the `:user_uuid` user, in the same transaction, and
+    reference it from the order instead of a snapshot. Billing makes a user's
+    first profile their default. Ignored for guests, without `billing_data`,
+    and when `billing_profile_uuid` is given.
 
   ## Returns
 
@@ -3933,6 +3941,8 @@ defmodule PhoenixKitEcommerce do
   - `{:error, :cart_empty}` - Cart has no items
   - `{:error, :no_shipping_method}` - No shipping method selected
   - `{:error, :email_already_registered}` - Guest email belongs to confirmed user
+  - `{:error, {:billing_profile_invalid, changeset}}` - `save_billing_profile: true`
+    was requested and the entered details do not make a valid billing profile
   - `{:error, changeset}` - Validation errors
   """
   def convert_cart_to_order(%Cart{} = cart, opts) when is_list(opts) do
@@ -3993,6 +4003,11 @@ defmodule PhoenixKitEcommerce do
            placing_session_id = cart.session_id,
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
            :ok <- validate_billing_profile_owner(opts, user_uuid),
+           # After the user is resolved and BEFORE the order is built: the
+           # saved profile is created in this same transaction, so a profile
+           # failure rolls the whole conversion back and the order can
+           # reference the profile it just created.
+           {:ok, opts} <- maybe_save_billing_profile(opts, user_uuid),
            {:ok, cart} <- apply_checkout_shipping_country(cart, opts),
            {:ok, cart} <- validate_shipping_method_available(cart),
            line_items <- build_order_line_items(cart),
@@ -4142,6 +4157,70 @@ defmodule PhoenixKitEcommerce do
           _ -> {:error, :billing_profile_not_owned}
         end
     end
+  end
+
+  # `save_billing_profile: true` turns the entered `:billing_data` into a
+  # saved billing profile of the logged-in user and has the order reference
+  # that profile instead of carrying a bare snapshot.
+  #
+  # Only for the user who is actually logged in: the guest path creates its
+  # user inside this very transaction (`resolve_checkout_user/2`), and a
+  # throwaway guest account must never own a "saved" profile - so the
+  # resolved user has to be the `:user_uuid` the caller passed. A form value
+  # alone can never reach this: the whitelist below keeps `user_uuid`,
+  # `is_default`, `name` and `metadata` out of the attrs, and billing makes
+  # the user's first profile the default itself.
+  defp maybe_save_billing_profile(opts, user_uuid) do
+    billing_data = Keyword.get(opts, :billing_data)
+
+    if Keyword.get(opts, :save_billing_profile) == true and is_map(billing_data) and
+         is_nil(Keyword.get(opts, :billing_profile_uuid)) and not is_nil(user_uuid) and
+         Keyword.get(opts, :user_uuid) == user_uuid do
+      save_billing_profile(user_uuid, billing_profile_attrs(billing_data), opts)
+    else
+      {:ok, opts}
+    end
+  end
+
+  # A blank country is refused here rather than saved: billing's schema
+  # defaults a profile's country to "EE", so it would be stored (and then
+  # taxed and shipped to) as a country nobody chose.
+  defp save_billing_profile(user_uuid, attrs, opts) do
+    if blank_field?(attrs["country"]) do
+      changeset =
+        %PhoenixKitBilling.BillingProfile{}
+        |> PhoenixKitBilling.BillingProfile.fields_changeset(attrs)
+        |> Ecto.Changeset.add_error(:country, "can't be blank")
+
+      {:error, {:billing_profile_invalid, changeset}}
+    else
+      case Billing.create_billing_profile(user_uuid, attrs) do
+        {:ok, profile} ->
+          {:ok,
+           opts
+           |> Keyword.delete(:billing_data)
+           |> Keyword.put(:billing_profile_uuid, profile.uuid)}
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          {:error, {:billing_profile_invalid, changeset}}
+      end
+    end
+  end
+
+  # `name` is a form field but not a checkout one: billing derives it.
+  @unsaved_profile_fields ~w(name)
+
+  defp billing_profile_attrs(billing_data) do
+    PhoenixKitBilling.BillingProfile.form_fields()
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(&1 in @unsaved_profile_fields))
+    |> Enum.flat_map(fn field ->
+      case Map.fetch(billing_data, field) do
+        {:ok, value} -> [{field, value}]
+        :error -> []
+      end
+    end)
+    |> Map.new()
   end
 
   defp validate_cart_convertible(%Cart{} = cart) do

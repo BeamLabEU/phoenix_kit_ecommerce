@@ -39,6 +39,7 @@ defmodule PhoenixKitEcommerce.Test.Router do
       layout: {PhoenixKitEcommerce.Test.Layouts, :app},
       on_mount: [
         {PhoenixKitEcommerce.Test.Hooks, :assign_scope},
+        {PhoenixKitEcommerce.Test.Hooks, :assign_locale},
         {PhoenixKitEcommerce.Test.Hooks, :assign_currency}
       ] do
       live("/shop", ShopCatalog, :index, as: :shop_catalog)
