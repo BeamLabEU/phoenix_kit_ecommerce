@@ -560,10 +560,12 @@ settings-layer error.
 
 **Shopify — read through `PhoenixKitEcommerce.shopify_enabled?/0`**
 
-- `shop_shopify_enabled` — default `true`. Off hides the Shopify Sync tab,
-  redirects the sync page, empties `integration_providers/0` and
-  `required_integrations/0` (the provider cache is cleared on toggle). The
-  stored connection and its token are never touched.
+- `shop_shopify_enabled` — default `false`, and a failing settings read also
+  answers `false` (fail closed). Off hides the Shopify Sync tab, redirects the
+  sync page, empties `integration_providers/0` and `required_integrations/0`
+  (the provider cache is cleared on toggle). The stored connection and its
+  token are never touched. Installs that used Shopify under the old default of
+  `true` get the row written by the chain's V3 step (below).
 
 **AI translations — read through `PhoenixKitEcommerce.TranslationSweepSettings`**
 
@@ -593,7 +595,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V2. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V3. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -604,7 +606,11 @@ ownership. V2 is the chain's first deliberate divergence: it drops the
 `DEFAULT 'USD'` core declares on the `currency` column of
 `phoenix_kit_shop_carts`, `…_cart_items`, `…_products` and
 `…_shipping_methods`, so an insert that names no currency stores NULL.
-Existing rows are untouched.
+Existing rows are untouched. V3 writes `shop_shopify_enabled = "true"` for an
+install that already uses Shopify (a Shopify integration connection, or
+catalogue items / legacy products carrying a Shopify product id) and has no
+such row yet, so flipping the default to off does not switch its sync off on
+upgrade. It never overwrites an existing row; `down/1` leaves the row alone.
 
 Rules for the chain, all of which have been broken at least once:
 

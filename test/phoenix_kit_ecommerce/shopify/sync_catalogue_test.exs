@@ -269,6 +269,8 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
     @stub __MODULE__.CheckScopeStub
 
     defp connect_shopify do
+      enable_shopify!()
+
       {:ok, %{uuid: uuid}} =
         Integrations.add_connection("shopify", "Test Shop #{System.unique_integer([:positive])}")
 
