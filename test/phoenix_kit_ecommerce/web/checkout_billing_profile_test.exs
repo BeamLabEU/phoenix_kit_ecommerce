@@ -29,6 +29,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
       refute has_element?(view, "#checkout-use-saved-billing")
     end
 
+    test "a profile type other than the two radios is ignored", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      render_click(view, "change_type", %{"type" => "bogus"})
+
+      assert has_element?(view, @form)
+      assert has_element?(view, "#checkout-billing-type-individual[checked]")
+    end
+
     test "saves the profile as default and the order references it", %{
       conn: conn,
       user: user,

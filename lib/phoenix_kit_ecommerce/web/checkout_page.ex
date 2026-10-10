@@ -581,6 +581,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
      |> assign_billing_form()}
   end
 
+  # Only the two radios send this event; anything else is ignored rather
+  # than crashing the checkout.
+  def handle_event("change_type", _params, socket), do: {:noreply, socket}
+
   @impl true
   def handle_event("proceed_to_review", params, socket) do
     if socket.assigns.use_new_profile do
