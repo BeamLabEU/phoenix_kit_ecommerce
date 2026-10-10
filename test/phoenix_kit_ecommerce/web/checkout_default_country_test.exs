@@ -57,6 +57,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutDefaultCountryTest do
       assert Shop.default_checkout_country() == "UA"
     end
 
+    test "compares the shipping methods' countries case-insensitively" do
+      shipping_method(countries: ["UA"])
+      shipping_method(countries: ["ua"])
+
+      assert Shop.default_checkout_country() == "UA"
+    end
+
+    test "skips a code that names no country" do
+      Settings.update_json_setting("company_info", %{"country" => "XX"})
+      Settings.update_setting("country_select_priority", "PL")
+
+      assert Shop.default_checkout_country() == "PL"
+    end
+
     test "ignores values that are not a country code" do
       Settings.update_json_setting("company_info", %{"country" => "Ukraine"})
       Settings.update_setting("country_select_priority", "UA")

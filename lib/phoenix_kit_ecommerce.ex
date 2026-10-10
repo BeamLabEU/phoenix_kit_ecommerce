@@ -297,19 +297,21 @@ defmodule PhoenixKitEcommerce do
       _ -> nil
     end
   rescue
-    _ -> nil
+    error -> checkout_country_source_failed(:company_country, error)
   end
 
   defp shipping_methods_country do
     case [active: true]
          |> list_shipping_methods()
-         |> Enum.map(&(&1.countries || []))
+         |> Enum.map(fn method ->
+           method.countries |> List.wrap() |> Enum.map(&country_code/1)
+         end)
          |> Enum.uniq() do
       [[country]] -> country
       _ -> nil
     end
   rescue
-    _ -> nil
+    error -> checkout_country_source_failed(:shipping_methods, error)
   end
 
   defp priority_country do
@@ -318,12 +320,24 @@ defmodule PhoenixKitEcommerce do
     |> CountryData.parse_priority()
     |> List.first()
   rescue
-    _ -> nil
+    error -> checkout_country_source_failed(:country_select_priority, error)
   end
 
+  # A failing source must not break checkout, but it must not pass silently
+  # either: the fallback it leads to is the bug the sources exist to avoid.
+  defp checkout_country_source_failed(source, error) do
+    Logger.warning(
+      "[PhoenixKitEcommerce] default checkout country: #{source} failed: " <>
+        Exception.message(error)
+    )
+
+    nil
+  end
+
+  # A known ISO 3166-1 alpha-2 code, upcased; anything else says nothing.
   defp country_code(value) when is_binary(value) do
     code = value |> String.trim() |> String.upcase()
-    if String.match?(code, ~r/\A[A-Z]{2}\z/), do: code
+    if String.match?(code, ~r/\A[A-Z]{2}\z/) and CountryData.get_country(code), do: code
   end
 
   defp country_code(_), do: nil
