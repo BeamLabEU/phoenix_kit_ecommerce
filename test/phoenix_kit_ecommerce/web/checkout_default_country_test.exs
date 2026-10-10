@@ -91,7 +91,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutDefaultCountryTest do
     assert has_element?(view, "#checkout-billing-form select option[value='UA'][selected]")
     refute has_element?(view, "#checkout-billing-form select option[value='EE'][selected]")
 
-    # The buyer fills in everything but the country.
+    # The buyer fills in the rest and keeps the country the form started on.
     billing = Map.delete(complete_billing("UA", "default-country"), "country")
     view |> form("#checkout-billing-form", billing: billing) |> render_change()
     view |> element("button[phx-click='proceed_to_review']") |> render_click()
