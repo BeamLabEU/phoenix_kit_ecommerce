@@ -49,6 +49,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Settings
   alias PhoenixKit.Users.Auth
+  alias PhoenixKit.Utils.CountryData
   alias PhoenixKit.Utils.Date, as: UtilsDate
   alias PhoenixKit.Utils.Routes
   alias PhoenixKit.Utils.UUID, as: UUIDUtils
@@ -263,6 +264,96 @@ defmodule PhoenixKitEcommerce do
       _ -> :cart
     end
   end
+
+  @fallback_checkout_country "EE"
+
+  @doc """
+  The country a checkout starts with while the cart has none of its own.
+
+  Taken from the shop's own settings, never guessed: the company country
+  (Settings → Organization), then `shop_default_tax_country`, then the one
+  country every active shipping method is limited to (when they all share
+  the same single country, any other default would leave the buyer with no
+  method to pick), then the first of `country_select_priority`. When none
+  of them says anything, `"EE"` — the default checkout has always started on.
+  """
+  @spec default_checkout_country() :: String.t()
+  def default_checkout_country do
+    Enum.find_value(
+      [
+        &company_country/0,
+        &tax_country/0,
+        &shipping_methods_country/0,
+        &priority_country/0
+      ],
+      @fallback_checkout_country,
+      fn source -> source.() |> country_code() end
+    )
+  end
+
+  defp company_country do
+    case CountryData.get_company_info() do
+      %{"country" => country} -> country
+      _ -> nil
+    end
+  rescue
+    error -> checkout_country_source_failed(:company_country, error)
+  end
+
+  defp tax_country do
+    Policy.default_tax_country()
+  rescue
+    error -> checkout_country_source_failed(:default_tax_country, error)
+  end
+
+  defp shipping_methods_country do
+    case [active: true]
+         |> list_shipping_methods()
+         |> Enum.map(&method_country_codes/1)
+         |> Enum.uniq() do
+      [[country]] -> country
+      _ -> nil
+    end
+  rescue
+    error -> checkout_country_source_failed(:shipping_methods, error)
+  end
+
+  defp priority_country do
+    "country_select_priority"
+    |> Settings.get_setting_cached("")
+    |> CountryData.parse_priority()
+    |> List.first()
+  rescue
+    error -> checkout_country_source_failed(:country_select_priority, error)
+  end
+
+  defp method_country_codes(method) do
+    method.countries
+    |> List.wrap()
+    |> Enum.map(&country_code/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # A failing source must not break checkout, but it must not pass silently
+  # either: the fallback it leads to is the bug the sources exist to avoid.
+  defp checkout_country_source_failed(source, error) do
+    Logger.warning(
+      "[PhoenixKitEcommerce] default checkout country: #{source} failed: " <>
+        Exception.message(error)
+    )
+
+    nil
+  end
+
+  # A known ISO 3166-1 alpha-2 code, upcased; anything else says nothing.
+  defp country_code(value) when is_binary(value) do
+    code = value |> String.trim() |> String.upcase()
+    if String.match?(code, ~r/\A[A-Z]{2}\z/) and CountryData.get_country(code), do: code
+  end
+
+  defp country_code(_), do: nil
 
   @notify_setting_keys %{
     cart_first_item: "shop_notify_cart_first_item",

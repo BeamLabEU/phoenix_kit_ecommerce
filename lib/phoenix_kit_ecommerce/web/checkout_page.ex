@@ -310,14 +310,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       "address_line1" => "",
       "city" => "",
       "postal_code" => "",
-      "country" => cart.shipping_country || "EE"
+      "country" => cart.shipping_country || Shop.default_checkout_country()
     }
   end
 
   defp profile_to_billing_data(profile, cart) do
     profile
     |> profile_base_data()
-    |> Map.put("country", profile.country || cart.shipping_country || "EE")
+    |> Map.put(
+      "country",
+      profile.country || cart.shipping_country || Shop.default_checkout_country()
+    )
   end
 
   defp profile_base_data(profile) do
