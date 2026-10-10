@@ -326,7 +326,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       "address_line1" => "",
       "city" => "",
       "postal_code" => "",
-      "country" => cart.shipping_country || Shop.default_checkout_country() || ""
+      "country" => cart.shipping_country || Shop.default_checkout_country()
     }
   end
 

@@ -508,13 +508,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
       assert selected_country(view) == "FR"
     end
 
-    test "is empty - never a guess - when nothing is configured", %{conn: conn, cart: cart} do
+    test "is EE when nothing is configured, and a cleared one is required", %{
+      conn: conn,
+      cart: cart
+    } do
       {:ok, view, _html} = live(conn, "/checkout")
 
-      assert selected_country(view) == nil
-      refute has_element?(view, "#checkout-billing-country option[selected]")
+      assert selected_country(view) == "EE"
 
-      # And the form insists on one.
+      # A shopper who clears it is asked for one.
       view
       |> form(@form, billing: complete_billing("EE") |> Map.put("country", ""))
       |> render_change()
