@@ -17,9 +17,9 @@ pages.
   `ImageFingerprint` runs ImageMagick through, above 2.38.0's
   `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound form
   keeps the ceiling open across later 2.x minors), `phoenix_kit_billing`
-  `~> 0.13` (hard; checkout also requires a `phoenix_kit_billing` that ships
-  `BillingProfileFields` and `BillingProfile.fields_changeset/3`, i.e. the
-  next release after 0.19.1 - the floor is raised when that is published),
+  `~> 0.20` (hard; 0.20 is the first release that ships
+  `BillingProfileFields` and `BillingProfile.fields_changeset/3`, which
+  checkout renders and validates over),
   `phoenix_kit_ai` `~> 0.24` (optional — the
   AI-translate UI, both translation adapters, the sweep worker and the
   translations page use it, and all of them compile out when it is absent;
