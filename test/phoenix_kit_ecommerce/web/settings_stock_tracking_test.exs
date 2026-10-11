@@ -18,7 +18,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
   @settings_path "/en/admin/shop/settings"
   @toggle "#toggle-shop-stock-tracking"
   @hint "#shop-stock-tracking-hint"
-  @link "#shop-stock-tracking-hint-link"
+  @action "#stock-tracking-action"
 
   setup %{conn: conn} do
     # The settings cache is ETS-backed and is not rolled back by the sandbox.
@@ -30,19 +30,22 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
     {:ok, conn: put_test_scope(conn, fake_scope())}
   end
 
-  defp link_href(view),
+  defp action_attr(view, attr),
     do:
       view
-      |> element(@link)
+      |> element(@action)
       |> render()
       |> LazyHTML.from_fragment()
-      |> LazyHTML.attribute("href")
+      |> LazyHTML.attribute(attr)
       |> List.first()
+
+  # The hint is plain text: it must not contain a link, the button is the link.
+  defp refute_hint_link(view), do: refute(has_element?(view, @hint <> " a"))
 
   describe "Warehouse not installed" do
     setup do: FakeWarehouse.put_not_installed()
 
-    test "toggle is disabled and the hint points at Modules -> Not installed", %{conn: conn} do
+    test "toggle is disabled and the button opens Modules -> Not installed", %{conn: conn} do
       {:ok, view, _html} = live(conn, @settings_path)
 
       assert has_element?(view, @toggle <> "[disabled]")
@@ -55,7 +58,11 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
                "Stock tracking needs the Warehouse module. Install it from Modules"
              )
 
-      assert link_href(view) == Routes.path("/admin/modules?tab=not_installed")
+      refute_hint_link(view)
+      assert has_element?(view, "#shop-stock-tracking-card " <> @action)
+      assert action_attr(view, "href") == Routes.path("/admin/modules?tab=not_installed")
+      assert action_attr(view, "class") =~ "btn-primary"
+      assert has_element?(view, @action, "Open Modules")
     end
 
     test "turning it on is refused by the server", %{conn: conn} do
@@ -74,7 +81,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
   describe "Warehouse installed but disabled" do
     setup do: FakeWarehouse.put_state(enabled: false)
 
-    test "toggle is disabled and the hint points at Modules -> Disabled", %{conn: conn} do
+    test "toggle is disabled and the button opens Modules -> Disabled", %{conn: conn} do
       {:ok, view, _html} = live(conn, @settings_path)
 
       assert has_element?(view, @toggle <> "[disabled]")
@@ -85,7 +92,10 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
                "Stock tracking needs the Warehouse module. Enable it in Modules"
              )
 
-      assert link_href(view) == Routes.path("/admin/modules?tab=disabled")
+      refute_hint_link(view)
+      assert action_attr(view, "href") == Routes.path("/admin/modules?tab=disabled")
+      assert action_attr(view, "class") =~ "btn-primary"
+      assert has_element?(view, @action, "Enable Warehouse")
     end
 
     test "turning it on is refused by the server", %{conn: conn} do
@@ -102,7 +112,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
   describe "Warehouse enabled, no default location" do
     setup do: FakeWarehouse.put_state(enabled: true, default_location: nil)
 
-    test "toggle is enabled and the hint points at Warehouse settings", %{conn: conn} do
+    test "toggle is enabled and the button opens Warehouse settings", %{conn: conn} do
       {:ok, view, _html} = live(conn, @settings_path)
 
       assert has_element?(view, @toggle)
@@ -114,7 +124,10 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
                "Choose a default warehouse in Warehouse settings first."
              )
 
-      assert link_href(view) == Routes.path("/admin/settings/warehouse")
+      refute_hint_link(view)
+      assert action_attr(view, "href") == Routes.path("/admin/settings/warehouse")
+      assert action_attr(view, "class") =~ "btn-primary"
+      assert has_element?(view, @action, "Set up Warehouse")
     end
 
     test "turning it on persists and logs", %{conn: conn} do
@@ -133,14 +146,18 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
   describe "Warehouse enabled and configured" do
     setup do: FakeWarehouse.put_state(enabled: true, default_location: "loc-1")
 
-    test "toggle is enabled and the hint links to the Warehouse stock page", %{conn: conn} do
+    test "toggle is enabled and the button opens the Warehouse stock page", %{conn: conn} do
       {:ok, view, _html} = live(conn, @settings_path)
 
       refute has_element?(view, @toggle <> "[disabled]")
       refute has_element?(view, @toggle <> "[checked]")
       assert has_element?(view, @hint, "Stock is kept by the Warehouse module.")
       refute has_element?(view, @hint, "Choose a default warehouse")
-      assert link_href(view) == Routes.path("/admin/warehouse")
+      refute_hint_link(view)
+      assert action_attr(view, "href") == Routes.path("/admin/warehouse")
+      assert action_attr(view, "class") =~ "btn-outline"
+      refute action_attr(view, "class") =~ "btn-primary"
+      assert has_element?(view, @action, "Open stock")
     end
 
     test "can be turned on and off again", %{conn: conn} do
