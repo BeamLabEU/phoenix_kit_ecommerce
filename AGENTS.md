@@ -26,8 +26,8 @@ pages.
   0.20 is the first engine that binds `{{SourceFields}}` and forwards
   `opts[:source_fields]`, `test/ai_pin_conformance_test.exs` guards it),
   `phoenix_kit_warehouse` `~> 0.5` (optional — only the Stock tracking
-  switch uses it, through `StockTracking`; 0.5 is the first release with
-  `enabled?/0` and `StockLedger.default_location_uuid/0`).
+  switch uses it, through `StockTracking`, which calls `enabled?/0` and
+  `StockLedger.default_location_uuid/0`).
   Also `phoenix`, `phoenix_live_view ~> 1.1`, `ecto_sql ~> 3.12`,
   `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `mdex`,
   `gettext ~> 1.0`. There is deliberately **no** dep on
