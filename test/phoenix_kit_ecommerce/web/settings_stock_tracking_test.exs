@@ -47,6 +47,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
 
       assert has_element?(view, @toggle <> "[disabled]")
       refute has_element?(view, @toggle <> "[checked]")
+      assert has_element?(view, @toggle <> "[aria-describedby=shop-stock-tracking-hint]")
 
       assert has_element?(
                view,

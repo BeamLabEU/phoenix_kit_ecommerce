@@ -737,19 +737,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   class="toggle toggle-secondary"
                   checked={@stock_tracking_enabled}
                   disabled={@warehouse_status in [:not_installed, :disabled]}
+                  aria-describedby="shop-stock-tracking-hint"
                   phx-click="toggle_shop_stock_tracking"
                 />
               </label>
             </div>
 
-            <% {hint, hint_path} = stock_tracking_hint(@warehouse_status) %>
             <p id="shop-stock-tracking-hint" class="text-sm text-base-content/70">
               <.link
                 id="shop-stock-tracking-hint-link"
-                navigate={hint_path}
+                navigate={elem(@stock_tracking_hint, 1)}
                 class="link link-primary"
               >
-                {hint}
+                {elem(@stock_tracking_hint, 0)}
               </.link>
             </p>
           </div>
@@ -1831,9 +1831,12 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   defp assign_stock_tracking(socket) do
+    status = StockTracking.warehouse_status()
+
     socket
-    |> assign(:warehouse_status, StockTracking.warehouse_status())
-    |> assign(:stock_tracking_enabled, StockTracking.enabled?())
+    |> assign(:warehouse_status, status)
+    |> assign(:stock_tracking_enabled, StockTracking.enabled?(status))
+    |> assign(:stock_tracking_hint, stock_tracking_hint(status))
   end
 
   defp stock_tracking_error(:warehouse_not_installed),
