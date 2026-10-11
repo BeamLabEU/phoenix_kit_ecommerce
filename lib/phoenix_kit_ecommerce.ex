@@ -1108,7 +1108,7 @@ defmodule PhoenixKitEcommerce do
       end
 
     # The enabled filters and their facets are cached on the storefront for
-    # a minute (`StorefrontCache`); a saved change must show on the next
+    # about a minute (`StorefrontCache`); a saved change must show on the next
     # page view, not after the TTL.
     if match?({:ok, _}, result), do: StorefrontCache.clear()
 
@@ -1476,6 +1476,10 @@ defmodule PhoenixKitEcommerce do
           ]
         )
 
+      # Does not broadcast, so the storefront cache (`StorefrontCache`) is
+      # cleared here.
+      if count > 0, do: StorefrontCache.clear()
+
       count
     end
   end
@@ -1491,6 +1495,11 @@ defmodule PhoenixKitEcommerce do
     else
       query = Product |> where([p], p.uuid in ^ids)
       {count, _} = repo().delete_all(query)
+
+      # Does not broadcast, so the storefront cache (`StorefrontCache`) is
+      # cleared here.
+      if count > 0, do: StorefrontCache.clear()
+
       count
     end
   end

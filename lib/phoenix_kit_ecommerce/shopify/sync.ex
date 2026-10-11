@@ -107,6 +107,7 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   alias PhoenixKitEcommerce.Shopify.ProductDiff.Change
   alias PhoenixKitEcommerce.Shopify.Source
   alias PhoenixKitEcommerce.Shopify.SyncScope
+  alias PhoenixKitEcommerce.StorefrontCache
   alias PhoenixKitEcommerce.Translations
 
   @localized_fields [:title, :body_html, :description]
@@ -422,12 +423,26 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
   def apply_change(change, fields \\ :all, opts \\ [])
 
   def apply_change(%Change{create?: true} = change, _fields, opts) do
-    create_change(change, resolve_verdict(opts))
+    change
+    |> create_change(resolve_verdict(opts))
+    |> clear_storefront_cache()
   end
 
   def apply_change(%Change{} = change, fields, opts) do
-    do_apply_change(change, fields, resolve_verdict(opts))
+    change
+    |> do_apply_change(fields, resolve_verdict(opts))
+    |> clear_storefront_cache()
   end
+
+  # The storefront caches its category list and facets for about a minute
+  # (`StorefrontCache`); a successful write must show on the next page view.
+  # `apply_changes/3` clears once for the whole batch instead.
+  defp clear_storefront_cache({:ok, _product} = result) do
+    StorefrontCache.clear()
+    result
+  end
+
+  defp clear_storefront_cache(result), do: result
 
   # `opts[:currency_verdict]`, when given, IS the answer
   # `currency_verdict/1` would otherwise compute — used as-is, with no
@@ -552,6 +567,10 @@ defmodule PhoenixKitEcommerce.Shopify.Sync do
           {:error, _changeset} -> %{acc | failed: [change | acc.failed]}
         end
       end)
+
+    # Once per run, not per change: a long sync would otherwise keep the
+    # storefront cache switched off for its whole duration.
+    if succeeded != [], do: StorefrontCache.clear()
 
     %{succeeded: Enum.reverse(succeeded), failed: Enum.reverse(failed)}
   end
