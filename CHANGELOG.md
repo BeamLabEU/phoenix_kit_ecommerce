@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.5.20 - 2026-10-11
 
 ### Added
 
@@ -1240,7 +1240,7 @@ resolve this release.
   do both, which is why the local copy existed. Stored slugs are not rewritten;
   only newly generated ones change.
 
-## Unreleased
+## 0.5.20 - 2026-10-11
 
 ### Added
 - **Cart-activity notifications for shop operators.** Three individually
