@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Storefront category and facet cache** (#79). `/shop` and the category
+  page share the category list and the filter facets for about a minute
+  (`StorefrontCache`, started through `children/0`), and the category-image
+  query no longer ships every item's `data`. This package's own product,
+  category, filter and Shopify-sync writes clear the cache; edits made in
+  `phoenix_kit_catalogue` show within the TTL.
+- **Stock tracking switch** (#81). A settings card for
+  `shop_stock_tracking_enabled`, effective only while the optional
+  `phoenix_kit_warehouse` (`~> 0.5`) is installed and enabled.
 - **Checkout starts on the shop's own country** (#76). A new cart with no
   shipping country no longer opens on `EE`: the country comes from the
   company country, `shop_default_tax_country`, the one country every
@@ -20,6 +29,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   billing profile"; `convert_cart_to_order/2` takes
   `save_billing_profile: true` and creates the profile in the conversion
   transaction. Ukrainian translations for the new strings.
+
+### Changed
+
+- **Shopify sync is off by default and fails closed** (#80). **Upgrade
+  note:** run `mix phoenix_kit.update`. The chain's new V3 step writes
+  `shop_shopify_enabled = "true"` for an install that already uses Shopify
+  and has no such row; a host that skips the update loses the Shopify tab
+  and provider until the toggle is switched on.
 
 ### Fixed
 
