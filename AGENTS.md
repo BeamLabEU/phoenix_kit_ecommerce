@@ -299,7 +299,7 @@ notification tree, and `migration_module/0` the migration chain. Settings
 persist through `PhoenixKit.Settings` (DB-backed in the host), never
 application env. `required_modules/0` declares `"billing"`;
 `required_integrations/0` and `integration_providers/0` declare the Shopify
-provider.
+provider only while `shop_shopify_enabled` is on (off by default).
 
 ```
 lib/phoenix_kit_ecommerce.ex          # PhoenixKit.Module behaviour + the main context
