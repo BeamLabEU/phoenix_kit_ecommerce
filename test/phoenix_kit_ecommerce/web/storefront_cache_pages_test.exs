@@ -334,7 +334,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontCachePagesTest do
 
   describe "wiring" do
     test "the module contributes the cache to the host's supervision tree" do
-      assert PhoenixKitEcommerce.children() == StorefrontCache.children()
+      assert Enum.all?(StorefrontCache.children(), &(&1 in PhoenixKitEcommerce.children()))
     end
 
     # Catalogue-side edits and the background Shopify jobs do not clear the

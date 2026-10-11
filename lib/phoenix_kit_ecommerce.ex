@@ -117,9 +117,6 @@ defmodule PhoenixKitEcommerce do
   def required_integrations, do: if(shopify_enabled?(), do: ["shopify"], else: [])
 
   @impl PhoenixKit.Module
-  def children, do: [Shipping.Cache]
-
-  @impl PhoenixKit.Module
   # Shopify (while its toggle is on) followed by the Integrations definition of
   # every registered shipping provider that has one, so a carrier's API key
   # is entered where every other credential is.
@@ -816,8 +813,9 @@ defmodule PhoenixKitEcommerce do
   # `PhoenixKit.ModuleRegistry.static_children/0` - no host wiring - and
   # started after `PhoenixKit.Cache.Registry`, a fixed earlier child of the
   # same supervisor.
+  # The shipping lookup cache (`Shipping.Cache`) goes in the same list.
   @impl PhoenixKit.Module
-  def children, do: StorefrontCache.children()
+  def children, do: StorefrontCache.children() ++ [Shipping.Cache]
 
   @impl PhoenixKit.Module
   def permission_metadata do
