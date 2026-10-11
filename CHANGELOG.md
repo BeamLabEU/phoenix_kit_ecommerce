@@ -44,6 +44,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   form needs `BillingProfileFields` and `BillingProfile.fields_changeset/3`,
   which 0.20 is the first release to ship; against 0.13-0.19 the checkout
   page failed at runtime. A floor test pins them.
+- **Hidden billing fields no longer block checkout after a type switch.**
+  An invalid company VAT number or overlong individual name was still
+  validated after its field disappeared. Checkout validates only the
+  selected type while preserving the other type's draft values.
+- **Unavailable checkout shipping can be replaced in checkout.** When
+  shipping selection is configured for checkout, an unavailable method on
+  mount or a missing/disabled selection at confirmation returns to its
+  picker instead of sending the shopper to a cart with no shipping controls.
+- **The transitional shop namespace exports the new APIs.**
+  `PhoenixKit.Modules.Shop` now delegates `default_checkout_country/0`,
+  `children/0`, `stock_tracking_enabled?/0` and `warehouse_status/0`.
 
 ## 0.5.19 - 2026-10-10
 

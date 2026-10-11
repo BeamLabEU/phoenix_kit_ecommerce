@@ -97,11 +97,30 @@ defmodule PhoenixKitEcommerce.DependencyFloorTest do
     # Checkout renders the component and validates over `fields_changeset/3`;
     # both arrived in billing 0.20. Below it the page fails at runtime.
     assert Code.ensure_loaded?(PhoenixKitBilling.Web.Components.BillingProfileFields)
+
+    assert function_exported?(
+             PhoenixKitBilling.Web.Components.BillingProfileFields,
+             :billing_profile_fields,
+             1
+           )
+
     # function_exported?/3 is false for a module that is not loaded yet.
     assert Code.ensure_loaded?(PhoenixKitBilling.BillingProfile)
     assert function_exported?(PhoenixKitBilling.BillingProfile, :fields_changeset, 3)
     assert function_exported?(PhoenixKitBilling.BillingProfile, :form_fields, 0)
     assert Code.ensure_loaded?(PhoenixKitBilling.Gettext)
+  end
+
+  test "the declared billing requirement excludes releases without the checkout form" do
+    # The resolved symbols above cannot catch a lowered requirement while
+    # mix.lock still selects a newer release. Inspect the shipped pin too,
+    # including when a local path override is active for this test run.
+    assert [_, requirement] =
+             Regex.run(~r/:phoenix_kit_billing,\s*"([^"]+)"/, File.read!("mix.exs"))
+
+    refute Version.match?("0.19.0", requirement)
+    assert Version.match?("0.20.0", requirement)
+    assert Version.match?("0.21.0", requirement)
   end
 
   test "the phoenix_kit floor ships V186's cart/order freeze columns" do
