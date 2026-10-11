@@ -401,6 +401,21 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether stock tracking is effectively on: the `shop_stock_tracking_enabled`
+  setting AND the Warehouse module installed AND enabled. See
+  `PhoenixKitEcommerce.StockTracking`.
+  """
+  @spec stock_tracking_enabled?() :: boolean()
+  defdelegate stock_tracking_enabled?, to: PhoenixKitEcommerce.StockTracking, as: :enabled?
+
+  @doc """
+  The Warehouse module's state as the shop sees it (`:not_installed`,
+  `:disabled`, `:no_default_location` or `:ready`).
+  """
+  @spec warehouse_status() :: PhoenixKitEcommerce.StockTracking.warehouse_status()
+  defdelegate warehouse_status, to: PhoenixKitEcommerce.StockTracking
+
+  @doc """
   Returns dashboard statistics for the shop.
   """
   def get_dashboard_stats do
