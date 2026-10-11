@@ -110,9 +110,12 @@ defmodule PhoenixKitEcommerce do
   sidebar entry, the sync page, and the Shopify option offered on the
   integrations page.
 
-  Defaults to `true` — Shopify sync predates this toggle, so a stand that
-  never touches `shop_shopify_enabled` keeps behaving exactly as it did
-  before this setting existed.
+  Defaults to `false`, and a failing settings read also answers `false`
+  (fail closed): Shopify is one optional product source, not part of every
+  shop, so a fresh install shows no Shopify UI until an admin turns it on.
+  Installs that already used Shopify under the old default of `true` keep it:
+  the `PhoenixKitEcommerce.Migrations` V3 step writes
+  `shop_shopify_enabled = "true"` for them when no row exists yet.
 
   Turning it off does **not** touch the stored integration record or its
   access token; re-enabling restores everything (design §4.7). Read via
@@ -121,11 +124,21 @@ defmodule PhoenixKitEcommerce do
   """
   @spec shopify_enabled?() :: boolean()
   def shopify_enabled? do
-    Settings.get_setting_cached("shop_shopify_enabled", "true") == "true"
+    read_shopify_setting() == "true"
   rescue
-    _ -> true
+    _ -> false
   catch
-    :exit, _ -> true
+    :exit, _ -> false
+  end
+
+  # Test seam: `:shopify_setting_reader` is an `{module, function}` called
+  # as `module.function(key, default)`, so a test can make the read raise or
+  # exit and reach the fail-closed clauses above.
+  defp read_shopify_setting do
+    case Application.get_env(:phoenix_kit_ecommerce, :shopify_setting_reader) do
+      {mod, fun} -> apply(mod, fun, ["shop_shopify_enabled", "false"])
+      _ -> Settings.get_setting_cached("shop_shopify_enabled", "false")
+    end
   end
 
   @impl PhoenixKit.Module
