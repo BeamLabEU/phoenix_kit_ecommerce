@@ -38,12 +38,14 @@ defmodule PhoenixKitEcommerce.StorefrontCache do
   itself when it writes something the cached values depend on: the
   storefront filter settings (`PhoenixKitEcommerce.update_storefront_filters/1`),
   the legacy-source product and category writes that announce themselves
-  through `PhoenixKitEcommerce.Events` (the single and bulk status writes),
-  the legacy bulk category change and bulk product delete (which do not
-  broadcast), and the Shopify sync's catalogue writes (`Shopify.Sync`: once
-  per `apply_changes/3` run, once per standalone `apply_change/3`). The
-  clear is node-local: another node of a cluster serves its entries until
-  they expire.
+  through `PhoenixKitEcommerce.Events` (single create/update/delete, bulk
+  product status, bulk category status, parent and delete), the legacy bulk
+  category change and bulk product delete (which do not broadcast), and the
+  Shopify sync (`Shopify.Sync`: under the catalogue source once per
+  `apply_changes/3` run and once per standalone `apply_change/3`; under the
+  legacy source `Shop.update_product/2` also clears per product through
+  `Events`). The clear is node-local: another node of a cluster serves its
+  entries until they expire.
 
   Everything else is visible within the TTL only:
 
@@ -52,6 +54,9 @@ defmodule PhoenixKitEcommerce.StorefrontCache do
       (`Workers.ShopifyMediaSyncWorker`, through `Catalogue.Writer`) and the
       collection sync (`Shopify.CollectionSync`), which write catalogue
       items and categories without clearing;
+    * enabling or disabling a language, which is not a write of this package:
+      the category list is built from `Translations.enabled_languages/0`,
+      so a changed language set reaches it within the TTL only;
     * the catalogue the shop reads (`shop_catalogue`), which is not part of
       any key: it is written out-of-band, not through a supported runtime
       flow, so switching it needs a `clear/0` (or about a minute);

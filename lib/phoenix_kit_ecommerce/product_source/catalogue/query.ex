@@ -626,8 +626,10 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     # The two sub-values are pulled out of `data` once per row, in a
     # `LATERAL` with `OFFSET 0` (without it the planner inlines the
     # expressions back into the `CASE`). Postgres detoasts the whole
-    # document on every `data->...` read, so a `CASE` that reads `data`
-    # itself costs about six detoasts per item - more than shipping `data`.
+    # document on every `data->...` read, and a `CASE` that reads `data`
+    # itself did that two to five times per item (plus once for the
+    # visibility filter): more Postgres time than shipping `data` (~100 vs
+    # ~50 ms for 700 items), though about equal in wall time.
     items =
       CatItem
       |> where([i], i.catalogue_uuid == ^catalogue_uuid)

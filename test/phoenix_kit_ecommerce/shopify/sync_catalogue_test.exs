@@ -283,6 +283,35 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
       assert generation() == before + 1
     end
 
+    # The reduce's accumulator is lost when a change raises (here: its item
+    # was deleted since the diff), but the change written before it must show.
+    test "apply_changes/3 still clears it when a later change raises", %{
+      change: change,
+      item: item
+    } do
+      ghost = %{change | product_uuid: Ecto.UUID.generate()}
+      prefill_probe()
+      before = generation()
+
+      assert_raise Ecto.NoResultsError, fn -> Sync.apply_changes([change, ghost]) end
+
+      assert Catalogue.get_item!(item.uuid).name == "Ceramic Vase Deluxe"
+      assert probe_cleared?()
+      assert generation() == before + 1
+    end
+
+    test "apply_changes/3 leaves it alone when the first change raises and nothing was written",
+         %{change: change} do
+      ghost = %{change | product_uuid: Ecto.UUID.generate()}
+      prefill_probe()
+      before = generation()
+
+      assert_raise Ecto.NoResultsError, fn -> Sync.apply_changes([ghost, change]) end
+
+      refute probe_cleared?()
+      assert generation() == before
+    end
+
     test "apply_changes/3 leaves it alone when no change was written", %{change: change} do
       prefill_probe()
       before = generation()
