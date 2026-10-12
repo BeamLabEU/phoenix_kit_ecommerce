@@ -4131,7 +4131,12 @@ defmodule PhoenixKitEcommerce do
       context = Shipping.context(method, shipping_context_options(request, opts))
       answer = Shipping.quote(context, request)
 
-      persist_cart_quote(fresh.uuid, Shipping.request_hash(request), answer)
+      persist_cart_quote(
+        fresh.uuid,
+        Shipping.request_hash(request),
+        CartQuote.provider(method),
+        answer
+      )
     end
   end
 
@@ -4146,7 +4151,7 @@ defmodule PhoenixKitEcommerce do
     [currency: currency, country: country] ++ context_opts ++ locale
   end
 
-  defp persist_cart_quote(cart_uuid, request_hash, answer) do
+  defp persist_cart_quote(cart_uuid, request_hash, provider, answer) do
     result =
       repo().transaction(fn ->
         locked =
@@ -4154,8 +4159,12 @@ defmodule PhoenixKitEcommerce do
           |> lock_active_cart!()
           |> repo().preload([:items, :shipping_method], force: true)
 
-        if cart_request_hash(locked) == request_hash do
-          method = cart_selected_method(locked)
+        method = cart_selected_method(locked)
+
+        # The hash does not name the provider: an answer that was on its way
+        # while the method was switched to another provider is not the new
+        # one's price.
+        if cart_request_hash(locked) == request_hash and CartQuote.provider(method) == provider do
           currencies = [cart_base_currency(locked), locked.currency]
           entry = CartQuote.entry(request_hash, answer, method, currencies)
           metadata = Map.put(locked.metadata || %{}, CartQuote.quote_key(), entry)
@@ -4241,7 +4250,7 @@ defmodule PhoenixKitEcommerce do
     with {:ok, request} <- shipping_rate_request(cart, method, items),
          :ok <-
            check_destination(lookup_shipping_service(service_lookup, method, request), request) do
-      {status, stored} = stored_quote_state(CartQuote.stored(cart.metadata), request)
+      {status, stored} = stored_quote_state(CartQuote.stored(cart.metadata), request, method)
       {status, stored, nil}
     else
       {:error, :needs_destination} ->
@@ -4258,17 +4267,19 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp stored_quote_state(nil, _request), do: {:missing, nil}
+  defp stored_quote_state(nil, _request, _method), do: {:missing, nil}
 
-  defp stored_quote_state(stored, request) do
-    if stored_quote_current?(stored, request),
+  defp stored_quote_state(stored, request, method) do
+    if stored_quote_current?(stored, request, method),
       do: {stored.status, stored},
       else: {:stale, nil}
   end
 
-  # Asked for this very request, and not too long ago.
-  defp stored_quote_current?(stored, request) do
-    stored.request_hash == Shipping.request_hash(request) and not CartQuote.expired?(stored)
+  # Asked for this very request, of the provider that prices the method now,
+  # and not too long ago.
+  defp stored_quote_current?(stored, request, method) do
+    stored.request_hash == Shipping.request_hash(request) and
+      stored.provider == CartQuote.provider(method) and not CartQuote.expired?(stored)
   end
 
   # The request for the cart as `items` say it is; no validation of the
@@ -4450,7 +4461,7 @@ defmodule PhoenixKitEcommerce do
     with true <- ShippingMethod.calculated?(method),
          %{status: :ok, quote: %Quote{} = quote} = stored <- CartQuote.stored(cart.metadata),
          {:ok, request} <- shipping_rate_request(cart, method, items),
-         true <- stored_quote_current?(stored, request) do
+         true <- stored_quote_current?(stored, request, method) do
       quote_final_amount(cart, method, quote, base_subtotal)
     else
       _ -> :none
@@ -4460,16 +4471,20 @@ defmodule PhoenixKitEcommerce do
   defp quote_final_amount(cart, method, quote, base_subtotal) do
     method
     |> ShippingMethod.shipping_config()
-    |> Pricing.final_amount(quote, method, base_subtotal)
+    |> Pricing.final_amount(quote, method, base_subtotal, quote_places(quote.currency, cart))
     |> quote_amount_to_cart_currency(quote.currency, cart)
+  end
+
+  # `Pricing` settles a marked-up amount once, on the places of the currency
+  # it is in: a base-currency quote on the base's (JPY: none), any other on cents.
+  defp quote_places(currency, cart) do
+    if is_nil(currency) or currency == cart.base_currency, do: base_decimal_places(), else: 2
   end
 
   defp quote_amount_to_cart_currency(amount, currency, cart) do
     cond do
-      # `Pricing` settles on cents; a base currency with another scale (JPY)
-      # settles on its own, like every other base figure here.
       is_nil(currency) or currency == cart.base_currency ->
-        {:ok, amount |> Decimal.round(base_decimal_places()) |> from_base(cart)}
+        {:ok, from_base(amount, cart)}
 
       currency == cart.currency ->
         {:ok, amount}

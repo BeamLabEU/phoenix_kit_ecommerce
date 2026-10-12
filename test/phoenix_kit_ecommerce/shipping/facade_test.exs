@@ -1299,6 +1299,55 @@ defmodule PhoenixKitEcommerce.Shipping.FacadeTest do
       refute log =~ "SECRET-KEY-123"
     end
 
+    test "a malformed return never carries the credentials: result, log and cache" do
+      ctx = secret_ctx(%{quote: fn _request, ctx -> {:ok, ctx.credentials} end})
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:bad_return, shape}} = Shipping.quote(ctx, request())
+          refute shape =~ "SECRET-KEY-123"
+          assert shape == "{:ok, a map}"
+        end)
+
+      refute log =~ "SECRET-KEY-123"
+      refute inspect(:ets.tab2list(:phoenix_kit_ecommerce_shipping_cache)) =~ "SECRET-KEY-123"
+    end
+
+    test "a malformed list never carries the credentials either" do
+      ctx = secret_ctx(%{services: [%{api_key: "SECRET-KEY-123"}]})
+
+      capture_log(fn ->
+        assert {:error, {:bad_return, shape}} = Shipping.services(ctx)
+        refute shape =~ "SECRET-KEY-123"
+      end)
+    end
+
+    test "credentials that inspect escapes, and short ones, are redacted from a crash" do
+      credentials = %{"secret" => ~s(ab"cd\\ef\ngh), "pin" => "xyz"}
+
+      ctx =
+        Shipping.context(
+          stub_method(),
+          credentials: credentials,
+          stub: %{
+            notify: self(),
+            quote: fn _request, ctx -> Map.fetch!(ctx.credentials, "missing") end
+          }
+        )
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:provider_crashed, text}} = Shipping.quote(ctx, request())
+          assert text =~ "[redacted]"
+          refute text =~ "ab"
+          refute text =~ "xyz"
+          refute text =~ "cd"
+        end)
+
+      refute log =~ "xyz"
+      refute log =~ ~s(ab\\"cd)
+    end
+
     test "a throw does not carry the credentials either" do
       ctx = secret_ctx(%{quote: fn _request, ctx -> throw(ctx.credentials) end})
 

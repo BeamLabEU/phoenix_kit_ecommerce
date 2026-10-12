@@ -3,9 +3,10 @@
 - **Author:** Tymofii Shapovalov (timujinne)
 - **Reviewer:** Claude
 - **Merge:** `37d11ec` on `main`
-- **Verdict:** approve with fixes. No data-loss or money-path bug; one page
-  crash, one credential leak into logs/cache and one cache/expiry
-  interaction fixed here. The rest are recorded below.
+- **Verdict:** approve with fixes. The first pass missed three bugs that
+  Codex reproduced afterwards (see "After the Codex review" below); all are
+  fixed. A page crash, a credential leak, a cache/expiry interaction, a
+  wrong-carrier quote and a rounding error were fixed in total.
 
 ## Summary
 
@@ -68,6 +69,32 @@ every finding below was re-checked against the code.
   `["ua"]` made every service "unsupported"); the admin locality query is
   cut to 64 characters; the unused `:form_params` assign is gone.
 
+## After the Codex review
+
+Codex (`CODEX_REVIEW.md`) reproduced three bugs in the first round of fixes;
+this was wrong in the first pass and is corrected here.
+
+- **BUG - HIGH: credentials were still reachable.** `bad_return` inspected
+  arbitrary provider output (`{:ok, ctx.credentials}` ended up in the result,
+  the log and the cache), and the crash redaction missed values that
+  `inspect` escapes (quotes, backslashes, newlines) and values under four
+  bytes. A malformed return is now described by shape only, redaction covers
+  the escaped form and any non-empty value, and the log line is redacted.
+- **BUG - HIGH: checkout accepted another carrier's quote.** I had filed the
+  missing provider in `request_hash/1` as a nitpick. It is a money bug: a
+  method switched to another provider kept the old provider's stored quote
+  (status `:ok`, charged and recorded on the order). The stored entry now
+  carries `"provider"` and is stale for any other (and when absent); the
+  in-flight persist checks it under the cart lock. The public
+  `request_hash/1` format is unchanged.
+- **BUG - MEDIUM: JPY was rounded twice.** `Pricing` rounded to cents and the
+  cart code then to yen (100.495 -> 100.50 -> 101). `Pricing.final_amount/5`
+  takes the places and rounds once.
+- The changelog now lists the feature itself.
+
+`Pricing` still cannot give a base currency with more than two decimals
+(KWD) full support: core's cart shipping column is `numeric(12,2)`.
+
 ## Not changed (on record)
 
 - **IMPROVEMENT - MEDIUM: carrier lookups inside the conversion
@@ -92,8 +119,7 @@ every finding below was re-checked against the code.
   reloads them).
 - **IMPROVEMENT - MEDIUM: a method whose provider is no longer installed
   cannot be saved,** while the card says it "keeps its fixed price".
-- **NITPICK:** `request_hash/1` omits the provider key (an in-place provider
-  swap keeps a stored quote for up to 30 min); declared value and COD sum
+- **NITPICK:** declared value and COD sum
   digital lines too; `shipping_skippable?` ignores provider reach; the
   rate-limit CAS retry writes a stale `now`; `round_to` below 0.01 breaks
   the settle-on-cents rule; checkout computes the snapshot up to 3 times on

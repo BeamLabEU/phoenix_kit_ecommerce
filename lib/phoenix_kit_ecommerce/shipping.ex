@@ -14,7 +14,8 @@ defmodule PhoenixKitEcommerce.Shipping do
     * whatever the provider returned
     * `:timeout` - no answer within the timeout
     * `{:provider_crashed, message}` - the provider raised, threw or exited
-    * `{:bad_return, inspected}` - the provider broke its contract
+    * `{:bad_return, shape}` - the provider broke its contract (the shape of
+      what it returned, never its content)
     * `:unknown_provider` - the context has no provider module
     * `:not_supported` - the provider does not implement the optional callback
     * `:unsupported_currency` - the provider declares `currencies/0` and the
@@ -534,10 +535,20 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   defp finite?(%Decimal{} = decimal), do: not (Decimal.nan?(decimal) or Decimal.inf?(decimal))
 
-  defp bad_return(value),
-    do:
-      {:error,
-       {:bad_return, value |> inspect(limit: 5, printable_limit: 100) |> String.slice(0, 300)}}
+  # What the provider returned is described by its shape, never by its
+  # content: the term may well be the credentials the provider was handed,
+  # and this text reaches the log, the cache and every caller.
+  defp bad_return(value), do: {:error, {:bad_return, describe(value)}}
+
+  defp describe(value) when is_atom(value) or is_number(value), do: inspect(value)
+  defp describe({:ok, inner}), do: "{:ok, #{describe(inner)}}"
+  defp describe({:error, inner}), do: "{:error, #{describe(inner)}}"
+  defp describe(%{__struct__: module}), do: "%#{inspect(module)}{}"
+  defp describe(value) when is_map(value), do: "a map"
+  defp describe(value) when is_list(value), do: "a list of #{length(value)} items"
+  defp describe(value) when is_binary(value), do: "a string"
+  defp describe(value) when is_tuple(value), do: "a tuple of #{tuple_size(value)} elements"
+  defp describe(_value), do: "an unexpected term"
 
   defp call(%Context{provider: provider} = ctx, operation, cache, fun) do
     if provider_module?(provider),
@@ -563,7 +574,7 @@ defmodule PhoenixKitEcommerce.Shipping do
         do: {:error, :rate_limited},
         else: guarded(ctx, fun)
 
-    log_error(result, key, operation)
+    log_error(result, key, operation, ctx.credentials)
     result
   end
 
@@ -676,19 +687,31 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp crash_text(text, credentials) do
     credentials
     |> secret_strings()
+    |> Enum.flat_map(&[&1, escaped(&1)])
+    |> Enum.uniq()
+    |> Enum.sort_by(&byte_size/1, :desc)
     |> Enum.reduce(text, &String.replace(&2, &1, "[redacted]"))
     |> String.slice(0, @crash_text_max)
   end
 
+  # How `inspect/1` prints the string inside quotes: an exception message
+  # carries the escaped form, which a plain replacement would miss.
+  defp escaped(secret), do: secret |> inspect() |> String.slice(1..-2//1)
+
   defp secret_strings(credentials) when is_map(credentials) do
-    credentials
-    |> Map.values()
-    |> Enum.flat_map(fn
-      value when is_binary(value) and byte_size(value) >= 4 -> [value]
-      value when is_map(value) -> secret_strings(value)
+    Enum.flat_map(credentials, fn
+      {_key, value} when is_binary(value) and value != "" -> [value]
+      {_key, value} when is_map(value) or is_list(value) -> secret_strings(value)
       _other -> []
     end)
-    |> Enum.sort_by(&byte_size/1, :desc)
+  end
+
+  defp secret_strings(credentials) when is_list(credentials) do
+    Enum.flat_map(credentials, fn
+      value when is_binary(value) and value != "" -> [value]
+      value when is_map(value) or is_list(value) -> secret_strings(value)
+      _other -> []
+    end)
   end
 
   defp secret_strings(_credentials), do: []
@@ -710,8 +733,10 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp status({:ok, _value}), do: :ok
   defp status(_error), do: :error
 
-  defp log_error({:error, reason}, key, operation) do
-    message = "Shipping provider #{key} #{operation} failed: #{inspect(reason, limit: 10)}"
+  defp log_error({:error, reason}, key, operation, credentials) do
+    message =
+      "Shipping provider #{key} #{operation} failed: " <>
+        crash_text(inspect(reason, limit: 10), credentials)
 
     cond do
       reason == :rate_limited -> Logger.debug(message)
@@ -720,7 +745,7 @@ defmodule PhoenixKitEcommerce.Shipping do
     end
   end
 
-  defp log_error(_ok, _key, _operation), do: :ok
+  defp log_error(_ok, _key, _operation, _credentials), do: :ok
 
   @doc """
   Whether an error reason means "this method cannot serve this cart"
