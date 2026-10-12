@@ -758,6 +758,65 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
       end
     end
 
+    test "events that store a destination need a service that takes it", %{conn: conn} do
+      {conn, cart, _method} = cart_session(conn)
+      {:ok, _view, _html} = live(conn, "/cart")
+
+      # A transient service failure leaves no service at all.
+      for service <- [nil, %Service{key: "courier", destination: :address, lookup: :manual}] do
+        socket = socket_with(%{service: service, locality: nil, points: []})
+
+        assert {:noreply, %Phoenix.LiveView.Socket{}} =
+                 ShippingDestinationPicker.handle_event(
+                   "apply_manual",
+                   %{"manual" => %{"locality" => "Springfield", "point" => "12345"}},
+                   socket
+                 )
+      end
+
+      socket = socket_with(%{service: nil, locality: nil, points: []})
+
+      assert {:noreply, %Phoenix.LiveView.Socket{}} =
+               ShippingDestinationPicker.handle_event(
+                 "apply_address",
+                 %{"address" => %{"street" => "Main", "house" => "7"}},
+                 socket
+               )
+
+      assert Shop.cart_shipping_destination(reload(cart)) == nil
+    end
+
+    test "a client repeating a destination faster than the lookups may run is not answered",
+         %{conn: conn} do
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_lookup_interval, 60_000)
+      stub!(%{services: [courier(:manual)]})
+      {conn, cart, _method} = cart_session(conn, service: "courier")
+      {:ok, view, _html} = live(conn, "/cart")
+
+      submit = fn street ->
+        view
+        |> form(ps("address-form"), %{
+          "address" => %{"street" => street, "house" => "7", "locality" => "Springfield"}
+        })
+        |> render_submit()
+      end
+
+      submit.("First")
+      settle(view)
+
+      assert %{street: "First"} =
+               cart |> reload() |> Shop.cart_shipping_destination() |> Map.get(:address)
+
+      # The editor is open again (the shopper changed their mind), and the
+      # second submit comes too soon.
+      view |> element(ps("change")) |> render_click()
+      submit.("Second")
+      settle(view)
+
+      assert %{street: "First"} =
+               cart |> reload() |> Shop.cart_shipping_destination() |> Map.get(:address)
+    end
+
     test "events of a shape nobody sends are ignored", %{conn: conn} do
       {conn, cart, _method} = cart_session(conn)
       {:ok, view, _html} = live(conn, "/cart")
@@ -946,6 +1005,16 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
       refute has_element?(view, ps("service-error"))
       assert has_element?(view, ps("destination-summary"), "Branch 1")
       assert Shop.shipping_quote_status(reload(cart)) in [:ok, :stale, :missing]
+    end
+
+    test "a refusal that carries details is shown, not a crash", %{conn: conn} do
+      {conn, _cart, _method} = cart_session(conn, destination: branch("P1"))
+      stub!(%{services: {:error, {:service_unavailable, "closed for the season"}}})
+
+      {:ok, view, _html} = live(conn, "/cart")
+
+      assert has_element?(view, ps("quote-unavailable"))
+      refute has_element?(view, ps("service-retry"))
     end
 
     test "the review stays on the review and offers the retry", %{conn: conn} do

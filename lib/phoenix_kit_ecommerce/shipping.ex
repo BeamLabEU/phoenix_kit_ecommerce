@@ -310,7 +310,7 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   defp list_services(ctx) do
     call(ctx, :services, {:lookups, []}, fn ->
-      result = normalize(:list, ctx.provider.services(ctx))
+      result = normalize({:list, Service}, ctx.provider.services(ctx))
       serving_country(result, ctx.country)
     end)
   end
@@ -325,7 +325,7 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp serving_country(other, _country), do: other
 
   defp service_serves?(%Service{countries: [_ | _] = countries}, country) when is_binary(country),
-    do: country in countries
+    do: country in Codec.countries(countries)
 
   defp service_serves?(_service, _country), do: true
 
@@ -353,7 +353,7 @@ defmodule PhoenixKitEcommerce.Shipping do
 
       true ->
         call(ctx, :search_localities, {:lookups, [String.downcase(query)], @shopper_lookup}, fn ->
-          normalize(:ok_list, ctx.provider.search_localities(query, ctx))
+          normalize({:ok_list, Locality}, ctx.provider.search_localities(query, ctx))
         end)
     end
   end
@@ -384,7 +384,7 @@ defmodule PhoenixKitEcommerce.Shipping do
           {:lookups, [locality.id, query && String.downcase(query)], lookup_cache_opts(query)},
           fn ->
             normalize(
-              :ok_list,
+              {:ok_list, PickupPoint},
               ctx.provider.list_pickup_points(locality, ctx.service, query, ctx)
             )
           end
@@ -418,7 +418,7 @@ defmodule PhoenixKitEcommerce.Shipping do
   end
 
   defp price(ctx, request) do
-    call(ctx, :quote, {:quotes, [request_hash(request)]}, fn ->
+    call(ctx, :quote, {:quotes, [request_hash(request)], [clamp_ttl: &quote_ttl/2]}, fn ->
       if currency_supported?(ctx.provider, request.currency),
         do: normalize(:quote, ctx.provider.quote(request, ctx)),
         else: {:error, :unsupported_currency}
@@ -506,8 +506,11 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   defp filter_points(error, _opts), do: error
 
-  defp normalize(:list, list) when is_list(list), do: {:ok, list}
-  defp normalize(:ok_list, {:ok, list} = ok) when is_list(list), do: ok
+  defp normalize({:list, struct}, list) when is_list(list),
+    do: if(all_of?(list, struct), do: {:ok, list}, else: bad_return(list))
+
+  defp normalize({:ok_list, struct}, {:ok, list} = ok) when is_list(list),
+    do: if(all_of?(list, struct), do: ok, else: bad_return(ok))
 
   defp normalize(:quote, {:ok, %Quote{amount: %Decimal{} = amount}} = ok) do
     if finite?(amount) and Decimal.compare(amount, 0) != :lt,
@@ -518,9 +521,23 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp normalize(_kind, {:error, _reason} = error), do: error
   defp normalize(_kind, other), do: bad_return(other)
 
+  # A list of anything else would be cached and then crash its readers (the
+  # service check, the picker) outside the isolated worker.
+  defp all_of?(list, struct), do: Enum.all?(list, &match?(%{__struct__: ^struct}, &1))
+
+  # A quote that knows when the carrier stops honouring it is not served from
+  # the cache past that moment.
+  defp quote_ttl(%Quote{expires_at: %DateTime{} = expires_at}, ttl_ms),
+    do: min(ttl_ms, DateTime.diff(expires_at, DateTime.utc_now(), :millisecond))
+
+  defp quote_ttl(_value, ttl_ms), do: ttl_ms
+
   defp finite?(%Decimal{} = decimal), do: not (Decimal.nan?(decimal) or Decimal.inf?(decimal))
 
-  defp bad_return(value), do: {:error, {:bad_return, inspect(value, limit: 5)}}
+  defp bad_return(value),
+    do:
+      {:error,
+       {:bad_return, value |> inspect(limit: 5, printable_limit: 100) |> String.slice(0, 300)}}
 
   defp call(%Context{provider: provider} = ctx, operation, cache, fun) do
     if provider_module?(provider),
@@ -609,7 +626,7 @@ defmodule PhoenixKitEcommerce.Shipping do
       spawn_monitor(fn ->
         Process.put(:"$callers", callers)
         put_locale(locale)
-        send(parent, {tag, run_safely(fun)})
+        send(parent, {tag, run_safely(fun, ctx.credentials)})
       end)
 
     receive do
@@ -618,7 +635,7 @@ defmodule PhoenixKitEcommerce.Shipping do
         result
 
       {:DOWN, ^monitor, :process, ^pid, reason} ->
-        {:error, {:provider_crashed, Exception.format_exit(reason)}}
+        {:error, {:provider_crashed, crash_text(Exception.format_exit(reason), ctx.credentials)}}
     after
       timeout ->
         # Wait for the worker to be gone (like `Task.shutdown/2`): signals from
@@ -640,13 +657,41 @@ defmodule PhoenixKitEcommerce.Shipping do
     end
   end
 
-  defp run_safely(fun) do
+  defp run_safely(fun, credentials) do
     fun.()
   rescue
-    error -> {:error, {:provider_crashed, Exception.message(error)}}
+    error -> {:error, {:provider_crashed, crash_text(Exception.message(error), credentials)}}
   catch
-    kind, reason -> {:error, {:provider_crashed, Exception.format_banner(kind, reason)}}
+    kind, reason ->
+      {:error,
+       {:provider_crashed, crash_text(Exception.format_banner(kind, reason), credentials)}}
   end
+
+  # The message of a `KeyError` or `MatchError` embeds the offending term,
+  # which for a provider adapter is often its own credentials map. The reason
+  # reaches the log, the cache and every caller, so the credential strings are
+  # cut out and the text is bounded.
+  @crash_text_max 300
+
+  defp crash_text(text, credentials) do
+    credentials
+    |> secret_strings()
+    |> Enum.reduce(text, &String.replace(&2, &1, "[redacted]"))
+    |> String.slice(0, @crash_text_max)
+  end
+
+  defp secret_strings(credentials) when is_map(credentials) do
+    credentials
+    |> Map.values()
+    |> Enum.flat_map(fn
+      value when is_binary(value) and byte_size(value) >= 4 -> [value]
+      value when is_map(value) -> secret_strings(value)
+      _other -> []
+    end)
+    |> Enum.sort_by(&byte_size/1, :desc)
+  end
+
+  defp secret_strings(_credentials), do: []
 
   defp put_locale(locale) when is_binary(locale) do
     Gettext.put_locale(PhoenixKitEcommerce.Gettext, locale)
@@ -656,7 +701,10 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp put_locale(_locale), do: :ok
 
   defp configured_timeout do
-    Application.get_env(:phoenix_kit_ecommerce, :shipping_provider_timeout, @default_timeout)
+    case Application.get_env(:phoenix_kit_ecommerce, :shipping_provider_timeout, @default_timeout) do
+      timeout when is_integer(timeout) and timeout > 0 -> timeout
+      _invalid -> @default_timeout
+    end
   end
 
   defp status({:ok, _value}), do: :ok

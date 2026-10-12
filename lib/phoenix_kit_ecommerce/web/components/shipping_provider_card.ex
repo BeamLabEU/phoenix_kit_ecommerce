@@ -330,6 +330,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
               phx-click="pick_locality"
               phx-value-key={@field.key}
               phx-value-index={index}
+              phx-value-id={locality.id}
               phx-value-provider={@state.provider}
             >
               <span>{locality.name}</span>

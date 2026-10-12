@@ -4466,9 +4466,16 @@ defmodule PhoenixKitEcommerce do
 
   defp quote_amount_to_cart_currency(amount, currency, cart) do
     cond do
-      is_nil(currency) or currency == cart.base_currency -> {:ok, from_base(amount, cart)}
-      currency == cart.currency -> {:ok, amount}
-      true -> :none
+      # `Pricing` settles on cents; a base currency with another scale (JPY)
+      # settles on its own, like every other base figure here.
+      is_nil(currency) or currency == cart.base_currency ->
+        {:ok, amount |> Decimal.round(base_decimal_places()) |> from_base(cart)}
+
+      currency == cart.currency ->
+        {:ok, amount}
+
+      true ->
+        :none
     end
   end
 

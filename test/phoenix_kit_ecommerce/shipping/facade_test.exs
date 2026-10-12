@@ -1268,4 +1268,129 @@ defmodule PhoenixKitEcommerce.Shipping.FacadeTest do
       assert hashes == Enum.uniq(hashes)
     end
   end
+
+  describe "review hardening" do
+    setup do
+      start_supervised!(Cache)
+      :ok
+    end
+
+    defp secret_ctx(stub) do
+      Shipping.context(
+        stub_method(),
+        credentials: %{"api_key" => "SECRET-KEY-123"},
+        stub: Map.put_new(stub, :notify, self())
+      )
+    end
+
+    test "a crash message never carries the credentials" do
+      ctx =
+        secret_ctx(%{
+          quote: fn _request, ctx -> Map.fetch!(ctx.credentials, "token") end
+        })
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:provider_crashed, text}} = Shipping.quote(ctx, request())
+          refute text =~ "SECRET-KEY-123"
+          assert text =~ "[redacted]"
+        end)
+
+      refute log =~ "SECRET-KEY-123"
+    end
+
+    test "a throw does not carry the credentials either" do
+      ctx = secret_ctx(%{quote: fn _request, ctx -> throw(ctx.credentials) end})
+
+      capture_log(fn ->
+        assert {:error, {:provider_crashed, text}} = Shipping.quote(ctx, request())
+        refute text =~ "SECRET-KEY-123"
+      end)
+    end
+
+    test "a crash reason is bounded" do
+      ctx = stub_ctx(%{quote: fn _request, _ctx -> raise String.duplicate("x", 5_000) end})
+
+      capture_log(fn ->
+        assert {:error, {:provider_crashed, text}} = Shipping.quote(ctx, request())
+        assert String.length(text) <= 300
+      end)
+    end
+
+    test "a bad return is bounded" do
+      ctx = stub_ctx(%{quote: fn _request, _ctx -> {:ok, String.duplicate("x", 5_000)} end})
+
+      capture_log(fn ->
+        assert {:error, {:bad_return, text}} = Shipping.quote(ctx, request())
+        assert String.length(text) <= 300
+      end)
+    end
+
+    test "services that are not Service structs are a bad return" do
+      ctx = stub_ctx(%{services: [%{key: "branch"}]})
+
+      capture_log(fn ->
+        assert {:error, {:bad_return, _}} = Shipping.services(ctx)
+      end)
+    end
+
+    test "localities and pickup points that are not structs are a bad return" do
+      capture_log(fn ->
+        assert {:error, {:bad_return, _}} =
+                 Shipping.search_localities(stub_ctx(%{localities: [%{id: "1"}]}), "spring")
+
+        assert {:error, {:bad_return, _}} =
+                 Shipping.list_pickup_points(
+                   stub_ctx(%{points: [%{id: "1"}]}),
+                   locality(),
+                   nil
+                 )
+      end)
+    end
+
+    test "a service that lists its countries in lower case still serves them" do
+      services = [%Service{key: "branch", label: "B", countries: ["ua"]}]
+
+      ctx =
+        Shipping.context(stub_method(),
+          stub: %{services: services, notify: self()},
+          country: "UA",
+          credentials: nil
+        )
+
+      assert {:ok, [%Service{key: "branch"}]} = Shipping.services(ctx)
+    end
+
+    test "a quote is not served from the cache past its own expiry" do
+      soon = DateTime.add(DateTime.utc_now(), 1, :second)
+      ctx = stub_ctx(%{quote: %Quote{amount: Decimal.new(5), currency: "UAH", expires_at: soon}})
+
+      assert {:ok, _} = Shipping.quote(ctx, request())
+      assert {:ok, _} = Shipping.quote(ctx, request())
+      assert_received {:stub_called, :quote, _}
+      refute_received {:stub_called, :quote, _}
+
+      Process.sleep(1_100)
+
+      assert {:ok, _} = Shipping.quote(ctx, request())
+      assert_received {:stub_called, :quote, _}
+    end
+
+    test "an already expired quote is not cached at all" do
+      past = DateTime.add(DateTime.utc_now(), -60, :second)
+      ctx = stub_ctx(%{quote: %Quote{amount: Decimal.new(5), currency: "UAH", expires_at: past}})
+
+      Shipping.quote(ctx, request())
+      Shipping.quote(ctx, request())
+
+      assert_received {:stub_called, :quote, _}
+      assert_received {:stub_called, :quote, _}
+    end
+
+    test "a malformed provider timeout falls back to the default" do
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_provider_timeout, "15000")
+
+      assert {:ok, %Quote{}} = Shipping.quote(stub_ctx(), request())
+    end
+  end
 end

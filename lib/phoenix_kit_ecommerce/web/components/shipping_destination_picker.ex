@@ -587,7 +587,10 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
         {:noreply, socket}
 
       point ->
-        save_complete(socket, %Destination{locality: socket.assigns.locality, pickup_point: point})
+        throttled(
+          socket,
+          &save_complete(&1, %Destination{locality: &1.assigns.locality, pickup_point: point})
+        )
     end
   end
 
@@ -596,6 +599,68 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   end
 
   def handle_event("apply_manual", %{"manual" => params}, socket) when is_map(params) do
+    if serves?(socket, :pickup_point),
+      do: throttled(socket, &apply_manual(&1, params)),
+      else: {:noreply, socket}
+  end
+
+  def handle_event("address_change", %{"address" => params}, socket) when is_map(params) do
+    {:noreply, assign(socket, form: whitelist(params, @address_fields))}
+  end
+
+  def handle_event("apply_address", %{"address" => params}, socket) when is_map(params) do
+    if serves?(socket, :address),
+      do: throttled(socket, &apply_address(&1, params)),
+      else: {:noreply, socket}
+  end
+
+  def handle_event("change", _params, socket) do
+    {:noreply, socket |> assign(editing: true) |> refresh()}
+  end
+
+  def handle_event("cancel_change", _params, socket) do
+    {:noreply, socket |> stop_editing() |> refresh()}
+  end
+
+  # The carrier is asked again by hand only when the answer is worth asking
+  # for again, and never while it is being asked.
+  def handle_event("requote", _params, socket) do
+    assigns = socket.assigns
+
+    if not quote_busy?(assigns) and assigns.snapshot.status in [:missing, :stale, :fallback] do
+      throttled(socket, &{:noreply, start_quote(&1)})
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # The list of services could not be had: ask again (the parent does).
+  def handle_event("recheck", _params, socket), do: {:noreply, recheck(socket)}
+
+  # Whatever else a client sends is not for the picker.
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  # The events that store a destination need a service that takes that kind
+  # of destination: a transient `service_error` leaves none, and a crafted
+  # event must not store what the service never asked for.
+  defp serves?(socket, destination) do
+    match?(%{destination: ^destination}, socket.assigns[:service])
+  end
+
+  # Each of these ends in a carrier call (a quote), so a client that repeats
+  # them faster than the lookups are allowed to run is simply not answered.
+  defp throttled(socket, fun) do
+    now = System.monotonic_time(:millisecond)
+    last = socket.assigns[:acted_at]
+
+    if is_nil(last) or now - last >= lookup_interval() do
+      fun.(assign(socket, acted_at: now))
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp apply_manual(socket, params) do
     locality = text(params, "locality")
     code = text(params, "point", @code_length + 1)
 
@@ -614,11 +679,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
     end
   end
 
-  def handle_event("address_change", %{"address" => params}, socket) when is_map(params) do
-    {:noreply, assign(socket, form: whitelist(params, @address_fields))}
-  end
-
-  def handle_event("apply_address", %{"address" => params}, socket) when is_map(params) do
+  defp apply_address(socket, params) do
     manual? = socket.assigns.service.lookup == :manual
 
     errors =
@@ -652,32 +713,6 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
       {:noreply, assign(socket, form: whitelist(params, @address_fields), form_errors: errors)}
     end
   end
-
-  def handle_event("change", _params, socket) do
-    {:noreply, socket |> assign(editing: true) |> refresh()}
-  end
-
-  def handle_event("cancel_change", _params, socket) do
-    {:noreply, socket |> stop_editing() |> refresh()}
-  end
-
-  # The carrier is asked again by hand only when the answer is worth asking
-  # for again, and never while it is being asked.
-  def handle_event("requote", _params, socket) do
-    assigns = socket.assigns
-
-    if not quote_busy?(assigns) and assigns.snapshot.status in [:missing, :stale, :fallback] do
-      {:noreply, start_quote(socket)}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  # The list of services could not be had: ask again (the parent does).
-  def handle_event("recheck", _params, socket), do: {:noreply, recheck(socket)}
-
-  # Whatever else a client sends is not for the picker.
-  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp pick_locality(socket, locality) do
     case Shop.set_cart_shipping_destination(socket.assigns.cart, %Destination{locality: locality}) do
@@ -955,7 +990,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
         </button>
       <% else %>
         <p id={"#{@pid}-quote-unavailable"} class="text-error">
-          {ShippingDisplay.unavailable_text(Atom.to_string(@reason))}
+          {ShippingDisplay.unavailable_text(CartQuote.error_reason(@reason))}
         </p>
       <% end %>
     </div>
