@@ -74,7 +74,10 @@ defmodule PhoenixKitEcommerce.Shipping.Cache do
 
   Other options: `group: :query` counts the entry among the shopper-text
   lookups (bounded by `:shipping_cache_max_lookup_entries`), and `list?: true`
-  skips a list longer than `:shipping_cache_max_list_size`.
+  skips a list longer than `:shipping_cache_max_list_size`. `clamp_ttl:` is a
+  function of the value and the TTL that answers the TTL to use (an entry
+  whose clamped TTL is not positive is not stored), so a value that knows its
+  own expiry is not served beyond it.
   """
   @spec fetch(term(), term(), (-> result), keyword()) :: result when result: term()
   def fetch(key, ttl_ms, fun, opts \\ []) when is_function(fun, 0) do
@@ -147,7 +150,13 @@ defmodule PhoenixKitEcommerce.Shipping.Cache do
   end
 
   defp store(key, ttl_ms, {:ok, value} = result, opts) when is_integer(ttl_ms) and ttl_ms > 0 do
-    if too_long?(value, opts), do: false, else: insert(key, ttl_ms, result, opts)
+    ttl_ms = clamp(opts, value, ttl_ms)
+
+    cond do
+      too_long?(value, opts) -> false
+      ttl_ms > 0 -> insert(key, ttl_ms, result, opts)
+      true -> false
+    end
   end
 
   defp store(key, _ttl_ms, {:error, reason} = result, opts) do
@@ -160,6 +169,13 @@ defmodule PhoenixKitEcommerce.Shipping.Cache do
   end
 
   defp store(_key, _ttl_ms, _result, _opts), do: false
+
+  defp clamp(opts, value, ttl_ms) do
+    case Keyword.get(opts, :clamp_ttl) do
+      fun when is_function(fun, 2) -> fun.(value, ttl_ms)
+      _none -> ttl_ms
+    end
+  end
 
   defp too_long?(value, opts) do
     Keyword.get(opts, :list?, false) and is_list(value) and

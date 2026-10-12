@@ -455,6 +455,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodFormProviderTest do
             %{"index" => "99"},
             %{"index" => "abc"},
             %{"index" => "0.5"},
+            # The id wins over the position: a list replaced since the click
+            # must not select whatever now sits at index 0.
+            %{"id" => "no-such-id"},
             %{"provider" => "table"},
             %{"key" => "nowhere"}
           ] do

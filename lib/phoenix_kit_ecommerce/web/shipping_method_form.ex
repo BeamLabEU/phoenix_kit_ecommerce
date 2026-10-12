@@ -92,10 +92,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
       |> ShippingMethod.changeset(params, check_service: false)
       |> Map.put(:action, action)
 
-    {:noreply,
-     socket
-     |> assign(:form_params, params)
-     |> assign_form_errors(changeset)}
+    {:noreply, assign_form_errors(socket, changeset)}
   end
 
   def handle_event("search_locality", params, socket) do
@@ -501,9 +498,8 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     with true <- Map.get(params, "provider") == socket.assigns.sp.provider,
          true <- locality_key?(socket, key),
          [_ | _] = results <- Map.get(socket.assigns.locality_results, key),
-         {position, ""} when position >= 0 <- Integer.parse(to_string(index)),
          %{id: id, name: name} when is_binary(id) and is_binary(name) <-
-           Enum.at(results, position) do
+           picked_locality(results, params, index) do
       {:noreply, put_locality(socket, key, %{"id" => id, "name" => name})}
     else
       _ -> {:noreply, socket}
@@ -518,12 +514,24 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
   defp gated_event(_event, _params, socket), do: {:noreply, socket}
 
+  # By the id the button carries: the list may have been replaced by a newer
+  # search between the click and this event, which moves every position. The
+  # position is the fallback for a client that sends no id.
+  defp picked_locality(results, %{"id" => id}, _index) when is_binary(id) and id != "",
+    do: Enum.find(results, &(&1.id == id))
+
+  defp picked_locality(results, _params, index) do
+    case Integer.parse(to_string(index)) do
+      {position, ""} when position >= 0 -> Enum.at(results, position)
+      _ -> nil
+    end
+  end
+
   # -- shipping cost calculation card --------------------------------------
 
   defp assign_provider_state(socket, method) do
     socket
     |> assign(:sp, ProviderState.from_method(method))
-    |> assign(:form_params, %{})
     |> assign(:provider_options, provider_options())
     |> assign(:loaded_provider, nil)
     |> assign(:provider_known?, true)
@@ -706,7 +714,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
   defp search_localities(socket, queries) do
     Enum.reduce(queries, socket, fn {key, query}, acc ->
-      query = if is_binary(query), do: query, else: ""
+      query = if is_binary(query), do: String.slice(query, 0, 64), else: ""
 
       if Map.get(acc.assigns.sp.queries, key, "") != query and locality_key?(acc, key),
         do: start_locality_search(acc, key, query),
