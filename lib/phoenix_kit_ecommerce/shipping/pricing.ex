@@ -22,15 +22,23 @@ defmodule PhoenixKitEcommerce.Shipping.Pricing do
     3. a `:fallback` quote (the carrier could not be reached) costs the
        `method.price`
     4. otherwise `amount * (1 + markup_percent / 100) + markup_fixed`, rounded
-       up to a multiple of `round_to` (no rounding when it is unset)
+       up to a multiple of `round_to` (when it is unset, to the `places` of the
+       currency, 2 by default)
   """
-  @spec final_amount(MethodConfig.t(), Quote.t(), map(), Decimal.t()) :: Decimal.t()
-  def final_amount(%MethodConfig{} = config, %Quote{} = rate, method, base_subtotal) do
+  @spec final_amount(MethodConfig.t(), Quote.t(), map(), Decimal.t(), non_neg_integer()) ::
+          Decimal.t()
+  def final_amount(
+        %MethodConfig{} = config,
+        %Quote{} = rate,
+        method,
+        base_subtotal,
+        places \\ 2
+      ) do
     cond do
       ShippingMethod.pay_on_delivery?(method) -> @zero
       free?(method, base_subtotal) -> @zero
       rate.source == :fallback -> method.price
-      true -> marked_up(config, rate.amount)
+      true -> marked_up(config, rate.amount, places)
     end
   end
 
@@ -53,22 +61,24 @@ defmodule PhoenixKitEcommerce.Shipping.Pricing do
 
   defp free?(_method, _subtotal), do: false
 
-  defp marked_up(%MethodConfig{pricing: pricing}, %Decimal{} = amount) do
+  defp marked_up(%MethodConfig{pricing: pricing}, %Decimal{} = amount, places) do
     factor = pricing.markup_percent |> Decimal.div(100) |> Decimal.add(1)
 
     amount
     |> Decimal.mult(factor)
     |> Decimal.add(pricing.markup_fixed)
     |> Decimal.max(@zero)
-    |> round_up(pricing.round_to)
+    |> round_up(pricing.round_to, places)
   end
 
   # No step: only a markup percentage can add digits (4.35 × 1.075 =
-  # 4.67625); settle on cents like the amount columns do, so the in-memory
-  # cart agrees with the stored one.
-  defp round_up(amount, nil), do: Decimal.round(amount, 2, :half_up)
+  # 4.67625); settle ONCE on the places of the currency the amount is in
+  # (cents unless told otherwise), like the amount columns do, so the
+  # in-memory cart agrees with the stored one. Rounding twice (cents, then
+  # yen) would carry 100.495 to 100.50 and on to 101.
+  defp round_up(amount, nil, places), do: Decimal.round(amount, places, :half_up)
 
-  defp round_up(amount, step) do
+  defp round_up(amount, step, _places) do
     amount
     |> Decimal.div(step)
     |> Decimal.round(0, :ceiling)
