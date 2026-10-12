@@ -2555,6 +2555,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         <details
           :if={status.state == :finished and status.error_count > 0}
           id={"media-sync-errors-#{kind}"}
+          phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
           class="mt-1 text-sm"
         >
           <summary class="cursor-pointer text-error">
@@ -2577,6 +2578,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
         <details
           :if={status.state == :finished and status.warning_count > 0}
           id={"media-sync-warnings-#{kind}"}
+          phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
           class="mt-1 text-sm"
         >
           <summary class="cursor-pointer text-warning">
