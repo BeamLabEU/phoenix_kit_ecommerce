@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- **Shipping providers, review of #83.** A provider refusal that carries
+  details (`{:service_unavailable, "text"}`) no longer crashes the cart and
+  checkout pages. Provider crash reasons no longer carry the provider's
+  credentials into the log, the cache or the caller, and are bounded. A
+  cached quote is not served past the carrier's own `expires_at`. Provider
+  lists of anything but `Service`/`Locality`/`PickupPoint` structs are a bad
+  return instead of being cached. Setting a destination, picking a point and
+  re-quoting are throttled per picker, and the manual/address events are
+  ignored without a matching service instead of crashing the page. Calculated
+  shipping settles on the base currency's decimal places (JPY no longer
+  shows fractional yen). The admin locality pick is by id, not list position.
+  A malformed `:shipping_provider_timeout` falls back to the default.
+
 ## 0.5.20 - 2026-10-11
 
 ### Added
