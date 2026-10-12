@@ -2022,12 +2022,12 @@ defmodule PhoenixKitEcommerce.Web.Translations do
               <.time_ago datetime={entry.inserted_at} />
             </div>
             <div :if={entry.error_message} class="text-error text-sm mt-1">{entry.error_message}</div>
-            <details :if={entry.response} class="mt-2">
+            <details :if={entry.response} class="mt-2" phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}>
               <summary class="cursor-pointer text-sm text-base-content/60">{gettext("Raw model response")}</summary>
               <pre class="whitespace-pre-wrap text-xs bg-base-200 rounded p-2 mt-1 max-h-64 overflow-y-auto" phx-no-curly-interpolation><%= entry.response %></pre>
             </details>
             <% sent_prompt = prompt_text(entry.messages) %>
-            <details :if={sent_prompt} id={"diagnostic-prompt-#{entry.uuid}"} class="mt-2">
+            <details :if={sent_prompt} id={"diagnostic-prompt-#{entry.uuid}"} class="mt-2" phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}>
               <summary class="cursor-pointer text-sm text-base-content/60">{gettext("Prompt as sent")}</summary>
               <pre class="whitespace-pre-wrap text-xs bg-base-200 rounded p-2 mt-1 max-h-64 overflow-y-auto" phx-no-curly-interpolation><%= sent_prompt %></pre>
             </details>
