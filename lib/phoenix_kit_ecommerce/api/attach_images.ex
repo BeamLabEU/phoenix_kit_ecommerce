@@ -400,7 +400,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     |> String.split(";", parts: 2)
     |> hd()
     |> String.trim()
-    |> String.slice(0, @max_reason_chars)
     |> String.replace(~r/[^\x20-\x7E]/, "?")
+    |> String.slice(0, @max_reason_chars)
   end
 end

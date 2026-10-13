@@ -209,7 +209,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
     import ExUnit.CaptureLog, only: [capture_log: 1]
 
     test "reaches the log cut short and printable, and the answer keeps the type" do
-      type = "text/" <> String.duplicate("a", 3000) <> "\e[31m\t\x7f"
+      type = "text/\e[31m\t\x7f" <> String.duplicate("a", 3000)
 
       Req.Test.stub(@stub, fn conn ->
         conn |> Plug.Conn.put_resp_header("content-type", type) |> Plug.Conn.send_resp(200, "x")
@@ -217,11 +217,26 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
 
       log = capture_log(fn -> assert {:error, {:invalid_content_type, _}} = download() end)
 
-      assert log =~ "Invalid content type for image download: text/aaaa"
+      assert log =~ "Invalid content type for image download: text/?[31m??aaaa"
       refute log =~ String.duplicate("a", 200)
       refute log =~ "\e["
       refute log =~ "\t"
       refute log =~ <<0x7F>>
+    end
+
+    test "combining marks do not get past the cap" do
+      type = "text/a" <> String.duplicate("\u0301", 4000)
+
+      Req.Test.stub(@stub, fn conn ->
+        conn |> Plug.Conn.put_resp_header("content-type", type) |> Plug.Conn.send_resp(200, "x")
+      end)
+
+      log = capture_log(fn -> assert {:error, {:invalid_content_type, ^type}} = download() end)
+
+      assert [_, logged] = Regex.run(~r/Invalid content type for image download: (\S+)/, log)
+      assert byte_size(logged) <= 80
+      assert String.starts_with?(logged, "text/a?")
+      refute log =~ "\u0301"
     end
 
     defp download, do: ImageDownloader.download_image(@url, opts())

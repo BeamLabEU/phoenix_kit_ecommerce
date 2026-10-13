@@ -651,6 +651,24 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert String.length(reason) < 150
   end
 
+  test "combining marks in the content type do not get past the cap in the answer", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    Req.Test.stub(@stub, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("content-type", "text/a" <> String.duplicate("\u0301", 4000))
+      |> Plug.Conn.send_resp(200, "x")
+    end)
+
+    item = F.item!(catalogue)
+    assert {:ok, %{"results" => [result]}} = attach([row(item, [image("/a.png")])], ctx)
+
+    assert [%{"reason" => reason}] = result["error"]["context"]["images"]
+    assert reason =~ "not an accepted image type: text/a?"
+    assert byte_size(reason) < 150
+  end
+
   describe "a picture that cannot be fetched never takes the call down" do
     @cdn "cdn.sec-test.example"
 

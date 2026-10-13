@@ -1082,8 +1082,8 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   defp loggable(value) do
     value
     |> to_string()
-    |> String.slice(0, @max_logged_chars)
     |> String.replace(~r/[^\x20-\x7E]/, "?")
+    |> String.slice(0, @max_logged_chars)
   end
 
   # The streaming collector already halted an oversized body; this turns
