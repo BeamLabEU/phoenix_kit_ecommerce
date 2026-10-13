@@ -57,7 +57,7 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     {product, root, leaf}
   end
 
-  test "list_item/2 carries the fields of spec 7.2", %{context: context} do
+  test "list_item/2 carries the list item fields", %{context: context} do
     {product, root, leaf} = vase()
     item = Cards.list_item(record(product), context)
 
@@ -163,6 +163,18 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
 
     assert card["description"] =~ "**world**"
     refute card["description"] =~ "<b>"
+  end
+
+  test "card/3 cuts the Markdown description to the same limit as the text one", %{
+    context: context
+  } do
+    {product, _root, _leaf} =
+      vase(%{body_html: %{"en" => "<p>" <> String.duplicate("word ", 5_000) <> "</p>"}})
+
+    description = Cards.card(record(product), context, format: "markdown")["description"]
+
+    assert String.length(description) <= 4_000
+    assert String.length(description) > 3_900
   end
 
   test "card/3 text format is plain text also when the stored body is Markdown (Catalogue source)",

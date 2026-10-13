@@ -2,11 +2,11 @@ defmodule PhoenixKitEcommerce.API.Cards do
   @moduledoc """
   The three shapes a product takes in a public answer:
 
-    * `list_item/2` - a product in a list (spec 7.2),
+    * `list_item/2` - a product in a list,
     * `card/3` - the full card of `shop.get_products` (a list item plus
       description, tags, options and images),
     * `stub/2` - a discontinued product: `id`, `title` and the status, nothing
-      else, no price (spec 7.1 rule 2).
+      else, no price.
 
   They are built from live data (`PhoenixKitEcommerce.API.Record`), never from
   the search index, and contain plain JSON values only: strings, integers,
@@ -31,7 +31,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
   @list_fields ~w(id title slug url price price_from compare_at discount_pct price_on_request
                   made_to_order vendor product_type category_path status image)
 
-  @doc "The keys a list item can carry, in the order of spec 7.2 (`fields` filters by these)."
+  @doc "The keys a list item can carry, in answer order (`fields` filters by these)."
   @spec list_fields() :: [String.t()]
   def list_fields, do: @list_fields
 
@@ -68,8 +68,9 @@ defmodule PhoenixKitEcommerce.API.Cards do
 
   @doc """
   The full card. Options: `format: "text"` (default; plain text: HTML tags and
-  Markdown syntax removed, at most #{@description_limit} characters) or
-  `"markdown"` (stored Markdown, or stored HTML converted).
+  Markdown syntax removed) or `"markdown"` (stored Markdown, or stored HTML
+  converted). Either way the description is cut to #{@description_limit}
+  characters.
   """
   @spec card(Record.t(), Context.t(), keyword()) :: map()
   def card(%Record{product: product} = record, %Context{} = context, opts \\ []) do
@@ -127,7 +128,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
   end
 
   # Only categories `shop.list_categories` shows (status `active`) are named:
-  # a hidden, deleted or unlisted ancestor stays out of the card (decision D2).
+  # a hidden, deleted or unlisted ancestor stays out of the card.
   defp category_path(%Record{chain: chain}, language) do
     chain
     |> Enum.filter(&(&1.status == "active"))
@@ -142,10 +143,15 @@ defmodule PhoenixKitEcommerce.API.Cards do
     raw = raw_description(product, language)
 
     case format do
-      "markdown" -> HtmlToMarkdown.convert(raw)
+      "markdown" -> raw |> HtmlToMarkdown.convert() |> cut(@description_limit)
       _text -> PlainText.convert(raw, @description_limit)
     end
   end
+
+  defp cut(text, limit) when is_binary(text),
+    do: text |> String.slice(0, limit) |> String.trim_trailing()
+
+  defp cut(other, _limit), do: other
 
   defp raw_description(product, language) do
     body = Translations.get(product, :body_html, language)
