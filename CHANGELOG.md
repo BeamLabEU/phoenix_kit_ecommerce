@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- **Sweep tick crash on a lost prompt create.** The tick runs inside a
+  transaction; a failed insert in `PromptRollout` (a lost create race, a name
+  another prompt already holds) aborted it and the re-read raised
+  `in_failed_sql_transaction`. The insert now runs in a savepoint and the
+  rollout answers `{:error, :prompt_create_failed}` as intended.
+
 ## 0.5.23 - 2026-10-13
 
 ### Fixed

@@ -7,5 +7,13 @@
 ## Gate
 
 `mix test`: 3037 tests, 1 failure — `TranslationsTest` "a tick whose enqueues
-all failed…", unrelated (see `CLAUDE_REVIEW.md`, "Not from this PR"; it fails
-on a clean `main` against `phoenix_kit_ai 0.25.5`). Open.
+all failed…", unrelated to #89: `phoenix_kit_ai 0.25.5` now refuses a bad
+endpoint override before enqueuing, so the test's door no longer led to an
+all-failed tick.
+
+Resolved afterwards: the test now provokes the tick through a prompt row that
+holds the product prompt's name under another slug (`create_prompt/1` loses to
+the unique name). That exposed a production bug in `PromptRollout.create/3`:
+the sweep tick runs in a transaction, and the failed insert aborted it so the
+re-read raised `in_failed_sql_transaction`. The insert now runs in a
+savepoint; `prompt_rollout_test.exs` pins it (fails without the fix).
