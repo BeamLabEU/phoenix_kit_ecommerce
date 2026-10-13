@@ -53,7 +53,7 @@ PhoenixKit auto-discovers the module at startup — no additional configuration 
 3. Add Oban queues to `config/config.exs`:
    ```elixir
    config :my_app, Oban,
-     queues: [shop_imports: 5]
+     queues: [shop_imports: 5, shop_search: 2]
    ```
 4. Run `mix phoenix_kit.update` to generate migrations
 5. Enable the Shop module in Admin -> Modules
@@ -209,8 +209,9 @@ curl -s -X POST https://shop.example.com/api/shop/v1/shop.search_products \
 ```
 
 What a caller sees is decided by one rule (`PhoenixKitEcommerce.API.Visibility`): draft, inactive,
-deleted products and products in hidden or deleted categories are never shown; discontinued or
-archived ones appear only as a stub in `shop.get_products`. Prices come in the language and
+deleted products and products in hidden or deleted categories are never shown (every product and
+card is read live); discontinued or archived ones appear only as a stub in `shop.get_products`.
+The counts and facets come from the search index and can lag a change by the reindex delay. Prices come in the language and
 currency of the domain the request came to (a host maps domains with
 `config :phoenix_kit, :api_request_context, {Mod, :fun}`); `language` and `currency` inputs override.
 
@@ -633,6 +634,11 @@ tests). The test repo runs core's versioned migrations via
 - Ensure Oban is configured with the `shop_imports` queue (every shop worker — CSV import, image migration, Shopify media sync — runs on it)
 - Check Oban dashboard for failed jobs
 - Review import logs at `/admin/shop/imports` for error details
+
+### Search finds nothing
+- Ensure Oban is configured with the `shop_search` queue (`queues: [shop_imports: 5, shop_search: 2]`). Without it the reindex and rebuild jobs stay `available` and the search index stays empty
+- An empty index is rebuilt by a job enqueued 30 seconds after boot, and every night; check the Oban dashboard for failed `SearchRebuildWorker` jobs
+- Typos are found only when the `pg_trgm` extension is installed and its operators are on the connection's search path; search works without it and logs a warning at boot
 
 ### Guest cart not persisting
 - Verify `ShopSession` plug is included in your router pipeline

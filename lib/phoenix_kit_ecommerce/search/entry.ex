@@ -20,7 +20,7 @@ defmodule PhoenixKitEcommerce.Search.Entry do
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
 
-  schema "phoenix_kit_shop_search_index" do
+  schema @table do
     field :item_uuid, Ecto.UUID
     field :language, :string
     field :title, :string

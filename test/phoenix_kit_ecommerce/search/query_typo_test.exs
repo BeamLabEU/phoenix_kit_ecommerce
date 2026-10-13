@@ -35,8 +35,8 @@ defmodule PhoenixKitEcommerce.Search.QueryTypoTest do
 
   @tag :requires_pg_trgm
   test "the threshold is 0.45, not the extension default of 0.6", t do
-    # word_similarity('cerumic', 'ceramic vase') = 0.4545 (checked with psql
-    # on PostgreSQL 18): below the default 0.6, above ours.
+    # word_similarity('cerumic', 'ceramic vase') = 0.4545: below the default
+    # 0.6, above ours.
     result = Query.run(%{q: "cerumic"}, "en")
 
     assert result.mode == :typo

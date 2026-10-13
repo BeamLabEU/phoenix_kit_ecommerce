@@ -62,7 +62,7 @@ defmodule PhoenixKitEcommerce.Search.Jobs do
 
   @doc """
   Rebuild the whole index. With a catalogue uuid the worker rebuilds only if
-  that is the shop's catalogue (events of the owner's other catalogues are
+  that is the shop's catalogue (events of the install's other catalogues are
   ignored).
   """
   @spec enqueue_rebuild(String.t() | nil) :: {:ok, Oban.Job.t()} | {:error, term()}

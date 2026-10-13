@@ -9,6 +9,19 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   built from live data (`PhoenixKitEcommerce.API.Loader`, `Cards.list_item/2`)
   and a product that is no longer listed is dropped, so the index can be a few
   seconds behind without ever showing a hidden product.
+
+  What comes from the index alone is the `count`, the facets, the price range
+  and the matching of the filters and the text: a change reaches them with the
+  reindex job (five seconds and the queue, or the nightly rebuild if the job
+  fails), so for that time a count can include a product the items no longer
+  show. The product itself, its title and its id are never read from the index.
+
+  Cost: a page builds each card from live data, a few queries per card (price
+  range, options, image), and every search, each cursor page included, reads
+  the matched rows (up to 5000) for the facets. That is bounded by the page
+  size (at most 100), the 50 ids of `shop.get_products`, the 200 cards of a
+  batch and the rate limit, and accepted for a catalogue of some thousands of
+  products.
   """
 
   require Logger

@@ -1,8 +1,7 @@
 defmodule PhoenixKitEcommerce.API.Public.SearchCatalogueTest do
   @moduledoc """
-  `shop.search_products` on the Catalogue product source, the one the stand
-  runs: the index is built from catalogue items, and the answer is built from
-  live items.
+  `shop.search_products` on the Catalogue product source: the index is built
+  from catalogue items, and the answer is built from live items.
 
   Needs a core with the shop API (`PhoenixKit.API.Actor`). `async: false`: the
   shop's catalogue is found by name across the database, and Billing's currency
