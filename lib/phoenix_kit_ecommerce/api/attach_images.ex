@@ -23,7 +23,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   carries the API metadata (tool, key prefix, request id) and the counts.
   """
 
-  @compile {:no_warn_undefined, PhoenixKitCatalogue.Attachments}
+  @compile {:no_warn_undefined, [PhoenixKitCatalogue.Attachments, PhoenixKitCatalogue.Catalogue]}
 
   require Logger
 
@@ -36,6 +36,11 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   @tool "ecommerce.attach_images"
   @max_images 20
   @max_image_bytes 10 * 1024 * 1024
+  @max_reason_chars 80
+
+  # Req options injected into every download, for the tests' plug adapter.
+  # Compiled in only for the test environment: no other build reads it.
+  @test_download_opts_key if Mix.env() == :test, do: :api_image_download_opts, else: nil
 
   @doc "The most pictures one call may attach."
   @spec max_images() :: pos_integer()
@@ -151,10 +156,12 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   # -- attaching --------------------------------------------------------------
 
   defp attach(rows, ctx) do
+    user_uuid = Meta.actor_uuid(ctx)
     index = reuse_index(rows)
+    downloaded = download_missing(rows, index, user_uuid)
 
     Enum.map(rows, fn
-      %{plan: %{changed?: true}} = row -> attach_row(row, index, ctx)
+      %{plan: %{changed?: true}} = row -> attach_row(row, {index, downloaded}, user_uuid, ctx)
       row -> row
     end)
   end
@@ -173,11 +180,27 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     end
   end
 
-  defp attach_row(%{item: item, plan: plan} = row, url_index, ctx) do
-    user_uuid = Meta.actor_uuid(ctx)
-    {resolved, failures} = resolve(plan.images, url_index, user_uuid)
+  # The URLs of every row that are not stored yet, downloaded in one
+  # concurrent batch, so rows do not wait for each other and a URL given for
+  # two products is fetched once. `%{url => {:ok, file_uuid} | {:error, reason}}`.
+  defp download_missing(rows, url_index, user_uuid) do
+    urls =
+      for %{plan: %{changed?: true, images: images}} <- rows,
+          %{"url" => url} <- images,
+          not Map.has_key?(url_index, ImageDownloader.source_key(url)),
+          uniq: true,
+          do: url
 
-    existing = plan.from.media_order
+    urls |> ImageDownloader.download_batch(user_uuid, download_opts()) |> Map.new()
+  end
+
+  defp attach_row(%{item: item, plan: plan} = row, lookups, user_uuid, ctx) do
+    {resolved, failures} = resolve(plan.images, lookups)
+
+    # The pictures the product has are read now, after the downloads, not at
+    # planning time: an editor or another call may have added some since.
+    item = fresh_item(item)
+    existing = existing_order(item)
     new = resolved |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Kernel.--(existing)
     featured = featured_uuid(plan.images, resolved, item, new)
     reused = Enum.count(resolved, &(elem(&1, 2) == :reused))
@@ -193,7 +216,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
 
     cond do
       change? ->
-        store(row, new, featured, user_uuid, extra, ctx)
+        store(%{row | item: item}, {existing, new}, featured, user_uuid, extra, ctx)
 
       failures != [] ->
         Batch.fail(
@@ -206,8 +229,10 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     end
   end
 
-  defp store(%{item: item, plan: plan} = row, new, featured, user_uuid, extra, ctx) do
-    opts = [featured: featured, order: plan.from.media_order ++ new, actor_uuid: user_uuid]
+  defp fresh_item(item), do: PhoenixKitCatalogue.Catalogue.get_item(item.uuid) || item
+
+  defp store(%{item: item, plan: plan} = row, {existing, new}, featured, user_uuid, extra, ctx) do
+    opts = [featured: featured, order: existing ++ new, actor_uuid: user_uuid]
 
     case Attachments.attach_files(item, new, opts) do
       {:ok, updated} ->
@@ -242,19 +267,12 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
 
   # `[{url, file_uuid, :reused | :downloaded}]` in the order given, and the
   # failures as JSON-ready maps. A URL already stored (query stripped) is
-  # reused; the rest go through the downloader in one concurrent batch.
-  defp resolve(images, url_index, user_uuid) do
-    urls = Enum.map(images, & &1["url"])
-
-    downloaded =
-      urls
-      |> Enum.reject(&Map.has_key?(url_index, ImageDownloader.source_key(&1)))
-      |> Enum.uniq()
-      |> ImageDownloader.download_batch(user_uuid, download_opts())
-      |> Map.new()
-
+  # reused; the rest were downloaded for the whole call.
+  defp resolve(images, {url_index, downloaded}) do
     {ok, failed} =
-      Enum.reduce(urls, {[], []}, fn url, {ok, failed} ->
+      images
+      |> Enum.map(& &1["url"])
+      |> Enum.reduce({[], []}, fn url, {ok, failed} ->
         case lookup(url, url_index, downloaded) do
           {:ok, uuid, how} ->
             {[{url, uuid, how} | ok], failed}
@@ -288,7 +306,14 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       max_bytes: @max_image_bytes,
       private_networks: :forbid,
       redact_query: true
-    ] ++ Application.get_env(:phoenix_kit_ecommerce, :api_image_download_opts, [])
+    ] ++ test_download_opts()
+  end
+
+  defp test_download_opts do
+    case @test_download_opts_key do
+      nil -> []
+      key -> Application.get_env(:phoenix_kit_ecommerce, key, [])
+    end
   end
 
   # The picture marked featured, if its file is known; else, when the product
@@ -323,6 +348,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   defp log(item, ctx, extra) do
     PhoenixKitEcommerce.Activity.log("shop.api_images_attached",
       actor_uuid: Meta.actor_uuid(ctx),
+      mode: "auto",
       resource_type: "product",
       resource_uuid: item.uuid,
       metadata:
@@ -345,8 +371,23 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   defp reason_text(:timeout), do: "the download timed out"
   defp reason_text(:not_found), do: "the server answered 404"
   defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp reason_text({:invalid_content_type, type}), do: "not an accepted image type: #{type}"
+
+  defp reason_text({:invalid_content_type, type}) when is_binary(type),
+    do: "not an accepted image type: #{media_type(type)}"
+
+  defp reason_text({:invalid_content_type, _type}), do: "not an accepted image type"
   defp reason_text({:file_too_large, message}) when is_binary(message), do: message
   defp reason_text(reason) when is_binary(reason), do: reason
   defp reason_text(_reason), do: "the picture could not be fetched"
+
+  # The media type before any parameter, cut short: the header is the remote
+  # server's and can be as long and as odd as it likes.
+  defp media_type(header) do
+    header
+    |> String.split(";", parts: 2)
+    |> hd()
+    |> String.trim()
+    |> String.slice(0, @max_reason_chars)
+    |> String.replace(~r/[^\x20-\x7E]/, "?")
+  end
 end

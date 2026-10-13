@@ -688,6 +688,12 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   and `active_uuids` then holds the uuids of those files only. The admin
   API's `attach_images` uses this form, so one call does not read the whole
   media library.
+
+  The lookup compares the stored string as it is, so it finds a file stored
+  under the canonical form `source_key/1` produces. A file stored under a
+  non-canonical spelling (an upper-case scheme, an explicit default port) is
+  found by `:all` only; with a list of keys it is missed, and the picture is
+  downloaded again and then reused by its checksum.
   """
   @spec build_reuse_index(:all | [String.t()]) :: %{
           url_index: %{optional(String.t()) => String.t()},

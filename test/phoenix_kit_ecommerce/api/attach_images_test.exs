@@ -397,6 +397,92 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert F.reload!(item).data["media_order"] in [nil, []]
   end
 
+  test "pictures of several products are fetched together, and a URL given twice once", %{
+    catalogue: catalogue,
+    ctx: ctx,
+    first: first,
+    second: second
+  } do
+    one = F.item!(catalogue)
+    two = F.item!(catalogue)
+    serve(%{"/a.png" => {"image/png", first}, "/b.png" => {"image/png", second}})
+
+    assert {:ok, %{"results" => [r1, r2], "summary" => %{"updated" => 2}}} =
+             attach(
+               [row(one, [image("/a.png")]), row(two, [image("/a.png"), image("/b.png")])],
+               ctx
+             )
+
+    assert r1["attached"] == 1
+    assert r2["attached"] == 2
+
+    assert_received {:requested, "/a.png"}
+    assert_received {:requested, "/b.png"}
+    refute_received {:requested, _}
+
+    assert [shared] = F.reload!(one).data["media_order"]
+    assert [^shared, _other] = F.reload!(two).data["media_order"]
+  end
+
+  test "a picture added to the product while the download runs keeps its place in the order", %{
+    catalogue: catalogue,
+    ctx: ctx,
+    first: first
+  } do
+    item = F.item!(catalogue)
+    test_pid = self()
+
+    Req.Test.stub(@stub, fn conn ->
+      # an editor adds a picture to the product while this request is served
+      {:ok, _} =
+        PhoenixKitCatalogue.Catalogue.update_item(
+          F.reload!(item),
+          %{data: %{"media_order" => ["added-meanwhile"]}},
+          data_owned_keys: ["media_order"]
+        )
+
+      send(test_pid, {:requested, conn.request_path})
+      conn |> Plug.Conn.put_resp_content_type("image/png") |> Plug.Conn.send_resp(200, first)
+    end)
+
+    assert {:ok, %{"results" => [%{"attached" => 1}]}} =
+             attach([row(item, [image("/a.png")])], ctx)
+
+    assert ["added-meanwhile", _new] = F.reload!(item).data["media_order"]
+  end
+
+  test "the log entry of the call is marked as not made by hand", %{
+    catalogue: catalogue,
+    ctx: ctx,
+    first: first
+  } do
+    item = F.item!(catalogue)
+    serve(%{"/a.png" => {"image/png", first}})
+
+    assert {:ok, _} = attach([row(item, [image("/a.png")])], ctx)
+
+    entry = assert_activity_logged("shop.api_images_attached", resource_uuid: item.uuid)
+    assert entry.mode == "auto"
+  end
+
+  test "a long content type of the remote server is cut in the answer", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    Req.Test.stub(@stub, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("content-type", "text/" <> String.duplicate("a", 500))
+      |> Plug.Conn.send_resp(200, "x")
+    end)
+
+    item = F.item!(catalogue)
+    assert {:ok, %{"results" => [result]}} = attach([row(item, [image("/a.png")])], ctx)
+
+    assert [%{"reason" => reason}] = result["error"]["context"]["images"]
+    assert reason =~ "not an accepted image type"
+    assert String.length(reason) < 150
+  end
+
   describe "the storefront cache" do
     setup do
       start_supervised!(PhoenixKit.Cache.Registry)
