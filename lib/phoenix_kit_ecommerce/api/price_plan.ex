@@ -42,7 +42,8 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
           dangerous?: boolean(),
           warnings: [String.t()],
           attrs: map(),
-          owned_paths: [[String.t()]]
+          owned_paths: [[String.t()]],
+          leaves: [{String.t(), String.t()}]
         }
 
   @doc "The values of an item that `ecommerce.set_prices` can change."
@@ -51,7 +52,7 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     ecommerce = ecommerce(item)
 
     %{
-      price: item.base_price,
+      price: Money.to_decimal(item.base_price),
       compare_at: Money.to_decimal(ecommerce["compare_at_price"]),
       price_modifiers: modifiers(ecommerce["price_modifiers"])
     }
@@ -100,18 +101,21 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
       price_modifiers: pick(values.price_modifiers, cur.price_modifiers)
     }
 
-    case lowest_total_error(to) do
+    leaves = changed_leaves(cur.price_modifiers, to.price_modifiers)
+
+    case cheapest_error(to, values, leaves) do
       nil ->
-        changes = changes(cur, to)
+        changes = changes(cur, to, leaves)
 
         plan =
-          Map.merge(write(to, changes), %{
+          Map.merge(write(to, changes, leaves), %{
             from: cur,
             to: to,
             changes: changes,
             changed?: changes != %{},
             dangerous?: dangerous?(cur, to, Keyword.fetch!(opts, :pct)),
-            warnings: warnings(item, to, opts)
+            warnings: warnings(item, to, opts),
+            leaves: leaves
           })
 
         validate_write(plan)
@@ -253,6 +257,12 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     end
   end
 
+  # Only a row that gives the price or changes a modifier answers for the
+  # total: what the row does not touch is none of its business.
+  defp cheapest_error(to, values, leaves) do
+    if values.price == :unset and leaves == [], do: nil, else: lowest_total_error(to)
+  end
+
   # With every option at its cheapest modifier the item must still cost
   # something: a negative total is a price the checkout cannot charge.
   defp lowest_total_error(%{price: nil}), do: nil
@@ -281,11 +291,11 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
   # -- diff ------------------------------------------------------------------
 
-  defp changes(cur, to) do
+  defp changes(cur, to, leaves) do
     %{}
     |> put_change("price", cur.price, to.price)
     |> put_change("compare_at", cur.compare_at, to.compare_at)
-    |> Map.merge(modifier_changes(cur.price_modifiers, to.price_modifiers))
+    |> Map.merge(modifier_changes(cur.price_modifiers, to.price_modifiers, leaves))
   end
 
   defp put_change(changes, name, from, to) do
@@ -299,20 +309,20 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   defp same?(_from, nil), do: false
   defp same?(from, to), do: Decimal.eq?(from, to)
 
-  defp modifier_changes(from, to) do
+  # The `{option, value}` leaves whose amount differs, sorted. The plan carries
+  # them as pairs: the dotted key of `changes` is for display, and a name that
+  # contains a dot could not be told apart from the separator.
+  defp changed_leaves(from, to) do
     (leaf_keys(from) ++ leaf_keys(to))
     |> Enum.uniq()
-    |> Enum.reduce(%{}, fn {option, value} = key, acc ->
-      old = leaf(from, key)
-      new = leaf(to, key)
+    |> Enum.reject(&leaf_same?(leaf(from, &1), leaf(to, &1)))
+    |> Enum.sort()
+  end
 
-      if leaf_same?(old, new),
-        do: acc,
-        else:
-          Map.put(acc, "price_modifiers.#{option}.#{value}", %{
-            "from" => show(old),
-            "to" => show(new)
-          })
+  defp modifier_changes(from, to, leaves) do
+    Map.new(leaves, fn {option, value} = key ->
+      {"price_modifiers.#{option}.#{value}",
+       %{"from" => show(leaf(from, key)), "to" => show(leaf(to, key))}}
     end)
   end
 
@@ -404,11 +414,10 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   # removal): owning the whole `price_modifiers` subtree would let a call that
   # read the item before another writer stored a different option drop that
   # option.
-  defp write(_to, changes) when changes == %{}, do: %{attrs: %{}, owned_paths: []}
+  defp write(_to, changes, _leaves) when changes == %{}, do: %{attrs: %{}, owned_paths: []}
 
-  defp write(to, changes) do
+  defp write(to, changes, leaves) do
     compare? = Map.has_key?(changes, "compare_at")
-    leaves = changed_leaves(changes)
 
     ecommerce =
       %{}
@@ -425,14 +434,6 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
         Enum.map(leaves, fn {option, value} -> @modifiers_path ++ [option, value] end)
 
     %{attrs: attrs, owned_paths: owned_paths}
-  end
-
-  # `[{option, value}]` for the modifier leaves `changes` says were written.
-  defp changed_leaves(changes) do
-    for {"price_modifiers." <> rest, _change} <- changes do
-      [option, value] = String.split(rest, ".", parts: 2)
-      {option, value}
-    end
   end
 
   # `option => value => amount` for exactly those leaves; a removed leaf is `nil`.
@@ -481,12 +482,10 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     Map.put(params, "price_modifiers", normalized)
   end
 
-  # `option => value => amount` for the leaves that `changes` says were
-  # written; a removed leaf is not validated (there is nothing to check).
+  # `option => value => amount` for the leaves the plan writes; a removed leaf
+  # is not validated (there is nothing to check).
   defp written_leaves(plan) do
-    plan.changes
-    |> changed_leaves()
-    |> Enum.reduce(%{}, fn {option, value}, acc ->
+    Enum.reduce(plan.leaves, %{}, fn {option, value}, acc ->
       case leaf(plan.to.price_modifiers, {option, value}) do
         nil -> acc
         amount -> put_leaf(acc, option, value, amount)

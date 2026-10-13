@@ -222,6 +222,82 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
 
       assert message =~ "less than zero"
     end
+
+    test "option and value names with dots are written, owned and reported as they are" do
+      stored =
+        item(%{
+          data: %{
+            "ecommerce" => %{
+              "price_modifiers" => %{"a.b" => %{"c" => "1.00"}, "a" => %{"b.c" => "2.00"}}
+            }
+          }
+        })
+
+      plan =
+        plan!(
+          %{
+            "price_modifiers" => %{"a.b" => %{"c" => "3.00"}, "a" => %{"b.c" => nil}}
+          },
+          stored,
+          sets: nil
+        )
+
+      assert plan.changed?
+
+      assert Enum.sort(plan.owned_paths) == [
+               ["ecommerce", "price_modifiers", "a", "b.c"],
+               ["ecommerce", "price_modifiers", "a.b", "c"]
+             ]
+
+      assert plan.attrs.data["ecommerce"]["price_modifiers"] ==
+               %{"a.b" => %{"c" => "3.00"}, "a" => %{"b.c" => nil}}
+    end
+  end
+
+  describe "the cheapest combination" do
+    defp cheap_item do
+      item(%{
+        base_price: dec("5.00"),
+        data: %{"ecommerce" => %{"price_modifiers" => %{"liquid" => %{"black" => "-10.00"}}}}
+      })
+    end
+
+    test "a row that touches neither the price nor a modifier is not held to it" do
+      assert {:ok, plan} = plan(%{"compare_at" => "9.00"}, cheap_item())
+      assert plan.changes == %{"compare_at" => %{"from" => nil, "to" => "9.00"}}
+    end
+
+    test "a modifier row that changes nothing is not held to it either" do
+      assert {:ok, plan} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"black" => "-10.00"}}}, cheap_item())
+
+      refute plan.changed?
+    end
+
+    test "a row that gives the price is held to it, even with the same price" do
+      assert {:error, [%{path: "price_modifiers", message: message}]} =
+               plan(%{"price" => "5.00"}, cheap_item())
+
+      assert message =~ "less than zero"
+    end
+
+    test "a row that changes a modifier is held to it" do
+      assert {:error, [%{path: "price_modifiers"}]} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"red" => "1.00"}}}, cheap_item())
+    end
+  end
+
+  describe "a stored price that is not a finite number" do
+    test "counts as no price: shown as none, and replaced like a first price" do
+      nan = item(%{base_price: Decimal.new("NaN")})
+
+      assert PricePlan.current(nan).price == nil
+
+      plan = plan!(%{"price" => "5000.00"}, nan)
+      assert plan.changes == %{"price" => %{"from" => nil, "to" => "5000.00"}}
+      refute plan.dangerous?
+      assert plan.attrs == %{base_price: dec("5000.00")}
+    end
   end
 
   describe "the row as a whole" do

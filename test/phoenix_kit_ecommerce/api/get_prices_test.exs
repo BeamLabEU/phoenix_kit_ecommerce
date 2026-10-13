@@ -11,10 +11,12 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 
+  alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.GetPrices
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
+  alias PhoenixKitEcommerce.Test.Repo
 
   setup do
     catalogue = F.shop_catalogue!()
@@ -124,6 +126,21 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
 
     assert good_row["id"] == good.uuid
     assert summary == %{"found" => 2, "error" => 0}
+  end
+
+  test "a stored base_price that is not a number is answered as no price",
+       %{catalogue: catalogue, ctx: ctx} do
+    item = F.item!(catalogue, %{sku: "GP-NAN"})
+
+    SQL.query!(
+      Repo,
+      "UPDATE phoenix_kit_cat_items SET base_price = 'NaN' WHERE uuid = $1",
+      [Ecto.UUID.dump!(item.uuid)]
+    )
+
+    assert {:ok, %{"results" => [row]}} = run([%{"id" => item.uuid}], ctx)
+    assert row["id"] == item.uuid
+    assert row["price"] == nil
   end
 
   test "shop_status_visible is about the product's own status: a product in a hidden category still says true",
