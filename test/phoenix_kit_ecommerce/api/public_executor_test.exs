@@ -53,6 +53,54 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     assert Plug.Conn.get_resp_header(conn, "content-type") == ["application/json; charset=utf-8"]
   end
 
+  test "every search filter works through the executor on a JSON-decoded body", t do
+    json = fn input -> input |> JSON.encode!() |> JSON.decode!() end
+
+    ids = fn input ->
+      {200, body, _} = call("shop.search_products", json.(input))
+      {body["items"] |> Enum.map(& &1["id"]) |> Enum.sort(), body["count"]}
+    end
+
+    assert {_, 5} = ids.(%{})
+    assert ids.(%{"category_id" => t.home}) == {Enum.sort([t.a, t.b, t.c]), 3}
+
+    assert ids.(%{"options" => %{"size" => ["large", "small"], "colour" => ["red"]}}) ==
+             {[t.a], 1}
+
+    assert ids.(%{"vendor" => "ACME"}) == {[t.a], 1}
+    assert ids.(%{"on_sale" => true}) == {[t.a], 1}
+    assert ids.(%{"made_to_order" => true}) == {[t.c], 1}
+    assert ids.(%{"price_min" => "15", "price_max" => 20}) == {Enum.sort([t.a, t.e]), 2}
+
+    {200, batch, _} =
+      call(
+        "shop.search_products_batch",
+        json.(%{"queries" => [%{"vendor" => "beta"}, %{"made_to_order" => true}, %{}]})
+      )
+
+    assert [one, two, all] = batch["results"]
+    assert Enum.map(one["items"], & &1["id"]) == [t.b]
+    assert Enum.map(two["items"], & &1["id"]) == [t.c]
+    assert all["count"] == 5
+  end
+
+  test "a number too large to be a limit or a price is a 422 before any handler runs", t do
+    huge = 10 ** 30
+
+    for {tool, input, path} <- [
+          {"shop.search_products", %{"limit" => huge}, "limit"},
+          {"shop.search_products", %{"price_min" => huge}, "price_min"},
+          {"shop.search_products", %{"price_max" => huge}, "price_max"},
+          {"shop.search_products", %{"price_max" => String.duplicate("9", 41)}, "price_max"},
+          {"shop.search_products_batch", %{"queries" => [%{"limit" => huge}]},
+           "queries[0].limit"},
+          {"shop.similar_products", %{"id" => t.a, "limit" => huge}, "limit"}
+        ] do
+      assert {422, body, _} = call(tool, input)
+      assert [%{"path" => ^path}] = body["context"]["errors"]
+    end
+  end
+
   test "language and currency are accepted; any other field is a 422, the control fields of write tools included" do
     assert {200, %{"currency" => "EUR"}, _} =
              call("shop.search_products", %{

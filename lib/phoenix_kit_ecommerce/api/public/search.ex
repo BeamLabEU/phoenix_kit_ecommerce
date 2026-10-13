@@ -281,10 +281,14 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
       },
       "price_min" => %{
         "type" => ["number", "string"],
+        "maximum" => 1.0e15,
+        "maxLength" => 40,
         "description" => "Lowest price, in the response currency (a number or a decimal string)."
       },
       "price_max" => %{
         "type" => ["number", "string"],
+        "maximum" => 1.0e15,
+        "maxLength" => 40,
         "description" => "Highest price, in the response currency (a number or a decimal string)."
       },
       "options" => %{
@@ -308,6 +312,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
       "limit" => %{
         "type" => "integer",
         "minimum" => 1,
+        "maximum" => 1_000_000,
         "description" => "Page size. Default 20; above 100 is reduced to 100 with a warning."
       },
       "cursor" => %{

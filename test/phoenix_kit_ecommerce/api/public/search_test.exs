@@ -171,6 +171,106 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     assert Enum.map(errors, & &1.path) |> Enum.sort() == ["category_id", "price_min"]
   end
 
+  describe "every filter of a query reaches the search" do
+    # Each filter is asserted against the unfiltered answer (5 products), so a
+    # filter that is parsed but dropped on the way to the query shows as 5.
+    defp filtered(input) do
+      out = search!(input)
+      {Enum.sort(item_ids(out)), out["count"]}
+    end
+
+    test "category_id: a parent finds its whole subtree, a leaf only itself", t do
+      assert search!(%{})["count"] == 5
+
+      assert {ids, 3} = filtered(%{"category_id" => t.home})
+      assert ids == Enum.sort([t.a, t.b, t.c])
+
+      assert {ids, 2} = filtered(%{"category_id" => t.vases})
+      assert ids == Enum.sort([t.a, t.c])
+
+      assert {[id], 1} = filtered(%{"category_id" => t.bowls})
+      assert id == t.b
+    end
+
+    test "options: values of one key are alternatives, different keys must all match", t do
+      assert {ids, 2} = filtered(%{"options" => %{"size" => ["large", "small"]}})
+      assert ids == Enum.sort([t.a, t.c])
+
+      assert {[id], 1} = filtered(%{"options" => %{"size" => ["small"]}})
+      assert id == t.c
+
+      assert {[id], 1} =
+               filtered(%{"options" => %{"size" => ["large", "small"], "colour" => ["red"]}})
+
+      assert id == t.a
+
+      assert {[], 0} =
+               filtered(%{"options" => %{"size" => ["small"], "colour" => ["red"]}})
+    end
+
+    test "vendor matches whatever the case", t do
+      assert {[id], 1} = filtered(%{"vendor" => "acme"})
+      assert id == t.a
+
+      assert {[id], 1} = filtered(%{"vendor" => "BETA"})
+      assert id == t.b
+    end
+
+    test "on_sale true keeps the products with a sale price, false the others", t do
+      assert {[id], 1} = filtered(%{"on_sale" => true})
+      assert id == t.a
+
+      assert {ids, 4} = filtered(%{"on_sale" => false})
+      assert ids == Enum.sort([t.b, t.c, t.d, t.e])
+    end
+
+    test "made_to_order keeps the products made to order", t do
+      assert {[id], 1} = filtered(%{"made_to_order" => true})
+      assert id == t.c
+
+      assert {ids, 4} = filtered(%{"made_to_order" => false})
+      assert ids == Enum.sort([t.a, t.b, t.d, t.e])
+    end
+
+    test "price_min and price_max bound the price from both sides", t do
+      assert {ids, 3} = filtered(%{"price_min" => "15"})
+      assert ids == Enum.sort([t.a, t.b, t.e])
+
+      assert {ids, 2} = filtered(%{"price_min" => 15, "price_max" => "20"})
+      assert ids == Enum.sort([t.a, t.e])
+    end
+
+    test "a filter combines with q", t do
+      assert {[id], 1} = filtered(%{"q" => "vase", "vendor" => "acme"})
+      assert id == t.a
+    end
+
+    test "search_products_batch applies the filters of a query and leaves the others alone", t do
+      out =
+        batch!(%{
+          "queries" => [
+            %{"category_id" => t.vases, "on_sale" => true, "price_min" => 5},
+            %{"vendor" => "beta"},
+            %{}
+          ]
+        })
+
+      assert [filtered_block, vendor_block, plain] = out["results"]
+
+      assert item_ids(filtered_block) == [t.a]
+      assert filtered_block["count"] == 1
+      assert item_ids(vendor_block) == [t.b]
+      assert plain["count"] == 5
+    end
+
+    test "a price above the ceiling is a validation error, not a Decimal" do
+      assert {:error, :validation_failed, _, %{errors: errors}} =
+               Search.search_products(%{"price_max" => 10 ** 40, "price_min" => "1e400"}, ctx())
+
+      assert errors |> Enum.map(& &1.path) |> Enum.sort() == ["price_max", "price_min"]
+    end
+  end
+
   test "a host language 'de' finds products indexed under the dialect 'de-DE'" do
     enable_languages!(["en-US", "de-DE"])
     g = legacy_product!(%{"en-US" => "Plain Vase", "de-DE" => "Rote Vasen"})

@@ -304,6 +304,7 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
             "limit" => %{
               "type" => "integer",
               "minimum" => 1,
+              "maximum" => 1_000_000,
               "description" =>
                 "How many products. Default #{@default_similar}; above #{@max_similar} is reduced with a warning."
             }

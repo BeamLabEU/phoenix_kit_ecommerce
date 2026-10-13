@@ -24,6 +24,8 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   @max_option_keys 20
   @max_option_values 50
   @max_vendor_length 200
+  # A price above this is refused before it is turned into a Decimal.
+  @max_price 1_000_000_000_000_000
 
   @sorts %{
     "relevance" => :relevance,
@@ -98,8 +100,11 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
 
       value ->
         case parse_decimal(value) do
-          {:ok, decimal} -> {state, decimal}
-          :error -> {error(state, name, "must be a non-negative number"), nil}
+          {:ok, decimal} ->
+            {state, decimal}
+
+          :error ->
+            {error(state, name, "must be a non-negative number of at most #{@max_price}"), nil}
         end
     end
   end
@@ -118,6 +123,7 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
     if Decimal.compare(base, 0) == :lt, do: Decimal.new(0), else: base
   end
 
+  defp parse_decimal(value) when is_integer(value) and value > @max_price, do: :error
   defp parse_decimal(value) when is_integer(value), do: non_negative(Decimal.new(value))
   defp parse_decimal(value) when is_float(value), do: non_negative(Decimal.from_float(value))
 
@@ -131,9 +137,10 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   defp parse_decimal(_other), do: :error
 
   defp non_negative(%Decimal{} = decimal) do
-    if Decimal.nan?(decimal) or Decimal.inf?(decimal) or Decimal.compare(decimal, 0) == :lt,
-      do: :error,
-      else: {:ok, decimal}
+    if Decimal.nan?(decimal) or Decimal.inf?(decimal) or Decimal.compare(decimal, 0) == :lt or
+         Decimal.compare(decimal, @max_price) == :gt,
+       do: :error,
+       else: {:ok, decimal}
   end
 
   defp put_options(state, input) do
