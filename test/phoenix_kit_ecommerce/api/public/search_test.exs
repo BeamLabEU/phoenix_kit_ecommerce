@@ -293,7 +293,7 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     end
 
     test "batch_cost/1 prices a raw, unvalidated batch by its number of queries" do
-      # The executor calls it BEFORE validation (1b decision M16): it must
+      # The executor calls it BEFORE validation: it must
       # answer a positive integer for any term and never raise.
       assert Search.batch_cost(%{"queries" => List.duplicate(%{}, 7)}) == 7
       assert Search.batch_cost(%{"queries" => List.duplicate(%{}, 20)}) == 20
@@ -322,6 +322,16 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
       assert out == out |> JSON.encode!() |> JSON.decode!()
       assert {:ok, _} = Validator.validate(Search.batch_output_schema(), out)
     end
+  end
+
+  test "a q over 200 characters is refused by the input schema; the handler alone truncates it" do
+    long = String.duplicate("vase ", 2_000)
+
+    assert {:error, [%{path: "q"}]} =
+             Validator.validate(Search.search_input_schema(), %{"q" => long})
+
+    assert {:ok, %{"count" => count}} = Search.search_products(%{"q" => long}, ctx())
+    assert is_integer(count)
   end
 
   test "the input schemas accept what the handlers read and close the object" do
