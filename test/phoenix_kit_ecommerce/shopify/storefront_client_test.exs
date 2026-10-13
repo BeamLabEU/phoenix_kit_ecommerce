@@ -138,6 +138,18 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClientTest do
       assert {:error, _reason} = Task.await(task, 1_000)
     end
 
+    test "reports an unexpected body by its shape, never its content" do
+      Req.Test.stub(@stub, fn conn ->
+        json_response(conn, 200, %{"secret" => "internal-metadata-value"})
+      end)
+
+      assert {:error, {:unexpected_body, summary}} =
+               StorefrontClient.fetch_products("test-shop.myshopify.com", req_options())
+
+      assert summary == {:object, 1}
+      refute inspect(summary) =~ "internal-metadata-value"
+    end
+
     test "returns an error when the \"products\" key is missing entirely" do
       Req.Test.stub(@stub, fn conn -> json_response(conn, 200, %{"unexpected" => "shape"}) end)
 

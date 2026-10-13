@@ -70,7 +70,8 @@ defmodule PhoenixKitEcommerce.ProductSource do
   and no node can hold a value another node has moved on from.
 
   A failed read never raises into the storefront: the process's last known
-  value is reused, and with none known the answer is `Legacy`. The `Code.
+  value is reused, and with none known the answer is `Legacy`. Either way
+  the read is not retried before the next interval. The `Code.
   ensure_loaded?/1` guard runs FIRST so a host without the optional
   `phoenix_kit_catalogue` dependency never pays for the read at all.
   """
@@ -100,10 +101,16 @@ defmodule PhoenixKitEcommerce.ProductSource do
     error ->
       Logger.error("[Shop] reading shop_product_source failed: #{Exception.message(error)}")
 
-      case previous do
-        {value, _read_at} -> value
-        _ -> nil
-      end
+      value =
+        case previous do
+          {value, _read_at} -> value
+          _ -> nil
+        end
+
+      # Back off for one memo interval: without this every call during a
+      # database problem repeats the failing read and logs again.
+      Process.put(@memo_key, {value, now})
+      value
   end
 
   # Max length for a user-supplied search term. Anything longer is

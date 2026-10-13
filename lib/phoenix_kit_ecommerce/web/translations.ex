@@ -615,19 +615,19 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   def handle_event("request_translate:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :translate, scope, cast_uuids(params["uuids"]))
+      open_pending(socket, :translate, scope, Helpers.cast_uuids(params["uuids"]))
     end)
   end
 
   def handle_event("request_retranslate:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :retranslate, scope, cast_uuids(params["uuids"]))
+      open_pending(socket, :retranslate, scope, Helpers.cast_uuids(params["uuids"]))
     end)
   end
 
   def handle_event("request_stamp:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :stamp, scope, cast_uuids(params["uuids"]))
+      open_pending(socket, :stamp, scope, Helpers.cast_uuids(params["uuids"]))
     end)
   end
 
@@ -806,15 +806,6 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # the template calls this function rather than `@product_statuses`.
   defp product_statuses, do: @product_statuses
 
-  # One `gettext/1` call per status so the label is extractable — the raw
-  # `draft`/`active`/`archived` value from `@product_statuses` must never
-  # be rendered directly. Reuses `products.ex`/`product_form.ex`'s own
-  # msgids for the same three words, so no new ones are needed here.
-  defp product_status_label("draft"), do: gettext("Draft")
-  defp product_status_label("active"), do: gettext("Active")
-  defp product_status_label("archived"), do: gettext("Archived")
-  defp product_status_label(status), do: status
-
   defp checked_list(nil, _allowed), do: []
 
   defp checked_list(raw, allowed) do
@@ -841,20 +832,8 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   # Empty selection is a no-op — matches the toolbar buttons' own
   # `disabled` state and stops a stale/tampered client event from opening
-  # a confirmation for zero actual resources.
-  # The selection is client input: anything that is not a list of uuids is
-  # dropped here, before it reaches a query.
-  defp cast_uuids(uuids) when is_list(uuids) do
-    Enum.flat_map(uuids, fn uuid ->
-      case Ecto.UUID.cast(uuid) do
-        {:ok, uuid} -> [uuid]
-        :error -> []
-      end
-    end)
-  end
-
-  defp cast_uuids(_other), do: []
-
+  # a confirmation for zero actual resources. The selection is client input,
+  # so `Helpers.cast_uuids/1` drops anything that is not a uuid first.
   defp open_pending(socket, _verb, _scope, []), do: {:noreply, socket}
 
   defp open_pending(socket, verb, scope, uuids) do
@@ -1815,7 +1794,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
                 <%= for status <- product_statuses() do %>
                   <label class="label cursor-pointer gap-2">
                     <input type="checkbox" name="statuses[]" value={status} checked={status in @sweep_settings.statuses} class="checkbox checkbox-sm" />
-                    <span>{product_status_label(status)}</span>
+                    <span>{StatusLabels.product(status)}</span>
                   </label>
                 <% end %>
               </div>

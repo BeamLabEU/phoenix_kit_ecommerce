@@ -5670,8 +5670,8 @@ defmodule PhoenixKitEcommerce do
               if(items_require_shipping?(cart.items), do: cart.shipping_method_uuid),
             # Set by `validate_shipping_method_available/1` when the cart
             # converted without a method under `:always`/`:fallback` - the
-            # durable record of WHY, since the cart row's in-memory stamp
-            # (see that function) is never persisted.
+            # order's durable record of WHY (the converted cart also keeps
+            # the stamp, since `mark_cart_converted/2` writes its metadata).
             "shipping_skipped" =>
               items_require_shipping?(cart.items) and is_nil(cart.shipping_method_uuid),
             "shipping_skip_reason" => (cart.metadata || %{})["shipping_skip_reason"],
@@ -6496,17 +6496,22 @@ defmodule PhoenixKitEcommerce do
   # ---- Option schemas (global + category) ----
 
   defp reprice_global_options_for_base_change(multiplier, decimal_places) do
-    case Options.get_global_options() do
-      [] ->
-        {:ok, 0}
+    # Read, re-price and write under the options lock: a list read before it
+    # and written back whole would erase an option or value another writer
+    # (a CSV import, a second admin) added in between.
+    result =
+      Options.transform_global_options(fn
+        [] ->
+          {:unchanged, 0}
 
-      options ->
-        {new_options, count} = reprice_option_definitions(options, multiplier, decimal_places)
+        options ->
+          {new_options, count} = reprice_option_definitions(options, multiplier, decimal_places)
+          {:ok, new_options, count}
+      end)
 
-        case Options.update_global_options(new_options) do
-          {:ok, _} -> {:ok, count}
-          {:error, reason} -> {:error, {:global_options_reprice_failed, reason}}
-        end
+    case result do
+      {:ok, count} -> {:ok, count}
+      {:error, reason} -> {:error, {:global_options_reprice_failed, reason}}
     end
   end
 

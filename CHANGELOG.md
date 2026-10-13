@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- **Bulk actions on the products and categories pages take only valid
+  uuids.** A hand-made selection or target (`junk`, a non-list) used to
+  reach a query and raise; it is now cast by `Web.Helpers.cast_uuids/1` /
+  `cast_optional_uuid/1`, which the translations page shares.
+- **Editing a global option no longer renames it.** The key input is
+  disabled while editing, so the browser sent no key and one was derived from
+  the label, possibly onto another option's key.
+- **Base-currency re-pricing no longer erases concurrent option edits.** It
+  runs under the global options lock (`Options.transform_global_options/1`).
+- **The product page keeps the visitor's picked image** across product,
+  inventory and currency broadcasts.
+- **A second concurrent "Confirm Order"** goes to the placed order instead of
+  showing "Failed to create order".
+- **The Shopify storefront fallback** follows at most 3 redirects and reports
+  an unexpected response by shape, not content.
+- **The image-migration progress on the Imports page** refreshes its stats at
+  most once a second instead of four queries per product.
+- **A failed `shop_product_source` read** is not retried or logged on every
+  call for one memo interval.
+- The product page's "Yes"/"No" specification values and the product form's
+  "Base Price" label are translated and no longer double-marked.
+
 ## 0.5.21 - 2026-10-12
 
 ### Added
