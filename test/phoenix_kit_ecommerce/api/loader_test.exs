@@ -26,6 +26,10 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
       assert record.facts.category_status == "active"
     end
 
+    test "catalogue_listed?/0 is true on the legacy source, where no catalogue is involved" do
+      assert Loader.catalogue_listed?()
+    end
+
     test "unknown and malformed ids are absent, never an error" do
       assert Loader.load(["not-a-uuid", Ecto.UUID.generate(), nil, 42]) == %{}
       assert Loader.load([]) == %{}

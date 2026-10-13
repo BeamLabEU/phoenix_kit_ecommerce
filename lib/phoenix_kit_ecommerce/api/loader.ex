@@ -127,9 +127,15 @@ defmodule PhoenixKitEcommerce.API.Loader do
     ProductSource.current() != ProductSource.Catalogue or CatalogueQuery.catalogue_uuid() != nil
   end
 
-  @doc "True when the shop's catalogue exists and its status is `active`."
+  @doc """
+  True when the shop's catalogue exists and its status is `active`. Always true
+  on the Legacy source, where no catalogue is involved.
+  """
   @spec catalogue_listed?() :: boolean()
-  def catalogue_listed?, do: listed?(CatalogueQuery.catalogue_uuid())
+  def catalogue_listed? do
+    ProductSource.current() != ProductSource.Catalogue or
+      listed?(CatalogueQuery.catalogue_uuid())
+  end
 
   defp listed?(nil), do: false
   defp listed?(uuid), do: match?(%{status: "active"}, Catalogue.get_catalogue(uuid))
@@ -173,16 +179,16 @@ defmodule PhoenixKitEcommerce.API.Loader do
   """
   @spec chain(map() | nil, %{String.t() => map()}) :: [map()]
   def chain(nil, _categories), do: []
-  def chain(category, categories), do: build_chain(category, categories, [], MapSet.new())
+  def chain(category, categories), do: build_chain(category, categories, [], [])
 
   defp build_chain(nil, _categories, acc, _seen), do: acc
 
   defp build_chain(category, categories, acc, seen) do
-    if MapSet.member?(seen, category.uuid) or MapSet.size(seen) >= @max_chain_depth do
+    if category.uuid in seen or length(seen) >= @max_chain_depth do
       acc
     else
       parent = category.parent_uuid && Map.get(categories, category.parent_uuid)
-      build_chain(parent, categories, [category | acc], MapSet.put(seen, category.uuid))
+      build_chain(parent, categories, [category | acc], [category.uuid | seen])
     end
   end
 
