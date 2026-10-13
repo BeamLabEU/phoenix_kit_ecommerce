@@ -1,0 +1,163 @@
+defmodule PhoenixKitEcommerce.API.GetPricesTest do
+  @moduledoc """
+  `ecommerce.get_prices`: what it answers per product, that its idea of
+  `shop_status_visible` is the storefront's own verdict on the product's status, and that it works for a
+  shop that never heard of Shopify.
+  """
+
+  use PhoenixKitEcommerce.DataCase, async: false
+
+  @moduletag :catalogue_api
+
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+
+  alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitEcommerce.API.GetPrices
+  alias PhoenixKitEcommerce.APIFixtures, as: F
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View
+
+  setup do
+    catalogue = F.shop_catalogue!()
+    %{catalogue: catalogue, ctx: F.ctx(F.user!())}
+  end
+
+  defp run(refs, ctx), do: GetPrices.run(%{"refs" => refs}, ctx)
+
+  test "answers price, compare_at, option prices, visibility and the made-to-order flag",
+       %{catalogue: catalogue, ctx: ctx} do
+    item =
+      F.item!(catalogue, %{
+        sku: "GP-1",
+        base_price: Decimal.new("35.52"),
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{
+            "shop_status" => "active",
+            "currency" => "EUR",
+            "compare_at_price" => "40.00",
+            "made_to_order" => true,
+            "price_modifiers" => %{"liquid_color" => %{"black" => "32.00", "blue" => 5}}
+          }
+        }
+      })
+
+    assert {:ok, %{"results" => [by_id, by_sku, missing], "summary" => summary}} =
+             run([%{"id" => item.uuid}, %{"sku" => "GP-1"}, %{"sku" => "GP-NONE"}], ctx)
+
+    assert by_id["id"] == item.uuid
+    assert by_id["price"] == %{"amount" => "35.52", "currency" => "EUR"}
+    assert by_id["compare_at"] == %{"amount" => "40.00", "currency" => "EUR"}
+    assert by_id["currency"] == "EUR"
+
+    assert by_id["price_modifiers"] == %{
+             "liquid_color" => %{"black" => "32.00", "blue" => "5.00"}
+           }
+
+    assert by_id["visibility"] == "active"
+    assert by_id["made_to_order"] == true
+    assert by_id["item_status"] == "active"
+    assert by_id["shop_status_visible"] == true
+
+    assert Map.delete(by_sku, "ref") == Map.delete(by_id, "ref")
+    assert missing["error"]["code"] == "not_found"
+    assert missing["ref"] == %{"sku" => "GP-NONE"}
+    assert summary == %{"found" => 2, "error" => 1}
+  end
+
+  test "a product with no price and no extras answers nils, not errors", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    item = F.item!(catalogue, %{base_price: nil, data: %{"_primary_language" => "en"}})
+
+    assert {:ok, %{"results" => [row]}} = run([%{"id" => item.uuid}], ctx)
+
+    assert row["price"] == nil
+    assert row["compare_at"] == nil
+    assert row["price_modifiers"] == %{}
+    assert row["made_to_order"] == false
+  end
+
+  test "shop_status_visible is the storefront's verdict for every status a product can be in",
+       %{catalogue: catalogue, ctx: ctx} do
+    for status <- ["active", "inactive", "discontinued"],
+        shop_status <- [nil, "draft", "active", "archived", "weird"] do
+      ecommerce = if shop_status, do: %{"shop_status" => shop_status}, else: %{}
+
+      item =
+        F.item!(catalogue, %{
+          status: status,
+          data: %{"_primary_language" => "en", "ecommerce" => ecommerce}
+        })
+
+      assert {:ok, %{"results" => [row]}} = run([%{"id" => item.uuid}], ctx)
+
+      storefront = View.product_view(item).status == "active"
+
+      assert row["shop_status_visible"] == storefront,
+             "status #{status}, shop_status #{inspect(shop_status)}: API says #{row["shop_status_visible"]}, storefront says #{storefront}"
+    end
+  end
+
+  test "shop_status_visible is about the product's own status: a product in a hidden category still says true",
+       %{catalogue: catalogue, ctx: ctx} do
+    {:ok, category} =
+      Catalogue.create_category(%{
+        name: "API hidden #{System.unique_integer([:positive])}",
+        catalogue_uuid: catalogue.uuid,
+        data: %{"ecommerce" => %{"shop_status" => "hidden"}}
+      })
+
+    item = F.item!(catalogue, %{category_uuid: category.uuid})
+
+    assert {:ok, %{"results" => [row]}} = run([%{"id" => item.uuid}], ctx)
+
+    # The storefront hides this product (`exclude_hidden_categories`, query.ex:421-435).
+    # The field does not claim to know that, which is why it is not called
+    # "visible in the shop"; phase 3a's `API.Visibility` is the full verdict.
+    assert row["shop_status_visible"] == true
+    refute Map.has_key?(row, "visible_in_shop")
+  end
+
+  test "a trashed product is not found", %{catalogue: catalogue, ctx: ctx} do
+    item = F.item!(catalogue)
+    {:ok, _} = Catalogue.trash_item(item)
+
+    assert {:ok, %{"results" => [%{"error" => %{"code" => "not_found"}}]}} =
+             run([%{"id" => item.uuid}], ctx)
+  end
+
+  test "reads a product that was never linked to Shopify like any other", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    item =
+      F.item!(catalogue, %{
+        data: %{"_primary_language" => "en", "ecommerce" => %{"shop_status" => "active"}}
+      })
+
+    assert {:ok, %{"results" => [row], "summary" => %{"found" => 1}}} =
+             run([%{"id" => item.uuid}], ctx)
+
+    refute Map.has_key?(row, "shopify")
+  end
+
+  test "the legacy source answers unsupported_source and reads nothing", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    item = F.item!(catalogue)
+    F.put_config!("shop_product_source", "legacy")
+
+    assert {:error, :unsupported_source, _detail, %{reason: "legacy_source"}} =
+             run([%{"id" => item.uuid}], ctx)
+  end
+
+  test "a catalogue_id that is not the shop's is refused", %{catalogue: catalogue, ctx: ctx} do
+    other = F.other_catalogue!()
+    item = F.item!(catalogue)
+
+    assert {:error, :validation_failed, _detail, _context} =
+             GetPrices.run(%{"catalogue_id" => other.uuid, "refs" => [%{"id" => item.uuid}]}, ctx)
+  end
+end
