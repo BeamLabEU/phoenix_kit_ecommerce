@@ -8,12 +8,13 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
+  @moduletag :core_api
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 
   alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitEcommerce.API.GetPrices
+  alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
   alias PhoenixKitEcommerce.Test.Repo
@@ -23,7 +24,7 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
     %{catalogue: catalogue, ctx: F.ctx(F.user!())}
   end
 
-  defp run(refs, ctx), do: GetPrices.run(%{"refs" => refs}, ctx)
+  defp run(refs, ctx), do: APICase.call("ecommerce.get_prices", %{"refs" => refs}, ctx)
 
   test "answers price, compare_at, option prices, visibility and the made-to-order flag",
        %{catalogue: catalogue, ctx: ctx} do
@@ -201,7 +202,9 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
     other = F.other_catalogue!()
     item = F.item!(catalogue)
 
+    input = %{"catalogue_id" => other.uuid, "refs" => [%{"id" => item.uuid}]}
+
     assert {:error, :validation_failed, _detail, _context} =
-             GetPrices.run(%{"catalogue_id" => other.uuid, "refs" => [%{"id" => item.uuid}]}, ctx)
+             APICase.call("ecommerce.get_prices", input, ctx)
   end
 end

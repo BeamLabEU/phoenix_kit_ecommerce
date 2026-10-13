@@ -35,7 +35,8 @@ support_dir = Path.expand("support", __DIR__)
   "shopify_fixtures.ex",
   "data_case.ex",
   "live_case.ex",
-  "api_fixtures.ex"
+  "api_fixtures.ex",
+  "api_case.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -274,13 +275,13 @@ catalogue_exclude =
 #   :old_catalogue     a catalogue WITHOUT it
 #   :no_catalogue      no phoenix_kit_catalogue at all
 #   :core_api          a core with the tool registry (PhoenixKit.API.Tool)
-#   :core_confirm      ... and the confirmation flow (PhoenixKit.API.Confirm)
+#   :core_confirm      ... and the confirmation gate (Keys.active?/1 and Flow.gate/1)
 #   :core_no_confirm   ... and not the confirmation flow
 #   :warehouse         phoenix_kit_warehouse with SourceKinds
 catalogue_loaded? = Code.ensure_loaded?(PhoenixKitCatalogue)
 catalogue_api? = PhoenixKitEcommerce.API.Gate.catalogue_api_ready?()
 core_api? = Code.ensure_loaded?(PhoenixKit.API.Tool)
-core_confirm? = Code.ensure_loaded?(PhoenixKit.API.Confirm)
+core_confirm? = PhoenixKitEcommerce.API.confirmation_available?()
 
 admin_api_exclude =
   [

@@ -8,9 +8,11 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
+  @moduletag :core_confirm
 
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.API.{CatalogueWrites, PricePlan, SetPrices}
+  alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.StorefrontCache
 
@@ -20,7 +22,13 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
     %{catalogue: catalogue, user: user, ctx: F.ctx(user)}
   end
 
-  defp set_prices(items, ctx), do: SetPrices.run(%{"items" => items}, ctx)
+  defp set_prices(items, ctx),
+    do: APICase.call("ecommerce.set_prices", %{"items" => items}, ctx)
+
+  # The handler without the schema in front of it: for the tests that pin the
+  # planner's own second line of defence (a malformed price a client's schema
+  # would already have refused).
+  defp set_prices_raw(items, ctx), do: SetPrices.run(%{"items" => items}, ctx)
 
   defp ecommerce(item), do: F.reload!(item).data["ecommerce"]
 
@@ -180,7 +188,10 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
         %{"ref" => %{"sku" => "SP-BADPRICE"}, "price" => "12,5"}
       ]
 
-      assert {:ok, %{"results" => results, "summary" => summary}} = set_prices(rows, ctx)
+      # `"12,5"` is refused by the schema in production (the executor's 422, pinned
+      # in `tools_test.exs` and `executor_test.exs`); this is the planner's own
+      # second line of defence, reached directly.
+      assert {:ok, %{"results" => results, "summary" => summary}} = set_prices_raw(rows, ctx)
 
       assert Enum.map(results, & &1["action"]) == ["error", "error", "updated", "error", "error"]
 

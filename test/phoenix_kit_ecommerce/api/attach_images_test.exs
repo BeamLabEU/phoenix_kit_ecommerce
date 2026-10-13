@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
+  @moduletag :core_confirm
   @moduletag skip:
                if(System.find_executable("convert"),
                  do: false,
@@ -26,6 +27,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.API.AttachImages
+  alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.StorefrontCache
@@ -88,7 +90,11 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     end)
   end
 
-  defp attach(rows, ctx), do: AttachImages.run(%{"items" => rows}, ctx)
+  defp attach(rows, ctx), do: APICase.call("ecommerce.attach_images", %{"items" => rows}, ctx)
+
+  # The handler without the schema in front of it: for the test that pins the
+  # planner's own second line of defence (a scheme the schema already refuses).
+  defp attach_raw(rows, ctx), do: AttachImages.run(%{"items" => rows}, ctx)
 
   defp row(item, images), do: %{"ref" => %{"id" => item.uuid}, "images" => images}
   defp image(path, extra \\ %{}), do: Map.merge(%{"url" => @host <> path}, extra)
@@ -160,17 +166,25 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     serve(%{})
     item = F.item!(catalogue)
 
-    for url <- [
-          "http://127.0.0.1/a.png",
-          "https://10.0.0.5/a.png",
-          "https://169.254.169.254/x",
-          "file:///etc/passwd",
-          "ftp://93.184.216.34/a.png"
-        ] do
+    # private addresses pass the schema (they are http(s) URLs) and are refused by the planner
+    for url <- ["http://127.0.0.1/a.png", "https://10.0.0.5/a.png", "https://169.254.169.254/x"] do
       assert {:ok, %{"results" => [result]}} = attach([row(item, [%{"url" => url}])], ctx)
 
       assert result["action"] == "error", "#{url} must be refused"
       assert result["error"]["code"] == "validation_failed"
+      assert [%{"path" => "images[0].url"}] = result["error"]["context"]["errors"]
+    end
+
+    # other schemes: the schema refuses them before any handler runs ...
+    for url <- ["file:///etc/passwd", "ftp://93.184.216.34/a.png"] do
+      assert {:error, :validation_failed, _message, %{errors: [%{path: path} | _]}} =
+               attach([row(item, [%{"url" => url}])], ctx)
+
+      assert path == "items[0].images[0].url", "#{url} must be refused by the schema"
+
+      # ... and the planner refuses them too, were one to get past it
+      assert {:ok, %{"results" => [result]}} = attach_raw([row(item, [%{"url" => url}])], ctx)
+      assert result["action"] == "error"
       assert [%{"path" => "images[0].url"}] = result["error"]["context"]["errors"]
     end
 
@@ -243,11 +257,20 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     catalogue: catalogue,
     ctx: ctx
   } do
-    item = F.item!(catalogue)
-    images = for n <- 1..21, do: image("/#{n}.png")
+    one = F.item!(catalogue)
+    two = F.item!(catalogue)
+    first = for n <- 1..11, do: image("/#{n}.png")
+    second = for n <- 12..21, do: image("/#{n}.png")
 
+    # 11 + 10: each row is within the schema's 20 per row, the call is not
     assert {:error, :validation_failed, _detail, %{errors: [%{path: "items", limit: 20}]}} =
-             attach([row(item, images)], ctx)
+             attach([row(one, first), row(two, second)], ctx)
+
+    # 21 in one row is refused earlier, by the schema
+    assert {:error, :validation_failed, _detail, %{errors: [%{path: path} | _]}} =
+             attach([row(one, first ++ second)], ctx)
+
+    assert path == "items[0].images"
   end
 
   test "two featured pictures in one row are refused", %{catalogue: catalogue, ctx: ctx} do

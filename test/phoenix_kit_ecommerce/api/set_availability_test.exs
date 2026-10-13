@@ -8,8 +8,9 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
+  @moduletag :core_confirm
 
-  alias PhoenixKitEcommerce.API.{GetPrices, SetAvailability}
+  alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.StorefrontCache
 
@@ -19,7 +20,7 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
     %{catalogue: catalogue, user: user, ctx: F.ctx(user)}
   end
 
-  defp run(items, ctx), do: SetAvailability.run(%{"items" => items}, ctx)
+  defp run(items, ctx), do: APICase.call("ecommerce.set_availability", %{"items" => items}, ctx)
 
   defp draft_item(catalogue, attrs \\ %{}) do
     F.item!(
@@ -32,7 +33,9 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
   end
 
   defp visible?(item, ctx) do
-    {:ok, %{"results" => [row]}} = GetPrices.run(%{"refs" => [%{"id" => item.uuid}]}, ctx)
+    {:ok, %{"results" => [row]}} =
+      APICase.call("ecommerce.get_prices", %{"refs" => [%{"id" => item.uuid}]}, ctx)
+
     row["shop_status_visible"]
   end
 

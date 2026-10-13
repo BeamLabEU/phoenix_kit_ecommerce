@@ -1151,6 +1151,15 @@ defmodule PhoenixKitEcommerce do
     [PhoenixKitEcommerce.Catalogue.Extension]
   end
 
+  @doc """
+  The e-commerce tools of the admin API (spec 6.2), for core's tool registry.
+  Defined without `@impl`, like `notification_types/0` and
+  `ai_translatables/0`: the callback is optional, and this package compiles
+  against cores that predate it. `[]` on such a core. See
+  `PhoenixKitEcommerce.API`.
+  """
+  def api_tools, do: PhoenixKitEcommerce.API.tools()
+
   # ============================================
   # PRODUCTS
   # ============================================

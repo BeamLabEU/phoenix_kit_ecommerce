@@ -1,0 +1,240 @@
+defmodule PhoenixKitEcommerce.API.ToolsTest do
+  @moduledoc """
+  What the module hands to core's tool registry: the tools, their scopes and
+  permissions from the spec's table, schemas that core's own validator
+  accepts and that accept what they should and refuse what they should, and
+  the rule that the write tools exist only on a core that can hold a
+  dangerous call for confirmation.
+
+  Needs core's tool registry (phase 1a): tagged `:core_api`. The tests of the
+  write tools are tagged `:core_confirm` (core also has the confirmation flow
+  of phase 1c); the one that pins the reduced list is `:core_no_confirm`.
+  `test_helper.exs` excludes what does not apply to the core in use.
+  """
+
+  use PhoenixKitEcommerce.DataCase, async: false
+
+  @moduletag :core_api
+
+  @compile {:no_warn_undefined, [PhoenixKit.API.Tool, PhoenixKit.API.Validator]}
+
+  alias PhoenixKit.API.Tool
+  alias PhoenixKit.API.Validator
+
+  @uuid "0192a7c0-0000-7000-8000-000000000001"
+  @row %{"ref" => %{"sku" => "A"}}
+
+  defp tools, do: Map.new(PhoenixKitEcommerce.api_tools(), &{&1.name, &1})
+
+  defp validate(tool_name, input) do
+    tool = Map.fetch!(tools(), tool_name)
+    Validator.validate(Validator.close_schema(tool.input_schema, %{}), input)
+  end
+
+  describe "the read tool" do
+    test "is registered with the spec's scope and permission, read-only, capped at 500 rows" do
+      tool = tools()["ecommerce.get_prices"]
+
+      assert {tool.scope, tool.permission, tool.audience} ==
+               {"ecommerce.prices:read", "shop", :admin}
+
+      assert tool.annotations.read_only
+      refute tool.annotations.destructive
+      assert tool.max_items == 500
+      assert tool.danger == nil
+    end
+
+    test "accepts refs by id, sku and external_id" do
+      input = %{"refs" => [%{"id" => @uuid}, %{"sku" => "A-1"}, %{"external_id" => "ERP-1"}]}
+      assert {:ok, _} = validate("ecommerce.get_prices", input)
+    end
+
+    test "refuses no refs, a malformed id, an unknown field and a control field" do
+      assert {:error, _} = validate("ecommerce.get_prices", %{"refs" => []})
+      assert {:error, _} = validate("ecommerce.get_prices", %{"refs" => [%{"id" => "nope"}]})
+
+      assert {:error, _} =
+               validate("ecommerce.get_prices", %{"refs" => [%{"sku" => "a", "colour" => "red"}]})
+
+      assert {:error, _} =
+               validate("ecommerce.get_prices", %{"refs" => [%{"sku" => "a"}], "dry_run" => true})
+    end
+  end
+
+  describe "without core's confirmation flow" do
+    @describetag :core_no_confirm
+
+    test "only the read tool is offered: a write tool would run a 90 percent price cut on the first call" do
+      assert Map.keys(tools()) == ["ecommerce.get_prices"]
+    end
+  end
+
+  describe "with core's confirmation flow" do
+    @describetag :core_confirm
+
+    test "all four tools are offered, with the spec's scopes and permissions" do
+      table =
+        Map.new(tools(), fn {name, tool} ->
+          {name, {tool.scope, tool.permission, tool.audience}}
+        end)
+
+      assert table == %{
+               "ecommerce.get_prices" => {"ecommerce.prices:read", "shop", :admin},
+               "ecommerce.set_prices" =>
+                 {"ecommerce.prices:write", "shop.manage_catalog", :admin},
+               "ecommerce.set_availability" =>
+                 {"ecommerce.availability:write", "shop.manage_catalog", :admin},
+               "ecommerce.attach_images" =>
+                 {"ecommerce.images:write", "shop.manage_catalog", :admin}
+             }
+    end
+
+    test "every tool is valid for core and every handler and danger function is exported" do
+      for tool <- PhoenixKitEcommerce.api_tools() do
+        assert {:ok, _} = Tool.validate(tool)
+        {module, function} = tool.handler
+        assert function_exported?(module, function, 2), "#{tool.name}: #{function}/2 missing"
+
+        case tool.danger do
+          nil -> :ok
+          {m, f} -> assert function_exported?(m, f, 2), "#{tool.name}: #{f}/2 missing"
+        end
+      end
+    end
+
+    test "set_prices is destructive and dangerous by value, attach_images reaches the open world" do
+      tools = tools()
+
+      assert tools["ecommerce.set_prices"].annotations.destructive
+      assert tools["ecommerce.set_prices"].danger == {PhoenixKitEcommerce.API, :set_prices_danger}
+
+      # the size of a batch is core's rule (E13): no other tool has a danger function
+      assert tools["ecommerce.set_availability"].danger == nil
+      assert tools["ecommerce.attach_images"].danger == nil
+      refute tools["ecommerce.set_availability"].annotations.destructive
+      assert tools["ecommerce.attach_images"].annotations.open_world
+      refute tools["ecommerce.set_prices"].annotations.open_world
+    end
+
+    test "attach_images is priced by its pictures when core has the cost field" do
+      tool = tools()["ecommerce.attach_images"]
+
+      if Map.has_key?(tool, :cost) do
+        assert tool.cost == {PhoenixKitEcommerce.API.AttachImages, :cost}
+      end
+    end
+
+    test "batch caps are the spec's: 500 rows, 20 pictures" do
+      tools = tools()
+      assert tools["ecommerce.set_prices"].max_items == 500
+      assert tools["ecommerce.set_availability"].max_items == 500
+      assert tools["ecommerce.attach_images"].max_items == 20
+    end
+
+    test "set_prices accepts the documented shapes" do
+      input = %{
+        "items" => [
+          %{"ref" => %{"sku" => "A"}, "price" => "12.50"},
+          %{"ref" => %{"sku" => "B"}, "compare_at" => nil},
+          %{
+            "ref" => %{"id" => @uuid},
+            "price" => "0",
+            "price_modifiers" => %{"color" => %{"black" => "-2.00", "blue" => nil}}
+          }
+        ]
+      }
+
+      assert {:ok, _} = validate("ecommerce.set_prices", input)
+    end
+
+    test "set_prices refuses prices a client could mean differently" do
+      for bad <- ["12,50", "12.505", "-1", "1e3", " 12.50", "12.50\n", 12.5, nil] do
+        input = %{"items" => [Map.put(@row, "price", bad)]}
+        assert {:error, [%{path: "items[0].price"}]} = validate("ecommerce.set_prices", input)
+      end
+    end
+
+    test "set_prices refuses a bad modifier, the catalogue's own price fields, and 501 rows" do
+      assert {:error, [%{path: path}]} =
+               validate("ecommerce.set_prices", %{
+                 "items" => [Map.put(@row, "price_modifiers", %{"c" => %{"x" => "abc"}})]
+               })
+
+      assert path =~ "price_modifiers"
+
+      for field <- [
+            "base_price",
+            "markup_percentage",
+            "discount_percentage",
+            "data",
+            "cost_per_item"
+          ] do
+        input = %{"items" => [@row |> Map.put("price", "1.00") |> Map.put(field, "5")]}
+        assert {:error, _} = validate("ecommerce.set_prices", input), "#{field} must be refused"
+      end
+
+      rows = for _ <- 1..501, do: Map.put(@row, "price", "1.00")
+      assert {:error, _} = validate("ecommerce.set_prices", %{"items" => rows})
+    end
+
+    test "availability accepts the three visibilities and refuses another" do
+      for visibility <- ["draft", "active", "archived"] do
+        input = %{"items" => [Map.put(@row, "visibility", visibility)]}
+        assert {:ok, _} = validate("ecommerce.set_availability", input)
+      end
+
+      assert {:error, [%{path: "items[0].visibility", allowed: allowed}]} =
+               validate("ecommerce.set_availability", %{
+                 "items" => [Map.put(@row, "visibility", "hidden")]
+               })
+
+      assert allowed == ["draft", "active", "archived"]
+    end
+
+    test "images accept http(s) URLs and refuse other schemes, more than 20 per row, and none" do
+      ok = %{
+        "items" => [
+          Map.put(@row, "images", [%{"url" => "https://cdn.example/a.png", "featured" => true}])
+        ]
+      }
+
+      assert {:ok, _} = validate("ecommerce.attach_images", ok)
+
+      for url <- ["file:///etc/passwd", "ftp://x/y.png", "//cdn.example/a.png"] do
+        input = %{"items" => [Map.put(@row, "images", [%{"url" => url}])]}
+        assert {:error, _} = validate("ecommerce.attach_images", input), "#{url} must be refused"
+      end
+
+      many = for n <- 1..21, do: %{"url" => "https://cdn.example/#{n}.png"}
+
+      assert {:error, _} =
+               validate("ecommerce.attach_images", %{"items" => [Map.put(@row, "images", many)]})
+
+      assert {:error, _} =
+               validate("ecommerce.attach_images", %{"items" => [Map.put(@row, "images", [])]})
+    end
+
+    test "the set_prices description mentions the Shopify sync only while it is on" do
+      shopify = PhoenixKitEcommerce.shopify_enabled?()
+
+      on_exit(fn ->
+        PhoenixKit.Settings.update_boolean_setting_with_module(
+          "shop_shopify_enabled",
+          shopify,
+          "shop"
+        )
+      end)
+
+      PhoenixKit.Settings.update_boolean_setting_with_module("shop_shopify_enabled", true, "shop")
+      assert tools()["ecommerce.set_prices"].description =~ "Shopify"
+
+      PhoenixKit.Settings.update_boolean_setting_with_module(
+        "shop_shopify_enabled",
+        false,
+        "shop"
+      )
+
+      refute tools()["ecommerce.set_prices"].description =~ "Shopify"
+    end
+  end
+end

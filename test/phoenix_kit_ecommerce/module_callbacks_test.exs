@@ -17,6 +17,16 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     assert PhoenixKitEcommerce.css_sources() == [:phoenix_kit_ecommerce]
   end
 
+  test "api_tools/0 hands core a list of tools, and an empty one on a core without the registry" do
+    tools = PhoenixKitEcommerce.api_tools()
+
+    assert is_list(tools)
+
+    if not Code.ensure_loaded?(PhoenixKit.API.Tool) do
+      assert tools == []
+    end
+  end
+
   test "module_key/0 matches what the permission and tabs declare" do
     # Every tab guards either the base key or one of THIS module's declared
     # sub-permissions. If a tab's key drifts outside that set, the sidebar
