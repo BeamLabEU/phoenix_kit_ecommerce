@@ -3,6 +3,10 @@ defmodule PhoenixKitEcommerce.API.Record do
   A product as the public API sees it: the storefront view-struct, its
   category chain (root first), the visibility facts and the resulting state.
   Built by `PhoenixKitEcommerce.API.Loader`.
+
+  Only the product's own category gates its visibility. `chain` is unfiltered
+  and may contain hidden or deleted ancestors; a caller that exposes category
+  names must filter it.
   """
 
   alias PhoenixKitEcommerce.API.Facts

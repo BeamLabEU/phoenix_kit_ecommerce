@@ -63,6 +63,9 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
 
       assert record.category == nil
       assert record.chain == []
+      # A category the snapshot does not know cannot be shown to be visible.
+      assert record.facts.category_status == "missing"
+      assert record.state == :hidden
     end
   end
 
@@ -114,13 +117,21 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
       assert Loader.chain(nil, @cats) == []
     end
 
-    test "chain/2 stops at a cycle instead of looping" do
+    test "chain/2 stops at the first repeated category" do
       cyclic = %{
         "x" => %{uuid: "x", parent_uuid: "y"},
-        "y" => %{uuid: "y", parent_uuid: "x"}
+        "y" => %{uuid: "y", parent_uuid: "x"},
+        "s" => %{uuid: "s", parent_uuid: "s"}
       }
 
-      assert length(Loader.chain(cyclic["x"], cyclic)) <= 20
+      assert Loader.chain(cyclic["x"], cyclic) |> Enum.map(& &1.uuid) == ["y", "x"]
+      assert Loader.chain(cyclic["s"], cyclic) |> Enum.map(& &1.uuid) == ["s"]
+    end
+
+    test "chain/2 stops after 20 levels of an endless parent line" do
+      long = Map.new(1..30, &{"c#{&1}", %{uuid: "c#{&1}", parent_uuid: "c#{&1 + 1}"}})
+
+      assert length(Loader.chain(long["c1"], long)) == 20
     end
 
     test "subtree_uuids/2 is the root and every descendant, once" do

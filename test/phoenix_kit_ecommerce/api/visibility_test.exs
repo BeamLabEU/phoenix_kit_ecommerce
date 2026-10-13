@@ -1,6 +1,6 @@
 defmodule PhoenixKitEcommerce.API.VisibilityTest do
   @moduledoc """
-  Spec 7.1, row by row and in order. Pure: no database.
+  The visibility rule, row by row and in order. Pure: no database.
   """
   use ExUnit.Case, async: true
 
@@ -77,6 +77,8 @@ defmodule PhoenixKitEcommerce.API.VisibilityTest do
     assert state(item_status: "something_new") == :hidden
     assert state(shop_status: "something_new") == :hidden
     assert state(item_status: nil) == :hidden
+    assert state(category_status: "something_new") == :hidden
+    assert state(category_status: "Hidden") == :hidden
   end
 
   test "listed?/1 is true only for rule 3" do

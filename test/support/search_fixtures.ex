@@ -48,13 +48,13 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     :ok
   end
 
-  @doc "A legacy category; `names` is the localized map, e.g. `%{\"en\" => \"Vases\"}`."
+  @doc ~s|A legacy category; `names` is the localized map, e.g. `%{"en" => "Vases"}`.|
   def legacy_category!(names, attrs \\ %{}) when is_map(names) do
     {:ok, category} = Shop.create_category(Map.merge(%{name: names}, attrs))
     category
   end
 
-  @doc "An active legacy product; `titles` is the localized map. `attrs` may carry `price: \"12.50\"`."
+  @doc ~s|An active legacy product; `titles` is the localized map. `attrs` may carry `price: "12.50"`.|
   def legacy_product!(titles, attrs \\ %{}) when is_map(titles) do
     base = %{title: titles, price: Decimal.new("10.00"), status: "active"}
     attrs = Map.new(attrs, fn {key, value} -> {key, decimal_field(key, value)} end)
@@ -67,7 +67,7 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
 
   defp decimal_field(_key, value), do: value
 
-  @doc "Writes the `shop_product_source` key (`\"legacy\"` or `\"catalogue\"`)."
+  @doc ~s|Writes the `shop_product_source` key (`"legacy"` or `"catalogue"`).|
   def set_product_source!(value) when value in ["legacy", "catalogue"] do
     case Repo.get(ShopConfig, "shop_product_source") do
       nil ->

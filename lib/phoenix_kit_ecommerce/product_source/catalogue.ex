@@ -52,7 +52,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   @doc """
   View-structs for catalogue items the caller already loaded, in the same
   order. Unlike `list_products_by_ids/1` it takes `language:`, which picks
-  the language option labels (`metadata["_option_values"]` ...) are written in.
+  the language the option value labels (`metadata["_option_values"]`, ...)
+  are written in.
   The public API loader uses it so it can read the raw item (for the four
   catalogue item states) and the view from one query.
   """

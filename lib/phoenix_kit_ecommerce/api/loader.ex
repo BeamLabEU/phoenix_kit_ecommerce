@@ -1,22 +1,27 @@
 defmodule PhoenixKitEcommerce.API.Loader do
   @moduledoc """
   Loads products for the public API from whichever product source is active
-  and wraps each in an `PhoenixKitEcommerce.API.Record`: the storefront
+  and wraps each in a `PhoenixKitEcommerce.API.Record`: the storefront
   view-struct, its category chain, the visibility facts and the resulting
-  state. One code path serves the search indexer (Task 5) and every public
-  tool, for both sources.
+  state. One code path serves the search indexer and every public tool, for
+  both sources.
 
   On the Catalogue source the raw item is read too, because the view-struct
   collapses the catalogue's `inactive`, `discontinued` and `deleted` states
-  into `"archived"` and the visibility rule (spec 7.1) tells them apart.
+  into `"archived"` and the visibility rule tells them apart. The stored shop
+  status of an item and of a category is read from the raw record as well: the
+  views turn a value they do not know into `"active"`, and the rule must see
+  it as it is so that it can hide the product.
+
+  A product that names a category the loader cannot find (outside the shop's
+  catalogue, or missing from a stale `:categories` snapshot) is hidden, not
+  listed: facts carry the category status `"missing"`.
   """
 
   import Ecto.Query, warn: false
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Schemas.Item}
-  @compile {:no_warn_undefined, PhoenixKitEcommerce.ProductSource.Catalogue}
-  @compile {:no_warn_undefined, PhoenixKitEcommerce.ProductSource.Catalogue.Query}
 
   alias PhoenixKit.RepoHelper
   alias PhoenixKit.Utils.UUID, as: UUIDUtils
@@ -29,13 +34,16 @@ defmodule PhoenixKitEcommerce.API.Loader do
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue, as: CatalogueSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query, as: CatalogueQuery
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View, as: CatalogueView
   alias PhoenixKitEcommerce.ProductSource.Legacy
 
   @max_chain_depth 20
 
   @doc """
-  Records for `ids`, keyed by product id. Unknown, malformed and
-  out-of-catalogue ids are absent from the map.
+  Records for `ids`, keyed by the canonical lowercase product uuid. Unknown,
+  malformed and out-of-catalogue ids are absent from the map. An id in another
+  spelling (upper case) loads, but under the canonical key: callers normalise
+  an id before they look it up in the result.
 
   Options: `:language` (the language option labels are written in; Catalogue
   source only) and `:categories` (a map from `categories/0`, so a caller that
@@ -48,19 +56,30 @@ defmodule PhoenixKitEcommerce.API.Loader do
     if ids == [] do
       %{}
     else
-      categories = Keyword.get_lazy(opts, :categories, &categories/0)
-
-      case ProductSource.current() do
-        ProductSource.Catalogue -> load_catalogue(ids, categories, opts)
-        _legacy -> load_legacy(ids, categories)
-      end
+      load_valid(ids, opts)
     end
   end
 
-  @doc "Every category of the active source by uuid; hidden and deleted ones included."
+  defp load_valid(ids, opts) do
+    case ProductSource.current() do
+      ProductSource.Catalogue -> load_catalogue(ids, opts)
+      _legacy -> load_legacy(ids, Keyword.get_lazy(opts, :categories, &categories/0))
+    end
+  end
+
+  @doc """
+  Every category of the active source by uuid; hidden and deleted ones
+  included. On the Catalogue source a category carries its stored status
+  (its catalogue status when that is not `active`, otherwise its stored shop
+  status, `active` when none is stored) and comes without a parent view or a resolved image,
+  which the API never reads.
+  """
   @spec categories() :: %{String.t() => PhoenixKitEcommerce.Category.t()}
   def categories do
-    ProductSource.current().list_categories([]) |> Map.new(&{&1.uuid, &1})
+    case ProductSource.current() do
+      ProductSource.Catalogue -> catalogue_categories(CatalogueQuery.catalogue_uuid())
+      source -> source.list_categories([]) |> Map.new(&{&1.uuid, &1})
+    end
   end
 
   @doc """
@@ -110,14 +129,10 @@ defmodule PhoenixKitEcommerce.API.Loader do
 
   @doc "True when the shop's catalogue exists and its status is `active`."
   @spec catalogue_listed?() :: boolean()
-  def catalogue_listed? do
-    with uuid when is_binary(uuid) <- CatalogueQuery.catalogue_uuid(),
-         %{status: status} <- Catalogue.get_catalogue(uuid) do
-      status == "active"
-    else
-      _other -> false
-    end
-  end
+  def catalogue_listed?, do: listed?(CatalogueQuery.catalogue_uuid())
+
+  defp listed?(nil), do: false
+  defp listed?(uuid), do: match?(%{status: "active"}, Catalogue.get_catalogue(uuid))
 
   @doc "The ids of the products that sit directly in any of `category_uuids`."
   @spec item_ids_in_categories([String.t()]) :: [String.t()]
@@ -151,17 +166,24 @@ defmodule PhoenixKitEcommerce.API.Loader do
     end
   end
 
-  @doc "The category and its ancestors, root first. Stops at a cycle or after #{@max_chain_depth} levels."
+  @doc """
+  The category and its ancestors, root first. Stops at the first category it
+  has already seen (a cycle, a self-parent) and after #{@max_chain_depth} levels.
+  The chain is unfiltered: it may contain hidden or deleted ancestors.
+  """
   @spec chain(map() | nil, %{String.t() => map()}) :: [map()]
   def chain(nil, _categories), do: []
-  def chain(category, categories), do: build_chain(category, categories, [], 0)
+  def chain(category, categories), do: build_chain(category, categories, [], MapSet.new())
 
-  defp build_chain(nil, _categories, acc, _depth), do: acc
-  defp build_chain(_category, _categories, acc, depth) when depth >= @max_chain_depth, do: acc
+  defp build_chain(nil, _categories, acc, _seen), do: acc
 
-  defp build_chain(category, categories, acc, depth) do
-    parent = category.parent_uuid && Map.get(categories, category.parent_uuid)
-    build_chain(parent, categories, [category | acc], depth + 1)
+  defp build_chain(category, categories, acc, seen) do
+    if MapSet.member?(seen, category.uuid) or MapSet.size(seen) >= @max_chain_depth do
+      acc
+    else
+      parent = category.parent_uuid && Map.get(categories, category.parent_uuid)
+      build_chain(parent, categories, [category | acc], MapSet.put(seen, category.uuid))
+    end
   end
 
   @doc "`root` and the uuids of every descendant, each once (a cycle cannot repeat a uuid)."
@@ -180,47 +202,74 @@ defmodule PhoenixKitEcommerce.API.Loader do
 
   # --- the two sources -------------------------------------------------------
 
-  defp load_catalogue(ids, categories, opts) do
-    items = CatalogueQuery.list_items_by_uuids(ids)
+  defp load_catalogue(ids, opts) do
+    catalogue = CatalogueQuery.catalogue_uuid()
+    categories = Keyword.get_lazy(opts, :categories, fn -> catalogue_categories(catalogue) end)
+    items = CatalogueQuery.list_items_by_uuids(ids, catalogue)
     products = CatalogueSource.products_for_items(items, Keyword.take(opts, [:language]))
-    listed? = catalogue_listed?()
+    listed? = listed?(catalogue)
 
     items
     |> Enum.zip(products)
     |> Map.new(fn {item, product} ->
-      category = Map.get(categories, item.category_uuid)
-
       facts = %Facts{
         item_status: item.status,
-        shop_status: product.merchant_status || product.status,
-        category_status: category && category.status,
+        shop_status: stored_shop_status(item.data),
+        category_status: category_status(item.category_uuid, categories),
         catalogue_listed?: listed?,
         position: item.position || 0
       }
 
-      {item.uuid, record(item.uuid, product, category, categories, facts)}
+      {item.uuid, record(item.uuid, product, item.category_uuid, categories, facts)}
     end)
+  end
+
+  defp catalogue_categories(catalogue) do
+    [catalogue_uuid: catalogue]
+    |> CatalogueQuery.list_categories()
+    |> Map.new(fn raw ->
+      {raw.uuid, %{CatalogueView.category_view(raw) | status: stored_category_status(raw)}}
+    end)
+  end
+
+  # The status as written, never the views' normalised one (they turn a value
+  # they do not know into "active"; the rule must see it to hide the product).
+  defp stored_category_status(%{status: "active"} = raw), do: stored_shop_status(raw.data)
+  defp stored_category_status(raw), do: raw.status
+
+  defp stored_shop_status(%{"ecommerce" => %{"shop_status" => status}}) when status != nil,
+    do: status
+
+  defp stored_shop_status(_data), do: "active"
+
+  defp category_status(nil, _categories), do: nil
+
+  defp category_status(category_uuid, categories) do
+    case Map.get(categories, category_uuid) do
+      nil -> "missing"
+      category -> category.status
+    end
   end
 
   defp load_legacy(ids, categories) do
     ids
     |> Legacy.list_products_by_ids()
     |> Map.new(fn product ->
-      category = Map.get(categories, product.category_uuid)
-
       facts = %Facts{
         item_status: "active",
         shop_status: product.status,
-        category_status: category && category.status,
+        category_status: category_status(product.category_uuid, categories),
         catalogue_listed?: true,
         position: 0
       }
 
-      {product.uuid, record(product.uuid, product, category, categories, facts)}
+      {product.uuid, record(product.uuid, product, product.category_uuid, categories, facts)}
     end)
   end
 
-  defp record(id, product, category, categories, facts) do
+  defp record(id, product, category_uuid, categories, facts) do
+    category = category_uuid && Map.get(categories, category_uuid)
+
     %Record{
       id: id,
       product: product,
