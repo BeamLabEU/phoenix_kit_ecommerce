@@ -371,12 +371,34 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
   @doc """
   Build a localized URL path, adding language prefix for non-default languages.
-  Delegates to Routes.path which handles default vs non-default consistently.
+  Delegates to Routes.path which handles default vs non-default consistently;
+  a single-language site gets no locale segment at all (`PhoenixKitEcommerce.url_locale/1`).
   """
   def build_lang_url(path, lang) do
-    base = DialectMapper.extract_base(lang)
-    Routes.path(path, locale: base)
+    Routes.path(path, locale: PhoenixKitEcommerce.url_locale(lang))
   end
+
+  @doc """
+  A storefront path for the page being rendered, in the page's own language.
+
+  `assigns` is the socket's (or a template's) assigns: the language comes from
+  `:current_locale`, falling back to the site's primary one. Every link a page
+  renders goes through this (or `PhoenixKitEcommerce.*_url/1`), so none of them
+  takes its locale segment from whatever Gettext happens to hold.
+  """
+  @spec page_path(map(), String.t(), keyword()) :: String.t()
+  def page_path(assigns, path, opts \\ []) do
+    language = assigns[:current_locale] || Translations.default_language()
+    Routes.path(path, Keyword.put(opts, :locale, PhoenixKitEcommerce.url_locale(language)))
+  end
+
+  @doc """
+  Whether the storefront serves a single language: multi-language support is
+  off, so there is no other language to redirect a visitor to and no link
+  carries a locale segment.
+  """
+  @spec single_language?() :: boolean()
+  def single_language?, do: not Languages.enabled?()
 
   # ---------------------------------------------------------------------------
   # Pagination helpers

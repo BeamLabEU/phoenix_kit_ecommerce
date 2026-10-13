@@ -10,7 +10,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Utils.CountryData
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.BillingProfile
   alias PhoenixKitBilling.PaymentOption
@@ -99,8 +98,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     session_id = if session["shop_session_trusted"] == true, do: session["shop_session_id"]
 
     case Shop.recent_checkout_order_uuid(user_uuid: user_uuid, session_id: session_id) do
-      nil -> redirect_to_cart(socket, gettext("Your cart is empty"))
-      order_uuid -> push_navigate(socket, to: Routes.path("/checkout/complete/#{order_uuid}"))
+      nil ->
+        redirect_to_cart(socket, gettext("Your cart is empty"))
+
+      order_uuid ->
+        push_navigate(socket,
+          to: Helpers.page_path(socket.assigns, "/checkout/complete/#{order_uuid}")
+        )
     end
   end
 
@@ -558,7 +562,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp redirect_to_cart(socket, message) do
     socket
     |> put_flash(:error, message)
-    |> push_navigate(to: Routes.path("/cart"))
+    |> navigate_to_cart()
+  end
+
+  # The cart in the page's own language — not whatever Gettext holds, which
+  # is how a checkout redirect used to land on `/en/cart` from a `/uk/` page.
+  defp navigate_to_cart(socket) do
+    push_navigate(socket, to: Helpers.page_path(socket.assigns, "/cart"))
   end
 
   @impl true
@@ -1037,7 +1047,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       socket
       |> assign(:step, :shipping_invalid)
       |> put_flash(:error, message)
-      |> push_navigate(to: Routes.path("/cart"))
+      |> navigate_to_cart()
     end
   end
 
@@ -1166,7 +1176,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp handle_order_result({:ok, order}, socket) do
     socket
     |> assign(:processing, false)
-    |> push_navigate(to: Routes.path("/checkout/complete/#{order.uuid}"))
+    |> push_navigate(to: Helpers.page_path(socket.assigns, "/checkout/complete/#{order.uuid}"))
   end
 
   # A second click on "Confirm Order" lands here: the first one already made
@@ -1184,14 +1194,16 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       order_uuid ->
         socket
         |> assign(:processing, false)
-        |> push_navigate(to: Routes.path("/checkout/complete/#{order_uuid}"))
+        |> push_navigate(
+          to: Helpers.page_path(socket.assigns, "/checkout/complete/#{order_uuid}")
+        )
     end
   end
 
   defp handle_order_result({:error, :cart_empty}, socket) do
     socket
     |> assign(:processing, false)
-    |> push_navigate(to: Routes.path("/cart"))
+    |> navigate_to_cart()
   end
 
   defp handle_order_result({:error, :no_shipping_method}, socket) do
@@ -1237,14 +1249,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:processing, false)
     |> put_flash(:error, gettext("An item in your cart is no longer available"))
-    |> push_navigate(to: Routes.path("/cart"))
+    |> navigate_to_cart()
   end
 
   defp handle_order_result({:error, :product_not_available}, socket) do
     socket
     |> assign(:processing, false)
     |> put_flash(:error, gettext("An item in your cart is no longer available"))
-    |> push_navigate(to: Routes.path("/cart"))
+    |> navigate_to_cart()
   end
 
   # The billing details are missing deliverable-address fields — this is
@@ -1311,7 +1323,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       :error,
       gettext("The selected payment method is no longer available - please pick another")
     )
-    |> push_navigate(to: Routes.path("/cart"))
+    |> navigate_to_cart()
   end
 
   defp handle_order_result({:error, :shop_disabled}, socket) do
@@ -1497,7 +1509,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
       <div class="p-6 max-w-6xl mx-auto">
         <div class="flex items-center justify-between mb-8">
           <h1 class="text-3xl font-bold">{gettext("Checkout")}</h1>
-          <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
+          <.link navigate={Helpers.page_path(assigns, "/cart")} class="btn btn-ghost btn-sm">
             <.icon name="hero-arrow-left" class="w-4 h-4" />
           </.link>
         </div>
@@ -1581,6 +1593,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                 />
               <% :billing -> %>
                 <.billing_step
+                  current_locale={assigns[:current_locale]}
                   is_guest={@is_guest}
                   billing_profiles={@billing_profiles}
                   selected_profile_uuid={@selected_profile_uuid}
@@ -1608,6 +1621,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                 />
               <% :review -> %>
                 <.review_step
+                  current_locale={assigns[:current_locale]}
                   cart={@cart}
                   is_guest={@is_guest}
                   billing_profiles={@billing_profiles}
@@ -1741,6 +1755,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <% else %>
           <%!-- Authenticated user with multiple profiles - show selector --%>
           <.profile_selector
+            current_locale={@current_locale}
             billing_profiles={@billing_profiles}
             selected_profile_uuid={@selected_profile_uuid}
             needs_profile_selection={@needs_profile_selection}
@@ -1774,7 +1789,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <.icon name="hero-information-circle" class="w-5 h-5" />
           <span>
             {gettext("You have multiple billing profiles. Please select one or")}
-            <.link navigate={Routes.path("/dashboard/billing-profiles")} class="link">
+            <.link navigate={Helpers.page_path(assigns, "/dashboard/billing-profiles")} class="link">
               {gettext("set a default in your account settings")}
             </.link>.
           </span>
@@ -1820,7 +1835,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
           <%= if to_string(@selected_profile_uuid) == to_string(profile.uuid) do %>
             <.link
               navigate={
-                Routes.path("/dashboard/billing-profiles/#{profile.uuid}/edit?return_to=/checkout")
+                Helpers.page_path(
+                  assigns,
+                  "/dashboard/billing-profiles/#{profile.uuid}/edit"
+                ) <> "?return_to=" <> Helpers.page_path(assigns, "/checkout")
               }
               class="btn btn-ghost btn-sm"
             >
@@ -2114,7 +2132,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
             <h2 class="card-title">{gettext("Shipping Method")}</h2>
-            <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
+            <.link navigate={Helpers.page_path(assigns, "/cart")} class="btn btn-ghost btn-sm">
               <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Change")}
             </.link>
           </div>
@@ -2175,7 +2193,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
             <h2 class="card-title">{gettext("Order Items")}</h2>
-            <.link navigate={Routes.path("/cart")} class="btn btn-ghost btn-sm">
+            <.link navigate={Helpers.page_path(assigns, "/cart")} class="btn btn-ghost btn-sm">
               <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> {gettext("Edit Cart")}
             </.link>
           </div>
@@ -2259,7 +2277,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                 </p>
                 <div class="mt-3">
                   <.link
-                    navigate={Routes.path("/users/log-in") <> "?return_to=" <> Routes.path("/checkout")}
+                    navigate={
+                      Helpers.page_path(assigns, "/users/log-in") <>
+                        "?return_to=" <> Helpers.page_path(assigns, "/checkout")
+                    }
                     class="btn btn-primary btn-sm"
                   >
                     <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4 mr-1" />

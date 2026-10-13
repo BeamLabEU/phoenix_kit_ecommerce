@@ -7,7 +7,6 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   """
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Web.Helpers
@@ -38,7 +37,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
       {:ok,
        socket
        |> put_flash(:error, gettext("Billing module is not enabled"))
-       |> push_navigate(to: Routes.path("/dashboard"))}
+       |> push_navigate(to: Helpers.page_path(socket.assigns, "/dashboard"))}
     end
   end
 
@@ -67,12 +66,14 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
       end
 
     {:noreply,
-     push_patch(socket, to: Routes.path("/dashboard/orders", map_to_keyword(filter_params)))}
+     push_patch(socket,
+       to: Helpers.page_path(socket.assigns, "/dashboard/orders", map_to_keyword(filter_params))
+     )}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
-    {:noreply, push_patch(socket, to: Routes.path("/dashboard/orders"))}
+    {:noreply, push_patch(socket, to: Helpers.page_path(socket.assigns, "/dashboard/orders"))}
   end
 
   @impl true
@@ -81,7 +82,10 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
     current_params = build_current_params(socket)
     params = Map.put(current_params, "page", page)
 
-    {:noreply, push_patch(socket, to: Routes.path("/dashboard/orders", map_to_keyword(params)))}
+    {:noreply,
+     push_patch(socket,
+       to: Helpers.page_path(socket.assigns, "/dashboard/orders", map_to_keyword(params))
+     )}
   end
 
   # Last, so it shadows nothing: an event this page does not know, or a

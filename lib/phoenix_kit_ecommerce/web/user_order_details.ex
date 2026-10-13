@@ -12,7 +12,6 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   """
   use PhoenixKitEcommerce.Web, :live_view
 
-  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.NamePrefix
@@ -37,7 +36,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
       {:ok,
        socket
        |> put_flash(:error, gettext("Billing module is not enabled"))
-       |> push_navigate(to: Routes.path("/dashboard"))}
+       |> push_navigate(to: ShopHelpers.page_path(socket.assigns, "/dashboard"))}
     end
   end
 
@@ -49,14 +48,14 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
         {:ok,
          socket
          |> put_flash(:error, gettext("Order not found"))
-         |> push_navigate(to: Routes.path("/dashboard/orders"))}
+         |> push_navigate(to: ShopHelpers.page_path(socket.assigns, "/dashboard/orders"))}
 
       order ->
         if order.user_uuid != current_user.uuid do
           {:ok,
            socket
            |> put_flash(:error, gettext("Access denied"))
-           |> push_navigate(to: Routes.path("/dashboard/orders"))}
+           |> push_navigate(to: ShopHelpers.page_path(socket.assigns, "/dashboard/orders"))}
         else
           {:ok, setup_order_assigns(socket, order, current_user)}
         end

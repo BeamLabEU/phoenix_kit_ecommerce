@@ -210,7 +210,10 @@ defmodule PhoenixKitEcommerce.Notifications do
           action: @customer_order_action,
           text: "Your order #{order.order_number} is confirmed",
           icon: "hero-check-circle",
-          link: Routes.path("/dashboard/orders/#{order.uuid}")
+          link:
+            Routes.path("/dashboard/orders/#{order.uuid}",
+              locale: PhoenixKitEcommerce.url_locale(Translations.default_language())
+            )
         })
 
       _unconfirmed_or_missing ->

@@ -11,7 +11,7 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
   use PhoenixKitEcommerce.LiveCase, async: true
 
   alias Phoenix.LiveView.Utils, as: LiveUtils
-  alias PhoenixKit.Modules.Languages.DialectMapper
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Test.Endpoint
 
@@ -72,7 +72,9 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
     test "creating a category without return_to still lands on the list", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en/admin/shop/categories/new")
 
-      assert {:error, {:live_redirect, %{to: "/en/admin/shop/categories"}}} =
+      list_path = Routes.path("/admin/shop/categories")
+
+      assert {:error, {:live_redirect, %{to: ^list_path}}} =
                save_category(view)
     end
 
@@ -116,15 +118,19 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
         live(conn, "/en/admin/shop/categories/#{category.uuid}/edit" <> return_to("/en/shop/x"))
 
       assert html =~ ~s(href="/en/shop/x")
-      refute html =~ ~s(href="/en/admin/shop/categories")
+      refute html =~ ~s(href="#{Routes.path("/admin/shop/categories")}")
     end
 
     test "without return_to, saving still lands on the categories list", %{conn: conn} do
       category = category!()
       {:ok, view, html} = live(conn, "/en/admin/shop/categories/#{category.uuid}/edit")
 
-      assert html =~ ~s(href="/en/admin/shop/categories")
-      assert {:error, {:live_redirect, %{to: "/en/admin/shop/categories"}}} = save_category(view)
+      assert html =~ ~s(href="#{Routes.path("/admin/shop/categories")}")
+
+      list_path = Routes.path("/admin/shop/categories")
+
+      assert {:error, {:live_redirect, %{to: ^list_path}}} =
+               save_category(view)
     end
 
     test "a return_to that is not a local path is ignored", %{conn: conn} do
@@ -143,7 +149,9 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
 
         refute html =~ "evil.example"
 
-        assert {:error, {:live_redirect, %{to: "/en/admin/shop/categories"}}} =
+        list_path = Routes.path("/admin/shop/categories")
+
+        assert {:error, {:live_redirect, %{to: ^list_path}}} =
                  save_category(view)
       end
     end
@@ -206,7 +214,7 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
                  })
                  |> render_submit()
 
-        assert to =~ ~r|^/en/admin/shop/products/[0-9a-f-]{36}$|
+        assert to =~ ~r|^#{Regex.escape(Routes.path("/admin/shop/products"))}/[0-9a-f-]{36}$|
       end
     end
 
@@ -217,14 +225,14 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
         live(conn, "/en/admin/shop/products/#{product.uuid}/edit" <> return_to("/en/shop/x"))
 
       assert html =~ ~s(href="/en/shop/x")
-      refute html =~ ~s(href="/en/admin/shop/products")
+      refute html =~ ~s(href="#{Routes.path("/admin/shop/products")}")
     end
 
     test "without return_to, saving an edit stays on the form", %{conn: conn} do
       product = product!()
       {:ok, view, html} = live(conn, "/en/admin/shop/products/#{product.uuid}/edit")
 
-      assert html =~ ~s(href="/en/admin/shop/products")
+      assert html =~ ~s(href="#{Routes.path("/admin/shop/products")}")
       assert save_product(view) =~ "Product updated"
     end
 
@@ -260,11 +268,13 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
       URI.decode_query(query)["return_to"]
     end
 
-    # The test router serves the admin under the default `/en` prefix only, so
-    # for another locale the link is checked as built (its prefix, and the
-    # `return_to` it carries) and the form is then opened at the `/en` form of
-    # the same URL: the query string is what the form reads, whatever locale
-    # segment the host's router matched.
+    # The test router serves the admin under the default `/en` prefix (and
+    # without one), so for another locale the link is checked as built (its
+    # prefix, and the `return_to` it carries) and the form is then opened at
+    # the `/en` form of the same URL: the query string is what the form reads,
+    # whatever locale segment the host's router matched. The prefix is what
+    # `Routes.path/1` puts before `/admin/shop` for the locale: none on a core
+    # that drops it for a single-language site.
     for locale <- ["en", "ru", "en-US"], kind <- [:item, :category] do
       test "#{kind} form, locale #{locale}: save lands exactly on the original path", %{
         conn: conn
@@ -273,7 +283,7 @@ defmodule PhoenixKitEcommerce.Web.LegacyFormsReturnToTest do
         Gettext.put_locale(PhoenixKitWeb.Gettext, locale)
 
         record = if unquote(kind) == :item, do: product!(), else: category!()
-        prefix = "/" <> DialectMapper.extract_base(locale)
+        prefix = String.replace_suffix(Routes.path("/admin/shop"), "/admin/shop", "")
 
         for original <- @return_paths do
           url = Helpers.admin_edit_path(unquote(kind), record, original)
