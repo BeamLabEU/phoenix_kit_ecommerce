@@ -105,5 +105,15 @@ defmodule PhoenixKitEcommerce.API.MoneyTest do
       assert Money.to_decimal(%{"type" => "fixed"}) == nil
       assert Money.to_decimal(nil) == nil
     end
+
+    test "a non-finite number is not a number" do
+      for value <- ["NaN", "Infinity", "-Infinity", "inf", " -inf "] do
+        assert Money.to_decimal(value) == nil, inspect(value)
+      end
+
+      for value <- [Decimal.new("NaN"), Decimal.new("Infinity"), Decimal.new("-Infinity")] do
+        assert Money.to_decimal(value) == nil, inspect(value)
+      end
+    end
   end
 end

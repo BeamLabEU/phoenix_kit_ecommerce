@@ -57,20 +57,24 @@ defmodule PhoenixKitEcommerce.API.Money do
 
   @doc """
   Reads a stored value (a decimal string, a number, a `Decimal`) leniently.
-  Returns `nil` for anything that is not a number: the caller keeps the raw
-  value in that case and never rewrites what it did not parse.
+  Returns `nil` for anything that is not a finite number (`"abc"`, `"NaN"`,
+  `"Infinity"`): the caller keeps the raw value in that case and never
+  rewrites what it did not parse.
   """
   @spec to_decimal(term()) :: Decimal.t() | nil
-  def to_decimal(%Decimal{} = value), do: value
+  def to_decimal(%Decimal{} = value), do: finite(value)
   def to_decimal(value) when is_integer(value), do: Decimal.new(value)
   def to_decimal(value) when is_float(value), do: Decimal.from_float(value)
 
   def to_decimal(value) when is_binary(value) do
     case Decimal.parse(String.trim(value)) do
-      {%Decimal{} = decimal, ""} -> decimal
+      {%Decimal{} = decimal, ""} -> finite(decimal)
       _ -> nil
     end
   end
 
   def to_decimal(_value), do: nil
+
+  defp finite(%Decimal{} = decimal),
+    do: if(Decimal.nan?(decimal) or Decimal.inf?(decimal), do: nil, else: decimal)
 end

@@ -22,7 +22,18 @@ defmodule PhoenixKitEcommerce.API.Meta do
 
   @doc "The key owner's user uuid: the actor of every write."
   @spec actor_uuid(map()) :: String.t() | nil
-  def actor_uuid(ctx), do: ctx |> Map.get(:actor, %{}) |> Map.get(:user_uuid)
+  def actor_uuid(ctx), do: (Map.get(ctx, :actor) || %{}) |> Map.get(:user_uuid)
+
+  @doc """
+  The shape of a term for a log line: an atom, a tuple's tag, a struct's
+  module. Never the term itself, which can carry submitted values or driver text.
+  """
+  @spec term_class(term()) :: String.t()
+  def term_class(term) when is_atom(term), do: inspect(term)
+  def term_class(%module{}), do: inspect(module)
+  def term_class({tag, _rest}) when is_atom(tag), do: "{" <> inspect(tag) <> ", _}"
+  def term_class(term) when is_tuple(term), do: "tuple"
+  def term_class(_term), do: "other"
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)

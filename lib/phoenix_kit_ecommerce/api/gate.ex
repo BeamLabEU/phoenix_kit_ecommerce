@@ -30,26 +30,27 @@ defmodule PhoenixKitEcommerce.API.Gate do
   def check(input \\ %{}) do
     with {:ok, catalogue_uuid} <- source() do
       case Map.get(input, "catalogue_id") do
-        nil ->
-          {:ok, catalogue_uuid}
-
-        ^catalogue_uuid ->
-          {:ok, catalogue_uuid}
-
-        other ->
-          {:error, :validation_failed, "catalogue_id is not the catalogue the shop reads.",
-           %{
-             errors: [
-               %{
-                 path: "catalogue_id",
-                 message: "must be the shop catalogue",
-                 limit: nil,
-                 allowed: [catalogue_uuid],
-                 given: other
-               }
-             ]
-           }}
+        nil -> {:ok, catalogue_uuid}
+        given -> check_catalogue_id(given, catalogue_uuid)
       end
+    end
+  end
+
+  defp check_catalogue_id(given, catalogue_uuid) do
+    if Ecto.UUID.cast(given) == {:ok, catalogue_uuid} do
+      {:ok, catalogue_uuid}
+    else
+      {:error, :validation_failed, "catalogue_id is not the catalogue the shop reads.",
+       %{
+         errors: [
+           %{
+             path: "catalogue_id",
+             message: "must be the shop catalogue",
+             limit: nil,
+             allowed: [catalogue_uuid]
+           }
+         ]
+       }}
     end
   end
 

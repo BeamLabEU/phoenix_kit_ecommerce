@@ -1,9 +1,9 @@
 defmodule PhoenixKitEcommerce.API.Refs do
   @moduledoc """
-  Product references of the admin tools (spec 5.4): `{"id": uuid}`,
+  Product references of the admin tools: `{"id": uuid}`,
   `{"sku": "..."}` or `{"external_id": "..."}`, resolved inside the shop's
-  catalogue by the catalogue's own resolver (phase 2a,
-  `PhoenixKitCatalogue.API.resolve_refs/2`). One answer per
+  catalogue by the catalogue's own resolver
+  (`PhoenixKitCatalogue.API.resolve_refs/2`). One answer per
   reference, in the order given; a bad reference is a row error, and the
   rows after it are still resolved.
   """
@@ -12,7 +12,7 @@ defmodule PhoenixKitEcommerce.API.Refs do
 
   require Logger
 
-  alias PhoenixKitEcommerce.API.Rows
+  alias PhoenixKitEcommerce.API.{Meta, Rows}
 
   @keys ["id", "sku", "external_id"]
 
@@ -83,9 +83,10 @@ defmodule PhoenixKitEcommerce.API.Refs do
   end
 
   # Not an answer the catalogue's resolver documents. The term can carry
-  # driver text, so the caller gets a fixed sentence and the term goes to the log.
+  # driver text and submitted values, so the caller gets a fixed sentence and
+  # the log only the term's class.
   defp translate({:error, other}, ref) do
-    Logger.error("[API.Refs] unexpected resolve_refs answer: " <> inspect(other))
+    Logger.error("[API.Refs] unexpected resolve_refs answer: " <> Meta.term_class(other))
 
     {:error,
      Rows.error(:validation_failed, "The reference could not be resolved.", %{

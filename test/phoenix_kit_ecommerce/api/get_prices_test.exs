@@ -99,6 +99,33 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
     end
   end
 
+  test "a stored non-finite option price is shown as it is and does not fail the call",
+       %{catalogue: catalogue, ctx: ctx} do
+    bad =
+      F.item!(catalogue, %{
+        sku: "GP-INF",
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{
+            "shop_status" => "active",
+            "price_modifiers" => %{"liquid" => %{"a" => "Infinity", "b" => "NaN", "c" => "2"}}
+          }
+        }
+      })
+
+    good = F.item!(catalogue, %{sku: "GP-OK"})
+
+    assert {:ok, %{"results" => [bad_row, good_row], "summary" => summary}} =
+             run([%{"id" => bad.uuid}, %{"id" => good.uuid}], ctx)
+
+    assert bad_row["price_modifiers"] == %{
+             "liquid" => %{"a" => "Infinity", "b" => "NaN", "c" => "2.00"}
+           }
+
+    assert good_row["id"] == good.uuid
+    assert summary == %{"found" => 2, "error" => 0}
+  end
+
   test "shop_status_visible is about the product's own status: a product in a hidden category still says true",
        %{catalogue: catalogue, ctx: ctx} do
     {:ok, category} =
@@ -114,7 +141,7 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
 
     # The storefront hides this product (`exclude_hidden_categories`, query.ex:421-435).
     # The field does not claim to know that, which is why it is not called
-    # "visible in the shop"; phase 3a's `API.Visibility` is the full verdict.
+    # "visible in the shop"; that needs a verdict that also looks at the categories.
     assert row["shop_status_visible"] == true
     refute Map.has_key?(row, "visible_in_shop")
   end

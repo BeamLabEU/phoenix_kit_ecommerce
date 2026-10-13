@@ -97,6 +97,19 @@ defmodule PhoenixKitEcommerce.API.BatchTest do
       assert summary == %{"updated" => 1, "error" => 2, "unchanged" => 1}
     end
 
+    test "the summary always has the three actions, zero when none happened" do
+      same = %{row(0, plan()) | result: {:unchanged, %{uuid: "u0"}}}
+
+      assert %{"summary" => %{"updated" => 0, "unchanged" => 1, "error" => 0}} =
+               Batch.render([same])
+
+      assert %{"summary" => %{"updated" => 0, "unchanged" => 0, "error" => 1}} =
+               Batch.render([failed(0)])
+
+      assert %{"results" => [], "summary" => %{"updated" => 0, "unchanged" => 0, "error" => 0}} =
+               Batch.render([])
+    end
+
     test "a row the catalogue found already up to date is unchanged, not updated" do
       same = %{row(0, plan()) | result: {:unchanged, %{uuid: "u0"}}}
 

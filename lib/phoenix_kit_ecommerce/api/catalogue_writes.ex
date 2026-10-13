@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   @moduledoc """
   The one place the admin tools write catalogue items through the catalogue's
-  batch update (phase 2a, `Catalogue.update_items/2`). The rest of the API
+  batch update (`Catalogue.update_items/2`). The rest of the API
   code does not know the catalogue's argument or return shape: if it
   differs from what is assumed here, this module is the only one to change.
 
@@ -16,7 +16,7 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   require Logger
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitEcommerce.API.Rows
+  alias PhoenixKitEcommerce.API.{Meta, Rows}
 
   @type answer :: {:ok, struct()} | {:unchanged, struct()} | {:error, Rows.t()}
 
@@ -41,8 +41,8 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
         end)
 
       {:error, reason} ->
-        # The term can carry SQL fragments, constraint names or driver text:
-        # the log gets all of it (with the request id), the answer a class.
+        # The term can carry SQL fragments, constraint names or driver text,
+        # and submitted values: log and answer get only a class.
         log_failure("update_items", opts, reason)
         failed(entries, "The batch could not be saved.", reason_class(reason))
     end
@@ -83,7 +83,7 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
     request_id = get_in(Keyword.get(opts, :log_metadata, %{}), ["request_id"])
 
     Logger.error(
-      "[API.CatalogueWrites] request #{request_id}: #{what} failed: " <> inspect(reason)
+      "[API.CatalogueWrites] request #{request_id}: #{what} failed: " <> Meta.term_class(reason)
     )
   end
 end

@@ -70,6 +70,21 @@ defmodule PhoenixKitEcommerce.API.GateTest do
 
       assert error.path == "catalogue_id"
       assert error.allowed == [catalogue.uuid]
+      refute Map.has_key?(error, :given)
+    end
+
+    test "the shop catalogue's uuid is accepted in any letter case" do
+      catalogue = F.shop_catalogue!()
+
+      assert {:ok, uuid} = Gate.check(%{"catalogue_id" => String.upcase(catalogue.uuid)})
+      assert uuid == catalogue.uuid
+    end
+
+    test "a catalogue_id that is not a uuid is refused" do
+      F.shop_catalogue!()
+
+      assert {:error, :validation_failed, _detail, %{errors: [%{path: "catalogue_id"}]}} =
+               Gate.check(%{"catalogue_id" => 42})
     end
   end
 end

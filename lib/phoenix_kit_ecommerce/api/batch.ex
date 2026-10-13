@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.API.Batch do
   @moduledoc """
   The steps every batch write tool shares: resolve the references, plan each
-  row, write the rows that change, and shape the answer (spec 5.4).
+  row, write the rows that change, and shape the answer.
 
   A row is a map:
 
@@ -185,11 +185,18 @@ defmodule PhoenixKitEcommerce.API.Batch do
     :ok
   end
 
-  @doc "The `results` list and the `summary` of a finished batch."
+  @doc "The `results` list and the `summary` (`updated`, `unchanged` and `error`, zero when none) of a finished batch."
   @spec render([row()]) :: map()
   def render(rows) do
     results = Enum.map(rows, &result/1)
-    %{"results" => results, "summary" => Enum.frequencies_by(results, & &1["action"])}
+    counts = Enum.frequencies_by(results, & &1["action"])
+
+    summary =
+      Map.new(["updated", "unchanged", "error"], fn action ->
+        {action, Map.get(counts, action, 0)}
+      end)
+
+    %{"results" => results, "summary" => summary}
   end
 
   defp result(%{error: error} = row) when not is_nil(error),

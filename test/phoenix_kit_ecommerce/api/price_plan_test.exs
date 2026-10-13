@@ -143,6 +143,36 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
       assert plan.changes["price_modifiers.liquid.blue"] == %{"from" => "5.00", "to" => nil}
     end
 
+    test "a stored non-finite leaf is kept as it is and can be replaced or removed" do
+      stored =
+        item(%{
+          data: %{
+            "ecommerce" => %{
+              "price_modifiers" => %{"liquid" => %{"black" => "Infinity", "blue" => "NaN"}}
+            }
+          }
+        })
+
+      assert {:ok, set} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"black" => "4.00"}}}, stored)
+
+      assert set.changed?
+      assert set.changes["price_modifiers.liquid.black"]["to"] == "4.00"
+      refute set.dangerous?
+
+      assert {:ok, removed} =
+               plan(
+                 %{"price_modifiers" => %{"liquid" => %{"black" => nil, "blue" => nil}}},
+                 stored
+               )
+
+      assert removed.changed?
+      refute removed.dangerous?
+
+      assert {:ok, price_only} = plan(%{"price" => "100.00"}, stored)
+      refute price_only.changed?
+    end
+
     test "removing a modifier that is not there changes nothing" do
       plan = plan!(%{"price_modifiers" => %{"liquid" => %{"red" => nil}}})
       refute plan.changed?
