@@ -47,7 +47,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, new_product_trail(socket)}
+    {:ok, socket |> new_product_trail() |> assign(:return_to, nil)}
   end
 
   @impl true
@@ -60,6 +60,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     if socket.assigns.live_action in [:new, :edit] and catalogue_source_active?() do
       {:noreply, redirect_to_catalogue(socket)}
     else
+      socket = assign(socket, :return_to, Helpers.safe_return_to(params["return_to"]))
       {:noreply, apply_action(socket, socket.assigns.live_action, params)}
     end
   end
@@ -810,11 +811,19 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
         changeset = Shop.change_product(product)
 
+        socket =
+          socket
+          |> assign(:product, product)
+          |> assign_form(changeset)
+          |> put_flash(:info, gettext("Product updated"))
+
+        # Opened from a storefront or list Edit link: send the operator
+        # back to the page they came from instead of leaving them on the form.
         {:noreply,
-         socket
-         |> assign(:product, product)
-         |> assign_form(changeset)
-         |> put_flash(:info, gettext("Product updated"))}
+         case socket.assigns.return_to do
+           nil -> socket
+           return_to -> push_navigate(socket, to: return_to)
+         end}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
@@ -862,7 +871,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   def render(assigns) do
     ~H"""
       <div class="container flex-col mx-auto px-4 py-6 max-w-5xl">
-        <.admin_page_header back={Routes.path("/admin/shop/products")}>
+        <.admin_page_header back={@return_to || Routes.path("/admin/shop/products")}>
           <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-base-content">{@heading}</h1>
           <p class="text-sm sm:text-base text-base-content/60 mt-0.5">
             {if @live_action == :new, do: gettext("Create a new product"), else: gettext("Edit product details")}
@@ -1962,7 +1971,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
           <%!-- Submit --%>
           <div class="flex justify-end gap-4">
-            <.link navigate={Routes.path("/admin/shop/products")} class="btn btn-ghost">
+            <.link navigate={@return_to || Routes.path("/admin/shop/products")} class="btn btn-ghost">
               {gettext("Cancel")}
             </.link>
             <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
