@@ -83,6 +83,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
 
     fields = %{
       uuid: item.uuid,
+      origin: :catalogue,
       title: localized_map(item, langs, &Catalogue.translated_name/2),
       body_html: localized_map(item, langs, &Catalogue.translated_description/2),
       description: summary_map(item, langs),
@@ -161,6 +162,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
 
     fields = %{
       uuid: category.uuid,
+      origin: :catalogue,
       name: localized_map(category, langs, &Catalogue.translated_name/2),
       description: localized_map(category, langs, &Catalogue.translated_description/2),
       slug: category.slug || %{},
@@ -209,7 +211,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   defp side(ecommerce, key), do: Codec.integer(Map.get(ecommerce, key))
 
   defp featured_product_placeholder(image_uuid) when is_binary(image_uuid) and image_uuid != "" do
-    struct(Product, featured_image_uuid: image_uuid)
+    struct(Product, featured_image_uuid: image_uuid, origin: :catalogue)
   end
 
   defp featured_product_placeholder(_), do: nil

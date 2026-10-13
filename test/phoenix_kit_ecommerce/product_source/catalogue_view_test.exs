@@ -133,6 +133,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
 
       assert %PhoenixKitEcommerce.Product{} = product
       assert product.__meta__.state == :built
+      # Decides whose editor the admin Edit link opens.
+      assert product.origin == :catalogue
 
       assert product.title["en-US"] == "Geometric Planter"
       assert product.title["fr-FR"] == "Cache-pot géométrique"
@@ -527,6 +529,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
 
       assert %PhoenixKitEcommerce.Category{} = view
       assert view.__meta__.state == :built
+      assert view.origin == :catalogue
       assert view.name["en-US"] == "Planters"
       assert view.name["fr-FR"] == "Cache-pots"
       assert view.description["en-US"] == "Pots and planters"
