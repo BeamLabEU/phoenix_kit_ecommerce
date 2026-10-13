@@ -82,6 +82,31 @@ defmodule PhoenixKitEcommerce.Search.IndexerTest do
     assert count == 1
   end
 
+  test "dialect language codes are kept in the row and still pick the language configuration" do
+    enable_languages!(["en-US", "de-DE", "fr-FR"])
+    product = legacy_product!(%{"en-US" => "Red Vase", "de-DE" => "Rote Vasen"})
+
+    assert {:ok, %{indexed: 3, removed: 0}} = Indexer.reindex_items([product.uuid])
+
+    assert rows(product.uuid) == [
+             {"de-DE", "Rote Vasen"},
+             {"en-US", "Red Vase"},
+             {"fr-FR", "Red Vase"}
+           ]
+
+    # Only the german configuration stems "Rote" to "rot"; the simple one would not match "Rot".
+    %{rows: [[language]]} =
+      Repo.query!(
+        """
+        SELECT language FROM phoenix_kit_shop_search_index
+        WHERE item_uuid = $1 AND document @@ websearch_to_tsquery('german', 'Rot')
+        """,
+        [Ecto.UUID.dump!(product.uuid)]
+      )
+
+    assert language == "de-DE"
+  end
+
   test "a draft, an archived and a hidden-category product get no rows" do
     hidden = legacy_category!(%{"en" => "Hidden"}, %{status: "hidden"})
     draft = legacy_product!(%{"en" => "Draft"}, %{status: "draft"})

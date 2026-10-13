@@ -35,6 +35,44 @@ defmodule PhoenixKitEcommerce.Search.IndexerCatalogueTest do
     assert titles() == ["Listed"]
   end
 
+  test "dialect language codes are kept in the row and fall back to the primary title" do
+    enable_languages!(["en-US", "de-DE", "fr-FR"])
+    catalogue = catalogue_source!()
+
+    data =
+      "active"
+      |> shop_data()
+      |> Map.merge(%{
+        "_primary_language" => "en-US",
+        "en-US" => %{"_name" => "Red Vase"},
+        "de-DE" => %{"_name" => "Rote Vasen"}
+      })
+
+    item = catalogue_item!(catalogue, "Red Vase", %{data: data})
+
+    assert {:ok, %{indexed: 3, removed: 0}} = Indexer.reindex_items([item.uuid])
+
+    assert Repo.all(
+             from(e in Entry,
+               where: e.item_uuid == ^item.uuid,
+               order_by: e.language,
+               select: {e.language, e.title}
+             )
+           ) == [{"de-DE", "Rote Vasen"}, {"en-US", "Red Vase"}, {"fr-FR", "Red Vase"}]
+
+    # Only the german configuration stems "Rote" to "rot"; the simple one would not match "Rot".
+    %{rows: [[language]]} =
+      Repo.query!(
+        """
+        SELECT language FROM phoenix_kit_shop_search_index
+        WHERE item_uuid = $1 AND document @@ websearch_to_tsquery('german', 'Rot')
+        """,
+        [Ecto.UUID.dump!(item.uuid)]
+      )
+
+    assert language == "de-DE"
+  end
+
   test "a category rename reaches every product of its subtree after a subtree reindex" do
     catalogue = catalogue_source!()
     root = catalogue_category!(catalogue, "Home")
