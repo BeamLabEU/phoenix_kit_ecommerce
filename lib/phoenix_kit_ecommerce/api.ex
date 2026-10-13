@@ -153,7 +153,7 @@ defmodule PhoenixKitEcommerce.API do
   # with the raw input). A core without the field is not told about it:
   # `Tool.new!/1` would refuse an unknown key.
   defp cost_option do
-    if Map.has_key?(Tool.__struct__(), :cost),
+    if :cost in Map.keys(Tool.__struct__()),
       do: [cost: {AttachImages, :cost}],
       else: []
   end

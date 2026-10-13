@@ -7,5 +7,12 @@
   # which is when the backend emits the plural code path. Mirrors the same
   # ignore in phoenix_kit_staff / phoenix_kit_billing / phoenix_kit_catalogue
   # / phoenix_kit_projects.)
-  {"lib/phoenix_kit_ecommerce/gettext.ex", :call_without_opaque}
+  {"lib/phoenix_kit_ecommerce/gettext.ex", :call_without_opaque},
+  # The admin API's e-commerce tools call core's tool registry and the catalogue's
+  # admin API (`PhoenixKitCatalogue.API.resolve_refs/2`, `Catalogue.update_items/2`),
+  # which no released core or catalogue ships yet.
+  {"lib/phoenix_kit_ecommerce/api.ex", :unknown_function},
+  {"lib/phoenix_kit_ecommerce/api/refs.ex", :unknown_function},
+  {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex", :call_to_missing},
+  {"lib/phoenix_kit_ecommerce/api/settings.ex", :unknown_function}
 ]
