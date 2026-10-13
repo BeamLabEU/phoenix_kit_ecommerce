@@ -193,6 +193,13 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
                plan(%{"price_modifiers" => %{"liquid" => %{"green" => "3.00"}}})
     end
 
+    test "an unknown option on a product with no option sets says why" do
+      assert {:error, [%{path: "price_modifiers.size", message: message, allowed: []}]} =
+               plan(%{"price_modifiers" => %{"size" => %{"l" => "3.00"}}}, item(), sets: [])
+
+      assert message =~ "entities module"
+    end
+
     test "a value the item already stores may be edited even if its set no longer lists it" do
       stale =
         item(%{data: %{"ecommerce" => %{"price_modifiers" => %{"gone" => %{"x" => "1.00"}}}}})

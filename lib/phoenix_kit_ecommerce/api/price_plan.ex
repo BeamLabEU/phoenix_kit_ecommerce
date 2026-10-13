@@ -193,7 +193,10 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
       is_nil(allowed) ->
         {acc,
-         [error("price_modifiers.#{option}", "unknown option", allowed_options(sets)) | errs]}
+         [
+           error("price_modifiers.#{option}", unknown_option_text(sets), allowed_options(sets))
+           | errs
+         ]}
 
       value not in allowed ->
         {acc, [error(path, "unknown value of option #{option}", allowed) | errs]}
@@ -247,6 +250,14 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
       set -> set |> Map.get(:values, []) |> Enum.map(&Map.get(&1, :key))
     end
   end
+
+  # Option sets come from the entities module; without it (or without a set on
+  # the product) there is nothing to price, and the caller should be told why.
+  defp unknown_option_text([]),
+    do:
+      "unknown option: the product has no option sets (option prices need the entities module enabled)"
+
+  defp unknown_option_text(_sets), do: "unknown option"
 
   defp allowed_options(sets), do: Enum.map(sets, &bare_key/1)
 
