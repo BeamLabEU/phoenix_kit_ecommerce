@@ -1,12 +1,12 @@
 defmodule PhoenixKitEcommerce.API.Context do
   @moduledoc """
-  Language, currency and money of one public API call (spec 5.3).
+  Language, currency and money of one public API call.
 
   `build/2` takes the tool input and the executor's handler context and
-  resolves what the answer is written in. See the task description for the
-  rules; in short: an explicit `language` / `currency` input must be enabled
-  (else `validation_failed` with the allowed list), a value from the host hook
-  falls back quietly, and the currency falls back to the shop's base currency.
+  resolves what the answer is written in: an explicit `language` / `currency`
+  input must be enabled (else `validation_failed` with the allowed list), a
+  value from the host hook falls back quietly, and the currency falls back to
+  the shop's base currency.
 
   Money is converted from the stored base-currency amount with
   `PhoenixKitBilling.Currency.present/3` (the storefront's one conversion path)

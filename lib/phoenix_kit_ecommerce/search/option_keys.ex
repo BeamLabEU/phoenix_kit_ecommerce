@@ -1,6 +1,6 @@
 defmodule PhoenixKitEcommerce.Search.OptionKeys do
   @moduledoc """
-  The language-neutral option keys of a product (spec 7.3: an option is
+  The language-neutral option keys of a product (an option is
   `{attribute_key, value_key}`), read from the metadata both product sources
   keep: `_option_values` (key to labels, in the language the view was built
   for), `_value_slugs` (key to label to value slug; catalogue source),

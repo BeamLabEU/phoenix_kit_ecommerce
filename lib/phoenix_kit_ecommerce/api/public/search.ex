@@ -1,7 +1,8 @@
 defmodule PhoenixKitEcommerce.API.Public.Search do
   @moduledoc """
-  Handlers and schemas of `shop.search_products` and `shop.search_products_batch`
-  (spec 7.2). See the phase 3a plan, Task 10, for the input and the answer.
+  Handlers and schemas of `shop.search_products` and `shop.search_products_batch`.
+  The first answers one query; the batch tool answers up to 20 of them in one
+  call, sharing one category lookup and one budget of 200 cards.
 
   A search is two steps. `PhoenixKitEcommerce.Search.Query` answers from the
   index with product ids, the exact count and the facets; the items are then
@@ -102,10 +103,10 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   end
 
   @doc """
-  The rate-limit price of a batch: one unit per query (decision D6). Declared
+  The rate-limit price of a batch: one unit per query. Declared
   on the tool as `cost: {#{inspect(__MODULE__)}, :batch_cost}`.
 
-  The executor calls it with the RAW input, before validation (1b decision M16),
+  The executor calls it with the RAW input, before validation,
   so it must answer a positive integer for any term and never raise. A batch
   over the cap is refused by the schema (422); it is charged the cap.
   """
@@ -202,7 +203,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
     |> put_price(facets.price, context)
   end
 
-  # Active categories only, as in list_categories (decision D2): an unlisted or
+  # Active categories only, as in list_categories: an unlisted or
   # hidden category is never named, though a product in it may be listed.
   defp category_facets(counts, language, categories) do
     counts

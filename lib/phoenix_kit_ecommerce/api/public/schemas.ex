@@ -4,7 +4,7 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
 
   They stay inside the subset core's validator understands (`type`,
   `required`, `properties`, `additionalProperties`, `enum`, bounds, `items`,
-  `pattern`) plus the annotation keywords (spec 16.25: `description`,
+  `pattern`) plus the annotation keywords (`description`,
   `title`, `default`, `examples`, `format`), which never reject input and are
   read by OpenAPI / MCP clients. Any other keyword (`oneOf`, `$ref`, ...) is
   not used here.
@@ -16,7 +16,7 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
   @string %{"type" => "string"}
   @boolean %{"type" => "boolean"}
 
-  @doc "The two fields every public tool accepts besides its own (decision D5)."
+  @doc "The two fields every public tool accepts besides its own."
   @spec control_fields() :: map()
   def control_fields do
     %{
@@ -58,7 +58,7 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
     }
   end
 
-  @doc "A product in a list (spec 7.2)."
+  @doc "A product in a list."
   @spec list_item() :: map()
   def list_item do
     %{
