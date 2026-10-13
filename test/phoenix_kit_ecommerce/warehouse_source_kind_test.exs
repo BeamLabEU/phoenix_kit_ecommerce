@@ -1,6 +1,6 @@
 defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
   @moduledoc """
-  The warehouse source kind `shop_order` (spec 6.3): what Warehouse's
+  The warehouse source kind `shop_order`: what Warehouse's
   `SourceKinds` registry is given, and the three callbacks it dispatches to,
   against real billing orders. Only orders placed by the storefront checkout
   are shop orders, and no label shows the customer.
@@ -8,12 +8,14 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @compile {:no_warn_undefined, PhoenixKitWarehouse.SourceKinds}
+  @compile {:no_warn_undefined, [PhoenixKitWarehouse.SourceKinds, PhoenixKitCatalogue.Catalogue]}
 
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Order
+  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.WarehouseSourceKind, as: Kind
+  alias PhoenixKitEcommerce.Web.StatusLabels
   alias PhoenixKitWarehouse.SourceKinds
 
   @item_a "0192a7c0-0000-7000-8000-00000000000a"
@@ -49,7 +51,12 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
           "quantity" => 2,
           "catalogue_item_uuid" => nil
         },
-        %{"type" => "shipping", "name" => "Shipping: Post", "quantity" => 1}
+        %{
+          "type" => "shipping",
+          "name" => "Shipping: Post",
+          "quantity" => 1,
+          "catalogue_item_uuid" => @item_a
+        }
       ]
     }
 
@@ -100,11 +107,23 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
       [hit] = Kind.search(mine.order_number)
       assert hit.uuid == mine.uuid
       assert hit.label =~ mine.order_number
-      assert hit.label =~ "pending"
+      assert hit.label == "#{mine.order_number} (#{StatusLabels.order("pending")})"
+      refute hit.label =~ "pending"
+      assert hit.extra == %{status: "pending"}
 
       assert Kind.search(other.order_number) == []
       assert Enum.any?(Kind.search("WK-"), &(&1.uuid == mine.uuid))
       refute Enum.any?(Kind.search("WK-"), &(&1.uuid == other.uuid))
+    end
+
+    test "lists the newest order first, whatever the number" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      older = order!(%{inserted_at: DateTime.add(now, -3600, :second)})
+      newer = order!(%{inserted_at: now})
+      oldest = order!(%{inserted_at: DateTime.add(now, -7200, :second)})
+
+      assert "WK-" |> Kind.search() |> Enum.map(& &1.uuid) ==
+               [newer.uuid, older.uuid, oldest.uuid]
     end
 
     test "treats % and _ as text, not as wildcards" do
@@ -137,7 +156,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
       order = order!()
 
       assert %{label: label, path: path} = Kind.resolve(order.uuid)
-      assert label =~ order.order_number
+      assert label == "#{order.order_number} (#{StatusLabels.order("pending")})"
       assert path == Routes.path("/admin/billing/orders/#{order.uuid}")
     end
 
@@ -163,6 +182,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
                  "sku" => "MUG",
                  "unit" => nil,
                  "catalogue_uuid" => nil,
+                 "category_uuid" => nil,
                  "required_quantity" => "3"
                },
                %{
@@ -171,15 +191,71 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
                  "sku" => nil,
                  "unit" => nil,
                  "catalogue_uuid" => nil,
+                 "category_uuid" => nil,
                  "required_quantity" => "1"
                }
              ]
     end
 
+    test "gives one line per item: lines that differ only in options are summed" do
+      line = fn name, quantity, specs ->
+        %{
+          "type" => "product",
+          "name" => name,
+          "sku" => "MUG-#{name}",
+          "quantity" => quantity,
+          "selected_specs" => specs,
+          "catalogue_item_uuid" => @item_a
+        }
+      end
+
+      other = %{
+        "type" => "product",
+        "name" => "Plate",
+        "quantity" => 4,
+        "catalogue_item_uuid" => @item_b
+      }
+
+      order =
+        order!(%{
+          line_items: [
+            line.("red", 3, %{"color" => "red"}),
+            other,
+            line.("blue", 2, %{"color" => "blue"})
+          ]
+        })
+
+      assert {:ok, [mug, plate]} = Kind.build_lines(order.uuid, Ecto.UUID.generate())
+
+      assert %{"item_uuid" => @item_a, "name" => "red", "sku" => "MUG-red"} = mug
+      assert mug["required_quantity"] == "5"
+      assert %{"item_uuid" => @item_b, "required_quantity" => "4"} = plate
+    end
+
+    test "leaves out a line that is not a product or whose item id is not a uuid" do
+      order =
+        order!(%{
+          line_items: [
+            %{"type" => "shipping", "quantity" => 1, "catalogue_item_uuid" => @item_a},
+            %{"type" => "product", "quantity" => 1, "catalogue_item_uuid" => "not-a-uuid"},
+            %{
+              "type" => "product",
+              "name" => "Ok",
+              "quantity" => "2",
+              "catalogue_item_uuid" => @item_b
+            }
+          ]
+        })
+
+      assert {:ok, [%{"item_uuid" => @item_b, "required_quantity" => "2"}]} =
+               Kind.build_lines(order.uuid, Ecto.UUID.generate())
+    end
+
     @tag :catalogue_api
     test "fills unit and catalogue from the catalogue items" do
       catalogue = F.shop_catalogue!()
-      item = F.item!(catalogue, %{unit: "pack"})
+      {:ok, category} = Catalogue.create_category(%{name: "Mugs", catalogue_uuid: catalogue.uuid})
+      item = F.item!(catalogue, %{unit: "pack", category_uuid: category.uuid})
 
       order =
         order!(%{
@@ -198,6 +274,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKindTest do
 
       assert line["unit"] == "pack"
       assert line["catalogue_uuid"] == catalogue.uuid
+      assert line["category_uuid"] == category.uuid
       assert line["required_quantity"] == "2"
     end
 

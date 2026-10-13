@@ -2,7 +2,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
   @moduledoc """
   The warehouse source kind `"shop_order"`: a shop order (a billing order
   placed through the storefront checkout) as the basis of a warehouse
-  document (spec 6.3, decision D10).
+  document.
 
   `PhoenixKitEcommerce.warehouse_source_kinds/0` returns `kinds/0`, and the
   Warehouse module merges it with the kinds a host configured itself
@@ -28,6 +28,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Order
   alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @kind "shop_order"
   @source "shop_checkout"
@@ -55,7 +56,11 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
     ]
   end
 
-  @doc "Shop orders whose number contains `query`, newest first. Empty while the shop is off."
+  @doc """
+  Shop orders whose number contains `query`, newest first. Empty while the
+  shop is off. Orders of every status are offered (the label shows the status);
+  which ones make a sensible document is left to the person choosing.
+  """
   @spec search(String.t()) :: [%{uuid: String.t(), label: String.t(), extra: map()}]
   def search(query) when is_binary(query) do
     if PhoenixKitEcommerce.enabled?() do
@@ -65,7 +70,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
         from(o in Order,
           where: fragment("?->>'source'", o.metadata) == ^@source,
           where: ilike(o.order_number, ^pattern),
-          order_by: [desc: o.inserted_at],
+          order_by: [desc: o.inserted_at, desc: o.uuid],
           limit: ^@search_limit,
           select: struct(o, [:uuid, :order_number, :status, :total, :currency])
         )
@@ -79,32 +84,44 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
   @doc "`%{label, path}` of an existing shop order, or `:error`."
   @spec resolve(String.t()) :: %{label: String.t(), path: String.t()} | :error
   def resolve(uuid) when is_binary(uuid) do
-    case fetch(uuid) do
-      %Order{} = order ->
-        %{label: label(order), path: Routes.path("/admin/billing/orders/#{order.uuid}")}
-
-      nil ->
-        :error
+    with %Ecto.Query{} = query <- shop_order_query(uuid),
+         %Order{} = order <-
+           RepoHelper.repo().one(
+             from(o in query, select: struct(o, [:uuid, :order_number, :status]))
+           ) do
+      %{label: label(order), path: Routes.path("/admin/billing/orders/#{order.uuid}")}
+    else
+      _ -> :error
     end
   end
 
   @doc """
   The product lines of a shop order, as an internal order imports them:
-  `item_uuid`, `name`, `sku`, `unit`, `catalogue_uuid` and `required_quantity`.
-  A line without a catalogue item (a shipping line, a legacy product) is left
-  out. `:error` when the order does not exist.
+  `item_uuid`, `name`, `sku`, `unit`, `catalogue_uuid`, `category_uuid` and
+  `required_quantity`. A line without a catalogue item (a shipping line, a
+  legacy product) is left out. One line per catalogue item: the lines of an
+  item that differ only in their selected options are summed, because a
+  document keeps one quantity per item. `:error` when the order does not exist.
   """
   @spec build_lines(String.t(), String.t()) :: {:ok, [map()]} | :error
   def build_lines(uuid, _actor_uuid) when is_binary(uuid) do
-    case fetch(uuid) do
-      %Order{line_items: line_items} ->
-        lines = Enum.filter(line_items, &product_line?/1)
-        facts = lines |> Enum.map(& &1["catalogue_item_uuid"]) |> Enum.uniq() |> catalogue_facts()
+    with %Ecto.Query{} = query <- shop_order_query(uuid),
+         %{line_items: line_items} <-
+           RepoHelper.repo().one(from(o in query, select: %{line_items: o.line_items})) do
+      pairs = line_items |> List.wrap() |> Enum.flat_map(&product_line/1)
+      grouped = Enum.group_by(pairs, &elem(&1, 0), &elem(&1, 1))
+      facts = grouped |> Map.keys() |> catalogue_facts()
 
-        {:ok, Enum.map(lines, &line(&1, facts))}
+      lines =
+        pairs
+        |> Enum.uniq_by(&elem(&1, 0))
+        |> Enum.map(fn {item_uuid, first} ->
+          line(item_uuid, first, grouped[item_uuid], facts)
+        end)
 
-      nil ->
-        :error
+      {:ok, lines}
+    else
+      _ -> :error
     end
   end
 
@@ -118,43 +135,85 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
       RepoHelper.repo().all(
         from(i in "phoenix_kit_cat_items",
           where: i.uuid in type(^item_uuids, {:array, Ecto.UUID}),
-          select: {type(i.uuid, Ecto.UUID), i.unit, type(i.catalogue_uuid, Ecto.UUID)}
+          select: {
+            type(i.uuid, Ecto.UUID),
+            i.unit,
+            type(i.catalogue_uuid, Ecto.UUID),
+            type(i.category_uuid, Ecto.UUID)
+          }
         )
       )
-      |> Map.new(fn {uuid, unit, catalogue_uuid} ->
-        {uuid, %{unit: unit, catalogue_uuid: catalogue_uuid}}
+      |> Map.new(fn {uuid, unit, catalogue_uuid, category_uuid} ->
+        {uuid, %{unit: unit, catalogue_uuid: catalogue_uuid, category_uuid: category_uuid}}
       end)
     else
       %{}
     end
   end
 
-  defp fetch(uuid) do
-    with {:ok, uuid} <- Ecto.UUID.cast(uuid),
-         %Order{metadata: %{"source" => @source}} = order <- RepoHelper.repo().get(Order, uuid) do
-      order
-    else
-      _ -> nil
+  # The shop orders (placed by the storefront checkout) with the given id, as a
+  # query to select from, or `nil` for something that is not a uuid. Callers
+  # select only the columns they print.
+  defp shop_order_query(uuid) do
+    case Ecto.UUID.cast(uuid) do
+      {:ok, uuid} ->
+        from(o in Order,
+          where: o.uuid == ^uuid,
+          where: fragment("?->>'source'", o.metadata) == ^@source
+        )
+
+      :error ->
+        nil
     end
   end
 
-  defp product_line?(line),
-    do: line["type"] == "product" and is_binary(line["catalogue_item_uuid"])
+  # `[{item_uuid, line}]` for a product line that names a catalogue item (the
+  # id in its canonical form, so it matches the catalogue lookup), else `[]`.
+  defp product_line(%{"type" => "product", "catalogue_item_uuid" => item_uuid} = line)
+       when is_binary(item_uuid) do
+    case Ecto.UUID.cast(item_uuid) do
+      {:ok, item_uuid} -> [{item_uuid, line}]
+      :error -> []
+    end
+  end
 
-  defp line(line, facts) do
-    fact = Map.get(facts, line["catalogue_item_uuid"], %{})
+  defp product_line(_line), do: []
+
+  # One line per item: name and sku of its first line, quantities summed.
+  defp line(item_uuid, first, rows, facts) do
+    fact = Map.get(facts, item_uuid, %{})
 
     %{
-      "item_uuid" => line["catalogue_item_uuid"],
-      "name" => line["name"],
-      "sku" => line["sku"],
+      "item_uuid" => item_uuid,
+      "name" => first["name"],
+      "sku" => first["sku"],
       "unit" => fact[:unit],
       "catalogue_uuid" => fact[:catalogue_uuid],
-      "required_quantity" => to_string(line["quantity"] || 0)
+      "category_uuid" => fact[:category_uuid],
+      "required_quantity" => rows |> total_quantity() |> Decimal.to_string(:normal)
     }
   end
 
+  defp total_quantity(rows) do
+    rows
+    |> Enum.map(&to_decimal(&1["quantity"]))
+    |> Enum.reduce(Decimal.new(0), &Decimal.add/2)
+  end
+
+  defp to_decimal(%Decimal{} = value), do: value
+  defp to_decimal(value) when is_integer(value), do: Decimal.new(value)
+  defp to_decimal(value) when is_float(value), do: Decimal.from_float(value)
+
+  defp to_decimal(value) when is_binary(value) do
+    case Decimal.parse(value) do
+      {decimal, ""} -> decimal
+      _ -> Decimal.new(0)
+    end
+  end
+
+  defp to_decimal(_value), do: Decimal.new(0)
+
   defp label(%Order{order_number: number, uuid: uuid, status: status}) do
-    "#{number || String.slice(uuid, 0, 8)} (#{status})"
+    "#{number || String.slice(uuid, 0, 8)} (#{StatusLabels.order(status)})"
   end
 end
