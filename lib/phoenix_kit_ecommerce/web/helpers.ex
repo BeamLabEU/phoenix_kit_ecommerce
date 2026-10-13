@@ -351,32 +351,61 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
-  Find the best enabled language that has a slug for this entity.
+  The entity's own language code (e.g. `"fr-FR"`) when it has a non-empty slug
+  for `language`, base-matched, else `nil` — i.e. whether it is genuinely
+  translated into the language a URL asked for.
 
-  Prefers the default language, then checks other enabled languages.
-  Returns nil if no valid language found.
+  The one definition of "translated" the storefront uses: the redirect
+  decision, the canonical language and the hreflang list all ask it, so a
+  blank slug (`""`, `nil`) counts as no translation everywhere.
   """
-  def best_redirect_language(slug_map) when slug_map == %{}, do: nil
+  @spec requested_translation_lang(map(), String.t()) :: String.t() | nil
+  def requested_translation_lang(entity, language) do
+    slug_language(entity.slug || %{}, language)
+  end
 
-  def best_redirect_language(slug_map) do
-    enabled = Languages.get_enabled_languages()
-    default_first = Enum.sort_by(enabled, fn l -> if l.is_default, do: 0, else: 1 end)
+  @doc "Whether `slug_map` holds a non-empty slug for `language` (base-matched)."
+  @spec slug_translated?(map() | nil, String.t()) :: boolean()
+  def slug_translated?(slug_map, language), do: slug_language(slug_map || %{}, language) != nil
 
-    Enum.find_value(default_first, fn lang ->
-      code = lang.code
-      base = DialectMapper.extract_base(code)
-      if Map.has_key?(slug_map, code) or Map.has_key?(slug_map, base), do: code
+  defp slug_language(slug_map, language) do
+    base = DialectMapper.extract_base(language)
+
+    Enum.find(Map.keys(slug_map), fn code ->
+      DialectMapper.extract_base(code) == base and Map.get(slug_map, code) not in [nil, ""]
     end)
   end
 
   @doc """
   Build a localized URL path, adding language prefix for non-default languages.
-  Delegates to Routes.path which handles default vs non-default consistently.
+  Delegates to Routes.path which handles default vs non-default consistently;
+  a single-language site gets no locale segment at all (`PhoenixKitEcommerce.url_locale/1`).
   """
   def build_lang_url(path, lang) do
-    base = DialectMapper.extract_base(lang)
-    Routes.path(path, locale: base)
+    Routes.path(path, locale: PhoenixKitEcommerce.url_locale(lang))
   end
+
+  @doc """
+  A storefront path for the page being rendered, in the page's own language.
+
+  `assigns` is the socket's (or a template's) assigns: the language comes from
+  `:current_locale`, falling back to the site's primary one. Every link a page
+  renders goes through this (or `PhoenixKitEcommerce.*_url/1`), so none of them
+  takes its locale segment from whatever Gettext happens to hold.
+  """
+  @spec page_path(map(), String.t(), keyword()) :: String.t()
+  def page_path(assigns, path, opts \\ []) do
+    language = assigns[:current_locale] || Translations.default_language()
+    Routes.path(path, Keyword.put(opts, :locale, PhoenixKitEcommerce.url_locale(language)))
+  end
+
+  @doc """
+  Whether the storefront serves a single language: multi-language support is
+  off, so there is no other language to redirect a visitor to and no link
+  carries a locale segment.
+  """
+  @spec single_language?() :: boolean()
+  def single_language?, do: not Languages.enabled?()
 
   # ---------------------------------------------------------------------------
   # Pagination helpers
