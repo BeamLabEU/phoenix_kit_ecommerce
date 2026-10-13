@@ -350,7 +350,11 @@ defmodule PhoenixKitEcommerce.Migrations do
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
-          EXECUTE 'CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_title_trgm_idx ON #{t} USING gin (title_trgm gin_trgm_ops)';
+          BEGIN
+            EXECUTE 'CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_title_trgm_idx ON #{t} USING gin (title_trgm gin_trgm_ops)';
+          EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'trigram index skipped: %', SQLERRM;
+          END;
         END IF;
       END
       $$

@@ -248,6 +248,11 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     trigram = List.last(stmts)
     assert trigram =~ "IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
     assert trigram =~ "gin_trgm_ops"
+
+    # A trigram index that cannot be built (the operator class is not on the
+    # search path) is a notice, not a failed migration.
+    assert trigram =~ "EXCEPTION WHEN OTHERS"
+    assert trigram =~ "trigram index skipped"
   end
 
   test "rolling back to V3 only rewrites the marker: the search table is derived data and stays" do
