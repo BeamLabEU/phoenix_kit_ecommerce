@@ -392,11 +392,16 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   `:current_locale`, falling back to the site's primary one. Every link a page
   renders goes through this (or `PhoenixKitEcommerce.*_url/1`), so none of them
   takes its locale segment from whatever Gettext happens to hold.
+
+  `query` (a map or keyword list) is appended as an encoded query string;
+  `Routes.path/2` reads only `:locale` and would drop it.
   """
-  @spec page_path(map(), String.t(), keyword()) :: String.t()
-  def page_path(assigns, path, opts \\ []) do
+  @spec page_path(map(), String.t(), Enumerable.t()) :: String.t()
+  def page_path(assigns, path, query \\ []) do
     language = assigns[:current_locale] || Translations.default_language()
-    Routes.path(path, Keyword.put(opts, :locale, PhoenixKitEcommerce.url_locale(language)))
+    base = Routes.path(path, locale: PhoenixKitEcommerce.url_locale(language))
+
+    if Enum.empty?(query), do: base, else: base <> "?" <> URI.encode_query(query)
   end
 
   @doc """
