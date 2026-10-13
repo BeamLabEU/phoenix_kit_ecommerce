@@ -8,11 +8,7 @@ defmodule PhoenixKitEcommerce.APIFixtures do
   """
 
   @compile {:no_warn_undefined,
-            [
-              PhoenixKitCatalogue.Catalogue,
-              PhoenixKitCatalogue.Catalogue.AttributeSets,
-              PhoenixKitEntities
-            ]}
+            [PhoenixKitCatalogue.Catalogue, PhoenixKitCatalogue.Catalogue.AttributeSets]}
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets

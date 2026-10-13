@@ -37,7 +37,7 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
         by_uuid = Map.new(outcomes)
 
         Enum.map(entries, fn {item, _attrs, _row_opts} ->
-          item.uuid |> then(&Map.get(by_uuid, &1)) |> normalize(opts)
+          normalize(Map.get(by_uuid, item.uuid), opts)
         end)
 
       {:error, reason} ->
@@ -48,6 +48,13 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
     end
   end
 
+  # A failure of the whole batch (`failed/3`) or of one row (`normalize/2`) that
+  # is not a changeset or `:not_found` is answered with the code
+  # `validation_failed` and `context.reason` set to the class of the cause
+  # (`database_error`, `duplicate_row`, ... or `unexpected`). The code is shared
+  # with real validation errors on purpose (one row-level code set), but a
+  # `database_error` or `unexpected` reason is not the client's fault and is
+  # worth a retry.
   defp normalize({:updated, item}, _opts), do: {:ok, item}
   defp normalize({:unchanged, item}, _opts), do: {:unchanged, item}
 
