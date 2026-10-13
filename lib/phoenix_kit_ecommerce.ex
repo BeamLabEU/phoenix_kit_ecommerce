@@ -4840,6 +4840,9 @@ defmodule PhoenixKitEcommerce do
     reference it from the order instead of a snapshot. Billing makes a user's
     first profile their default. Ignored for guests, without `billing_data`,
     and when `billing_profile_uuid` is given.
+  - `language: code` - The language the buyer is checking out in (the page's).
+    The confirmation notification links to the order page in it; without one
+    (a worker, a script) the link is in the site's primary language.
 
   ## Returns
 
@@ -4961,7 +4964,7 @@ defmodule PhoenixKitEcommerce do
         # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
         _ = maybe_send_guest_confirmation(order.user_uuid)
         _ = log_order_converted(order)
-        _ = PhoenixKitEcommerce.Notifications.order_placed(order)
+        _ = PhoenixKitEcommerce.Notifications.order_placed(order, language: opts[:language])
         {:ok, order}
 
       {:error, reason} ->

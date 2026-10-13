@@ -847,13 +847,21 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # Options for `convert_cart_to_order/2`.
   defp convert_opts(%{assigns: %{use_new_profile: true}} = socket, user_uuid, save_profile?) do
     # Guest or new profile - use billing_data directly
-    [billing_data: socket.assigns.billing_data, user_uuid: user_uuid] ++
+    [
+      billing_data: socket.assigns.billing_data,
+      user_uuid: user_uuid,
+      language: socket.assigns[:current_locale]
+    ] ++
       if(save_profile?, do: [save_billing_profile: true], else: [])
   end
 
   defp convert_opts(socket, user_uuid, _save_profile?) do
     # Logged-in user with existing profile
-    [billing_profile_uuid: socket.assigns.selected_profile_uuid, user_uuid: user_uuid]
+    [
+      billing_profile_uuid: socket.assigns.selected_profile_uuid,
+      user_uuid: user_uuid,
+      language: socket.assigns[:current_locale]
+    ]
   end
 
   # The profile was created inside the conversion transaction, so an order
