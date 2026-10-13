@@ -14,6 +14,8 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
   is not ready to be.
   """
 
+  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1, error: 3, put_if: 4]
+
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
 
@@ -143,21 +145,11 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
     |> Enum.map(&elem(&1, 1))
   end
 
-  defp put_if(map, true, key, value), do: Map.put(map, key, value)
-  defp put_if(map, false, _key, _value), do: map
-
   # The catalogue's own status wins on the storefront: an item that is not
   # `active` in the catalogue stays hidden whatever the shop status says.
   defp warnings(item), do: if(item.status == "active", do: [], else: ["item_not_active"])
 
   defp price_on_request?(item), do: Map.get(ecommerce(item), "price_on_request", false) == true
-
-  defp ecommerce(item) do
-    case item.data do
-      %{"ecommerce" => %{} = ecommerce} -> ecommerce
-      _ -> %{}
-    end
-  end
 
   # The fields a planned row writes go through `ItemCommerce`, so a value the
   # namespace would refuse is a row error before anything is stored.
@@ -175,6 +167,4 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
          Enum.map(errors, fn {field, message} -> error(to_string(field), message, nil) end)}
     end
   end
-
-  defp error(path, message, allowed), do: %{path: path, message: message, allowed: allowed}
 end

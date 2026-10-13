@@ -15,6 +15,8 @@ defmodule PhoenixKitEcommerce.API.GetPrices do
   `shopify` sub-map.
   """
 
+  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1]
+
   alias PhoenixKitEcommerce.API.{AvailabilityPlan, Gate, Money, PricePlan, Refs}
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
 
@@ -88,13 +90,6 @@ defmodule PhoenixKitEcommerce.API.GetPrices do
     case PhoenixKitEcommerce.get_base_currency() do
       %{code: code} when is_binary(code) -> code
       _ -> nil
-    end
-  end
-
-  defp ecommerce(item) do
-    case item.data do
-      %{"ecommerce" => %{} = ecommerce} -> ecommerce
-      _ -> %{}
     end
   end
 end

@@ -17,6 +17,8 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   stored numbers, and a rewrite would lose them).
   """
 
+  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1, error: 2, error: 3, put_if: 4]
+
   alias PhoenixKitEcommerce.API.Money
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
   alias PhoenixKitEcommerce.Options.MetadataValidator
@@ -440,9 +442,6 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     end)
   end
 
-  defp put_if(map, true, key, value), do: Map.put(map, key, value)
-  defp put_if(map, false, _key, _value), do: map
-
   # The row is checked through `ItemCommerce` and its metadata normalizer
   # before anything is stored. Only the leaves the row writes are checked: a
   # stored leaf this module does not touch is none of the row's business, and
@@ -523,15 +522,6 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
   # -- helpers ---------------------------------------------------------------
 
-  defp ecommerce(item) do
-    case item.data do
-      %{"ecommerce" => %{} = ecommerce} -> ecommerce
-      _ -> %{}
-    end
-  end
-
   defp modifiers(%{} = modifiers), do: modifiers
   defp modifiers(_other), do: %{}
-
-  defp error(path, message, allowed \\ nil), do: %{path: path, message: message, allowed: allowed}
 end
