@@ -110,11 +110,21 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttribution do
         is_map(before) and is_map(current) and depth < max_depth(path) ->
           walk(before, current, path, depth + 1)
 
+        # A product (or option) with no option prices yet gets its first ones
+        # from the sync: listing it as a whole would overwrite an option price
+        # the API stored in it after the sync read the item.
+        is_nil(before) and is_map(current) and modifiers_path?(path) and
+            depth < max_depth(path) ->
+          walk(%{}, current, path, depth + 1)
+
         true ->
           [path]
       end
     end)
   end
+
+  defp modifiers_path?(["ecommerce", "price_modifiers" | _]), do: true
+  defp modifiers_path?(_path), do: false
 
   defp max_depth(["ecommerce", "price_modifiers" | _]), do: @modifiers_depth
   defp max_depth(_path), do: @max_depth

@@ -51,6 +51,18 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttributionTest do
     test "a key that is new is listed as a whole" do
       assert Attribution.changed_paths(%{}, %{"a" => %{"b" => 1}}) == [["a"]]
     end
+
+    test "price_modifiers that are new are listed option price by option price" do
+      old = %{"ecommerce" => %{"vendor" => "v"}}
+
+      new = %{
+        "ecommerce" => %{"vendor" => "v", "price_modifiers" => %{"size" => %{"s" => "0.00"}}}
+      }
+
+      assert Attribution.changed_paths(old, new) == [
+               ["ecommerce", "price_modifiers", "size", "s"]
+             ]
+    end
   end
 
   describe "prepare/3 with a catalogue that honours owned paths" do
