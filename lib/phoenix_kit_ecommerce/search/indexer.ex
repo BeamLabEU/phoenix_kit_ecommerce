@@ -10,10 +10,22 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   survives an upsert, a search that runs during a rebuild still finds every
   product that stays listed.
 
+  Runs may overlap (the queue has more than one slot and reindex jobs are not
+  unique), so a run never overwrites a row that carries a newer stamp than its
+  own: a slower, older run can neither bring back stale content nor make a
+  newer run's row look stale to that run's own sweep. The rows of two runs
+  that touch the same product therefore end with the content and the stamp of
+  the run that started last. Ties (equal stamps) are written, so the newest
+  stamp always wins and a repeated run with one stamp is idempotent.
+
     * `reindex_items/1` - the given product ids (an item edit, a bulk change).
     * `rebuild/0` - the whole shop (the nightly safety net). If the shop's
       catalogue cannot be resolved it returns `{:error, :no_catalogue}` and
       deletes nothing: an unresolvable catalogue is not an empty shop.
+
+  Every enabled language gets a row. If the Languages module is on and none
+  is enabled, the shop's default language is indexed instead, so that a
+  language-less configuration cannot make the sweep empty the index.
 
   Rows are written with raw SQL because the `document` column is a
   `tsvector` that Postgres builds with the language's configuration
@@ -37,22 +49,30 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   @chunk 100
   @delete_chunk 500
 
+  @typedoc """
+  Run options. `:started_at` is the stamp of the run (default: now); rows
+  stamped later are never overwritten. `:chunk_size` is the number of products
+  per write batch and per delete statement (default 100 and 500).
+  """
+  @type opts :: [started_at: DateTime.t(), chunk_size: pos_integer()]
+
   @doc """
   Re-indexes `uuids`: listed products are upserted in every enabled language,
-  every other row of these products is removed.
+  every other row of these products is removed. Entries that are not product
+  uuids are ignored.
 
   Like `rebuild/0` it changes nothing while the Catalogue source is on and the
   shop's catalogue cannot be resolved: the loader would answer an empty map and
   `delete_stale/2` would then remove the rows of every id it was given.
   """
-  @spec reindex_items([term()]) ::
+  @spec reindex_items([term()], opts()) ::
           {:ok, %{indexed: non_neg_integer(), removed: non_neg_integer()}}
-  def reindex_items(uuids) when is_list(uuids) do
+  def reindex_items(uuids, opts \\ []) when is_list(uuids) do
     if Loader.source_resolvable?() do
       uuids = uuids |> Enum.filter(&(is_binary(&1) and UUIDUtils.valid?(&1))) |> Enum.uniq()
-      started = DateTime.utc_now()
-      indexed = index_all(uuids, started)
-      removed = delete_stale(uuids, started)
+      started = started_at(opts)
+      indexed = index_all(uuids, started, opts)
+      removed = delete_stale(uuids, started, opts)
       {:ok, %{indexed: indexed, removed: removed}}
     else
       Logger.warning("[Search] reindex skipped: the shop catalogue cannot be resolved")
@@ -61,19 +81,22 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   end
 
   @doc "Rebuilds the whole index from the product source."
-  @spec rebuild() ::
+  @spec rebuild(opts()) ::
           {:ok,
            %{products: non_neg_integer(), indexed: non_neg_integer(), removed: non_neg_integer()}}
           | {:error, :no_catalogue}
-  def rebuild do
+  def rebuild(opts \\ []) do
+    # The stamp is taken before the ids are read: a product that appears after
+    # this point is stamped later than `started` and is safe from the sweep.
+    started = started_at(opts)
+
     case Loader.all_ids() do
       {:error, :no_catalogue} = error ->
         Logger.warning("[Search] rebuild skipped: the shop catalogue cannot be resolved")
         error
 
       {:ok, ids} ->
-        started = DateTime.utc_now()
-        indexed = index_all(ids, started)
+        indexed = index_all(ids, started, opts)
 
         {removed, _} =
           RepoHelper.repo().delete_all(from(e in Entry, where: e.indexed_at < ^started))
@@ -111,30 +134,59 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
 
   # --- writing ---------------------------------------------------------------
 
-  defp index_all([], _started), do: 0
+  defp started_at(opts), do: Keyword.get_lazy(opts, :started_at, &DateTime.utc_now/0)
 
-  defp index_all(ids, started) do
-    languages = Translations.enabled_languages()
+  # With the Languages module on and no language enabled, the enabled list is
+  # empty: indexing nothing would let the sweep delete every row, so the
+  # shop's default language stands in.
+  defp index_languages do
+    case Translations.enabled_languages() do
+      [] -> [Translations.default_language()]
+      languages -> languages
+    end
+  end
+
+  defp index_all([], _started, _opts), do: 0
+
+  defp index_all(ids, started, opts) do
+    languages = index_languages()
     categories = Loader.categories()
 
     ids
-    |> Enum.chunk_every(@chunk)
+    |> Enum.chunk_every(Keyword.get(opts, :chunk_size, @chunk))
     |> Enum.reduce(0, fn chunk, total ->
       total + index_chunk(chunk, started, languages, categories)
     end)
   end
 
-  # Split into three small functions: Credo (`--strict`) refuses a function
-  # body nested deeper than two levels.
+  # The loading, the row building and the writing are separate functions to
+  # keep each body shallow (Credo `--strict` allows two levels of nesting).
+  # Rows are written in a fixed order so that two overlapping runs lock the
+  # same rows in the same order.
   defp index_chunk(chunk, started, languages, categories) do
-    rows = Enum.flat_map(languages, &language_rows(chunk, &1, categories))
+    chunk
+    |> chunk_rows(languages, categories)
+    |> write_rows(started)
+  end
 
+  defp chunk_rows(chunk, languages, categories) do
+    languages
+    |> Enum.flat_map(&language_rows(chunk, &1, categories))
+    |> Enum.sort_by(&{&1.language, &1.item_uuid})
+  end
+
+  defp write_rows([], _started), do: 0
+
+  defp write_rows(rows, started) do
     repo = RepoHelper.repo()
 
-    {:ok, _} =
-      repo.transaction(fn -> Enum.each(rows, &upsert(repo, &1, started)) end, timeout: :infinity)
+    {:ok, written} =
+      repo.transaction(
+        fn -> rows |> Enum.map(&upsert(repo, &1, started)) |> Enum.sum() end,
+        timeout: :infinity
+      )
 
-    length(rows)
+    written
   end
 
   defp language_rows(chunk, language, categories) do
@@ -152,9 +204,9 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
     end
   end
 
-  defp delete_stale(uuids, started) do
+  defp delete_stale(uuids, started, opts) do
     uuids
-    |> Enum.chunk_every(@delete_chunk)
+    |> Enum.chunk_every(Keyword.get(opts, :chunk_size, @delete_chunk))
     |> Enum.reduce(0, fn chunk, total ->
       {count, _} =
         RepoHelper.repo().delete_all(
@@ -165,8 +217,13 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
     end)
   end
 
+  # The number of rows written: 0 when the row already carries a newer stamp.
   defp upsert(repo, row, started) do
-    repo.query!(upsert_sql(), [
+    repo.query!(upsert_sql(), params(row, started)).num_rows
+  end
+
+  defp params(row, started) do
+    [
       dump_uuid(row.item_uuid),
       row.language,
       row.title,
@@ -189,7 +246,7 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
       row.sort_position,
       row.item_inserted_at,
       started
-    ])
+    ]
   end
 
   defp dump_uuid(nil), do: nil
@@ -197,7 +254,7 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
 
   defp upsert_sql do
     """
-    INSERT INTO #{Entry.table()}
+    INSERT INTO #{Entry.table()} AS idx
       (item_uuid, language, title, title_trgm, document, category_uuid, category_path,
        category_path_uuids, vendor, tags, option_pairs, option_labels, made_to_order, on_sale,
        price, compare_at_price, discount_pct, sort_position, item_inserted_at, indexed_at)
@@ -229,6 +286,7 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
       sort_position = EXCLUDED.sort_position,
       item_inserted_at = EXCLUDED.item_inserted_at,
       indexed_at = EXCLUDED.indexed_at
+    WHERE idx.indexed_at <= EXCLUDED.indexed_at
     """
   end
 end
