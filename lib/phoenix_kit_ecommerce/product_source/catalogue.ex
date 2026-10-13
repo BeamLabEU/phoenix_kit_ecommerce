@@ -130,7 +130,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
              Catalogue.get_category_by_slug(slug, language, catalogue_opts(opts)),
              opts
            ) do
-      {:ok, build_category(category, opts)}
+      {:ok, build_category(category, opts, category_images(category, opts))}
     end
   end
 
@@ -141,8 +141,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     catalogue_opts = catalogue_opts(opts) |> Keyword.put(:any_lang, true)
 
     case fetch_scoped(Catalogue.get_category_by_slug(slug, lang, catalogue_opts), opts) do
-      {:ok, category, matched_lang} -> {:ok, build_category(category, opts), matched_lang}
-      {:error, :not_found} -> {:error, :not_found}
+      {:ok, category, matched_lang} ->
+        {:ok, build_category(category, opts, category_images(category, opts)), matched_lang}
+
+      {:error, :not_found} ->
+        {:error, :not_found}
     end
   end
 
@@ -407,7 +410,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   # calling `View.category_view/1` directly. `images_by_uuid` is the
   # batch (or single-category) result of `Query.resolve_category_images/1`
   # — defaults to `%{}` for any future call site that doesn't resolve one.
-  defp build_category(category, opts, images_by_uuid \\ %{}) do
+  defp build_category(category, opts, images_by_uuid) do
     View.category_view(category,
       parent: resolve_parent(category, opts),
       featured_image_uuid: Map.get(images_by_uuid, category.uuid)
@@ -437,6 +440,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     case Map.get(parents_by_uuid, category.parent_uuid) do
       nil -> nil
       parent -> View.category_view(parent)
+    end
+  end
+
+  # The fallback image of ONE category, resolved only when the caller asked
+  # for `:featured_product` — the legacy source loads that association on
+  # demand too, and the lookup is a query a plain category read should not
+  # pay for.
+  defp category_images(category, opts) do
+    if :featured_product in List.wrap(Keyword.get(opts, :preload)) do
+      Query.resolve_category_images([category], opts)
+    else
+      %{}
     end
   end
 
