@@ -1207,16 +1207,29 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
     } do
       # The immediate-flash twin of the persisted-summary test below, and
       # provoked through a door an operator can actually open rather than
-      # by writing the outcome by hand: the AI section's explicit endpoint
-      # override left pointing at something that isn't a uuid.
-      # `default_endpoint_uuid/0` hands that value back verbatim, so both
-      # this page and the tick still consider AI available, while
-      # `enqueue_all_missing/2` refuses every language with
-      # `{:invalid_uuids, [:endpoint_uuid]}`. The tick then records
-      # `enqueued: 0, errors: 2` (one per language) — which, unsurfaced,
-      # reads exactly like "nothing needed doing".
+      # by writing the outcome by hand: a prompt that already holds the
+      # code-managed product prompt's NAME under another slug. The prompt
+      # rollout finds nothing at its own slug, `create_prompt/1` loses to the
+      # unique name and the re-read by slug finds nothing either
+      # (`:prompt_create_failed`), so the tick still has the category
+      # prompt, goes ahead, and counts every product language it cannot
+      # enqueue as an error: `enqueued: 0, errors: 2` (de and fr) — which,
+      # unsurfaced, reads exactly like "nothing needed doing". (The AI
+      # section's endpoint override used to be the door; the engine now
+      # refuses a bad endpoint before it enqueues anything.)
       Settings.update_boolean_setting_with_module("shop_translation_sweep_enabled", true, "shop")
-      {:ok, _} = Settings.update_setting_with_module("ai_translation_endpoint_uuid", "nope", "ai")
+
+      {:ok, squatter} =
+        PhoenixKitAI.create_prompt(%{
+          name: "PhoenixKit Shop Product Translation",
+          content: "An operator's own prompt."
+        })
+
+      repo().query!("UPDATE phoenix_kit_ai_prompts SET slug = $1 WHERE uuid = $2", [
+        "operators-own-slug",
+        Ecto.UUID.dump!(squatter.uuid)
+      ])
+
       product = create_product()
 
       {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
