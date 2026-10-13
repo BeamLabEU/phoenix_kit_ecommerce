@@ -223,10 +223,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   """
   @spec source_key(term()) :: String.t() | nil
   def source_key(url) when is_binary(url) do
-    url
-    |> URI.parse()
-    |> Map.merge(%{query: nil, fragment: nil, userinfo: nil})
-    |> URI.to_string()
+    uri = URI.parse(url)
+
+    URI.to_string(%URI{uri | query: nil, fragment: nil, userinfo: nil, authority: nil})
   end
 
   def source_key(_url), do: nil

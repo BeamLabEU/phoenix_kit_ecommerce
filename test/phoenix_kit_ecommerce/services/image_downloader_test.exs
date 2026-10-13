@@ -39,6 +39,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
                "https://cdn.example.com/a.jpg"
     end
 
+    test "never prints credentials, even when the URL has no host" do
+      refute ImageDownloader.source_key("https://user:secret@:443/p.png?sig=abc") =~ "secret"
+      refute ImageDownloader.source_key("https://user:secret@/p.png") =~ "secret"
+      refute ImageDownloader.source_key("https://user:secret@:443/p.png?sig=abc") =~ "user"
+    end
+
     test "is nil for anything that is not a string" do
       assert ImageDownloader.source_key(nil) == nil
       assert ImageDownloader.source_key(42) == nil
