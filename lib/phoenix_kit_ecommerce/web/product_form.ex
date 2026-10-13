@@ -1011,7 +1011,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                   <.input
                     field={@form[:price]}
                     type="number"
-                    label={gettext("Base Price") <> " *"}
+                    label={gettext("Base Price")}
                     step="0.01"
                     min="0"
                     required

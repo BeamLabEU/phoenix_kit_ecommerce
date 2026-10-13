@@ -11,7 +11,6 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   alias PhoenixKit.Utils.Routes
 
-  alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Events
@@ -847,7 +846,6 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp product_item_url(item, language) do
-    base = DialectMapper.extract_base(language)
-    Routes.path("/shop/product/#{item.product_slug}", locale: base)
+    Routes.path("/shop/product/#{item.product_slug}", locale: Shop.url_locale(language))
   end
 end

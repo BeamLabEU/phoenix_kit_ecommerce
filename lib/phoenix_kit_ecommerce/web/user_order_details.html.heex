@@ -3,7 +3,7 @@
     <%!-- Back Button --%>
     <div class="mb-6">
       <.link
-        navigate={PhoenixKit.Utils.Routes.path("/dashboard/orders")}
+        navigate={ShopHelpers.page_path(assigns, "/dashboard/orders")}
         class="btn btn-ghost btn-sm gap-2"
       >
         <.icon name="hero-arrow-left" class="h-4 w-4" />
@@ -257,7 +257,7 @@
               {gettext("If you have questions about your order, please contact our support team.")}
             </p>
             <.link
-              navigate={PhoenixKit.Utils.Routes.path("/shop")}
+              navigate={ShopHelpers.page_path(assigns, "/shop")}
               class="btn btn-primary btn-block"
             >
               <.icon name="hero-shopping-bag" class="w-5 h-5" />

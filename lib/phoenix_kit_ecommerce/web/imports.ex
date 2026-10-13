@@ -35,6 +35,9 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
   require Logger
 
+  # How often a burst of per-product migration messages refreshes the stats.
+  @migration_stats_refresh_ms 1_000
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -363,11 +366,24 @@ defmodule PhoenixKitEcommerce.Web.Imports do
         {:product_migrated, %{product_uuid: _product_uuid, images_migrated: _count}},
         socket
       ) do
-    # Update stats on each product completion
+    # One message per product, and the stats are four queries (two table
+    # counts, two Oban counts): refresh at most once per interval however
+    # many products finish in it.
+    if socket.assigns[:migration_stats_refresh_pending] do
+      {:noreply, socket}
+    else
+      Process.send_after(self(), :refresh_migration_stats, @migration_stats_refresh_ms)
+      {:noreply, assign(socket, :migration_stats_refresh_pending, true)}
+    end
+  end
+
+  @impl true
+  def handle_info(:refresh_migration_stats, socket) do
     stats = ImageMigration.migration_stats()
 
     socket =
       socket
+      |> assign(:migration_stats_refresh_pending, false)
       |> assign(:migration_stats, stats)
       |> assign(:migration_in_progress, stats.in_progress > 0)
 

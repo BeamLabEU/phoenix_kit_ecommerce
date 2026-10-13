@@ -27,7 +27,7 @@ msgstr "Töölaud"
 #: lib/phoenix_kit_ecommerce/web/products.ex:293
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2088
 #: lib/phoenix_kit_ecommerce/web/trail.ex:45
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1876
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1855
 #, elixir-autogen
 msgid "Products"
 msgstr "Tooted"
@@ -41,15 +41,15 @@ msgstr "Tooted"
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:276
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:414
 #: lib/phoenix_kit_ecommerce/web/trail.ex:46
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1877
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1856
 #, elixir-autogen
 msgid "Categories"
 msgstr "Kategooriad"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:704
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1520
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1895
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2410
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1523
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1898
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2413
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:25
 #: lib/phoenix_kit_ecommerce/web/trail.ex:47
 #, elixir-autogen
@@ -63,8 +63,8 @@ msgid "Carts"
 msgstr "Ostukorvid"
 
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:175
-#: lib/phoenix_kit_ecommerce/web/imports.ex:69
-#: lib/phoenix_kit_ecommerce/web/imports.ex:789
+#: lib/phoenix_kit_ecommerce/web/imports.ex:72
+#: lib/phoenix_kit_ecommerce/web/imports.ex:805
 #: lib/phoenix_kit_ecommerce/web/trail.ex:48
 #, elixir-autogen
 msgid "CSV Import"
@@ -72,8 +72,8 @@ msgstr "CSV-import"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:78
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:369
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:378
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:809
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:383
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:811
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:95
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:309
 #, elixir-autogen
@@ -84,12 +84,12 @@ msgstr "Pood"
 msgid "My Cart"
 msgstr "Minu ostukorv"
 
-#: lib/phoenix_kit_ecommerce/web/categories.ex:758
+#: lib/phoenix_kit_ecommerce/web/categories.ex:763
 #, elixir-autogen, elixir-format
 msgid "%{count} categories deleted"
 msgstr "%{count} kategooriat kustutatud"
 
-#: lib/phoenix_kit_ecommerce/web/categories.ex:734
+#: lib/phoenix_kit_ecommerce/web/categories.ex:735
 #, elixir-autogen, elixir-format
 msgid "%{count} categories updated"
 msgstr "%{count} kategooriat uuendatud"
@@ -106,12 +106,12 @@ msgid_plural "%{count} orders"
 msgstr[0] "1 tellimus"
 msgstr[1] "%{count} tellimust"
 
-#: lib/phoenix_kit_ecommerce/web/products.ex:1042
+#: lib/phoenix_kit_ecommerce/web/products.ex:1047
 #, elixir-autogen, elixir-format
 msgid "%{count} products deleted"
 msgstr "%{count} toodet kustutatud"
 
-#: lib/phoenix_kit_ecommerce/web/products.ex:1014
+#: lib/phoenix_kit_ecommerce/web/products.ex:1015
 #, elixir-autogen, elixir-format
 msgid "%{count} products moved"
 msgstr "%{count} toodet teisaldatud"
@@ -123,10 +123,10 @@ msgstr "%{count} toodet muudetud olekusse %{status}"
 
 #: lib/phoenix_kit_ecommerce/web/products.ex:388
 #: lib/phoenix_kit_ecommerce/web/products.ex:389
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1927
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2353
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1988
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1989
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1937
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2363
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1967
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1968
 #, elixir-autogen, elixir-format
 msgid "%{count} selected"
 msgstr "Valitud: %{count}"
@@ -152,12 +152,12 @@ msgid_plural "%{count} products"
 msgstr[0] "1 toode"
 msgstr[1] "%{count} toodet"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:773
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:790
 #, elixir-autogen, elixir-format
 msgid "= Category specific,"
 msgstr "= Kategooriaspetsiifiline,"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:774
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:791
 #, elixir-autogen, elixir-format
 msgid "= Global"
 msgstr "= Globaalne"
@@ -168,14 +168,14 @@ msgstr "= Globaalne"
 msgid "Abandoned"
 msgstr "Hüljatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1112
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1128
 #, elixir-autogen, elixir-format
 msgid "About CSV Import"
 msgstr "CSV-impordi kohta"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:446
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:278
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:274
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:281
 #: lib/phoenix_kit_ecommerce/web/products.ex:501
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:123
 #, elixir-autogen, elixir-format
@@ -193,14 +193,13 @@ msgstr "Tegevused"
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:222
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:336
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:425
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:922
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:931
 #: lib/phoenix_kit_ecommerce/web/products.ex:323
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:430
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:37
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:43
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:44
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:51
-#: lib/phoenix_kit_ecommerce/web/translations.ex:814
 #, elixir-autogen, elixir-format
 msgid "Active"
 msgstr "Aktiivne"
@@ -210,18 +209,18 @@ msgstr "Aktiivne"
 msgid "Active Products"
 msgstr "Aktiivsed tooted"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:471
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:488
 #, elixir-autogen, elixir-format
 msgid "Active — Category and products visible"
 msgstr "Aktiivne — kategooria ja tooted nähtavad"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:848
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:899
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:476
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1433
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:865
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:916
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:483
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1442
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1099
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2526
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2544
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2536
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2554
 #, elixir-autogen, elixir-format
 msgid "Add"
 msgstr "Lisa"
@@ -231,7 +230,7 @@ msgstr "Lisa"
 msgid "Add Category"
 msgstr "Lisa kategooria"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:799
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:816
 #, elixir-autogen, elixir-format
 msgid "Add Category Option"
 msgstr "Lisa kategooria valik"
@@ -241,14 +240,14 @@ msgstr "Lisa kategooria valik"
 msgid "Add Method"
 msgstr "Lisa meetod"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:693
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:237
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:419
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:710
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:244
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:426
 #, elixir-autogen, elixir-format
 msgid "Add Option"
 msgstr "Lisa valik"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1442
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1451
 #, elixir-autogen, elixir-format
 msgid "Add Option or Value"
 msgstr "Lisa valik või väärtus"
@@ -259,7 +258,7 @@ msgstr "Lisa valik või väärtus"
 msgid "Add Product"
 msgstr "Lisa toode"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1420
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1429
 #, elixir-autogen, elixir-format
 msgid "Add new value..."
 msgstr "Lisa uus väärtus..."
@@ -270,7 +269,7 @@ msgstr "Lisa uus väärtus..."
 msgid "All Categories"
 msgstr "Kõik kategooriad"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:992
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1008
 #, elixir-autogen, elixir-format
 msgid "All Images Migrated"
 msgstr "Kõik pildid migreeritud"
@@ -292,12 +291,12 @@ msgstr "Kõik olekud"
 msgid "All Types"
 msgstr "Kõik tüübid"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1352
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1361
 #, elixir-autogen, elixir-format
 msgid "All values"
 msgstr "Kõik väärtused"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1299
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1315
 #, elixir-autogen, elixir-format
 msgid "Analyze & Configure"
 msgstr "Analüüsi ja seadista"
@@ -305,10 +304,9 @@ msgstr "Analüüsi ja seadista"
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:91
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:148
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:149
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:923
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:932
 #: lib/phoenix_kit_ecommerce/web/products.ex:325
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:38
-#: lib/phoenix_kit_ecommerce/web/translations.ex:815
 #, elixir-autogen, elixir-format
 msgid "Archived"
 msgstr "Arhiveeritud"
@@ -323,7 +321,7 @@ msgstr "Kas olete kindel, et soovite kustutada %{count} kategooriat? Seda toimin
 msgid "Are you sure you want to delete %{count} products? This action cannot be undone."
 msgstr "Kas olete kindel, et soovite kustutada %{count} toodet? Seda toimingut ei saa tagasi võtta."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1091
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1107
 #, elixir-autogen, elixir-format
 msgid "Are you sure you want to delete this import log?"
 msgstr "Kas oled kindel, et soovid kustutada selle impordiloogi?"
@@ -343,33 +341,33 @@ msgstr "Kas olete kindel, et soovite selle toote kustutada? Seda toimingut ei sa
 msgid "Attached"
 msgstr "Lisatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1484
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1500
 #, elixir-autogen, elixir-format
 msgid "Auto-add"
 msgstr "Automaatne lisamine"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:553
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:570
 #, elixir-autogen, elixir-format
 msgid "Auto-detect (first product with image)"
 msgstr "Automaattuvastus (esimene toode pildiga)"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:827
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:844
 #, elixir-autogen, elixir-format
 msgid "Auto-generated"
 msgstr "Automaatselt genereeritud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:442
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:459
 #, elixir-autogen, elixir-format
 msgid "Auto-generated from name"
 msgstr "Genereeritakse nimest"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:943
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:952
 #, elixir-autogen, elixir-format
 msgid "Auto-generated from title"
 msgstr "Genereeritakse pealkirjast"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:292
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1288
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1297
 #, elixir-autogen, elixir-format
 msgid "Available Options"
 msgstr "Saadaolevad valikud"
@@ -385,17 +383,17 @@ msgid "Back to Orders"
 msgstr "Tagasi tellimuste juurde"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:468
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1005
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1014
 #, elixir-autogen, elixir-format
 msgid "Base Price"
 msgstr "Põhihind"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1511
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1520
 #, elixir-autogen, elixir-format
 msgid "Base price:"
 msgstr "Põhihind:"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:396
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:413
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:206
 #, elixir-autogen, elixir-format
 msgid "Basic Information"
@@ -403,8 +401,8 @@ msgstr "Põhiandmed"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:252
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:265
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1714
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2077
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1717
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2080
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:145
 #, elixir-autogen, elixir-format
 msgid "Billing Information"
@@ -421,13 +419,13 @@ msgstr "Arveldusmoodul ei ole lubatud"
 msgid "Billing module settings"
 msgstr "Arvelduse mooduli seaded"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:772
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:789
 #, elixir-autogen, elixir-format
 msgid "Blue"
 msgstr "Sinine"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:112
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:952
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:961
 #, elixir-autogen, elixir-format
 msgid "Brand or manufacturer"
 msgstr "Bränd või tootja"
@@ -451,13 +449,13 @@ msgstr "CSV-impordi filtrid"
 #: lib/phoenix_kit_ecommerce/web/categories.ex:584
 #: lib/phoenix_kit_ecommerce/web/categories.ex:625
 #: lib/phoenix_kit_ecommerce/web/categories.ex:644
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:784
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:896
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:801
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:913
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:945
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:628
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:656
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:663
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:642
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1966
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1975
 #: lib/phoenix_kit_ecommerce/web/products.ex:683
 #: lib/phoenix_kit_ecommerce/web/products.ex:723
 #: lib/phoenix_kit_ecommerce/web/products.ex:751
@@ -467,7 +465,7 @@ msgstr "CSV-impordi filtrid"
 msgid "Cancel"
 msgstr "Tühista"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:977
+#: lib/phoenix_kit_ecommerce/web/imports.ex:993
 #, elixir-autogen, elixir-format
 msgid "Cancel Migration"
 msgstr "Tühista migreermine"
@@ -478,12 +476,12 @@ msgstr "Tühista migreermine"
 msgid "Cancelled"
 msgstr "Tühistatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1737
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1753
 #, elixir-autogen, elixir-format
 msgid "Cancelled %{count} pending migration jobs"
 msgstr "Tühistati %{count} migreerimistehtust"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:430
+#: lib/phoenix_kit_ecommerce/web/imports.ex:446
 #, elixir-autogen, elixir-format
 msgid "Cannot retry: file no longer exists"
 msgstr "Kordamine pole võimalik: fail puudub"
@@ -504,11 +502,11 @@ msgid "Categories in shop enabled"
 msgstr "Kategooriad poes lubatud"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:538
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:968
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:977
 #: lib/phoenix_kit_ecommerce/web/products.ex:344
 #: lib/phoenix_kit_ecommerce/web/products.ex:432
 #: lib/phoenix_kit_ecommerce/web/products.ex:499
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1883
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1862
 #, elixir-autogen, elixir-format
 msgid "Category"
 msgstr "Kategooria"
@@ -518,7 +516,7 @@ msgstr "Kategooria"
 msgid "Category Icons"
 msgstr "Kategooria ikoonid"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:502
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:519
 #, elixir-autogen, elixir-format
 msgid "Category Image"
 msgstr "Kategooria pilt"
@@ -528,12 +526,12 @@ msgstr "Kategooria pilt"
 msgid "Category Name Display"
 msgstr "Kategooria nime kuvamine"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:686
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:703
 #, elixir-autogen, elixir-format
 msgid "Category Options"
 msgstr "Kategooria valikud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:935
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:952
 #, elixir-autogen, elixir-format
 msgid "Category created"
 msgstr "Kategooria loodud"
@@ -543,7 +541,7 @@ msgstr "Kategooria loodud"
 msgid "Category deleted"
 msgstr "Kategooria kustutatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:495
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:512
 #, elixir-autogen, elixir-format
 msgid "Category description"
 msgstr "Kategooria kirjeldus"
@@ -558,23 +556,23 @@ msgstr "Kategooria kuvamissäe uuendatud"
 msgid "Category icon setting updated"
 msgstr "Kategooria ikooni säe uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:511
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:528
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1289
 #, elixir-autogen, elixir-format
 msgid "Category image"
 msgstr "Kategooria pilt"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:416
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:433
 #, elixir-autogen, elixir-format
 msgid "Category name"
 msgstr "Kategooria nimi"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:959
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:976
 #, elixir-autogen, elixir-format
 msgid "Category updated"
 msgstr "Kategooria uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:535
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:552
 #, elixir-autogen, elixir-format
 msgid "Change Image"
 msgstr "Muuda pilti"
@@ -593,14 +591,14 @@ msgstr "Muuda ülematkat"
 msgid "Change Status"
 msgstr "Muuda olekut"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1042
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1051
 #, elixir-autogen, elixir-format
 msgid "Charge tax on this product"
 msgstr "Rakenda maks sellele tootele"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:370
 #: lib/phoenix_kit_ecommerce/web/products.ex:392
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1991
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1970
 #, elixir-autogen, elixir-format
 msgid "Clear selection"
 msgstr "Tühista valik"
@@ -611,7 +609,7 @@ msgid "Compare At"
 msgstr "Võrdlushind"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:135
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1016
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1025
 #, elixir-autogen, elixir-format
 msgid "Compare at price"
 msgstr "Võrdlushind"
@@ -621,14 +619,14 @@ msgstr "Võrdlushind"
 msgid "Completed At"
 msgstr "Lõpetamise aeg"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:845
+#: lib/phoenix_kit_ecommerce/web/imports.ex:861
 #: lib/phoenix_kit_ecommerce/web/settings.ex:916
 #: lib/phoenix_kit_ecommerce/web/settings.ex:939
 #, elixir-autogen, elixir-format
 msgid "Configure"
 msgstr "Seadista"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1310
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1326
 #, elixir-autogen, elixir-format
 msgid "Configure Option Mappings"
 msgstr "Seadista valikute kaardistus"
@@ -649,12 +647,12 @@ msgstr "Seadista tarneviisi üksikasjad"
 msgid "Configure your e-commerce store"
 msgstr "Seadista oma e-pood"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:826
+#: lib/phoenix_kit_ecommerce/web/imports.ex:842
 #, elixir-autogen, elixir-format
 msgid "Confirm"
 msgstr "Kinnita"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1503
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1519
 #, elixir-autogen, elixir-format
 msgid "Confirm Import"
 msgstr "Kinnita import"
@@ -683,12 +681,12 @@ msgid "Cost"
 msgstr "Omahind"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:148
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1028
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1037
 #, elixir-autogen, elixir-format
 msgid "Cost per item"
 msgstr "Kauba omahind"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:788
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:805
 #, elixir-autogen, elixir-format
 msgid "Create Category"
 msgstr "Loo kategooria"
@@ -698,17 +696,17 @@ msgstr "Loo kategooria"
 msgid "Create Method"
 msgstr "Loo meetod"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1970
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1979
 #, elixir-autogen, elixir-format
 msgid "Create Product"
 msgstr "Loo toode"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:382
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:399
 #, elixir-autogen, elixir-format
 msgid "Create a new category"
 msgstr "Loo uus kategooria"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:868
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:877
 #, elixir-autogen, elixir-format
 msgid "Create a new product"
 msgstr "Loo uus toode"
@@ -744,22 +742,22 @@ msgstr "Valuuta- ja maksusätted"
 msgid "Currency and tax configuration is managed in the"
 msgstr "Valuuta ja maksude seadistamine toimub"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1765
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1774
 #, elixir-autogen, elixir-format
 msgid "Current Modifier"
 msgstr "Praegune modifikaator"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1618
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1627
 #, elixir-autogen, elixir-format
 msgid "Custom"
 msgstr "Kohandatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1559
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1568
 #, elixir-autogen, elixir-format
 msgid "Custom Price"
 msgstr "Kohandatud hind"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1350
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1359
 #, elixir-autogen, elixir-format
 msgid "Custom selection"
 msgstr "Kohandatud valik"
@@ -769,17 +767,17 @@ msgstr "Kohandatud valik"
 msgid "Customer"
 msgstr "Klient"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1021
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1037
 #, elixir-autogen, elixir-format
 msgid "Date"
 msgstr "Kuupäev"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1558
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1567
 #, elixir-autogen, elixir-format
 msgid "Default Price"
 msgstr "Vaikimisi hind"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:698
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:715
 #, elixir-autogen, elixir-format
 msgid "Define options specific to this category. These override global options with the same key."
 msgstr "Määratle kategooriaspetsiifilised valikud. Need alistavad sama võtmega globaalsed valikud."
@@ -794,9 +792,9 @@ msgstr "Määrake kõigile toodetele kehtivad valikud (suurus, värv, materjal j
 #: lib/phoenix_kit_ecommerce/web/categories.ex:515
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:266
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:373
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1090
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1094
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:358
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1106
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1110
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:365
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:236
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:644
 #: lib/phoenix_kit_ecommerce/web/products.ex:415
@@ -871,14 +869,14 @@ msgstr "Tarne ja olek"
 msgid "Delivery in 3-5 business days"
 msgstr "Tarne 3–5 tööpäeva jooksul"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1220
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:485
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:669
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:977
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1208
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1222
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:502
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:686
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:986
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1217
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:231
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1568
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1485
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1464
 #, elixir-autogen, elixir-format
 msgid "Description"
 msgstr "Kirjeldus"
@@ -889,7 +887,7 @@ msgid "Description:"
 msgstr "Kirjeldus:"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:102
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:961
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:970
 #: lib/phoenix_kit_ecommerce/web/products.ex:337
 #, elixir-autogen, elixir-format
 msgid "Digital"
@@ -907,7 +905,7 @@ msgstr "Digitaalsed tooted"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:727
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:357
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2440
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2443
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:113
 #, elixir-autogen, elixir-format
 msgid "Discount"
@@ -923,7 +921,7 @@ msgstr "Kuva kategooria kaardid toodete kohal poe pealehel"
 msgid "Download Limit:"
 msgstr "Allalaadimise limiit:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1269
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1285
 #, elixir-autogen, elixir-format
 msgid "Download images to Storage"
 msgstr "Laadi pildid salvestusruumi"
@@ -935,11 +933,10 @@ msgstr "Allalaaditavad tooted"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:89
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:147
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:921
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:930
 #: lib/phoenix_kit_ecommerce/web/products.ex:324
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:22
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:36
-#: lib/phoenix_kit_ecommerce/web/translations.ex:813
 #, elixir-autogen, elixir-format
 msgid "Draft"
 msgstr "Mustand"
@@ -949,7 +946,7 @@ msgstr "Mustand"
 msgid "Draft Products"
 msgstr "Mustandtooted"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1222
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1238
 #, elixir-autogen, elixir-format
 msgid "Drag CSV file here or click to browse"
 msgstr "Lohista CSV-fail siia või kliki sirvimiseks"
@@ -961,15 +958,15 @@ msgstr "E-kaubanduse seaded"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:418
 #: lib/phoenix_kit_ecommerce/web/categories.ex:506
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:107
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:109
 #: lib/phoenix_kit_ecommerce/web/components/shop_cards.ex:211
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:257
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:364
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:195
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:198
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:347
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:354
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:230
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:150
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:151
 #: lib/phoenix_kit_ecommerce/web/products.ex:480
 #: lib/phoenix_kit_ecommerce/web/products.ex:608
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:71
@@ -979,34 +976,34 @@ msgstr "E-kaubanduse seaded"
 msgid "Edit"
 msgstr "Muuda"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:108
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:110
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:72
 #, elixir-autogen, elixir-format
 msgid "Edit %{name}"
 msgstr "Muuda %{name}"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:154
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:155
 #, elixir-autogen, elixir-format
 msgid "Edit %{title}"
 msgstr "Muuda %{title}"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:799
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:419
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:816
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:426
 #, elixir-autogen, elixir-format
 msgid "Edit Option"
 msgstr "Muuda valikut"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:382
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:399
 #, elixir-autogen, elixir-format
 msgid "Edit category details"
 msgstr "Muuda kategooria andmeid"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:868
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:877
 #, elixir-autogen, elixir-format
 msgid "Edit product details"
 msgstr "Muuda toote andmeid"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1522
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1531
 #, elixir-autogen, elixir-format
 msgid "Editable"
 msgstr "Muudetav"
@@ -1016,7 +1013,7 @@ msgstr "Muudetav"
 msgid "Enabled"
 msgstr "Lubatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1444
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1453
 #, elixir-autogen, elixir-format
 msgid "Enter an existing option key to add a new value, or a new key to create a new option."
 msgstr "Sisestage olemasolev valikuvõti uue väärtuse lisamiseks või uus võti uue valiku loomiseks."
@@ -1043,7 +1040,7 @@ msgstr "Tähtaeg (maks, päevades)"
 msgid "Est. days (min)"
 msgstr "Tähtaeg (min, päevades)"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1116
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1132
 #, elixir-autogen, elixir-format
 msgid "Existing products with the same slug are updated"
 msgstr "Sama slug-iga olemasolevad tooted uuendatakse"
@@ -1059,7 +1056,7 @@ msgstr "Aegunud"
 msgid "Expiry:"
 msgstr "Aegumisaeg:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:943
+#: lib/phoenix_kit_ecommerce/web/imports.ex:959
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:63
 #, elixir-autogen, elixir-format
 msgid "Failed"
@@ -1071,7 +1068,7 @@ msgstr "Ebaõnnestunud"
 msgid "Failed to add filter"
 msgstr "Filtri lisamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:576
+#: lib/phoenix_kit_ecommerce/web/imports.ex:592
 #, elixir-autogen, elixir-format
 msgid "Failed to create import log"
 msgstr "Impordiloogi loomine ebaõnnestus"
@@ -1081,7 +1078,7 @@ msgstr "Impordiloogi loomine ebaõnnestus"
 msgid "Failed to delete category"
 msgstr "Kategooria kustutamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:503
+#: lib/phoenix_kit_ecommerce/web/imports.ex:519
 #, elixir-autogen, elixir-format
 msgid "Failed to delete import log"
 msgstr "Impordiloogi kustutamine ebaõnnestus"
@@ -1098,7 +1095,7 @@ msgstr "Toote kustutamine ebaõnnestus"
 msgid "Failed to delete shipping method"
 msgstr "Tarnemeetodi kustutamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:288
+#: lib/phoenix_kit_ecommerce/web/imports.ex:291
 #, elixir-autogen, elixir-format
 msgid "Failed to read CSV file headers"
 msgstr "CSV-faili päiste lugemine ebaõnnestus"
@@ -1141,17 +1138,17 @@ msgstr "Filtri sildi uuendamine ebaõnnestus"
 msgid "Failed to update setting"
 msgstr "Seade uuendamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:545
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:562
 #, elixir-autogen, elixir-format
 msgid "Featured Product (image fallback)"
 msgstr "Esitletud toode (varupilt)"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1017
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1033
 #, elixir-autogen, elixir-format
 msgid "File"
 msgstr "Fail"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1625
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1641
 #, elixir-autogen, elixir-format
 msgid "File is too large (max 50MB)"
 msgstr "Fail on liiga suur (maks 50 MB)"
@@ -1193,7 +1190,7 @@ msgstr "Filter eemaldatud"
 msgid "Filters reset to defaults"
 msgstr "Filtrid lähtestatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1766
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1775
 #, elixir-autogen, elixir-format
 msgid "Final Price"
 msgstr "Lõpphind"
@@ -1208,7 +1205,7 @@ msgstr "Kausta ikoon"
 msgid "Free above"
 msgstr "Tasuta alates"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1745
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1754
 #, elixir-autogen, elixir-format
 msgid "From Import"
 msgstr "Impordist"
@@ -1223,7 +1220,7 @@ msgstr "Täielik kirjeldus:"
 msgid "Global Product Options"
 msgstr "Globaalsed tootevalikud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:773
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:790
 #, elixir-autogen, elixir-format
 msgid "Gray"
 msgstr "Hall"
@@ -1235,7 +1232,7 @@ msgid "Guest"
 msgstr "Külaline"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:232
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2504
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2514
 #, elixir-autogen, elixir-format
 msgid "Handle"
 msgstr "Identifikaator"
@@ -1247,7 +1244,7 @@ msgstr "Identifikaator"
 msgid "Hidden"
 msgstr "Peidetud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:473
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:490
 #, elixir-autogen, elixir-format
 msgid "Hidden — Category and products hidden"
 msgstr "Peidetud — kategooria ja tooted peidetud"
@@ -1267,18 +1264,18 @@ msgstr "Kui teil on küsimusi tellimuse kohta, võtke ühendust meie tugimeeskon
 msgid "Image"
 msgstr "Pilt"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:899
+#: lib/phoenix_kit_ecommerce/web/imports.ex:915
 #, elixir-autogen, elixir-format
 msgid "Image Migration"
 msgstr "Piltide migratsioon"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1271
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1287
 #, elixir-autogen, elixir-format
 msgid "Images will be downloaded from CDN URLs and stored in the Storage module"
 msgstr "Pildid laaditakse CDN-ist alla ja salvestatakse Salvestusmoodulisse"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:829
-#: lib/phoenix_kit_ecommerce/web/imports.ex:848
+#: lib/phoenix_kit_ecommerce/web/imports.ex:845
+#: lib/phoenix_kit_ecommerce/web/imports.ex:864
 #, elixir-autogen, elixir-format
 msgid "Import"
 msgstr "Import"
@@ -1294,13 +1291,13 @@ msgstr "Impordi seadistused"
 msgid "Import Details"
 msgstr "Impordi üksikasjad"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1176
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1321
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1192
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1337
 #, elixir-autogen, elixir-format
 msgid "Import Filter"
 msgstr "Impordi filter"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1004
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1020
 #, elixir-autogen, elixir-format
 msgid "Import History"
 msgstr "Impordi ajalugu"
@@ -1310,66 +1307,66 @@ msgstr "Impordi ajalugu"
 msgid "Import Information"
 msgstr "Impordi teave"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1140
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1156
 #, elixir-autogen, elixir-format
 msgid "Import Language"
 msgstr "Impordi keel"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:323
+#: lib/phoenix_kit_ecommerce/web/imports.ex:326
 #, elixir-autogen, elixir-format
 msgid "Import completed successfully!"
 msgstr "Import edukalt lõpetatud!"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:343
+#: lib/phoenix_kit_ecommerce/web/imports.ex:346
 #, elixir-autogen, elixir-format
 msgid "Import failed: %{reason}"
 msgstr "Import ebaõnnestus: %{reason}"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1568
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1584
 #, elixir-autogen, elixir-format
 msgid "Import in Progress"
 msgstr "Import käib"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1167
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1183
 #, elixir-autogen, elixir-format
 msgid "Import language:"
 msgstr "Impordi keel:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:498
+#: lib/phoenix_kit_ecommerce/web/imports.ex:514
 #, elixir-autogen, elixir-format
 msgid "Import log deleted"
 msgstr "Impordi logi kustutatud"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:26
-#: lib/phoenix_kit_ecommerce/web/imports.ex:424
-#: lib/phoenix_kit_ecommerce/web/imports.ex:482
+#: lib/phoenix_kit_ecommerce/web/imports.ex:440
+#: lib/phoenix_kit_ecommerce/web/imports.ex:498
 #, elixir-autogen, elixir-format
 msgid "Import not found"
 msgstr "Importi ei leitud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:791
+#: lib/phoenix_kit_ecommerce/web/imports.ex:807
 #, elixir-autogen, elixir-format
 msgid "Import products from CSV files"
 msgstr "Impordi tooteid CSV-failidest"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1117
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1133
 #, elixir-autogen, elixir-format
 msgid "Import runs in the background — you can leave this page"
 msgstr "Import töötab taustal — saate sellelt lehelt lahkuda"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:571
+#: lib/phoenix_kit_ecommerce/web/imports.ex:587
 #, elixir-autogen, elixir-format
 msgid "Import started: %{filename}"
 msgstr "Import alustatud: %{filename}"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:121
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1346
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1758
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1355
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1767
 #, elixir-autogen, elixir-format
 msgid "Imported"
 msgstr "Imporditud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1744
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1753
 #, elixir-autogen, elixir-format
 msgid "Imported Option Prices"
 msgstr "Imporditud valikute hinnad"
@@ -1379,13 +1376,13 @@ msgstr "Imporditud valikute hinnad"
 msgid "Imported Products"
 msgstr "Imporditud tooted"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:936
+#: lib/phoenix_kit_ecommerce/web/imports.ex:952
 #, elixir-autogen, elixir-format
 msgid "In Progress"
 msgstr "Töös"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1698
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1708
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1714
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1724
 #, elixir-autogen, elixir-format
 msgid "Invalid import ID"
 msgstr "Vigane impordi ID"
@@ -1398,20 +1395,20 @@ msgstr "Vigane impordi ID"
 msgid "Items"
 msgstr "Kirjed"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:821
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:438
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:838
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:445
 #, elixir-autogen, elixir-format
 msgid "Key"
 msgstr "Võti"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:809
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:425
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:826
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:432
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1004
 #, elixir-autogen, elixir-format
 msgid "Label"
 msgstr "Silt"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1429
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1445
 #, elixir-autogen, elixir-format
 msgid "Link to Global Option"
 msgstr "Seo globaalse valikuga"
@@ -1452,17 +1449,17 @@ msgstr "Ühendatud"
 msgid "Method"
 msgstr "Meetod"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:988
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1004
 #, elixir-autogen, elixir-format
 msgid "Migrate %{count} Products"
 msgstr "Migreeri %{count} toodet"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:912
+#: lib/phoenix_kit_ecommerce/web/imports.ex:928
 #, elixir-autogen, elixir-format
 msgid "Migrate product images from external CDN URLs to the Storage module for better control and reliability."
 msgstr "Migreerige toote pildid välistest CDN-URL-idest Storage moodulisse parema kontrolli ja töökindluse tagamiseks."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:924
+#: lib/phoenix_kit_ecommerce/web/imports.ex:940
 #, elixir-autogen, elixir-format
 msgid "Migrated"
 msgstr "Migreeritud"
@@ -1477,7 +1474,7 @@ msgstr "Min. tellimus"
 msgid "Min weight (g)"
 msgstr "Min. kaal (g)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1669
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1678
 #, elixir-autogen, elixir-format
 msgid "Modifier"
 msgstr "Modifikaator"
@@ -1501,12 +1498,12 @@ msgid "My Orders"
 msgstr "Minu tellimused"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:440
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:401
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:656
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:418
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:673
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:274
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:402
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:213
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1489
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1468
 #, elixir-autogen, elixir-format
 msgid "Name"
 msgstr "Nimi"
@@ -1521,8 +1518,10 @@ msgstr "Vajate abi?"
 msgid "Never"
 msgstr "Mitte kunagi"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1530
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1534
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1480
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1482
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1546
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1550
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:362
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:371
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:377
@@ -1555,13 +1554,13 @@ msgstr "Kategooriaid ei leitud"
 msgid "No category"
 msgstr "Kategooriata"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:703
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:720
 #, elixir-autogen, elixir-format
 msgid "No category-specific options"
 msgstr "Kategooriaspetsiifilisi valikuid pole"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1184
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1329
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1200
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1345
 #, elixir-autogen, elixir-format
 msgid "No filter (import all products)"
 msgstr "Ilma filtrita (impordi kõik tooted)"
@@ -1572,12 +1571,12 @@ msgid "No icons"
 msgstr "Ilma ikoonideta"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:260
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1842
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1851
 #, elixir-autogen, elixir-format
 msgid "No image"
 msgstr "Pilt puudub"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1010
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1026
 #, elixir-autogen, elixir-format
 msgid "No imports yet"
 msgstr "Importe pole veel"
@@ -1602,8 +1601,8 @@ msgstr "Maks. piiranguta"
 msgid "No min"
 msgstr "Min. piiranguta"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:768
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2170
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:785
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2179
 #, elixir-autogen, elixir-format
 msgid "No options defined"
 msgstr "Valikuid pole määratud"
@@ -1618,12 +1617,12 @@ msgstr "Selle olekuga tellimusi pole. Proovige teist filtrit."
 msgid "No orders yet"
 msgstr "Tellimusi pole veel"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:450
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:467
 #, elixir-autogen, elixir-format
 msgid "No parent (root category)"
 msgstr "Ülemkategooriata (juurkategooria)"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:560
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:577
 #, elixir-autogen, elixir-format
 msgid "No products with images in this category. Add product images to enable this option."
 msgstr "Selles kategoorias pole piltidega tooteid. Lisa toote pildid selle valiku aktiveerimiseks."
@@ -1640,74 +1639,74 @@ msgstr "Piiranguta"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:680
 #: lib/phoenix_kit_ecommerce/web/categories.ex:710
-#: lib/phoenix_kit_ecommerce/web/categories.ex:736
-#: lib/phoenix_kit_ecommerce/web/categories.ex:760
+#: lib/phoenix_kit_ecommerce/web/categories.ex:737
+#: lib/phoenix_kit_ecommerce/web/categories.ex:765
 #, elixir-autogen, elixir-format
 msgid "Not authorized"
 msgstr "Puuduvad õigused"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1626
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1642
 #, elixir-autogen, elixir-format
 msgid "Only CSV files are accepted"
 msgstr "Aktsepteeritakse ainult CSV-faile"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1627
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1643
 #, elixir-autogen, elixir-format
 msgid "Only one file at a time"
 msgstr "Korraga ainult üks fail"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:273
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1667
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:280
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1676
 #, elixir-autogen, elixir-format
 msgid "Option"
 msgstr "Valik"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:767
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:768
 #, elixir-autogen, elixir-format
 msgid "Option '%{key}' created"
 msgstr "Valik '%{key}' loodud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1449
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1458
 #, elixir-autogen, elixir-format
 msgid "Option Key"
 msgstr "Valikuvõti"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1508
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1517
 #, elixir-autogen, elixir-format
 msgid "Option Prices"
 msgstr "Valikute hinnad"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:346
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:363
 #, elixir-autogen, elixir-format
 msgid "Option added"
 msgstr "Valik lisatud"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:239
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:716
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:717
 #, elixir-autogen, elixir-format
 msgid "Option key and value are required"
 msgstr "Valiku võti ja väärtus on kohustuslikud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:1146
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:1158
 #, elixir-autogen, elixir-format
 msgid "Option removed"
 msgstr "Valik eemaldatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:346
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:859
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:363
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:866
 #, elixir-autogen, elixir-format
 msgid "Option updated"
 msgstr "Valik uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:859
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:487
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:876
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:494
 #, elixir-autogen, elixir-format
 msgid "Option value"
 msgstr "Valiku väärtus"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:846
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:863
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:25
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:470
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:477
 #, elixir-autogen, elixir-format
 msgid "Options"
 msgstr "Valikud"
@@ -1722,7 +1721,7 @@ msgstr "Tellimus %{number}"
 msgid "Order Date"
 msgstr "Tellimuse kuupäev"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2177
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2180
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:39
 #, elixir-autogen, elixir-format
 msgid "Order Items"
@@ -1735,7 +1734,7 @@ msgid "Order Number"
 msgstr "Tellimuse number"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:690
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2394
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2397
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:192
 #, elixir-autogen, elixir-format
 msgid "Order Summary"
@@ -1748,7 +1747,7 @@ msgid "Order not found"
 msgstr "Tellimust ei leitud"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:136
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1019
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1028
 #, elixir-autogen, elixir-format
 msgid "Original price"
 msgstr "Algne hind"
@@ -1764,12 +1763,12 @@ msgstr "Lehekülg %{page} / %{total}"
 msgid "Parent"
 msgstr "Ülemkategooria"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:449
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:466
 #, elixir-autogen, elixir-format
 msgid "Parent Category"
 msgstr "Ülemkategooria"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:930
+#: lib/phoenix_kit_ecommerce/web/imports.ex:946
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:23
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:60
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:26
@@ -1777,13 +1776,13 @@ msgstr "Ülemkategooria"
 msgid "Pending"
 msgstr "Ootel"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1523
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1532
 #, elixir-autogen, elixir-format
 msgid "Per-product price modifiers"
 msgstr "Toote-spetsiifilised hinnamuutjad"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:102
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:961
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:970
 #: lib/phoenix_kit_ecommerce/web/products.ex:336
 #, elixir-autogen, elixir-format
 msgid "Physical"
@@ -1799,25 +1798,25 @@ msgstr "Füüsilised tooted"
 msgid "Placed on %{date}"
 msgstr "Esitatud %{date}"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:665
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:666
 #, elixir-autogen, elixir-format
 msgid "Please enter a value first"
 msgstr "Sisesta esmalt väärtus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1672
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1688
 #, elixir-autogen, elixir-format
 msgid "Please select a CSV file first"
 msgstr "Vali esmalt CSV-fail"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:403
 #: lib/phoenix_kit_ecommerce/web/categories.ex:444
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:459
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:476
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:412
 #, elixir-autogen, elixir-format
 msgid "Position"
 msgstr "Positsioon"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1587
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1603
 #, elixir-autogen, elixir-format
 msgid "Preparing import..."
 msgstr "Impordi ettevalmistamine..."
@@ -1827,7 +1826,7 @@ msgstr "Impordi ettevalmistamine..."
 msgid "Preview:"
 msgstr "Eelvaade:"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:750
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:767
 #, elixir-autogen, elixir-format
 msgid "Preview: Merged Schema"
 msgstr "Eelvaade: ühendatud skeem"
@@ -1866,7 +1865,7 @@ msgid "Price override is configured per-option in the options settings."
 msgstr "Hinna alistamine seadistatakse iga valiku kohta valikute seadetes."
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:424
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:997
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1006
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:243
 #, elixir-autogen, elixir-format
 msgid "Pricing"
@@ -1881,36 +1880,36 @@ msgstr "Töötlemisel"
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:97
 #: lib/phoenix_kit_ecommerce/web/products.ex:496
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2379
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2389
 #, elixir-autogen, elixir-format
 msgid "Product"
 msgstr "Toode"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:338
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:883
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:892
 #, elixir-autogen, elixir-format
 msgid "Product Details"
 msgstr "Toote üksikasjad"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1887
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1896
 #, elixir-autogen, elixir-format
 msgid "Product Images"
 msgstr "Toote pildid"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:223
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:230
 #: lib/phoenix_kit_ecommerce/web/settings.ex:905
 #, elixir-autogen, elixir-format
 msgid "Product Options"
 msgstr "Toote valikud"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:100
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:960
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2505
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:969
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2515
 #, elixir-autogen, elixir-format
 msgid "Product type"
 msgstr "Toote tüüp"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:784
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:785
 #, elixir-autogen, elixir-format
 msgid "Product created"
 msgstr "Toode loodud"
@@ -1922,22 +1921,22 @@ msgstr "Toode loodud"
 msgid "Product deleted"
 msgstr "Toode kustutatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:904
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:913
 #, elixir-autogen, elixir-format
 msgid "Product title"
 msgstr "Toote pealkiri"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:817
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:818
 #, elixir-autogen, elixir-format
 msgid "Product updated"
 msgstr "Toode uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1115
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1131
 #, elixir-autogen, elixir-format
 msgid "Products are automatically categorized based on title or category name"
 msgstr "Tooted kategoriseeritakse automaatselt pealkirja või kategooria nime alusel"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:753
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:770
 #, elixir-autogen, elixir-format
 msgid "Products in this category will show these options:"
 msgstr "Selle kategooria toodetel kuvatakse järgmised valikud:"
@@ -1947,12 +1946,12 @@ msgstr "Selle kategooria toodetel kuvatakse järgmised valikud:"
 msgid "Products requiring shipping"
 msgstr "Tarnet vajavad tooted"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:704
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:721
 #, elixir-autogen, elixir-format
 msgid "Products will use global options only"
 msgstr "Tooted kasutavad ainult globaalseid valikuid"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1019
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1035
 #, elixir-autogen, elixir-format
 msgid "Progress"
 msgstr "Edenemine"
@@ -1962,7 +1961,7 @@ msgstr "Edenemine"
 msgid "Quick Actions"
 msgstr "Kiiraktsioonid"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:905
+#: lib/phoenix_kit_ecommerce/web/imports.ex:921
 #, elixir-autogen, elixir-format
 msgid "Refresh stats"
 msgstr "Värskenda statistikat"
@@ -1973,7 +1972,7 @@ msgstr "Värskenda statistikat"
 msgid "Remove"
 msgstr "Eemalda"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1288
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1304
 #, elixir-autogen, elixir-format
 msgid "Remove auto-created categories that have no products after import"
 msgstr "Eemalda automaatselt loodud tühjad kategooriad pärast importi"
@@ -1983,14 +1982,14 @@ msgstr "Eemalda automaatselt loodud tühjad kategooriad pärast importi"
 msgid "Remove this filter?"
 msgstr "Eemaldada see filter?"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:715
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:301
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:732
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:308
 #, elixir-autogen, elixir-format
 msgid "Required"
 msgstr "Kohustuslik"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:890
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:649
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:907
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:656
 #, elixir-autogen, elixir-format
 msgid "Required field"
 msgstr "Kohustuslik väli"
@@ -2005,18 +2004,18 @@ msgstr "Nõuab tarnimist:"
 msgid "Reset to defaults"
 msgstr "Lähtesta vaikimisi seadetele"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1020
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1036
 #, elixir-autogen, elixir-format
 msgid "Results"
 msgstr "Tulemused"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1078
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1081
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1094
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1097
 #, elixir-autogen, elixir-format
 msgid "Retry"
 msgstr "Proovi uuesti"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:474
+#: lib/phoenix_kit_ecommerce/web/imports.ex:490
 #, elixir-autogen, elixir-format
 msgid "Retrying import: %{filename}"
 msgstr "Impordi kordamine: %{filename}"
@@ -2031,8 +2030,8 @@ msgstr "Ainult juurkategooriad"
 msgid "SEO"
 msgstr "SEO"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:665
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1204
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:682
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1213
 #, elixir-autogen, elixir-format
 msgid "SEO-friendly URL for this language"
 msgstr "SEO-sõbralik URL selle keele jaoks"
@@ -2041,7 +2040,7 @@ msgstr "SEO-sõbralik URL selle keele jaoks"
 #: lib/phoenix_kit_ecommerce/web/categories.ex:293
 #: lib/phoenix_kit_ecommerce/web/components/catalog_sidebar.ex:382
 #: lib/phoenix_kit_ecommerce/web/products.ex:304
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1934
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1913
 #, elixir-autogen, elixir-format
 msgid "Search"
 msgstr "Otsi"
@@ -2061,7 +2060,7 @@ msgstr "Otsi kategooriaid..."
 msgid "Search products..."
 msgstr "Otsi tooteid..."
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:535
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:552
 #, elixir-autogen, elixir-format
 msgid "Select from Storage"
 msgstr "Vali salvestusest"
@@ -2097,14 +2096,14 @@ msgstr "Eemalda loendist"
 msgid "Set parent for %{count} selected categories"
 msgstr "Määra ülemkategooria %{count} valitud kategooriale"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1748
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1757
 #, elixir-autogen, elixir-format
 msgid "Set prices for each option value. Enter the final price (base price + modifier)."
 msgstr "Määrake hind iga variandi väärtuse jaoks. Sisestage lõpphind (põhihind + muutja)."
 
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:182
 #: lib/phoenix_kit_ecommerce/web/settings.ex:55
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2067
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2077
 #: lib/phoenix_kit_ecommerce/web/trail.ex:49
 #, elixir-autogen, elixir-format
 msgid "Settings"
@@ -2136,7 +2135,7 @@ msgstr "Tarneviis kustutatud"
 msgid "Shipping method updated"
 msgstr "Tarneviis uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1225
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1241
 #, elixir-autogen, elixir-format
 msgid "Shopify or Prom.ua CSV format, max 50MB"
 msgstr "Shopify või Prom.ua CSV-vorming, maks 50 MB"
@@ -2146,7 +2145,7 @@ msgstr "Shopify või Prom.ua CSV-vorming, maks 50 MB"
 msgid "Shopping Carts"
 msgstr "Ostlejate korvid"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:987
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:996
 #, elixir-autogen, elixir-format
 msgid "Short product description"
 msgstr "Lühike tootekirjeldus"
@@ -2166,17 +2165,17 @@ msgstr "Näita ikoonide kõrval kategooriate nimesid külgribal"
 msgid "Sidebar Display"
 msgstr "Külgriba kuvamine"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1392
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1408
 #, elixir-autogen, elixir-format
 msgid "Skip Mapping"
 msgstr "Jäta vastendamine vahele"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1286
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1302
 #, elixir-autogen, elixir-format
 msgid "Skip empty categories"
 msgstr "Jäta tühjad kategooriad vahele"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1548
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1564
 #, elixir-autogen, elixir-format
 msgid "Skip empty categories (remove categories with no products after import)"
 msgstr "Jäta tühjad kategooriad vahele (eemalda tootevaesed kategooriad pärast importi)"
@@ -2186,29 +2185,29 @@ msgstr "Jäta tühjad kategooriad vahele (eemalda tootevaesed kategooriad päras
 msgid "Skipped"
 msgstr "Vahele jäetud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1449
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1465
 #, elixir-autogen, elixir-format
 msgid "Slot Key"
 msgstr "Pesa võti"
 
 #: lib/phoenix_kit_ecommerce/web/categories.ex:441
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:430
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:447
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:167
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:931
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:940
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:223
 #, elixir-autogen, elixir-format
 msgid "Slug"
 msgstr "Slug"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:1129
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:797
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:829
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:1142
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:798
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:838
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Please try again."
 msgstr "Midagi läks valesti. Proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1258
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1948
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1260
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1957
 #, elixir-autogen, elixir-format
 msgid "Specifications"
 msgstr "Omadused"
@@ -2218,8 +2217,8 @@ msgstr "Omadused"
 msgid "Standard Shipping"
 msgstr "Standardtarne"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1396
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1559
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1412
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1575
 #, elixir-autogen, elixir-format
 msgid "Start Import"
 msgstr "Alusta importi"
@@ -2234,7 +2233,7 @@ msgstr "Alustage ostlemist, et siin näha oma tellimusi."
 msgid "Started At"
 msgstr "Alustatud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1721
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1737
 #, elixir-autogen, elixir-format
 msgid "Started migration for %{count} products"
 msgstr "Alustati migreerimist %{count} toote jaoks"
@@ -2245,24 +2244,24 @@ msgstr "Alustati migreerimist %{count} toote jaoks"
 #: lib/phoenix_kit_ecommerce/web/categories.ex:308
 #: lib/phoenix_kit_ecommerce/web/categories.ex:402
 #: lib/phoenix_kit_ecommerce/web/categories.ex:443
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:469
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:486
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:277
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1018
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1034
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:526
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:919
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:928
 #: lib/phoenix_kit_ecommerce/web/products.ex:319
 #: lib/phoenix_kit_ecommerce/web/products.ex:429
 #: lib/phoenix_kit_ecommerce/web/products.ex:497
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:419
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:122
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1571
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2506
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2516
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:196
 #, elixir-autogen, elixir-format
 msgid "Status"
 msgstr "Olek"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:547
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:564
 #, elixir-autogen, elixir-format
 msgid "Storage image has priority"
 msgstr "Salvestusmooduli pildil on prioriteet"
@@ -2283,7 +2282,7 @@ msgstr "Poe filter uuendatud"
 msgid "Subtotal"
 msgstr "Vahesumma"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1114
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1130
 #, elixir-autogen, elixir-format
 msgid "Supported formats: Shopify, Prom.ua (auto-detected from file headers)"
 msgstr "Toetatud formaadid: Shopify, Prom.ua (tuvastatakse automaatselt failipäistest)"
@@ -2295,13 +2294,13 @@ msgstr "Märksõnad:"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:734
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:350
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2433
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2436
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:106
 #, elixir-autogen, elixir-format
 msgid "Tax"
 msgstr "Maks"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1037
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1046
 #, elixir-autogen, elixir-format
 msgid "Tax Settings"
 msgstr "Maksuseaded"
@@ -2311,7 +2310,7 @@ msgstr "Maksuseaded"
 msgid "Taxable:"
 msgstr "Maksustatav:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1160
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1176
 #, elixir-autogen, elixir-format
 msgid "Text fields will be imported to this language"
 msgstr "Tekstiväljad imporditakse sellesse keelde"
@@ -2337,11 +2336,11 @@ msgid "Timestamps"
 msgstr "Ajatemplid"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:166
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:889
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1195
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:898
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1204
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1566
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2503
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1484
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2513
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1463
 #, elixir-autogen, elixir-format
 msgid "Title"
 msgstr "Pealkiri"
@@ -2355,7 +2354,7 @@ msgstr "Pealkiri:"
 #: lib/phoenix_kit_ecommerce/web/carts.ex:163
 #: lib/phoenix_kit_ecommerce/web/carts.ex:182
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:363
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2448
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2451
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:119
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:224
 #, elixir-autogen, elixir-format
@@ -2363,7 +2362,7 @@ msgid "Total"
 msgstr "Kokku"
 
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:64
-#: lib/phoenix_kit_ecommerce/web/imports.ex:918
+#: lib/phoenix_kit_ecommerce/web/imports.ex:934
 #, elixir-autogen, elixir-format
 msgid "Total Products"
 msgstr "Tooteid kokku"
@@ -2373,23 +2372,23 @@ msgstr "Tooteid kokku"
 msgid "Tracking supported"
 msgstr "Jälgimine toetatud"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:634
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:651
 #, elixir-autogen, elixir-format
 msgid "Translate category content for different languages. The default language uses the main fields above."
 msgstr "Tõlgi kategooria sisu erinevatesse keeltesse. Vaikekeel kasutab üla olevaid põhijalju."
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:658
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:675
 #, elixir-autogen, elixir-format
 msgid "Translated category name"
 msgstr "Tõlgitud kategooria nimi"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:671
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:688
 #, elixir-autogen, elixir-format
 msgid "Translated description"
 msgstr "Tõlgitud kirjeldus"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:632
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1164
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:649
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1173
 #: lib/phoenix_kit_ecommerce/web/translations.ex:216
 #, elixir-autogen, elixir-format
 msgid "Translations"
@@ -2400,14 +2399,14 @@ msgstr "Tõlked"
 msgid "Truncate (single line)"
 msgstr "Kärbi (üks rida)"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:833
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:456
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1670
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:850
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:463
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1679
 #: lib/phoenix_kit_ecommerce/web/products.ex:332
 #: lib/phoenix_kit_ecommerce/web/products.ex:430
 #: lib/phoenix_kit_ecommerce/web/products.ex:498
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1003
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1873
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1852
 #, elixir-autogen, elixir-format
 msgid "Type"
 msgstr "Tüüp"
@@ -2417,14 +2416,14 @@ msgstr "Tüüp"
 msgid "Type:"
 msgstr "Tüüp:"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:662
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1201
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:679
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1210
 #, elixir-autogen, elixir-format
 msgid "URL Slug"
 msgstr "URL Slug"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:876
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:629
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:893
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:636
 #, elixir-autogen, elixir-format
 msgid "Unit (optional)"
 msgstr "Ühik (valikuline)"
@@ -2441,24 +2440,24 @@ msgstr "Piiramatu"
 msgid "Unlisted"
 msgstr "Loetlemata"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:472
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:489
 #, elixir-autogen, elixir-format
 msgid "Unlisted — Category hidden, products still visible"
 msgstr "Peidetud — kategooria peidetud, tooted nähtavad"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:478
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:495
 #, elixir-autogen, elixir-format
 msgid "Unlisted: products appear in search/catalog but category not in menu"
 msgstr "Peidetud: tooted nähtavad otsingus, kuid kategooria pole menüüs"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:899
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:916
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:631
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:659
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:666
 #, elixir-autogen, elixir-format
 msgid "Update"
 msgstr "Uuenda"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:788
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:805
 #, elixir-autogen, elixir-format
 msgid "Update Category"
 msgstr "Uuenda kategooriat"
@@ -2468,7 +2467,7 @@ msgstr "Uuenda kategooriat"
 msgid "Update Method"
 msgstr "Uuenda meetodit"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1970
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1979
 #, elixir-autogen, elixir-format
 msgid "Update Product"
 msgstr "Uuenda toodet"
@@ -2495,18 +2494,18 @@ msgstr "Uuendatud"
 msgid "Updated:"
 msgstr "Uuendatud:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:820
-#: lib/phoenix_kit_ecommerce/web/imports.ex:839
+#: lib/phoenix_kit_ecommerce/web/imports.ex:836
+#: lib/phoenix_kit_ecommerce/web/imports.ex:855
 #, elixir-autogen, elixir-format
 msgid "Upload"
 msgstr "Laadi üles"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1132
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1148
 #, elixir-autogen, elixir-format
 msgid "Upload CSV File"
 msgstr "Laadi üles CSV-fail"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:565
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:582
 #, elixir-autogen, elixir-format
 msgid "Used as category image when no Storage image is selected"
 msgstr "Kasutatakse kategooria pildina, kui salvestusmooduli pilti pole valitud"
@@ -2516,42 +2515,42 @@ msgstr "Kasutatakse kategooria pildina, kui salvestusmooduli pilti pole valitud"
 msgid "User"
 msgstr "Kasutaja"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1461
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1557
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1668
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1764
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1470
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1566
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1677
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1773
 #, elixir-autogen, elixir-format
 msgid "Value"
 msgstr "Väärtus"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:690
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:691
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' added"
 msgstr "Väärtus '%{value}' lisatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:757
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:758
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' added to '%{key}'"
 msgstr "Väärtus '%{value}' lisatud väljale '%{key}'"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:646
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:672
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:647
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:673
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' already exists"
 msgstr "Väärtus '%{value}' on juba olemas"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:741
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:742
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' already exists in '%{key}'"
 msgstr "Väärtus '%{value}' on juba olemas väljal '%{key}'"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1823
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1832
 #, elixir-autogen, elixir-format
 msgid "Variant Images"
 msgstr "Variandi pildid"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:111
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:951
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:960
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1569
 #, elixir-autogen, elixir-format
 msgid "Vendor"
@@ -2562,8 +2561,8 @@ msgstr "Tarnija"
 msgid "Vendor:"
 msgstr "Tarnija:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1065
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1069
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1081
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1085
 #, elixir-autogen, elixir-format
 msgid "View Details"
 msgstr "Vaata üksikasjad"
@@ -2573,7 +2572,7 @@ msgstr "Vaata üksikasjad"
 msgid "View your order history"
 msgstr "Vaata tellimuste ajalugu"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1162
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1164
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:365
 #, elixir-autogen, elixir-format
 msgid "Weight:"
@@ -2584,17 +2583,19 @@ msgstr "Kaal:"
 msgid "Wrap (multi-line)"
 msgstr "Murdmine (mitu rida)"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1530
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1534
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1479
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1481
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1546
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1550
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:362
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:371
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:377
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2143
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2152
 #, elixir-autogen, elixir-format
 msgid "Yes"
 msgstr "Jah"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1031
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1040
 #, elixir-autogen, elixir-format
 msgid "Your cost for profit calculation"
 msgstr "Teie kulu kasumi arvutamiseks"
@@ -2614,18 +2615,18 @@ msgstr "Teie tellimus on teel!"
 msgid "auto-generated if empty"
 msgstr "genereeritakse automaatselt, kui tühi"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:815
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:832
 #, elixir-autogen, elixir-format
 msgid "e.g., Mounting Type"
 msgstr "nt Kinnitustüüp"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:882
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:899
 #, elixir-autogen, elixir-format
 msgid "e.g., cm"
 msgstr "nt cm"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:945
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2668
+#: lib/phoenix_kit_ecommerce/web/imports.ex:961
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2678
 #, elixir-autogen, elixir-format
 msgid "errors"
 msgstr "viga"
@@ -2645,7 +2646,7 @@ msgstr "vearida"
 msgid "filtered out"
 msgstr "filtreeritud"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:926
+#: lib/phoenix_kit_ecommerce/web/imports.ex:942
 #, elixir-autogen, elixir-format
 msgid "in Storage"
 msgstr "Salvestusruumis"
@@ -2657,12 +2658,12 @@ msgid_plural "items"
 msgstr[0] "ese"
 msgstr[1] "eset"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:938
+#: lib/phoenix_kit_ecommerce/web/imports.ex:954
 #, elixir-autogen, elixir-format
 msgid "jobs"
 msgstr "tööd"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:932
+#: lib/phoenix_kit_ecommerce/web/imports.ex:948
 #, elixir-autogen, elixir-format
 msgid "legacy URLs"
 msgstr "aegunud URL-e"
@@ -2672,12 +2673,12 @@ msgstr "aegunud URL-e"
 msgid "new products"
 msgstr "uued tooted"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:920
+#: lib/phoenix_kit_ecommerce/web/imports.ex:936
 #, elixir-autogen, elixir-format
 msgid "with images"
 msgstr "piltidega"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1437
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1453
 #, elixir-autogen, elixir-format
 msgid "— Standalone (no mapping) —"
 msgstr "— Eraldiseisev (ilma seoseta) —"
@@ -2852,17 +2853,17 @@ msgstr "Ootamatu viga: %{reason}"
 msgid "You do not have permission to perform this action."
 msgstr "Teil puudub õigus seda toimingut teha."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1466
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1475
 #, elixir-autogen, elixir-format
 msgid "e.g. 14 inches, Red"
 msgstr "nt 14 tolli, punane"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1454
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1463
 #, elixir-autogen, elixir-format
 msgid "e.g. size, color"
 msgstr "nt suurus, värv"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1458
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1474
 #, elixir-autogen, elixir-format
 msgid "e.g., cup_color"
 msgstr "nt cup_color"
@@ -2894,12 +2895,12 @@ msgid_plural "%{count} methods configured"
 msgstr[0] "1 meetod seadistatud"
 msgstr[1] "%{count} meetodit seadistatud"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1216
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1225
 #, elixir-autogen, elixir-format
 msgid "<p>Full translated description...</p>"
 msgstr "<p>Täielik tõlgitud kirjeldus...</p>"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1294
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1303
 #, elixir-autogen, elixir-format
 msgid "Add custom options for this product."
 msgstr "Lisage sellele tootele kohandatud valikud."
@@ -2909,47 +2910,47 @@ msgstr "Lisage sellele tootele kohandatud valikud."
 msgid "Create your first product to get started"
 msgstr "Loo esimene toode alustamiseks"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1529
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1545
 #, elixir-autogen, elixir-format
 msgid "Download images:"
 msgstr "Laadi pildid alla:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1890
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1899
 #, elixir-autogen, elixir-format
 msgid "Drag images to reorder. First image is the featured (main) image."
 msgstr "Lohistage pilte ümberjärjestamiseks. Esimene pilt on esiletõstetud (peamine) pilt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1951
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1960
 #, elixir-autogen, elixir-format
 msgid "Fill in the product specifications based on global and category options."
 msgstr "Täitke toote spetsifikatsioonid globaalsete ja kategooria valikute põhjal."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1521
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1537
 #, elixir-autogen, elixir-format
 msgid "Format:"
 msgstr "Formaat:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1518
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1534
 #, elixir-autogen, elixir-format
 msgid "Import details:"
 msgstr "Impordi üksikasjad:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1526
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1535
 #, elixir-autogen, elixir-format
 msgid "Leave as \"Default\" to use global option values, or set custom values per-product."
 msgstr "Jätke väärtuseks „Vaikimisi“, et kasutada globaalseid valiku väärtusi, või määrake tootepõhised väärtused."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1826
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1835
 #, elixir-autogen, elixir-format
 msgid "Link images to option values. When a customer selects an option, the corresponding image displays."
 msgstr "Seo pildid valiku väärtustega. Kui klient valib valiku, kuvatakse vastav pilt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1228
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1237
 #, elixir-autogen, elixir-format
 msgid "Meta description for search engines (max 160 chars)"
 msgstr "Metakirjeldus otsingumootoritele (max 160 tähemärki)"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1374
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1390
 #, elixir-autogen, elixir-format
 msgid "No options found in CSV file. You can proceed with basic import."
 msgstr "CSV-failist ei leitud valikuid. Võite jätkata lihtsa impordiga."
@@ -2964,57 +2965,57 @@ msgstr "Tooteid ei leitud"
 msgid "No products tracked for this import. Product tracking was added in a later version."
 msgstr "Selle impordi jaoks ei jälgita tooteid. Toodete jälgimine lisati hilisemas versioonis."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1222
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1231
 #, elixir-autogen, elixir-format
 msgid "Page title for search engines (max 60 chars)"
 msgstr "Lehe pealkiri otsingumootoritele (max 60 tähemärki)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1707
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1716
 #, elixir-autogen, elixir-format
 msgid "Price Range:"
 msgstr "Hinnavahemik:"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1525
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1541
 #, elixir-autogen, elixir-format
 msgid "Products:"
 msgstr "Tooted:"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:736
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:753
 #, elixir-autogen, elixir-format
 msgid "Remove this option?"
 msgstr "Eemaldada see valik?"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1226
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1235
 #, elixir-autogen, elixir-format
 msgid "SEO Description"
 msgstr "SEO kirjeldus"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1220
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1229
 #, elixir-autogen, elixir-format
 msgid "SEO Title"
 msgstr "SEO pealkiri"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1292
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1301
 #, elixir-autogen, elixir-format
 msgid "Select which option values are available for this product."
 msgstr "Valige, millised valiku väärtused on sellele tootele saadaval."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1210
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1219
 #, elixir-autogen, elixir-format
 msgid "Short translated description"
 msgstr "Lühike tõlgitud kirjeldus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1533
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1549
 #, elixir-autogen, elixir-format
 msgid "Skip empty categories:"
 msgstr "Jäta tühjad kategooriad vahele:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1168
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1177
 #, elixir-autogen, elixir-format
 msgid "Translate product content for different languages. The default language uses the main fields above."
 msgstr "Tõlgi toote sisu erinevatesse keeltesse. Vaikekeel kasutab ülalolevaid põhivälju."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1197
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1206
 #, elixir-autogen, elixir-format
 msgid "Translated product title"
 msgstr "Tõlgitud toote pealkiri"
@@ -3112,7 +3113,7 @@ msgstr "SVG impordi reeglid uuendatud"
 #: lib/phoenix_kit_ecommerce/web/settings.ex:552
 #: lib/phoenix_kit_ecommerce/web/settings.ex:882
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1191
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2771
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2781
 #, elixir-autogen, elixir-format
 msgid "Save"
 msgstr "Salvesta"
@@ -3134,7 +3135,7 @@ msgstr "Maksu varuriik uuendatud"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:633
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:833
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1278
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1281
 #, elixir-autogen, elixir-format
 msgid "That billing profile is not available."
 msgstr "See arveldusprofiil ei ole saadaval."
@@ -3149,8 +3150,8 @@ msgstr "Vaikimisi on valitud turvaline variant. Muuda ainult siis, kui mõistad 
 msgid "e.g. EE"
 msgstr "nt EE"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1239
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1246
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1242
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1249
 #, elixir-autogen, elixir-format
 msgid "An item in your cart is no longer available"
 msgstr "Ostukorvis olev toode ei ole enam saadaval"
@@ -3160,29 +3161,29 @@ msgstr "Ostukorvis olev toode ei ole enam saadaval"
 msgid "Please complete the billing address - a physical order needs one"
 msgstr "Palun täida arveaadress — füüsilise tellimuse jaoks on see vajalik"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1077
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1086
 #, elixir-autogen, elixir-format
 msgid "Price display"
 msgstr "Hinna kuvamine"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:282
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1050
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1059
 #, elixir-autogen, elixir-format
 msgid "Price unit"
 msgstr "Hinnaühik"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:238
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1082
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1091
 #, elixir-autogen, elixir-format
 msgid "Show \"From\" before the price"
 msgstr "Näita hinna ees „Alates“"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1063
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1072
 #, elixir-autogen, elixir-format
 msgid "Shown after the price (%{lang}). Leave empty for none."
 msgstr "Kuvatakse hinna järel (%{lang}). Jäta tühjaks, kui pole vaja."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1312
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1315
 #, elixir-autogen, elixir-format
 msgid "The selected payment method is no longer available - please pick another"
 msgstr "Valitud makseviis ei ole enam saadaval — palun vali teine"
@@ -3196,17 +3197,17 @@ msgstr "Valitud tarneviis ei ole teie aadressil saadaval — palun vali teine"
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:81
 #: lib/phoenix_kit_ecommerce/web/catalog_category.ex:34
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:47
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:536
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:588
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:538
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:590
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:56
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1320
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1323
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:33
 #, elixir-autogen, elixir-format
 msgid "The shop is currently unavailable"
 msgstr "Pood ei ole hetkel saadaval"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:283
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1059
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1068
 #, elixir-autogen, elixir-format
 msgid "e.g. per hour, per m², per litre"
 msgstr "nt tunnis, m² kohta, liitri kohta"
@@ -3241,7 +3242,7 @@ msgstr "Ostukorvi riba välja lülitatud"
 msgid "Storefront cart bar enabled"
 msgstr "Ostukorvi riba sisse lülitatud"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1137
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1139
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"
 msgstr "Lisa veel ostukorvi"
@@ -3251,7 +3252,7 @@ msgstr "Lisa veel ostukorvi"
 msgid "Add some products to get started"
 msgstr "Alustamiseks lisa mõni toode"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1139
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1141
 #, elixir-autogen, elixir-format
 msgid "Add to Cart"
 msgstr "Lisa ostukorvi"
@@ -3261,7 +3262,7 @@ msgstr "Lisa ostukorvi"
 msgid "All Products"
 msgstr "Kõik tooted"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1107
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1109
 #, elixir-autogen, elixir-format
 msgid "Already in cart:"
 msgstr "Juba ostukorvis:"
@@ -3269,7 +3270,7 @@ msgstr "Juba ostukorvis:"
 #: lib/phoenix_kit_ecommerce/web/components/catalog_sidebar.ex:285
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1246
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1339
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2019
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2029
 #, elixir-autogen, elixir-format
 msgid "Apply"
 msgstr "Rakenda"
@@ -3284,15 +3285,15 @@ msgstr "Vaata kõiki tooteid"
 msgid "Browse our collection of products across various categories"
 msgstr "Sirvi meie tooteid erinevates kategooriates"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:58
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:211
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:218
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:227
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:62
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:216
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:223
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:232
 #, elixir-autogen, elixir-format
 msgid "Category not found"
 msgstr "Kategooriat ei leitud"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1170
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1172
 #, elixir-autogen, elixir-format
 msgid "Category:"
 msgstr "Kategooria:"
@@ -3302,7 +3303,7 @@ msgstr "Kategooria:"
 msgid "Check back soon for new arrivals"
 msgstr "Tule varsti tagasi, uued tooted on tulemas"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:562
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:567
 #, elixir-autogen, elixir-format
 msgid "Check back soon or browse other categories"
 msgstr "Tule varsti tagasi või sirvi teisi kategooriaid"
@@ -3312,7 +3313,7 @@ msgstr "Tule varsti tagasi või sirvi teisi kategooriaid"
 msgid "Check your inbox"
 msgstr "Kontrolli oma postkasti"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:974
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:976
 #, elixir-autogen, elixir-format
 msgid "Choose Options"
 msgstr "Vali parameetrid"
@@ -3322,7 +3323,7 @@ msgstr "Vali parameetrid"
 msgid "Clear all filters"
 msgstr "Tühjenda kõik filtrid"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:554
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:559
 #: lib/phoenix_kit_ecommerce/web/components/catalog_sidebar.ex:437
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:466
 #, elixir-autogen, elixir-format
@@ -3346,9 +3347,9 @@ msgstr "Ei näe kirja? Kontrolli rämpsposti kausta. Kirja saabumine võib võtt
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:645
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:718
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1935
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2135
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2424
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1938
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2138
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2427
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1389
 #, elixir-autogen, elixir-format
 msgid "FREE"
@@ -3410,7 +3411,7 @@ msgid "No shipping methods available for your selection"
 msgstr "Sinu valikule pole tarneviise saadaval"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:706
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2412
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2415
 #, elixir-autogen, elixir-format
 msgid "Not needed"
 msgstr "Pole vajalik"
@@ -3447,12 +3448,12 @@ msgstr "Tellimuse olek"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:182
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:124
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1200
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1203
 #, elixir-autogen, elixir-format
 msgid "Please select a shipping method"
 msgstr "Palun vali tarneviis"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:991
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:993
 #, elixir-autogen, elixir-format
 msgid "Please select an option"
 msgstr "Palun tee valik"
@@ -3463,7 +3464,7 @@ msgid "Product not found"
 msgstr "Toodet ei leitud"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:454
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1029
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1031
 #, elixir-autogen, elixir-format
 msgid "Quantity"
 msgstr "Kogus"
@@ -3484,13 +3485,13 @@ msgid "Secure checkout powered by PhoenixKit"
 msgstr "Turvaline tellimuse vormistamine – PhoenixKit"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:710
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2416
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2419
 #, elixir-autogen, elixir-format
 msgid "Select method"
 msgstr "Vali viis"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:599
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2116
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2119
 #, elixir-autogen, elixir-format
 msgid "Shipping Method"
 msgstr "Tarneviis"
@@ -3546,8 +3547,8 @@ msgstr "Sinu konto aktiveeritakse ja saad tellimust jälgida"
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:439
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:102
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:121
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1389
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1433
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1392
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1436
 #, elixir-autogen, elixir-format
 msgid "Your cart is empty"
 msgstr "Ostukorv on tühi"
@@ -3557,8 +3558,8 @@ msgstr "Ostukorv on tühi"
 msgid "Your order is being processed"
 msgstr "Tellimust töödeldakse"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:661
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:677
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:663
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:679
 #, elixir-autogen, elixir-format
 msgid "option"
 msgstr "valik"
@@ -3584,19 +3585,19 @@ msgid "Price on request"
 msgstr "Hind kokkuleppel"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:247
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1092
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1101
 #, elixir-autogen, elixir-format
 msgid "Price on request (hide the amount)"
 msgstr "Hind kokkuleppel (peida summa)"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1128
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1133
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1130
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1135
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1098
 #, elixir-autogen, elixir-format
 msgid "Adding..."
 msgstr "Lisamine..."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:421
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:426
 #: lib/phoenix_kit_ecommerce/web/shop_catalog.ex:359
 #, elixir-autogen, elixir-format
 msgid "Filters"
@@ -3607,7 +3608,7 @@ msgstr "Filtrid"
 msgid "Proceed to Checkout"
 msgstr "Vormista tellimus"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1146
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1148
 #, elixir-autogen, elixir-format
 msgid "View Cart"
 msgstr "Vaata ostukorvi"
@@ -3785,48 +3786,48 @@ msgstr "Teenuse lisamine ostukorvi ebaõnnestus. Värskenda lehte ja proovi uues
 msgid "What the storefront calls what you sell. Each option is separately translated, not a swapped word, so it reads correctly in every language."
 msgstr "Kuidas pood nimetab seda, mida müüte. Iga variant on eraldi tõlgitud, mitte asendatud sõna, seega on sõnastus igas keeles korrektne."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2254
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2257
 #, elixir-autogen, elixir-format
 msgid "Account already exists"
 msgstr "Konto on juba olemas"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1564
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1567
 #, elixir-autogen, elixir-format
 msgid "After placing your order, we'll send a confirmation email to verify your address. Check your inbox and click the link to activate your account and track your order."
 msgstr "Pärast tellimuse vormistamist saadame aadressi kinnitamiseks kirja. Kontrolli postkasti ja klõpsa lingil, et konto aktiveerida ja tellimust jälgida."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2256
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2259
 #, elixir-autogen, elixir-format
 msgid "An account with this email is already registered. Please log in to complete your order."
 msgstr "Selle e-postiga konto on juba registreeritud. Tellimuse lõpetamiseks logi sisse."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1562
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1565
 #, elixir-autogen, elixir-format
 msgid "Checking out as a guest"
 msgstr "Vormistamine külalisena"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2266
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2269
 #, elixir-autogen, elixir-format
 msgid "Log in to continue"
 msgstr "Jätkamiseks logi sisse"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1509
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1512
 #, elixir-autogen, elixir-format
 msgid "Payment"
 msgstr "Makse"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1716
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1719
 #, elixir-autogen, elixir-format
 msgid "Select Billing Profile"
 msgstr "Vali arveldusprofiil"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:251
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1499
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1502
 #, elixir-autogen, elixir-format
 msgid "Checkout"
 msgstr "Tellimuse vormistamine"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1328
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1331
 #, elixir-autogen, elixir-format
 msgid "Failed to create order"
 msgstr "Tellimuse loomine ebaõnnestus"
@@ -3916,22 +3917,22 @@ msgstr[1] "Leiti %{count} teenust"
 msgid "Access denied"
 msgstr "Juurdepääs keelatud"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1514
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1517
 #, elixir-autogen, elixir-format
 msgid "Billing"
 msgstr "Arveldusandmed"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2048
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2083
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2118
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2051
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2086
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2121
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1018
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2380
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2390
 #, elixir-autogen, elixir-format
 msgid "Change"
 msgstr "Muuda"
 
 #: lib/phoenix_kit_ecommerce/web/components/shipping_provider_card.ex:281
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2364
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2374
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:48
 #, elixir-autogen, elixir-format
 msgid "Clear"
@@ -3944,23 +3945,23 @@ msgstr "Tühjenda"
 msgid "Completed"
 msgstr "Täidetud"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2348
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2351
 #, elixir-autogen, elixir-format
 msgid "Confirm Order"
 msgstr "Kinnita tellimus"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1695
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1698
 #, elixir-autogen, elixir-format
 msgid "Continue to Billing"
 msgstr "Edasi arveldusandmete juurde"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1698
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1759
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1701
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1762
 #, elixir-autogen, elixir-format
 msgid "Continue to Review"
 msgstr "Edasi ülevaate juurde"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1806
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1809
 #: lib/phoenix_kit_ecommerce/web/components/translation_tabs.ex:209
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:219
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:298
@@ -3969,94 +3970,94 @@ msgstr "Edasi ülevaate juurde"
 msgid "Default"
 msgstr "Vaikimisi"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2179
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2182
 #, elixir-autogen, elixir-format
 msgid "Edit Cart"
 msgstr "Muuda ostukorvi"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:152
+#: lib/phoenix_kit_ecommerce/web/catalog_category.ex:156
 #, elixir-autogen, elixir-format
 msgid "Edit Category"
 msgstr "Muuda kategooriat"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:175
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:386
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:387
 #, elixir-autogen, elixir-format
 msgid "Edit Product"
 msgstr "Muuda toodet"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1327
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1330
 #, elixir-autogen, elixir-format
 msgid "Failed to create order. Please try again."
 msgstr "Tellimuse loomine ebaõnnestus. Palun proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:700
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:702
 #, elixir-autogen, elixir-format
 msgid "Insufficient stock (only %{count} available).\nPlease reduce quantity."
 msgstr "Laos ei ole piisavalt (saadaval ainult %{count}).\nPalun vähenda kogust."
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:766
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:371
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2469
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2472
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:127
 #, elixir-autogen, elixir-format
 msgid "Items priced on request are not included in this total."
 msgstr "Kirjed hinnaga „kokkuleppel“ ei ole sellesse summasse arvatud."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:688
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:690
 #, elixir-autogen, elixir-format
 msgid "Missing required option: %{option}.\nPlease select all required parameters."
 msgstr "Kohustuslik valik puudub: %{option}.\nPalun vali kõik kohustuslikud parameetrid."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2055
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2034
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:138
 #, elixir-autogen, elixir-format
 msgid "Next"
 msgstr "Järgmine"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:679
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:681
 #, elixir-autogen, elixir-format
 msgid "Option \"%{option}\" does not exist.\nProduct was updated - please reload the page."
 msgstr "Valikut „%{option}“ ei ole olemas.\nToodet muudeti — palun laadi leht uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:668
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:670
 #, elixir-autogen, elixir-format
 msgid "Option \"%{option}: %{value}\" is no longer available.\nPlease refresh the page for current options."
 msgstr "Valik „%{option}: %{value}“ ei ole enam saadaval.\nPalun laadi leht uuesti, et näha praeguseid valikuid."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2045
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2048
 #, elixir-autogen, elixir-format
 msgid "Payment Method"
 msgstr "Makseviis"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2341
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2346
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2344
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2349
 #, elixir-autogen, elixir-format
 msgid "Processing..."
 msgstr "Töötlemine..."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1113
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2221
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1115
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2224
 #, elixir-autogen, elixir-format
 msgid "Qty: %{count}"
 msgstr "Kogus: %{count}"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2223
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2226
 #, elixir-autogen, elixir-format
 msgid "Qty: %{count} × %{price}"
 msgstr "Kogus: %{count} × %{price}"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1523
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1526
 #, elixir-autogen, elixir-format
 msgid "Review & Confirm"
 msgstr "Ülevaade ja kinnitamine"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1661
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1664
 #, elixir-autogen, elixir-format
 msgid "Select Payment Method"
 msgstr "Vali makseviis"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:665
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:667
 #, elixir-autogen, elixir-format
 msgid "Selected options are no longer available.\nPlease refresh and select again."
 msgstr "Valitud valikud ei ole enam saadaval.\nPalun laadi leht uuesti ja vali uuesti."
@@ -4076,39 +4077,39 @@ msgstr[0] "Näidatakse %{shown} / %{total} teenuse"
 msgstr[1] "Näidatakse %{shown} / %{total} teenust"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:695
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2401
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2404
 #, elixir-autogen, elixir-format
 msgid "Subtotal (%{count} item)"
 msgid_plural "Subtotal (%{count} items)"
 msgstr[0] "Vahesumma (%{count} kirje)"
 msgstr[1] "Vahesumma (%{count} kirjet)"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:706
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:708
 #, elixir-autogen, elixir-format
 msgid "The price has changed.\nPlease refresh to see the current price."
 msgstr "Hind on muutunud.\nPalun laadi leht uuesti, et näha praegust hinda."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:694
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:696
 #, elixir-autogen, elixir-format
 msgid "This item is out of stock.\nPlease try again later or choose another one."
 msgstr "See kirje on läbi müüdud.\nProovi hiljem uuesti või vali mõni teine."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:710
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:712
 #, elixir-autogen, elixir-format
 msgid "Unable to add to cart.\nPlease try again or contact support."
 msgstr "Ostukorvi lisamine ebaõnnestus.\nProovi uuesti või võta ühendust klienditoega."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1776
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1779
 #, elixir-autogen, elixir-format
 msgid "You have multiple billing profiles. Please select one or"
 msgstr "Teil on mitu arveldusprofiili. Palun vali üks või"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:686
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:688
 #, elixir-autogen, elixir-format
 msgid "required option"
 msgstr "kohustuslik valik"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1778
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1781
 #, elixir-autogen, elixir-format
 msgid "set a default in your account settings"
 msgstr "määra konto seadetes vaikimisi profiil"
@@ -4118,8 +4119,8 @@ msgstr "määra konto seadetes vaikimisi profiil"
 msgid "Buyer proceeded to checkout"
 msgstr "Ostja liikus tellimuse vormistamisele"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1972
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1987
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1975
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1990
 #, elixir-autogen, elixir-format
 msgid "Continue"
 msgstr "Jätka"
@@ -4146,7 +4147,7 @@ msgstr "Ei õnnestunud saajaid uuendada"
 msgid "First item added to a cart"
 msgstr "Esimene toode lisatud korvi"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1994
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1997
 #, elixir-autogen, elixir-format
 msgid "No shipping methods are available for your country."
 msgstr "Teie riigi jaoks pole saadaval ühtegi tarneviisi."
@@ -4178,7 +4179,7 @@ msgstr "Saajad"
 msgid "Save recipients"
 msgstr "Salvesta saajad"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1980
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1983
 #, elixir-autogen, elixir-format
 msgid "Shipping to your country will be arranged individually - we will contact you to confirm delivery and details after you place the order."
 msgstr "Tarne teie riiki lepitakse kokku individuaalselt — pärast tellimuse esitamist võtame teiega ühendust, et täpsustada tarnet ja üksikasju."
@@ -4188,12 +4189,12 @@ msgstr "Tarne teie riiki lepitakse kokku individuaalselt — pärast tellimuse e
 msgid "Storefront notifications"
 msgstr "Poe teavitused"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:314
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:315
 #, elixir-autogen, elixir-format
 msgid "Translate with AI"
 msgstr "Tõlgi AI-ga"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1172
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1181
 #, elixir-autogen, elixir-format
 msgid "Use \"Translate with AI\" to fill the missing languages automatically."
 msgstr "Kasuta nuppu „Tõlgi AI-ga“, et puuduvad keeled automaatselt täita."
@@ -4218,7 +4219,7 @@ msgstr "Sul puudub juurdepääs sellele tellimusele"
 msgid "Allow the order through when nothing covers the country - contact the buyer afterwards"
 msgstr "Luba tellimus läbi, kui ükski viis riiki ei kata - võta ostjaga hiljem ühendust"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2018
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2021
 #, elixir-autogen, elixir-format
 msgid "Back"
 msgstr "Tagasi"
@@ -4304,7 +4305,7 @@ msgstr[1] "%{count} äärmuslikku hinnamuutust on välja jäetud ja tuleb rakend
 msgid "%{credential_error} The storefront fallback also failed: %{storefront_error}"
 msgstr "%{credential_error} Ka poe avaliku vaate varulahendus ebaõnnestus: %{storefront_error}"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1920
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1930
 #, elixir-autogen, elixir-format
 msgid "%{percent}% of the Shopify catalogue"
 msgstr "%{percent}% Shopify kataloogist"
@@ -4314,7 +4315,7 @@ msgstr "%{percent}% Shopify kataloogist"
 msgid "Admin API access token"
 msgstr "Admin API juurdepääsutoken"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1854
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1864
 #, elixir-autogen, elixir-format
 msgid "All price changes have been applied."
 msgstr "Kõik hinnamuutused on rakendatud."
@@ -4338,7 +4339,7 @@ msgstr[1] "Kas rakendada %{count} välja „%{field}“ muudatust Shopifyst?"
 msgid "Apply change?"
 msgstr "Kas rakendada muudatus?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2284
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2294
 #, elixir-autogen, elixir-format
 msgid "Apply everything"
 msgstr "Rakenda kõik"
@@ -4355,7 +4356,7 @@ msgid_plural "Apply pending changes for %{count} products across all sections?"
 msgstr[0] "Kas rakendada ootel muudatused %{count} tootele kõigis jaotistes?"
 msgstr[1] "Kas rakendada ootel muudatused %{count} tootele kõigis jaotistes?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2321
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2331
 #, elixir-autogen, elixir-format
 msgid "Apply section"
 msgstr "Rakenda jaotis"
@@ -4365,7 +4366,7 @@ msgstr "Rakenda jaotis"
 msgid "Apply section?"
 msgstr "Kas rakendada jaotis?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2361
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2371
 #, elixir-autogen, elixir-format
 msgid "Apply selection"
 msgstr "Rakenda valik"
@@ -4382,12 +4383,12 @@ msgid_plural "Apply %{count} selected %{field} changes from Shopify?"
 msgstr[0] "Kas rakendada valitud välja „%{field}“ muudatus Shopifyst?"
 msgstr[1] "Kas rakendada %{count} valitud välja „%{field}“ muudatust Shopifyst?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2251
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2261
 #, elixir-autogen, elixir-format
 msgid "Catalogue coverage"
 msgstr "Kataloogi kaetus"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2086
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2096
 #, elixir-autogen, elixir-format
 msgid "Check for changes"
 msgstr "Kontrolli muudatusi"
@@ -4417,12 +4418,12 @@ msgstr "Ühenda"
 msgid "Connect a Shopify Admin API token in Integrations settings, then review and apply catalog changes from the Shopify Sync page."
 msgstr "Ühendage Shopify Admin API token integratsioonide seadetes, seejärel vaadake üle ja rakendage kataloogi muudatused Shopify Synci lehel."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2100
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2110
 #, elixir-autogen, elixir-format
 msgid "Connect it in Integrations settings."
 msgstr "Ühendage see integratsioonide seadetes."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2110
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2120
 #, elixir-autogen, elixir-format
 msgid "Connected: %{name}"
 msgstr "Ühendatud: %{name}"
@@ -4439,7 +4440,7 @@ msgid_plural "Could not apply %{count} changes — try again or apply individual
 msgstr[0] "%{count} muudatust ei õnnestunud rakendada — proovige uuesti või rakendage ükshaaval."
 msgstr[1] "%{count} muudatust ei õnnestunud rakendada — proovige uuesti või rakendage ükshaaval."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1832
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1842
 #, elixir-autogen, elixir-format
 msgid "Could not reach Shopify: %{reason}"
 msgstr "Shopifyga ei õnnestunud ühendust saada: %{reason}"
@@ -4461,7 +4462,7 @@ msgstr "Toote „%{title}“ välja „%{field}“ ei õnnestunud uuendada."
 msgid "Create a Custom App in Shopify"
 msgstr "Looge Shopifys Custom App"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1941
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1951
 #, elixir-autogen, elixir-format
 msgid "Current"
 msgstr "Praegune"
@@ -4486,7 +4487,7 @@ msgstr "Andke sellele nimi (nt \"PhoenixKit sync\")"
 msgid "Go to **API credentials** and click **Install app**"
 msgstr "Minge jaotisse **API credentials** ja klõpsake **Install app**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2008
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2018
 #, elixir-autogen, elixir-format
 msgid "Hide diff"
 msgstr "Peida erinevused"
@@ -4496,7 +4497,7 @@ msgstr "Peida erinevused"
 msgid "In your Shopify admin, go to **Settings → Apps and sales channels → Develop apps**"
 msgstr "Avage Shopify halduses **Settings → Apps and sales channels → Develop apps**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1952
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1962
 #, elixir-autogen, elixir-format
 msgid "Incoming"
 msgstr "Saabuv"
@@ -4506,12 +4507,12 @@ msgstr "Saabuv"
 msgid "Install the app and copy the token"
 msgstr "Paigaldage rakendus ja kopeerige token"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2264
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2274
 #, elixir-autogen, elixir-format
 msgid "No changes — the shop matches Shopify."
 msgstr "Muudatusi pole — pood ühtib Shopifyga."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1857
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1867
 #, elixir-autogen, elixir-format
 msgid "No price differences found. Other fields were not compared — see the notice above."
 msgstr "Hinnaerinevusi ei leitud. Teisi välju ei võrreldud — vt ülalolevat teadet."
@@ -4531,27 +4532,27 @@ msgstr "Ava sünkroonimine"
 msgid "Open the app, go to **Configuration**, and click **Configure** under Admin API scopes"
 msgstr "Avage rakendus, minge jaotisse **Configuration** ja klõpsake Admin API scopes all **Configure**"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2226
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2236
 #, elixir-autogen, elixir-format
 msgid "Pending changes"
 msgstr "Ootel muudatused"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2237
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2247
 #, elixir-autogen, elixir-format
 msgid "Price changes"
 msgstr "Hinnamuutused"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2238
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2248
 #, elixir-autogen, elixir-format
 msgid "Products whose price differs from Shopify"
 msgstr "Tooted, mille hind erineb Shopify omast"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2227
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2237
 #, elixir-autogen, elixir-format
 msgid "Products with at least one field to review"
 msgstr "Tooted vähemalt ühe ülevaatamist vajava väljaga"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2377
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2387
 #, elixir-autogen, elixir-format
 msgid "Select all on this page"
 msgstr "Vali kõik sellel lehel"
@@ -4574,12 +4575,12 @@ msgstr "Shopify"
 #: lib/phoenix_kit_ecommerce/web/settings.ex:783
 #: lib/phoenix_kit_ecommerce/web/settings.ex:953
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:150
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2075
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2085
 #, elixir-autogen, elixir-format
 msgid "Shopify Sync"
 msgstr "Shopify sünkroonimine"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2094
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2104
 #, elixir-autogen, elixir-format
 msgid "Shopify isn't connected yet."
 msgstr "Shopify pole veel ühendatud."
@@ -4594,12 +4595,12 @@ msgstr "Shopify piiras selle päringu kiirust — proovige veidi hiljem uuesti."
 msgid "Shopify rejected the access token — check the connection's credentials."
 msgstr "Shopify lükkas juurdepääsutokeni tagasi — kontrollige ühenduse mandaate."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2008
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2018
 #, elixir-autogen, elixir-format
 msgid "Show diff"
 msgstr "Näita erinevusi"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2215
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2225
 #, elixir-autogen, elixir-format
 msgid "Showing price-only changes — %{reason}. Connect a valid Admin API token to see the full diff."
 msgstr "Kuvatakse ainult hinnamuutusi — %{reason}. Täieliku võrdluse nägemiseks ühendage kehtiv Admin API token."
@@ -4646,7 +4647,7 @@ msgstr "Uuendati toote „%{title}“ välja „%{field}“."
 msgid "Your Shopify store's *.myshopify.com domain"
 msgstr "Teie Shopify poe *.myshopify.com domeen"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1983
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1993
 #, elixir-autogen, elixir-format
 msgid "large change"
 msgstr "suur muutus"
@@ -4656,22 +4657,22 @@ msgstr "suur muutus"
 msgid "no length change"
 msgstr "pikkus ei muutunud"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1851
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1861
 #, elixir-autogen, elixir-format
 msgid "the Admin API request was rejected (%{reason})"
 msgstr "Admin API päring lükati tagasi (%{reason})"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1840
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1850
 #, elixir-autogen, elixir-format
 msgid "the access token is missing the required scope"
 msgstr "juurdepääsutokenil puudub vajalik õigus"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1836
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1846
 #, elixir-autogen, elixir-format
 msgid "the access token was rejected"
 msgstr "juurdepääsutoken lükati tagasi"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1847
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1857
 #, elixir-autogen, elixir-format
 msgid "the connection is missing its access token"
 msgstr "ühendusel puudub juurdepääsutoken"
@@ -4723,7 +4724,7 @@ msgstr "Vaikimisi valuutat ei ole seadistatud"
 msgid "This item is priced in a different currency and cannot be added right now."
 msgstr "See toode on hinnastatud teises vääringus ja seda ei saa praegu lisada."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1552
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1555
 #, elixir-autogen, elixir-format
 msgid "Reprice at the current rate"
 msgstr "Arvuta ümber praeguse kursiga"
@@ -4733,7 +4734,7 @@ msgstr "Arvuta ümber praeguse kursiga"
 msgid "The cart could not be repriced — please try again"
 msgstr "Ostukorvi ei õnnestunud ümber arvutada — proovige uuesti"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1534
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1537
 #, elixir-autogen, elixir-format
 msgid "The exchange rate has changed since you started this cart"
 msgstr "Vahetuskurss on selle ostukorvi loomisest alates muutunud"
@@ -4743,7 +4744,7 @@ msgstr "Vahetuskurss on selle ostukorvi loomisest alates muutunud"
 msgid "Your cart has been repriced at the current exchange rate"
 msgstr "Teie ostukorv arvutati ümber praeguse kursiga"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1537
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1540
 #, elixir-autogen, elixir-format
 msgid "Your cart is priced at rate %{frozen}; the current rate is %{current} (%{pct}% apart). Your prices stay as shown unless you reprice."
 msgstr "Teie ostukorv on arvutatud kursiga %{frozen}; praegune kurss on %{current} (erinevus %{pct}%). Hinnad jäävad kuvatuks, kuni te ümber ei arvuta."
@@ -4869,13 +4870,13 @@ msgstr "Kollektsioonide filter: eesliide %{prefix}, välja arvatud %{exclude}"
 msgid "Could not queue the sync — try again."
 msgstr "Sünkroonimist ei saanud järjekorda lisada — proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2062
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2582
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2072
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2592
 #, elixir-autogen, elixir-format
 msgid "Media & collections"
 msgstr "Meedia ja kollektsioonid"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2584
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2594
 #, elixir-autogen, elixir-format
 msgid "Runs in the background: product images into Storage, options into attribute sets and price modifiers, and Shopify collections into catalogue categories."
 msgstr "Töötab taustal: tootepildid laaditakse hoiuruumi, valikutest saavad atribuutide komplektid ja hinnamodifikaatorid, Shopify kollektsioonid muutuvad kataloogi kategooriateks."
@@ -4905,7 +4906,7 @@ msgstr "Sünkrooni variandid ja hinnad"
 msgid "Manage Shop"
 msgstr "Halda poodi"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1214
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1223
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1567
 #, elixir-autogen, elixir-format
 msgid "Full Description"
@@ -4916,7 +4917,7 @@ msgstr "Täielik kirjeldus"
 msgid "Full Descriptions"
 msgstr "Täielikud kirjeldused"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:928
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:930
 #, elixir-autogen, elixir-format
 msgid "by %{vendor}"
 msgstr "tootja: %{vendor}"
@@ -4944,8 +4945,8 @@ msgid "Deleted"
 msgstr "Kustutatud"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:197
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1494
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1915
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1473
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1894
 #, elixir-autogen, elixir-format
 msgid "Unknown"
 msgstr "Teadmata"
@@ -4970,7 +4971,7 @@ msgstr "Peida nimeeesliited poes"
 msgid "Storefront name prefixes updated"
 msgstr "Poe nimeeesliited on uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2436
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2446
 #, elixir-autogen, elixir-format
 msgid "changes"
 msgstr "muudatust"
@@ -5014,54 +5015,54 @@ msgstr "Selle ostukorvi valuuta pole praegu saadaval."
 msgid "Invalid value"
 msgstr "Vigane väärtus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1464
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1443
 #, elixir-autogen, elixir-format
 msgid "%{count} already in flight"
 msgid_plural "%{count} already in flight"
 msgstr[0] "%{count} juba järjekorras"
 msgstr[1] "%{count} juba järjekorras"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2121
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2100
 #, elixir-autogen, elixir-format
 msgid "%{count} enqueue error"
 msgid_plural "%{count} enqueue errors"
 msgstr[0] "%{count} järjekorda lisamise viga"
 msgstr[1] "%{count} järjekorda lisamise viga"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1390
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1369
 #, elixir-autogen, elixir-format
 msgid "%{count} enqueue error."
 msgid_plural "%{count} enqueue errors."
 msgstr[0] "%{count} järjekorda lisamise viga."
 msgstr[1] "%{count} järjekorda lisamise viga."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1475
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1454
 #, elixir-autogen, elixir-format
 msgid "%{count} failed"
 msgid_plural "%{count} failed"
 msgstr[0] "%{count} nurjus"
 msgstr[1] "%{count} nurjus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1771
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1750
 #, elixir-autogen, elixir-format
 msgid "%{count} in queue now"
 msgid_plural "%{count} in queue now"
 msgstr[0] "%{count} praegu järjekorras"
 msgstr[1] "%{count} praegu järjekorras"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1456
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1435
 #, elixir-autogen, elixir-format
 msgid "%{count} job queued"
 msgid_plural "%{count} jobs queued"
 msgstr[0] "%{count} töö järjekorras"
 msgstr[1] "%{count} tööd järjekorras"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1660
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1639
 #, elixir-autogen, elixir-format
 msgid "A translation whose source has changed since (\"stale\") is accepted as up to date too — the sweep will stop picking it up until its reference is reset."
 msgstr "Tõlge, mille lähtetekst on vahepeal muutunud („aegunud“), loetakse samuti värskeks — ühtlustus ei võta seda enam arvesse, kuni selle võrdlusalus lähtestatakse."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1633
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1612
 #, elixir-autogen, elixir-format
 msgid "A translation whose source has changed since (\"stale\") is accepted as up to date — the sweep will stop picking it up until its reference is reset."
 msgstr "Tõlge, mille lähtetekst on vahepeal muutunud („aegunud“), loetakse värskeks — ühtlustus ei võta seda enam arvesse, kuni selle võrdlusalus lähtestatakse."
@@ -5076,49 +5077,49 @@ msgstr "AI tõlked"
 msgid "AI translation isn't available — configure an enabled AI endpoint in the AI section first."
 msgstr "AI tõlge ei ole saadaval — seadista kõigepealt aktiveeritud AI lõpp-punkt jaotises AI."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1886
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1865
 #, elixir-autogen, elixir-format
 msgid "All categories"
 msgstr "Kõik kategooriad"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1900
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1879
 #, elixir-autogen, elixir-format
 msgid "All target languages"
 msgstr "Kõik sihtkeeled"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1925
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1904
 #, elixir-autogen, elixir-format
 msgid "Any field"
 msgstr "Kõik väljad"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1608
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1587
 #, elixir-autogen, elixir-format
 msgid "Any manual edit to the selected fields, for the selected languages, will be overwritten by the new translation."
 msgstr "Kõik valitud väljade käsitsi tehtud muudatused valitud keeltes kirjutatakse uue tõlkega üle."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1912
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1891
 #, elixir-autogen, elixir-format
 msgid "Any state"
 msgstr "Kõik olekud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1949
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1928
 #, elixir-autogen, elixir-format
 msgid "Applies to every resource matching the filters above — %{count} match right now, across every page."
 msgid_plural "Applies to every resource matching the filters above — %{count} matches right now, across every page."
 msgstr[0] "Kehtib kõigi ülaltoodud filtritele vastavate ressursside kohta — praegu vastab %{count}, kõigil lehtedel."
 msgstr[1] "Kehtib kõigi ülaltoodud filtritele vastavate ressursside kohta — praegu vastab %{count}, kõigil lehtedel."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1762
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1741
 #, elixir-autogen, elixir-format
 msgid "Automatic sweep: off (manual only)"
 msgstr "Automaatne ühtlustus: väljas (ainult käsitsi)"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1762
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1741
 #, elixir-autogen, elixir-format
 msgid "Automatic sweep: on"
 msgstr "Automaatne ühtlustus: sees"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1789
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1768
 #, elixir-autogen, elixir-format
 msgid "Batch size (resources per tick)"
 msgstr "Partii suurus (ressursse tsükli kohta)"
@@ -5128,29 +5129,29 @@ msgstr "Partii suurus (ressursse tsükli kohta)"
 msgid "Batch size must be at least 1."
 msgstr "Partii suurus peab olema vähemalt 1."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1486
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1465
 #, elixir-autogen, elixir-format
 msgid "Body"
 msgstr "Sisu"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1002
+#: lib/phoenix_kit_ecommerce/web/translations.ex:981
 #, elixir-autogen, elixir-format
 msgid "Cancelled %{count} pending translation job."
 msgid_plural "Cancelled %{count} pending translation jobs."
 msgstr[0] "Tühistati %{count} ootel tõlketöö."
 msgstr[1] "Tühistati %{count} ootel tõlketööd."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1573
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1552
 #, elixir-autogen, elixir-format
 msgid "Cancels every pending and in-progress translation job for this shop. Nothing already written is undone — a stopped translation just doesn't appear yet and can be started again."
 msgstr "Tühistab kõik selle poe ootel ja pooleliolevad tõlketööd. Juba salvestatut ei tühistata — peatatud tõlge lihtsalt ei ilmu veel ja selle saab uuesti käivitada."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1737
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1716
 #, elixir-autogen, elixir-format
 msgid "Check now"
 msgstr "Kontrolli kohe"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1672
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1651
 #, elixir-autogen, elixir-format
 msgid "Clear the stored reference for %{count} resource matching the filters above — every page, not just the one shown. The existing translation is kept as-is; the pair reads as \"unknown\" until it's stamped or translated again."
 msgid_plural "Clear the stored reference for %{count} resources matching the filters above — every page, not just the one shown. The existing translation is kept as-is; the pair reads as \"unknown\" until it's stamped or translated again."
@@ -5167,12 +5168,12 @@ msgstr "Enne selle sisselülitamist seadista jaotises AI aktiveeritud AI lõpp-p
 msgid "Configure an enabled AI endpoint in the AI section first — this stays off until one exists."
 msgstr "Seadista kõigepealt jaotises AI aktiveeritud AI lõpp-punkt — kuni selleni jääb see väljalülitatuks."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1026
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1005
 #, elixir-autogen, elixir-format
 msgid "Couldn't stop the translation queue — nothing was cancelled. Try again."
 msgstr "Tõlkejärjekorra peatamine ebaõnnestus — midagi ei tühistatud. Proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2061
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2040
 #, elixir-autogen, elixir-format
 msgid "Diagnostics — recent AI request log entries"
 msgstr "Diagnostika — AI päringute logi viimased kirjed"
@@ -5257,7 +5258,7 @@ msgstr "Seadista Warehouse"
 msgid "Open stock"
 msgstr "Ava laoseis"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1778
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1757
 #, elixir-autogen, elixir-format
 msgid "Enable automatic sweep"
 msgstr "Luba automaatne ühtlustus"
@@ -5277,57 +5278,57 @@ msgstr "Shopify sünkroonimise uuendamine ebaõnnestus"
 msgid "Failed to update shop translations"
 msgstr "Poe tõlgete uuendamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1922
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1901
 #, elixir-autogen, elixir-format
 msgid "Field"
 msgstr "Väli"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1495
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1916
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1474
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1895
 #, elixir-autogen, elixir-format
 msgid "Fresh"
 msgstr "Värske"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1863
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1842
 #, elixir-autogen, elixir-format
 msgid "In queue now"
 msgstr "Praegu järjekorras"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1863
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1842
 #, elixir-autogen, elixir-format
 msgid "Incomplete translation jobs"
 msgstr "Lõpetamata tõlketööd"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1784
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1763
 #, elixir-autogen, elixir-format
 msgid "Interval (minutes)"
 msgstr "Intervall (minutites)"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1897
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1876
 #, elixir-autogen, elixir-format
 msgid "Language"
 msgstr "Keel"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1768
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1747
 #, elixir-autogen, elixir-format
 msgid "Last tick: %{outcome}"
 msgstr "Viimane tsükkel: %{outcome}"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1651
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1630
 #, elixir-autogen, elixir-format
 msgid "Mark the current source text as the reference translation for %{count} resource matching the filters above — every page, not just the one shown. No model call; existing translations are kept as-is."
 msgid_plural "Mark the current source text as the reference translation for %{count} resources matching the filters above — every page, not just the one shown. No model call; existing translations are kept as-is."
 msgstr[0] "Määrata praegune lähtetekst võrdlustõlkeks %{count} ülaltoodud filtritele vastava ressursi jaoks — kõigil lehtedel, mitte ainult kuvataval. Mudelit ei kutsuta; olemasolevad tõlked jäävad muutmata."
 msgstr[1] "Määrata praegune lähtetekst võrdlustõlkeks %{count} ülaltoodud filtritele vastava ressursi jaoks — kõigil lehtedel, mitte ainult kuvataval. Mudelit ei kutsuta; olemasolevad tõlked jäävad muutmata."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1620
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1599
 #, elixir-autogen, elixir-format
 msgid "Mark the current source text as the reference translation for %{count} selected resource, for the current language/field scope — no model call, existing translations are kept as-is."
 msgid_plural "Mark the current source text as the reference translation for %{count} selected resources, for the current language/field scope — no model call, existing translations are kept as-is."
 msgstr[0] "Määrata praegune lähtetekst võrdlustõlkeks %{count} valitud ressursi jaoks, praeguse keele/välja ulatuses — mudelit ei kutsuta, olemasolevad tõlked jäävad muutmata."
 msgstr[1] "Määrata praegune lähtetekst võrdlustõlkeks %{count} valitud ressursi jaoks, praeguse keele/välja ulatuses — mudelit ei kutsuta, olemasolevad tõlked jäävad muutmata."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1794
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1773
 #, elixir-autogen, elixir-format
 msgid "Max in-flight jobs"
 msgstr "Maksimaalne samaaegsete tööde arv"
@@ -5337,33 +5338,33 @@ msgstr "Maksimaalne samaaegsete tööde arv"
 msgid "Max in-flight jobs must be at least 1."
 msgstr "Maksimaalne samaaegsete tööde arv peab olema vähemalt 1."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1492
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1913
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1471
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1892
 #, elixir-autogen, elixir-format
 msgid "Missing"
 msgstr "Puudub"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1765
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1744
 #, elixir-autogen, elixir-format
 msgid "Next tick: %{time}"
 msgstr "Järgmine tsükkel: %{time}"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2066
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2045
 #, elixir-autogen, elixir-format
 msgid "No AI requests logged for shop resources yet"
 msgstr "Poe ressursside kohta ei ole veel ühtegi AI päringut logitud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2023
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2002
 #, elixir-autogen, elixir-format
 msgid "No resources match these filters"
 msgstr "Ükski ressurss ei vasta nendele filtritele"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1496
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1475
 #, elixir-autogen, elixir-format
 msgid "No source"
 msgstr "Allikas puudub"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2064
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2043
 #, elixir-autogen, elixir-format
 msgid "Only successful model calls are attributed to a resource here — a transport failure (e.g. a timeout) never carries attribution, so it won't appear even though it may have been a retryable failure. See the design notes for why."
 msgstr "Siin seostatakse ressursiga ainult õnnestunud mudeli päringud — ülekandeviga (nt ajalõpp) ei saa kunagi seostust ega ilmu seetõttu siia, isegi kui tegemist võis olla korratava veaga. Põhjuste kohta vaata disainimärkmeid."
@@ -5378,103 +5379,103 @@ msgstr "Ava Shopify sünkroonimise leht →"
 msgid "Open the translations page →"
 msgstr "Ava tõlgete leht →"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2051
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2030
 #, elixir-autogen, elixir-format
 msgid "Prev"
 msgstr "Eelmine"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1813
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1792
 #, elixir-autogen, elixir-format
 msgid "Product statuses swept"
 msgstr "Ühtlusesse kaasatud toote staatused"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2080
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2059
 #, elixir-autogen, elixir-format
 msgid "Prompt as sent"
 msgstr "Saadetud prompt"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1584
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1563
 #, elixir-autogen, elixir-format
 msgid "Queue translation for %{count} selected resource's missing and outdated languages?"
 msgid_plural "Queue translation for %{count} selected resources' missing and outdated languages?"
 msgstr[0] "Lisada järjekorda %{count} valitud ressursi puuduvate ja aegunud keelte tõlge?"
 msgstr[1] "Lisada järjekorda %{count} valitud ressursi puuduvate ja aegunud keelte tõlge?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2075
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2054
 #, elixir-autogen, elixir-format
 msgid "Raw model response"
 msgstr "Mudeli toores vastus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1755
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1734
 #, elixir-autogen, elixir-format
 msgid "Reconciliation sweep"
 msgstr "Ühtlustus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1973
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1952
 #, elixir-autogen, elixir-format
 msgid "Reset reference for all matching"
 msgstr "Lähtesta võrdlusalus kõigi sobivate jaoks"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1599
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1578
 #, elixir-autogen, elixir-format
 msgid "Reset the reference and re-queue translation for %{count} selected resource, for the current language/field scope?"
 msgid_plural "Reset the reference and re-queue translation for %{count} selected resources, for the current language/field scope?"
 msgstr[0] "Lähtestada võrdlusalus ja lisada uuesti järjekorda %{count} valitud ressursi tõlge, praeguse keele/välja ulatuses?"
 msgstr[1] "Lähtestada võrdlusalus ja lisada uuesti järjekorda %{count} valitud ressursi tõlge, praeguse keele/välja ulatuses?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1114
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1093
 #, elixir-autogen, elixir-format
 msgid "Reset the reference for %{count} resource, across every matching page."
 msgid_plural "Reset the reference for %{count} resources, across every matching page."
 msgstr[0] "Lähtestati võrdlusalus %{count} ressursi jaoks, kõigil sobivatel lehtedel."
 msgstr[1] "Lähtestati võrdlusalus %{count} ressursi jaoks, kõigil sobivatel lehtedel."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1670
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1649
 #, elixir-autogen, elixir-format
 msgid "Reset the reference for every matching resource?"
 msgstr "Lähtestada võrdlusalus kõigi sobivate ressursside jaoks?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2011
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1990
 #, elixir-autogen, elixir-format
 msgid "Resource"
 msgstr "Ressurss"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1746
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1725
 #, elixir-autogen, elixir-format
 msgid "Run sweep"
 msgstr "Käivita ühtlustus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1488
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1467
 #, elixir-autogen, elixir-format
 msgid "SEO description"
 msgstr "SEO kirjeldus"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1487
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1466
 #, elixir-autogen, elixir-format
 msgid "SEO title"
 msgstr "SEO pealkiri"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1831
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1810
 #, elixir-autogen, elixir-format
 msgid "Save sweep settings"
 msgstr "Salvesta ühtlustuse seaded"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1706
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1685
 #, elixir-autogen, elixir-format
 msgid "Scope: %{langs} · %{fields}"
 msgstr "Ulatus: %{langs} · %{fields}"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1936
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1915
 #, elixir-autogen, elixir-format
 msgid "Search..."
 msgstr "Otsi…"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2010
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1989
 #, elixir-autogen, elixir-format
 msgid "Select all"
 msgstr "Vali kõik"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1734
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1713
 #, elixir-autogen, elixir-format
 msgid "Shop Translations"
 msgstr "Poe tõlked"
@@ -5509,99 +5510,99 @@ msgstr "Shopify sünkroonimine lubatud"
 msgid "Shopify sync is turned off. Turn it on in E-Commerce settings first."
 msgstr "Shopify sünkroonimine on välja lülitatud. Lülita see kõigepealt e-poe seadetes sisse."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1493
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1914
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1472
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1893
 #, elixir-autogen, elixir-format
 msgid "Stale"
 msgstr "Aegunud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1964
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1943
 #, elixir-autogen, elixir-format
 msgid "Stamp all matching as reference"
 msgstr "Määra kõik sobivad võrdlusaluseks"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2001
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1980
 #, elixir-autogen, elixir-format
 msgid "Stamp as reference"
 msgstr "Määra võrdlusaluseks"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1618
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1597
 #, elixir-autogen, elixir-format
 msgid "Stamp as reference?"
 msgstr "Määrata võrdlusaluseks?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1649
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1628
 #, elixir-autogen, elixir-format
 msgid "Stamp every matching resource as reference?"
 msgstr "Määrata kõik sobivad ressursid võrdlusaluseks?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1087
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1066
 #, elixir-autogen, elixir-format
 msgid "Stamped %{count} resource as reference, across every matching page."
 msgid_plural "Stamped %{count} resources as reference, across every matching page."
 msgstr[0] "Määrati %{count} ressurss võrdlusaluseks, kõigil sobivatel lehtedel."
 msgstr[1] "Määrati %{count} ressurssi võrdlusaluseks, kõigil sobivatel lehtedel."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1063
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1042
 #, elixir-autogen, elixir-format
 msgid "Stamped %{count} resource as reference."
 msgid_plural "Stamped %{count} resources as reference."
 msgstr[0] "Määrati %{count} ressurss võrdlusaluseks."
 msgstr[1] "Määrati %{count} ressurssi võrdlusaluseks."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1909
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1888
 #, elixir-autogen, elixir-format
 msgid "State"
 msgstr "Olek"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1980
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1959
 #, elixir-autogen, elixir-format
 msgid "Stop translations"
 msgstr "Peata tõlked"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1571
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1550
 #, elixir-autogen, elixir-format
 msgid "Stop translations?"
 msgstr "Peatada tõlked?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1413
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1392
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — %{count} job already in flight (at the ceiling)."
 msgid_plural "Sweep did not run — %{count} jobs already in flight (at the ceiling)."
 msgstr[0] "Ühtlustus ei käivitunud — juba %{count} töö järjekorras (ülempiir on täis)."
 msgstr[1] "Ühtlustus ei käivitunud — juba %{count} tööd järjekorras (ülempiir on täis)."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1426
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1405
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — %{count} jobs already in flight (at the ceiling)."
 msgstr "Ühtlustus ei käivitunud — juba %{count} tööd järjekorras (ülempiir on täis)."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1410
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1389
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — AI translation isn't available right now."
 msgstr "Ühtlustus ei käivitunud — AI tõlge ei ole praegu saadaval."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1407
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1386
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — automatic sweeping is turned off."
 msgstr "Ühtlustus ei käivitunud — automaatne ühtlustus on välja lülitatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1450
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1429
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — no target languages are configured."
 msgstr "Ühtlustus ei käivitunud — sihtkeeli ei ole seadistatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1398
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1377
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — shop translations are disabled."
 msgstr "Ühtlustus ei käivitunud — poe tõlked on keelatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1452
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1431
 #, elixir-autogen, elixir-format
 msgid "Sweep finished."
 msgstr "Ühtlustus lõpetatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1386
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1365
 #, elixir-autogen, elixir-format
 msgid "Sweep ran — %{count} job queued."
 msgid_plural "Sweep ran — %{count} jobs queued."
@@ -5613,42 +5614,42 @@ msgstr[1] "Ühtlustus tehti — %{count} tööd järjekorras."
 msgid "Sweep settings updated"
 msgstr "Ühtlustuse seaded on uuendatud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1801
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1780
 #, elixir-autogen, elixir-format
 msgid "Target languages"
 msgstr "Sihtkeeled"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1843
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1822
 #, elixir-autogen, elixir-format
 msgid "The category translation prompt has been hand-edited and no longer matches the module's shipped version. Restore it in AI › Prompts, or leave the edit — this warning stays until it's resolved."
 msgstr "Kategooriate tõlke prompt on käsitsi muudetud ega vasta enam mooduliga kaasas olevale versioonile. Taasta see jaotises AI › Promptid või jäta muudatus alles — see hoiatus püsib, kuni see on lahendatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1840
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1819
 #, elixir-autogen, elixir-format
 msgid "The product translation prompt has been hand-edited and no longer matches the module's shipped version. Restore it in AI › Prompts, or leave the edit — this warning stays until it's resolved."
 msgstr "Toodete tõlke prompt on käsitsi muudetud ega vasta enam mooduliga kaasas olevale versioonile. Taasta see jaotises AI › Promptid või jäta muudatus alles — see hoiatus püsib, kuni see on lahendatud."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1681
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1660
 #, elixir-autogen, elixir-format
 msgid "This does not queue any translation — it only clears the reference. The automatic sweep never picks up an \"unknown\" pair on its own."
 msgstr "See ei lisa ühtegi tõlget järjekorda — see ainult kustutab võrdlusaluse. Automaatne ühtlustus ei võta kunagi omal algatusel üles paari, mille olek on „teadmata“."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1995
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1974
 #, elixir-autogen, elixir-format
 msgid "Translate"
 msgstr "Tõlgi"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1998
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1977
 #, elixir-autogen, elixir-format
 msgid "Translate again"
 msgstr "Tõlgi uuesti"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1597
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1576
 #, elixir-autogen, elixir-format
 msgid "Translate again?"
 msgstr "Tõlkida uuesti?"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1582
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1561
 #, elixir-autogen, elixir-format
 msgid "Translate?"
 msgstr "Tõlkida?"
@@ -5663,42 +5664,42 @@ msgstr "Lülitab välja Shopify sünkroonimise lehe, selle kirje külgmenüüs j
 msgid "Turns on AI-powered translation of products and categories: the management page, its sidebar entry, and manual translate/stamp/reset actions. Requires a configured AI endpoint."
 msgstr "Lülitab sisse toodete ja kategooriate AI-põhise tõlke: haldusleht, selle kirje külgmenüüs ning käsitsi tehtavad toimingud tõlgi / määra võrdlusaluseks / lähtesta. Nõuab seadistatud AI lõpp-punkti."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1559
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1538
 #, elixir-autogen, elixir-format
 msgid "about %{count} minute."
 msgid_plural "about %{count} minutes."
 msgstr[0] "umbes %{count} minut."
 msgstr[1] "umbes %{count} minutit."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1717
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1718
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1696
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1697
 #, elixir-autogen, elixir-format
 msgid "all fields"
 msgstr "kõik väljad"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1854
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1833
 #, elixir-autogen, elixir-format
 msgid "fresh / stale %{s} / missing %{m} / unknown %{u}"
 msgstr "värske / aegunud %{s} / puudub %{m} / teadmata %{u}"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2101
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2080
 #, elixir-autogen, elixir-format
 msgid "never run yet"
 msgstr "pole veel kordagi käivitunud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1540
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1519
 #, elixir-autogen, elixir-format
 msgid "not scheduled"
 msgstr "ei ole plaanitud"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2119
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2098
 #, elixir-autogen, elixir-format
 msgid "ran, %{count} job queued"
 msgid_plural "ran, %{count} jobs queued"
 msgstr[0] "tehti, %{count} töö järjekorras"
 msgstr[1] "tehti, %{count} tööd järjekorras"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1557
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1536
 #, elixir-autogen, elixir-format
 msgid "≈%{count} model call"
 msgid_plural "≈%{count} model calls"
@@ -5711,12 +5712,12 @@ msgstr[1] "≈%{count} mudeli päringut"
 msgid "Manage in Catalogues"
 msgstr "Halda kataloogides"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:64
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:66
 #, elixir-autogen, elixir-format
 msgid "Categories are managed in the Catalogues module now."
 msgstr "Kategooriaid haldab nüüd moodul Kataloogid."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:80
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:81
 #, elixir-autogen, elixir-format
 msgid "Products are managed in the Catalogues module now."
 msgstr "Tooteid haldab nüüd moodul Kataloogid."
@@ -5727,7 +5728,7 @@ msgstr "Tooteid haldab nüüd moodul Kataloogid."
 msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
 msgstr "Pole saadaval, kuni pood loeb tooteid moodulist Kataloogid — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:802
+#: lib/phoenix_kit_ecommerce/web/imports.ex:818
 #, elixir-autogen, elixir-format
 msgid "Products and categories now live in the Catalogues module. CSV import is disabled — use the Catalogues item form (linked from the shop admin) to add or edit products, or the Shopify sync to bring in Shopify's own data."
 msgstr "Tooted ja kategooriad asuvad nüüd moodulis Kataloogid. CSV-import on keelatud — kasutage toodete lisamiseks või muutmiseks Kataloogide üksuse vormi (link poe admin lehel) või Shopify sünkroonimist Shopify oma andmete toomiseks."
@@ -5737,31 +5738,31 @@ msgstr "Tooted ja kategooriad asuvad nüüd moodulis Kataloogid. CSV-import on k
 msgid "Shop translations aren't available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
 msgstr "Poe tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid — tõlkeadapterid katavad ainult poe enda toote- ja kategooriatabeleid."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1402
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1381
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
 msgstr "Ühtlustust ei käivitatud — tõlked pole saadaval, kuni pood loeb tooteid moodulist Kataloogid."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:969
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:978
 #, elixir-autogen, elixir-format
 msgid "— Category not set —"
 msgstr "— Kategooria määramata —"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2657
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2667
 #, elixir-autogen, elixir-format
 msgid "%{count} error"
 msgid_plural "%{count} errors"
 msgstr[0] "%{count} viga"
 msgstr[1] "%{count} viga"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2486
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2496
 #, elixir-autogen, elixir-format
 msgid "%{count} product is outside the sync scope and hidden."
 msgid_plural "%{count} products are outside the sync scope and hidden."
 msgstr[0] "%{count} toode jääb sünkroonimisulatusest välja ja on peidetud."
 msgstr[1] "%{count} toodet jääb sünkroonimisulatusest välja ja on peidetud."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2612
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2622
 #, elixir-autogen, elixir-format
 msgid "%{done} / %{total}"
 msgstr "%{done} / %{total}"
@@ -5783,7 +5784,7 @@ msgstr[1] "Kas lisada %{count} uut toodet Shopify'st?"
 msgid "Add %{title} from Shopify?"
 msgstr "Kas lisada „%{title}“ Shopify'st?"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2481
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2491
 #, elixir-autogen, elixir-format
 msgid "Add all (%{count})"
 msgstr "Lisa kõik (%{count})"
@@ -5822,52 +5823,52 @@ msgstr "Sünkroonimisulatust ei õnnestunud salvestada."
 msgid "Downloaded %{downloaded}, reused %{reused}."
 msgstr "Laaditi alla %{downloaded}, kasutati uuesti %{reused}."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2620
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2630
 #, elixir-autogen, elixir-format
 msgid "Failed: %{reason}"
 msgstr "Nurjus: %{reason}"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2624
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2634
 #, elixir-autogen, elixir-format
 msgid "Finished at %{time} (UTC)."
 msgstr "Lõpetatud kell %{time} (UTC)."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2739
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2749
 #, elixir-autogen, elixir-format
 msgid "Mode"
 msgstr "Režiim"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2472
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2482
 #, elixir-autogen, elixir-format
 msgid "New in Shopify (%{count})"
 msgstr "Uued Shopify's (%{count})"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2497
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2507
 #, elixir-autogen, elixir-format
 msgid "No new products in scope."
 msgstr "Sünkroonimisulatuses uusi tooteid ei ole."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2608
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2618
 #, elixir-autogen, elixir-format
 msgid "Not run yet"
 msgstr "Pole veel käivitatud"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2644
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2654
 #, elixir-autogen, elixir-format
 msgid "Nothing new — all images already present."
 msgstr "Uut ei ole — kõik pildid on juba olemas."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2743
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2753
 #, elixir-autogen, elixir-format
 msgid "Only matching products"
 msgstr "Ainult sobivad tooted"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2760
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2770
 #, elixir-autogen, elixir-format
 msgid "Product types (comma-separated)"
 msgstr "Tootetüübid (komaga eraldatud)"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2727
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2737
 #, elixir-autogen, elixir-format
 msgid "Scope decides which Shopify products count for adding and skipping; items already in the catalogue always sync."
 msgstr "Sünkroonimisulatus määrab, millised Shopify tooted loetakse lisamise ja vahelejätmise puhul; kataloogis juba olevad tooted sünkroonitakse alati."
@@ -5883,7 +5884,7 @@ msgstr "Ulatus: sildid %{tags}, tootetüübid %{product_types}"
 msgid "Scope: whole store — every unmatched Shopify product counts."
 msgstr "Ulatus: kogu pood — iga sobitamata Shopify toode loetakse."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2725
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2735
 #, elixir-autogen, elixir-format
 msgid "Sync scope"
 msgstr "Sünkroonimisulatus"
@@ -5893,17 +5894,17 @@ msgstr "Sünkroonimisulatus"
 msgid "Sync scope saved."
 msgstr "Sünkroonimisulatus salvestatud."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2749
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2759
 #, elixir-autogen, elixir-format
 msgid "Tags (comma-separated)"
 msgstr "Sildid (komaga eraldatud)"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2741
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2751
 #, elixir-autogen, elixir-format
 msgid "Whole store"
 msgstr "Kogu pood"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2636
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2646
 #, elixir-autogen, elixir-format
 msgid "%{count} error."
 msgid_plural "%{count} errors."
@@ -5917,42 +5918,42 @@ msgid_plural "Could not add %{count} products: the store is now in %{shop_curren
 msgstr[0] "%{count} toodet ei õnnestunud lisada: pood on nüüd valuutas %{shop_currency}, selle poe baasvaluuta on aga %{base_currency}."
 msgstr[1] "%{count} toodet ei õnnestunud lisada: pood on nüüd valuutas %{shop_currency}, selle poe baasvaluuta on aga %{base_currency}."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2637
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2647
 #, elixir-autogen, elixir-format
 msgid "Counts not recorded by this run."
 msgstr "Selle käivituse kohta ei ole loendeid salvestatud."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2051
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2061
 #, elixir-autogen, elixir-format
 msgid "Changes"
 msgstr "Muudatused"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2056
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2066
 #, elixir-autogen, elixir-format
 msgid "New in Shopify"
 msgstr "Uus Shopify's"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2457
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2467
 #, elixir-autogen, elixir-format
 msgid "Run \"Check for changes\" to see new Shopify products."
 msgstr "Uute Shopify toodete nägemiseks vajuta „Kontrolli muudatusi“."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2555
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2565
 #, elixir-autogen, elixir-format
 msgid "products"
 msgstr "toodet"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2804
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2814
 #, elixir-autogen, elixir-format
 msgid "Open integration settings"
 msgstr "Ava integratsiooni seaded"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2792
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2802
 #, elixir-autogen, elixir-format
 msgid "Shopify connection"
 msgstr "Shopify ühendus"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2794
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2804
 #, elixir-autogen, elixir-format
 msgid "The shop domain and the Admin API token are stored on the integration itself."
 msgstr "Poe domeen ja Admin API luba on salvestatud integratsiooni juurde."
@@ -6007,77 +6008,77 @@ msgstr "Viimase variantide sünkroonimise ajal erines baashind Shopify odavaimas
 msgid "%{under} below Shopify, up to -%{max}."
 msgstr "%{under} Shopify hinnast madalamad, kuni -%{max}."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2628
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2638
 #, elixir-autogen, elixir-format
 msgid "%{count} with approximated prices."
 msgid_plural "%{count} with approximated prices."
 msgstr[0] "%{count} ligikaudsete hindadega."
 msgstr[1] "%{count} ligikaudsete hindadega."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2680
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2690
 #, elixir-autogen, elixir-format
 msgid "%{count} price warning"
 msgid_plural "%{count} price warnings"
 msgstr[0] "%{count} hinnahoiatus"
 msgstr[1] "%{count} hinnahoiatust"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2696
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2706
 #, elixir-autogen, elixir-format
 msgid "warnings"
 msgstr "hoiatust"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:498
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:500
 #, elixir-autogen, elixir-format
 msgid "Please select: %{options}"
 msgstr "Palun valige: %{options}"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2184
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2163
 #, elixir-autogen, elixir-format
 msgid "%{count} held back after a recent failure"
 msgid_plural "%{count} held back after recent failures"
 msgstr[0] "%{count} ootel pärast hiljutist tõrget"
 msgstr[1] "%{count} ootel pärast hiljutisi tõrkeid"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1447
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1426
 #, elixir-autogen, elixir-format
 msgid "A sweep is already running. Its result appears when it finishes."
 msgstr "Ühtlustus juba käib. Selle tulemus ilmub, kui see lõpeb."
 
 #: lib/phoenix_kit_ecommerce/web/test_shop.ex:116
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1744
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1723
 #, elixir-autogen, elixir-format
 msgid "Running…"
 msgstr "Käib…"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:786
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:898
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:803
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:915
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1245
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1338
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:630
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:658
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1968
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:665
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1977
 #: lib/phoenix_kit_ecommerce/web/settings.ex:551
 #: lib/phoenix_kit_ecommerce/web/settings.ex:617
 #: lib/phoenix_kit_ecommerce/web/settings.ex:882
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1191
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:453
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2770
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1829
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2780
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1808
 #, elixir-autogen, elixir-format
 msgid "Saving…"
 msgstr "Salvestan…"
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1442
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1421
 #, elixir-autogen, elixir-format
 msgid "Sweep did not run — the translation prompts could not be prepared."
 msgstr "Ühtlustus ei käivitunud — tõlkeviipasid ei õnnestunud ette valmistada."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:1434
+#: lib/phoenix_kit_ecommerce/web/translations.ex:1413
 #, elixir-autogen, elixir-format
 msgid "Sweep queued nothing — batch %{batch} / ceiling %{ceiling}: both must be at least 1. Raise them in the settings below."
 msgstr "Ühtlustus ei lisanud midagi järjekorda — partii %{batch} / ülempiir %{ceiling}: mõlemad peavad olema vähemalt 1. Suurenda neid allpool olevates seadetes."
 
-#: lib/phoenix_kit_ecommerce/web/translations.ex:2133
+#: lib/phoenix_kit_ecommerce/web/translations.ex:2112
 #, elixir-autogen, elixir-format
 msgid "stalled — batch %{batch} / ceiling %{ceiling}: both must be at least 1"
 msgstr "seisma jäänud — partii %{batch} / ülempiir %{ceiling}: mõlemad peavad olema vähemalt 1"
@@ -6087,14 +6088,14 @@ msgstr "seisma jäänud — partii %{batch} / ülempiir %{ceiling}: mõlemad pea
 msgid "Import configs"
 msgstr "Impordi seadistused"
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:58
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:59
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:60
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:61
 #, elixir-autogen, elixir-format
 msgid "New category"
 msgstr "Uus kategooria"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:74
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:75
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:76
 #, elixir-autogen, elixir-format
 msgid "New product"
 msgstr "Uus toode"
@@ -6118,9 +6119,9 @@ msgstr "Vedaja hinnakirja järgi, tasumine kättesaamisel"
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:642
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:716
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:317
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1932
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2133
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2422
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1935
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2136
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2425
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1387
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:76
 #: lib/phoenix_kit_ecommerce/web/shipping_methods.ex:155
@@ -6136,7 +6137,7 @@ msgstr "Tasumine kättesaamisel vedaja hinnakirja järgi"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:774
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:377
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2475
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2478
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:133
 #, elixir-autogen, elixir-format
 msgid "Shipping is not included in this total: you pay the carrier at their rates on delivery."
@@ -6147,27 +6148,27 @@ msgstr "Tarne ei sisaldu selles summas: tasute selle vedajale tema hinnakirja j�
 msgid "The customer pays the carrier at their rates on delivery. The shop charges nothing for shipping: the price is saved as 0 and the free-shipping threshold is cleared."
 msgstr "Klient tasub vedajale tema hinnakirja järgi kättesaamisel. Pood tarne eest tasu ei võta: hind salvestatakse nullina ja tasuta tarne lävi eemaldatakse."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1729
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1732
 #, elixir-autogen, elixir-format
 msgid "Back to saved profiles"
 msgstr "Tagasi salvestatud profiilide juurde"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1870
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1873
 #, elixir-autogen, elixir-format
 msgid "Save as a billing profile"
 msgstr "Salvesta arveldusprofiilina"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1303
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1306
 #, elixir-autogen, elixir-format
 msgid "The billing details could not be saved - please check the highlighted fields"
 msgstr "Arveldusandmeid ei saanud salvestada – palun kontrolli märgitud välju"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1839
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1842
 #, elixir-autogen, elixir-format
 msgid "Use new details"
 msgstr "Kasuta uusi andmeid"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1877
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1880
 #, elixir-autogen, elixir-format
 msgid "This profile could not be saved. Untick \"Save as a billing profile\" to place the order without saving it."
 msgstr "Seda profiili ei saanud salvestada. Eemalda linnuke valikult „Salvesta arveldusprofiilina“, et esitada tellimus ilma salvestamata."
@@ -6218,7 +6219,7 @@ msgid "Calculate the delivery price"
 msgstr "Arvuta tarnehind"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:648
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1938
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1941
 #, elixir-autogen, elixir-format
 msgid "Calculated for your address"
 msgstr "Arvutatakse sinu aadressi jaoks"
@@ -6238,12 +6239,12 @@ msgstr "Kättesaamisel tasumise tasu %{fee}, mille maksab saaja vedajale"
 msgid "Change city"
 msgstr "Muuda linna"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2166
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2169
 #, elixir-autogen, elixir-format
 msgid "Change delivery details"
 msgstr "Muuda tarneandmeid"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2319
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2322
 #, elixir-autogen, elixir-format
 msgid "Check delivery details"
 msgstr "Kontrolli tarneandmeid"
@@ -6271,7 +6272,7 @@ msgid "Customer provides"
 msgstr "Annab klient"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:474
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:577
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:594
 #: lib/phoenix_kit_ecommerce/web/settings.ex:506
 #, elixir-autogen, elixir-format
 msgid "Default parcel"
@@ -6311,7 +6312,7 @@ msgid_plural "Delivery in %{min}–%{max} days"
 msgstr[0] "Tarne %{min}–%{max} päeva jooksul"
 msgstr[1] "Tarne %{min}–%{max} päeva jooksul"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2297
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2300
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:980
 #, elixir-autogen, elixir-format
 msgid "Delivery options are temporarily unavailable. Please try again in a moment."
@@ -6351,8 +6352,8 @@ msgstr "Fikseeritud hind"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:201
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:505
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:611
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1148
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:628
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1157
 #: lib/phoenix_kit_ecommerce/web/settings.ex:539
 #, elixir-autogen, elixir-format
 msgid "Height (mm)"
@@ -6370,8 +6371,8 @@ msgstr "Jäta ümardamine tühjaks, kui hinda ei ümardata."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:183
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:487
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:591
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1128
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:608
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1137
 #: lib/phoenix_kit_ecommerce/web/settings.ex:525
 #, elixir-autogen, elixir-format
 msgid "Length (mm)"
@@ -6435,8 +6436,8 @@ msgstr "Nr %{number}"
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:652
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:712
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1942
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2418
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1945
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2421
 #, elixir-autogen, elixir-format
 msgid "Not available"
 msgstr "Pole saadaval"
@@ -6554,7 +6555,7 @@ msgstr "Vali teenus"
 msgid "Shipping cost calculation"
 msgstr "Tarnekulu arvutus"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1103
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1112
 #, elixir-autogen, elixir-format
 msgid "Shipping parcel"
 msgstr "Saatepakk"
@@ -6564,7 +6565,7 @@ msgstr "Saatepakk"
 msgid "Size and weight assumed for items of this category that have none of their own. Leave empty to use the shop's defaults."
 msgstr "Mõõtmed ja kaal, mida eeldatakse selle kategooria kirjete puhul, millel oma väärtusi pole. Jäta tühjaks, et kasutada poe vaikeväärtusi."
 
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:579
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:596
 #, elixir-autogen, elixir-format
 msgid "Size and weight assumed for products of this category that have none of their own. Leave empty to use the shop's defaults."
 msgstr "Mõõtmed ja kaal, mida eeldatakse selle kategooria toodete puhul, millel oma väärtusi pole. Jäta tühjaks, et kasutada poe vaikeväärtusi."
@@ -6610,7 +6611,7 @@ msgid "The chosen point can't take this parcel (weight/size/value). Please choos
 msgstr "Valitud punkt ei saa seda pakki vastu võtta (kaal/mõõtmed/väärtus). Palun valige mõni muu."
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:757
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2462
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2465
 #, elixir-autogen, elixir-format
 msgid "The delivery cost is still to be calculated: the total will change."
 msgstr "Tarnekulu tuleb alles arvutada: kogusumma muutub."
@@ -6635,8 +6636,8 @@ msgstr "Tarnehinda ei õnnestunud arvutada. Proovi uuesti."
 msgid "The delivery price has to be calculated before the order can be placed."
 msgstr "Tarnehind tuleb enne tellimuse esitamist arvutada."
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1232
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2309
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1235
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2312
 #, elixir-autogen, elixir-format
 msgid "The delivery price needs to be confirmed - please check your delivery details"
 msgstr "Tarnehind tuleb kinnitada – palun kontrolli oma tarneandmeid"
@@ -6727,19 +6728,19 @@ msgid "This provider is no longer installed. Choose another one; until then the 
 msgstr "See teenusepakkuja pole enam paigaldatud. Vali mõni teine; seni jääb viisile fikseeritud hind."
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:714
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2420
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2423
 #, elixir-autogen, elixir-format
 msgid "To be calculated"
 msgstr "Arvutatakse"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2305
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2308
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:989
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1158
 #, elixir-autogen, elixir-format
 msgid "Try again"
 msgstr "Proovi uuesti"
 
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2287
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2290
 #, elixir-autogen, elixir-format
 msgid "Updating the delivery price..."
 msgstr "Tarnehinda uuendatakse..."
@@ -6750,14 +6751,14 @@ msgid "Volumetric divisor (cm3 per kg)"
 msgstr "Mahutegur (cm³ kg kohta)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:514
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:621
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1118
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:638
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1127
 #: lib/phoenix_kit_ecommerce/web/settings.ex:546
 #, elixir-autogen, elixir-format
 msgid "Weight (g)"
 msgstr "Kaal (g)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1105
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1114
 #, elixir-autogen, elixir-format
 msgid "Weight and size of one unit. Carriers price the parcel by them; leave empty to use the category's or the shop's defaults."
 msgstr "Ühe ühiku kaal ja mõõtmed. Vedajad arvutavad paki hinna nende järgi; jäta tühjaks, et kasutada kategooria või poe vaikeväärtusi."
@@ -6769,8 +6770,8 @@ msgstr "Kust selle viisi hind tuleb."
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:192
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:496
-#: lib/phoenix_kit_ecommerce/web/category_form.ex:601
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1138
+#: lib/phoenix_kit_ecommerce/web/category_form.ex:618
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1147
 #: lib/phoenix_kit_ecommerce/web/settings.ex:532
 #, elixir-autogen, elixir-format
 msgid "Width (mm)"
@@ -6791,18 +6792,18 @@ msgstr "peab olema täisarv vahemikus 0 kuni %{max}"
 msgid "Delivers to: %{countries}"
 msgstr "Tarneriigid: %{countries}"
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:947
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:960
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:949
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:962
 #, elixir-autogen, elixir-format
 msgid "%{percent}% OFF"
 msgstr "-%{percent}%"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:974
+#: lib/phoenix_kit_ecommerce/web/imports.ex:990
 #, elixir-autogen, elixir-format
 msgid "Cancelling…"
 msgstr "Tühistamine…"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2081
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2091
 #, elixir-autogen, elixir-format
 msgid "Checking…"
 msgstr "Kontrollimine…"
@@ -6826,27 +6827,27 @@ msgstr "Kustutamine…"
 msgid "Free above %{amount}"
 msgstr "Tasuta alates %{amount}"
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2616
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2626
 #, elixir-autogen, elixir-format
 msgid "Interrupted before it finished — run it again."
 msgstr "Katkes enne lõpetamist — käivita uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:892
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:899
 #, elixir-autogen, elixir-format
 msgid "Option %{key} disabled"
 msgstr "Valik %{key} on välja lülitatud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:891
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:898
 #, elixir-autogen, elixir-format
 msgid "Option %{key} enabled"
 msgstr "Valik %{key} on sisse lülitatud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:859
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:866
 #, elixir-autogen, elixir-format
 msgid "Option created"
 msgstr "Valik loodud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:873
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:880
 #, elixir-autogen, elixir-format
 msgid "Option deleted"
 msgstr "Valik kustutatud"
@@ -6866,15 +6867,15 @@ msgstr "Shopify tagastas rohkem lehti, kui ühelgi poel on — sünkroonimine pe
 msgid "Shopify took too long to answer — try again shortly."
 msgstr "Shopify vastamine võttis liiga kaua — proovi varsti uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1822
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1832
 #, elixir-autogen, elixir-format
 msgid "Shopify's answer pointed at another host — the sync was stopped."
 msgstr "Shopify vastus viitas teisele hostile — sünkroonimine peatati."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:984
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1395
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1558
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2596
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1000
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1411
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1574
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2606
 #, elixir-autogen, elixir-format
 msgid "Starting…"
 msgstr "Käivitamine…"
@@ -6889,7 +6890,7 @@ msgstr "Seda valikut enam ei ole."
 msgid "That quantity is not available."
 msgstr "See kogus ei ole saadaval."
 
-#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1828
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1838
 #, elixir-autogen, elixir-format
 msgid "The check stopped unexpectedly — try again."
 msgstr "Kontroll katkes ootamatult — proovi uuesti."
@@ -6904,14 +6905,14 @@ msgstr "Ühenduse poe domeen peab olema poe enda aadress, näiteks my-store.mysh
 msgid "The data could not be saved. Check the values and try again."
 msgstr "Andmeid ei õnnestunud salvestada. Kontrolli väärtusi ja proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:880
-#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:908
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:882
+#: lib/phoenix_kit_ecommerce/web/catalog_product.ex:910
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:277
 #, elixir-autogen, elixir-format
 msgid "Thumbnail"
 msgstr "Pisipilt"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:1298
+#: lib/phoenix_kit_ecommerce/web/imports.ex:1314
 #, elixir-autogen, elixir-format
 msgid "Uploading…"
 msgstr "Üleslaadimine…"
@@ -6929,7 +6930,7 @@ msgstr "Vaata"
 #: lib/phoenix_kit_ecommerce/web/categories.ex:576
 #: lib/phoenix_kit_ecommerce/web/categories.ex:602
 #: lib/phoenix_kit_ecommerce/web/categories.ex:612
-#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1550
+#: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1553
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:240
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:248
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:347
@@ -6976,7 +6977,7 @@ msgid_plural "%{count} keywords"
 msgstr[0] "%{count} märksõna"
 msgstr[1] "%{count} märksõna"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:250
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:257
 #, elixir-autogen, elixir-format
 msgid "%{count} option"
 msgid_plural "%{count} options"
@@ -7026,12 +7027,12 @@ msgstr "Lisa seadistus"
 msgid "Add Configuration"
 msgstr "Lisa seadistus"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:500
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:507
 #, elixir-autogen, elixir-format
 msgid "Add at least one option"
 msgstr "Lisa vähemalt üks väärtus"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:264
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:271
 #, elixir-autogen, elixir-format
 msgid "Add your first global option to get started"
 msgstr "Alustamiseks lisa esimene üldine valik"
@@ -7041,7 +7042,7 @@ msgstr "Alustamiseks lisa esimene üldine valik"
 msgid "Add your first import configuration to get started"
 msgstr "Alustamiseks lisa esimene impordi seadistus"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:516
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:523
 #, elixir-autogen, elixir-format
 msgid "Affects Price"
 msgstr "Mõjutab hinda"
@@ -7051,7 +7052,7 @@ msgstr "Mõjutab hinda"
 msgid "All products will be imported without keyword filtering"
 msgstr "Kõik tooted imporditakse ilma märksõnafiltrita"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:609
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:616
 #, elixir-autogen, elixir-format
 msgid "Allow Override Per-Product"
 msgstr "Luba tootepõhine ülekirjutamine"
@@ -7071,22 +7072,22 @@ msgstr "Valik võtmega \"%{key}\" on selles kategoorias juba olemas."
 msgid "An option with the key \"%{key}\" already exists."
 msgstr "Valik võtmega \"%{key}\" on juba olemas."
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:444
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:451
 #, elixir-autogen, elixir-format
 msgid "Auto-generated from label"
 msgstr "Luuakse automaatselt sildi põhjal"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:770
+#: lib/phoenix_kit_ecommerce/web/imports.ex:786
 #, elixir-autogen, elixir-format
 msgid "CSV format error: The file contains incorrectly escaped quotes. Please export directly from Shopify using 'Export > CSV for Excel'."
 msgstr "CSV-vormingu viga: fail sisaldab valesti paotatud jutumärke. Ekspordi otse Shopifyst, valides 'Export > CSV for Excel'."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:775
+#: lib/phoenix_kit_ecommerce/web/imports.ex:791
 #, elixir-autogen, elixir-format
 msgid "CSV format error: The file has unclosed quotes. Please re-export from Shopify or check for corrupted data."
 msgstr "CSV-vormingu viga: failis on sulgemata jutumärke. Ekspordi Shopifyst uuesti või kontrolli, kas andmed on rikutud."
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:780
+#: lib/phoenix_kit_ecommerce/web/imports.ex:796
 #, elixir-autogen, elixir-format
 msgid "CSV parse error: %{details}"
 msgstr "CSV-faili lugemise viga: %{details}"
@@ -7148,12 +7149,12 @@ msgid "Confirmed"
 msgstr "Kinnitatud"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:631
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:659
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:666
 #, elixir-autogen, elixir-format
 msgid "Create"
 msgstr "Loo"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:267
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:274
 #, elixir-autogen, elixir-format
 msgid "Create First Option"
 msgstr "Loo esimene valik"
@@ -7169,7 +7170,7 @@ msgstr "Deaktiveeri"
 msgid "Default Category Slug"
 msgstr "Vaikekategooria slug"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:224
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:231
 #, elixir-autogen, elixir-format
 msgid "Define global options that apply to all products"
 msgstr "Määra üldised valikud, mis kehtivad kõigile toodetele"
@@ -7180,17 +7181,17 @@ msgstr "Määra üldised valikud, mis kehtivad kõigile toodetele"
 msgid "Delete this configuration?"
 msgstr "Kas kustutada see seadistus?"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:356
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:363
 #, elixir-autogen, elixir-format
 msgid "Delete this option? This cannot be undone."
 msgstr "Kas kustutada see valik? Seda ei saa tagasi võtta."
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:331
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:338
 #, elixir-autogen, elixir-format
 msgid "Disable"
 msgstr "Keela"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:298
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:305
 #, elixir-autogen, elixir-format
 msgid "Disabled"
 msgstr "Keelatud"
@@ -7217,22 +7218,22 @@ msgstr "Iga seadistus määrab CSV-importide märksõnafiltrid ja kategooriareeg
 msgid "Edit Configuration"
 msgstr "Muuda seadistust"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:331
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:338
 #, elixir-autogen, elixir-format
 msgid "Enable"
 msgstr "Luba"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:399
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:406
 #, elixir-autogen, elixir-format
 msgid "Enable \"Allow Override\" for per-product values"
 msgstr "Tootepõhiste väärtuste jaoks lülita sisse \"Luba ülekirjutamine\""
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:611
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:618
 #, elixir-autogen, elixir-format
 msgid "Enable editing price modifiers for each individual product"
 msgstr "Luba hinnamuutjate muutmine iga toote juures eraldi"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:520
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:527
 #, elixir-autogen, elixir-format
 msgid "Enable to add price modifiers for each option"
 msgstr "Lülita sisse, et lisada igale väärtusele hinnamuutja"
@@ -7257,7 +7258,7 @@ msgstr "Välistavad fraasid"
 msgid "Failed to delete config"
 msgstr "Seadistuse kustutamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/imports.ex:764
+#: lib/phoenix_kit_ecommerce/web/imports.ex:780
 #, elixir-autogen, elixir-format
 msgid "Failed to parse CSV file. Please check the file format."
 msgstr "CSV-faili lugemine ebaõnnestus. Kontrolli faili vormingut."
@@ -7272,17 +7273,17 @@ msgstr "Vaikeseadistuse määramine ebaõnnestus"
 msgid "Failed to update config"
 msgstr "Seadistuse uuendamine ebaõnnestus"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:543
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:550
 #, elixir-autogen, elixir-format
 msgid "Fixed (+10)"
 msgstr "Fikseeritud (+10)"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:247
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:254
 #, elixir-autogen, elixir-format
 msgid "Global Options"
 msgstr "Üldised valikud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:233
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:240
 #, elixir-autogen, elixir-format
 msgid "Global options apply to all products. Categories can override or add their own."
 msgstr "Üldised valikud kehtivad kõigile toodetele. Kategooriad saavad neid üle kirjutada või lisada enda omi."
@@ -7297,7 +7298,7 @@ msgstr "Impordifiltri seadistused"
 msgid "Include Keywords"
 msgstr "Kaasavad märksõnad"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:380
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:387
 #, elixir-autogen, elixir-format
 msgid "Input Types"
 msgstr "Sisenditüübid"
@@ -7323,7 +7324,7 @@ msgstr "Märksõnad"
 msgid "Keywords (comma-separated)"
 msgstr "Märksõnad (komadega eraldatud)"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:449
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:456
 #, elixir-autogen, elixir-format
 msgid "Lowercase with underscores, auto-generated from label"
 msgstr "Väiketähed ja alakriipsud, luuakse automaatselt sildi põhjal"
@@ -7338,7 +7339,7 @@ msgstr "Hinnamuutjad puuduvad väärtustel: %{values}"
 msgid "Missing required keys: %{keys}"
 msgstr "Puuduvad kohustuslikud võtmed: %{keys}"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:530
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:537
 #, elixir-autogen, elixir-format
 msgid "Modifier Type"
 msgstr "Muutja tüüp"
@@ -7348,12 +7349,12 @@ msgstr "Muutja tüüp"
 msgid "No configurations defined yet"
 msgstr "Seadistusi pole veel määratud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:261
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:268
 #, elixir-autogen, elixir-format
 msgid "No options defined yet"
 msgstr "Valikuid pole veel määratud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:374
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:381
 #, elixir-autogen, elixir-format
 msgid "Option Types Reference"
 msgstr "Valikutüüpide ülevaade"
@@ -7368,7 +7369,7 @@ msgstr "Valiku väärtused peavad olema tekst või kogumid võtmega \"value\"."
 msgid "Options must be a list."
 msgstr "Valikud peavad olema loend."
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:311
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:318
 #, elixir-autogen, elixir-format
 msgid "Override"
 msgstr "Ülekirjutatav"
@@ -7378,17 +7379,17 @@ msgstr "Ülekirjutatav"
 msgid "Paid"
 msgstr "Makstud"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:555
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:562
 #, elixir-autogen, elixir-format
 msgid "Percent (+20%)"
 msgstr "Protsent (+20%)"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:392
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:399
 #, elixir-autogen, elixir-format
 msgid "Price Modifiers"
 msgstr "Hinnamuutjad"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:563
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:570
 #, elixir-autogen, elixir-format
 msgid "Price Modifiers (Default Values)"
 msgstr "Hinnamuutjad (vaikeväärtused)"
@@ -7413,7 +7414,7 @@ msgstr "Hinnamuutjad peavad olema võtme-väärtuse kogum."
 msgid "Price modifiers must be valid decimal numbers (e.g., \"5.00\")."
 msgstr "Hinnamuutjad peavad olema korrektsed kümnendarvud (nt \"5.00\")."
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:623
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:630
 #, elixir-autogen, elixir-format
 msgid "Price modifiers only work with Select or Multiselect types"
 msgstr "Hinnamuutjad toimivad ainult tüüpidega Select ja Multiselect"
@@ -7429,17 +7430,17 @@ msgstr "Tagastatud"
 msgid "Set Default"
 msgstr "Määra vaikimisi"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:568
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:575
 #, elixir-autogen, elixir-format
 msgid "Set percentage adjustment for each option (use 0 for no change)"
 msgstr "Määra igale väärtusele protsendimuutus (0 tähendab muutuseta)"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:570
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:577
 #, elixir-autogen, elixir-format
 msgid "Set price adjustment for each option (use 0 for no change)"
 msgstr "Määra igale väärtusele hinnamuutus (0 tähendab muutuseta)"
 
-#: lib/phoenix_kit_ecommerce.ex:5521
+#: lib/phoenix_kit_ecommerce.ex:5525
 #, elixir-autogen, elixir-format
 msgid "Shipping: %{method}"
 msgstr "Tarne: %{method}"
@@ -7511,12 +7512,12 @@ msgstr "Kasutatakse, kui ükski kategooriareegel ei sobi"
 msgid "decal, sticker, mural, wallpaper, poster"
 msgstr "kleebis, tarra, seinamaaling, tapeet, plakat"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:431
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:438
 #, elixir-autogen, elixir-format
 msgid "e.g., Material"
 msgstr "nt Materjal"
 
-#: lib/phoenix_kit_ecommerce/web/options_settings.ex:635
+#: lib/phoenix_kit_ecommerce/web/options_settings.ex:642
 #, elixir-autogen, elixir-format
 msgid "e.g., cm, kg"
 msgstr "nt cm, kg"
@@ -7540,3 +7541,13 @@ msgstr "riiul, mask, vaas, lillepott, hoidik, alus, lamp"
 #, elixir-autogen, elixir-format
 msgid "wall art, home decor stickers"
 msgstr "seinakunst, kodukaunistuse kleebised"
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1822
+#, elixir-autogen, elixir-format
+msgid "Shopify's storefront redirected to an address that is not allowed — the sync was stopped."
+msgstr "Shopify poe esikülg suunas ümber lubamatule aadressile — sünkroonimine peatati."
+
+#: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1828
+#, elixir-autogen, elixir-format
+msgid "Shopify's storefront redirected too many times — the sync was stopped."
+msgstr "Shopify poe esikülg suunas liiga mitu korda ümber — sünkroonimine peatati."

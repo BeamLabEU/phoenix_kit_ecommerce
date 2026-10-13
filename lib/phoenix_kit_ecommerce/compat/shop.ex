@@ -55,6 +55,7 @@ defmodule PhoenixKit.Modules.Shop do
   defdelegate product_url(locale, slug), to: PhoenixKitEcommerce
   defdelegate cart_url(locale), to: PhoenixKitEcommerce
   defdelegate checkout_url(locale), to: PhoenixKitEcommerce
+  defdelegate url_locale(language), to: PhoenixKitEcommerce
 
   # Products
   defdelegate list_products(opts \\ []), to: PhoenixKitEcommerce

@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
 
   @compile {:no_warn_undefined, [PhoenixKitCatalogue.Paths, PhoenixKitCatalogue.Catalogue]}
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Product
@@ -83,7 +84,7 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
 
       href = Helpers.admin_edit_path(:item, product, "/en/admin/shop/products?page=2")
 
-      assert URI.parse(href).path == "/en/admin/shop/products/#{product.uuid}/edit"
+      assert URI.parse(href).path == Routes.path("/admin/shop/products/#{product.uuid}/edit")
       assert href =~ "return_to=%2Fen%2Fadmin%2Fshop%2Fproducts%3Fpage%3D2"
     end
 
@@ -92,7 +93,7 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
 
       href = Helpers.admin_edit_path(:category, category, nil)
 
-      assert href == "/en/admin/shop/categories/#{category.uuid}/edit"
+      assert href == Routes.path("/admin/shop/categories/#{category.uuid}/edit")
     end
 
     @tag :catalogue
@@ -102,10 +103,10 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
       set_product_source("catalogue")
 
       assert URI.parse(Helpers.admin_edit_path(:item, product, nil)).path ==
-               "/en/admin/shop/products/#{product.uuid}/edit"
+               Routes.path("/admin/shop/products/#{product.uuid}/edit")
 
       assert URI.parse(Helpers.admin_edit_path(:category, category, nil)).path ==
-               "/en/admin/shop/categories/#{category.uuid}/edit"
+               Routes.path("/admin/shop/categories/#{category.uuid}/edit")
     end
   end
 
@@ -153,10 +154,10 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
       uuid = Ecto.UUID.generate()
 
       assert Helpers.admin_edit_path(:item, uuid, nil) ==
-               "/en/admin/shop/products/#{uuid}/edit"
+               Routes.path("/admin/shop/products/#{uuid}/edit")
 
       assert Helpers.admin_edit_path(:category, uuid, nil) ==
-               "/en/admin/shop/categories/#{uuid}/edit"
+               Routes.path("/admin/shop/categories/#{uuid}/edit")
     end
 
     @tag :catalogue

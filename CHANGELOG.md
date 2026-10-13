@@ -4,6 +4,90 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.24 - 2026-10-13
+
+### Fixed
+
+- **Sweep tick crash on a lost prompt create.** The tick runs inside a
+  transaction; a failed insert in `PromptRollout` (a lost create race, a name
+  another prompt already holds) aborted it and the re-read raised
+  `in_failed_sql_transaction`. The insert now runs in a savepoint and the
+  rollout answers `{:error, :prompt_create_failed}` as intended.
+
+## 0.5.23 - 2026-10-13
+
+### Fixed
+
+- **My Orders filter and pagination.** The status filter and the page
+  buttons patched to the bare `/dashboard/orders`, so neither applied.
+  `Helpers.page_path/3` now takes a `query` and appends it encoded
+  (review of #89).
+
+## 0.5.22 - 2026-10-13
+
+### Added
+
+- **Share image on the storefront `og` map** (#85): the product and category
+  pages carry their image for link previews.
+- **My Cart in the avatar menu** (#88), through the `Tab` option
+  `user_menu: true`; a core without it ignores the key.
+- **Edit and save return to the page you came from** (#87): the legacy
+  product and category forms honour a local `return_to`.
+
+### Changed
+
+- **Guest checkout reuses an unconfirmed account only when guest checkout
+  created it** (#84). Reuse needs the guest stamp AND an order the guest path
+  itself marked for that email (`metadata["guest_checkout"]`,
+  `guest_checkout_email`). ⚠️ A guest account created before this release
+  carries neither mark on its orders, so that customer's next guest checkout
+  with the same email is answered "already registered" and they sign in or
+  reset their password instead. There is no automatic backfill: the stamps
+  cannot be derived safely from old data, which an account holder can write.
+- **The admin Edit link picks its editor by the record's own `origin`**
+  (#86), not the global product source; a catalogue record also needs the
+  `"catalogue"` permission. Under the catalogue source the legacy forms still
+  redirect to the catalogue, so a legacy-origin link is meaningful only in a
+  transitional mixed store.
+- **Storefront links carry no locale segment on a single-language site**
+  (#89); a product or category page stays in its own language instead of
+  redirecting into the slug's.
+- **Quality sweep** (#84): public LiveViews ignore unknown or malformed
+  events; statuses render through translated labels; Shopify shop domains
+  must be `*.myshopify.com` and the Admin API follows no redirect; cart
+  quantity is bounded; global options are edited under a lock; bulk and
+  translation mutations are logged; admin and storefront literals translated.
+
+### Fixed
+
+- **Bulk actions on the products and categories pages take only valid
+  uuids.** A hand-made selection or target (`junk`, a non-list) used to
+  reach a query and raise; it is now cast by `Web.Helpers.cast_uuids/1` /
+  `cast_optional_uuid/1`, which the translations page shares.
+- **Editing a global option no longer renames it.** The key input is
+  disabled while editing, so the browser sent no key and one was derived from
+  the label, possibly onto another option's key.
+- **Base-currency re-pricing no longer erases concurrent option edits.** It
+  runs under the global options lock (`Options.transform_global_options/1`).
+- **The product page keeps the visitor's picked image** across product,
+  inventory and currency broadcasts.
+- **A second concurrent "Confirm Order"** goes to the placed order instead of
+  showing "Failed to create order".
+- **The Shopify storefront fallback** follows at most 3 redirects, each over
+  https on the default port and, off the shop's own host, to public addresses
+  only (the connection is pinned to the address that was checked), and
+  reports an unexpected response by shape, not content.
+- **Editing a category option no longer renames it**, and the category's
+  option edits (save, delete, reorder, base-currency re-pricing) apply to the
+  list as stored under a row lock instead of the form's copy, so concurrent
+  edits are no longer erased.
+- **The image-migration progress on the Imports page** refreshes its stats at
+  most once a second instead of four queries per product.
+- **A failed `shop_product_source` read** is not retried or logged on every
+  call for one memo interval.
+- The product page's "Yes"/"No" specification values and the product form's
+  "Base Price" label are translated and no longer double-marked.
+
 ## 0.5.21 - 2026-10-12
 
 ### Added

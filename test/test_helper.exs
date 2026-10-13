@@ -245,6 +245,26 @@ transliteration_exclude =
     []
   end
 
+# A switched-off multi-language site is single-language only on a core that
+# ships the URL language policy: its primary language is the stored default
+# language (`Languages.set_primary_language/1` arrived with it). An older core
+# answers "en" there, so the tests asserting the stored primary language wait
+# for the release that has it. The storefront's own links do not depend on it
+# (`Shop.url_locale/1`), and their tests run everywhere.
+single_language_exclude =
+  if Code.ensure_loaded?(PhoenixKit.Modules.Languages) and
+       function_exported?(PhoenixKit.Modules.Languages, :set_primary_language, 1) do
+    []
+  else
+    Logger.info(
+      "[test_helper] Languages.set_primary_language/1 not available - " <>
+        "single-language primary-language tests excluded. They will run " <>
+        "automatically once `phoenix_kit` is upgraded to a release that ships it."
+    )
+
+    [:requires_core_single_language]
+  end
+
 # `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
 # by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
 # `ProductSource.Catalogue` adapter's own tests need it loaded (a real
@@ -344,6 +364,7 @@ ExUnit.start(
     i18n_exclude ++
       integration_exclude ++
       transliteration_exclude ++
+      single_language_exclude ++
       catalogue_exclude ++
       user_menu_exclude ++ billing_user_menu_exclude ++ api_exclude ++ trigram_exclude
 )
