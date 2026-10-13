@@ -13,6 +13,15 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   map (`Map.has_key?(entity.slug, lang)`) — `SlugResolver` silently falls
   back to the default-language slug, which must never produce an hreflang
   entry mislabelling the fallback URL as a translation.
+
+  The share image (`og.image`, which core's root layout turns into
+  `og:image`, `twitter:image` and a `summary_large_image` card) is the
+  entity's main Storage image — `large`, else `original` — as the same
+  signed `/file/…` URL the storefront renders, absolutized on the
+  language's canonical host. For files in public libraries those tokens
+  are permanent, so a crawler that fetches the image days after the page
+  keeps getting it. No image, no `:image` key: the layout then renders a
+  plain `summary` card.
   """
 
   require Logger
@@ -21,6 +30,7 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce.Translations
+  alias PhoenixKitEcommerce.Web.Helpers
 
   @doc "SEO assigns for a product page."
   @spec product_seo(struct(), String.t()) :: map()
@@ -43,19 +53,23 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
         slug_translated_hreflang(product, fn lang ->
           PhoenixKitEcommerce.product_url(product, lang)
         end),
-      og: %{
-        type: "product",
-        title: title,
-        description: description,
-        url: canonical,
-        locale: language
-      }
+      og:
+        %{
+          type: "product",
+          title: title,
+          description: description,
+          url: canonical,
+          locale: language
+        }
+        |> put_share_image(language, product_image_uuid(product), title)
     }
   end
 
   @doc "SEO assigns for a category page."
   @spec category_seo(struct(), String.t()) :: map()
   def category_seo(category, language) do
+    name = Translations.get_display(category, :name, language)
+
     canonical =
       canonical_absolute_url(language, PhoenixKitEcommerce.category_url(category, language))
 
@@ -65,12 +79,14 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
         slug_translated_hreflang(category, fn lang ->
           PhoenixKitEcommerce.category_url(category, lang)
         end),
-      og: %{
-        type: "website",
-        title: Translations.get_display(category, :name, language),
-        url: canonical,
-        locale: language
-      }
+      og:
+        %{
+          type: "website",
+          title: name,
+          url: canonical,
+          locale: language
+        }
+        |> put_share_image(language, category_image_uuid(category), name)
     }
   end
 
@@ -95,6 +111,52 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   end
 
   # -- internals --------------------------------------------------------
+
+  # The page's main image: featured, else the first of the gallery. A
+  # catalogue product arrives with the same two fields, mapped from
+  # `data["featured_image_uuid"]` / `data["media_order"]` by its view.
+  defp product_image_uuid(%{featured_image_uuid: id}) when is_binary(id) and id != "", do: id
+  defp product_image_uuid(%{image_uuids: [id | _]}) when is_binary(id) and id != "", do: id
+  defp product_image_uuid(_), do: nil
+
+  # The same order `Category.get_image_url/2` uses: its own image, else the
+  # featured product's (preloaded on the legacy source, a placeholder
+  # carrying the resolved uuid on the catalogue one).
+  defp category_image_uuid(%{image_uuid: id}) when is_binary(id) and id != "", do: id
+
+  defp category_image_uuid(%{featured_product: %{featured_image_uuid: id}})
+       when is_binary(id) and id != "",
+       do: id
+
+  defp category_image_uuid(_), do: nil
+
+  defp put_share_image(og, _language, nil, _alt), do: og
+
+  defp put_share_image(og, language, file_uuid, alt) do
+    case share_image_path(file_uuid) do
+      nil -> og
+      path -> Map.merge(og, %{image: canonical_file_url(language, path), image_alt: alt})
+    end
+  end
+
+  # A uuid that names no file costs the image, never the page; one that is
+  # not a uuid at all (catalogue `data` is free-form JSON) never reaches the
+  # query, which would raise on the cast.
+  defp share_image_path(file_uuid) do
+    case Ecto.UUID.cast(file_uuid) do
+      {:ok, uuid} -> Helpers.get_storage_image_url(uuid, "large")
+      :error -> nil
+    end
+  end
+
+  # A file URL carries no locale segment, so — unlike a page URL — there is
+  # nothing to strip on the language's home host.
+  defp canonical_file_url(language, path) do
+    case resolve_canonical_host(language) do
+      nil -> Routes.base_url() <> path
+      host -> "https://#{host}#{path}"
+    end
+  end
 
   defp slug_translated_hreflang(entity, url_fun) do
     slug_map = Map.get(entity, :slug) || %{}
