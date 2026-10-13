@@ -20,7 +20,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeysTest do
     assert options == [
              %{
                key: "colour",
-               label: "colour",
+               label: "Colour",
                affects_price: false,
                values: [%{key: "red", label: "Red"}]
              },
@@ -79,5 +79,111 @@ defmodule PhoenixKitEcommerce.Search.OptionKeysTest do
       )
 
     assert [%{key: "large"}] = option.values
+  end
+
+  describe "affects_price" do
+    defp price_flag(modifiers) do
+      [option] =
+        OptionKeys.extract(
+          product(%{
+            "_option_values" => %{"size" => ["Large", "Small"]},
+            "_price_modifiers" => modifiers
+          })
+        )
+
+      option.affects_price
+    end
+
+    test "is true when some amount is not zero" do
+      assert price_flag(%{"size" => %{"Large" => "5.00", "Small" => "0.00"}}) == true
+
+      assert price_flag(%{"size" => %{"Large" => %{"type" => "fixed", "value" => "-2.50"}}}) ==
+               true
+    end
+
+    test "is false when the set has no modifiers or every amount is zero, blank or not a number" do
+      assert price_flag(%{}) == false
+      assert price_flag(%{"size" => %{}}) == false
+      assert price_flag(%{"size" => %{"Large" => "0.00", "Small" => "0"}}) == false
+      assert price_flag(%{"size" => %{"Large" => "", "Small" => "abc"}}) == false
+      assert price_flag(%{"size" => %{"Large" => %{"value" => "0.00"}, "Small" => nil}}) == false
+      assert price_flag(%{"size" => "oops"}) == false
+    end
+
+    test "belongs to the set it is stored under" do
+      options =
+        OptionKeys.extract(
+          product(%{
+            "_option_values" => %{"size" => ["Large"], "colour" => ["Red"]},
+            "_price_modifiers" => %{"colour" => %{"Red" => "3.00"}, "size" => %{"Large" => "0"}}
+          })
+        )
+
+      assert Enum.map(options, &{&1.key, &1.affects_price}) == [{"colour", true}, {"size", false}]
+    end
+  end
+
+  test "a set without a stored name is labelled with its humanised key" do
+    [option] = OptionKeys.extract(product(%{"_option_values" => %{"color_variant" => ["Red"]}}))
+
+    assert option.label == "Color Variant"
+    assert OptionKeys.labels([option])["color_variant"] == "Color Variant"
+  end
+
+  test "a colon in a value key cannot break the pair format either" do
+    [option] =
+      OptionKeys.extract(
+        product(%{
+          "_option_values" => %{"size" => ["Odd", "★:★"]},
+          "_value_slugs" => %{"size" => %{"Odd" => "a:b"}}
+        })
+      )
+
+    assert Enum.map(option.values, & &1.key) == ["a_b", "★_★"]
+    assert OptionKeys.pairs([option]) == ["size:a_b", "size:★_★"]
+  end
+
+  test "keys are trimmed, and a blank key or an empty slug does not make an option or a key" do
+    options =
+      OptionKeys.extract(
+        product(%{
+          "_option_values" => %{"" => ["x"], " " => ["y"], " size " => ["Large"]},
+          "_value_slugs" => %{" size " => %{"Large" => ""}}
+        })
+      )
+
+    assert [%{key: "size", values: [%{key: "large", label: "Large"}]}] = options
+  end
+
+  test "sets whose keys collapse to one key are merged into one option" do
+    options =
+      OptionKeys.extract(
+        product(%{
+          "_option_values" => %{"a:b" => ["One", "Two"], "a_b" => ["Two", "Three"]},
+          "_price_modifiers" => %{"a_b" => %{"Two" => "1.00"}}
+        })
+      )
+
+    assert [%{key: "a_b", affects_price: true, values: values}] = options
+    assert Enum.map(values, & &1.key) == ["one", "two", "three"]
+  end
+
+  test "options come out sorted by key whatever the size of the map" do
+    keys = for n <- 1..40, do: "set#{String.pad_leading(Integer.to_string(n), 2, "0")}"
+
+    options =
+      OptionKeys.extract(product(%{"_option_values" => Map.new(keys, &{&1, ["Value"]})}))
+
+    assert Enum.map(options, & &1.key) == keys
+  end
+
+  test "pairs/1 are unique and sorted" do
+    options = [
+      %{key: "size", values: [%{key: "small"}, %{key: "large"}, %{key: "small"}]},
+      %{key: "colour", values: [%{key: "red"}]},
+      %{key: "colour", values: [%{key: "red"}]}
+    ]
+
+    assert OptionKeys.pairs(options) == ["colour:red", "size:large", "size:small"]
   end
 end

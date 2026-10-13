@@ -48,4 +48,69 @@ defmodule PhoenixKitEcommerce.API.PlainTextTest do
     assert PlainText.convert(42, 10) == nil
     assert PlainText.convert(String.duplicate("a", 30), 10) == String.duplicate("a", 10)
   end
+
+  test "HTML entities are decoded once, after the tags are gone" do
+    assert text("Salt &amp; pepper &lt;b&gt; &nbsp; &quot;q&quot; &#39;x&#39; &#x41;") ==
+             ~s|Salt & pepper <b> "q" 'x' A|
+
+    assert text("&amp;lt;") == "&lt;"
+    assert text("<p>Fish &amp; chips</p>") == "Fish & chips"
+    assert text("caf&#233; &#x1F600;") == "café 😀"
+  end
+
+  test "an unknown or invalid reference stays, and a control character becomes a space" do
+    assert text("&bogus; &#1114112; &#xD800; AT&T") == "&bogus; &#1114112; &#xD800; AT&T"
+    assert text("a&#0;b") == "a b"
+    refute text("a&#0;b") =~ <<0>>
+  end
+
+  test "a tag that spans lines does not lose the text after its closing bracket" do
+    assert text("<a href=\"x\"\n>link</a> and more") == "link and more"
+  end
+
+  test "a link target with parentheses is removed whole" do
+    assert text("[a](http://en.wikipedia.org/wiki/Foo_(bar)) tail") == "a tail"
+  end
+
+  test "a table cell loses the backslash before its pipe" do
+    assert text("| a\\|b | c |\n|---|---|\n| d | e |") == "a b c d e"
+    assert text("x\\|y") == "x|y"
+  end
+
+  test "script and style blocks are dropped, closed or not" do
+    assert text(
+             "<style>a{color:red}</style>Hi <script>alert(1)</script>text<SCRIPT\n>x</SCRIPT >!"
+           ) ==
+             "Hi text !"
+
+    assert text("Before <script>unclosed") == "Before"
+    assert text("<scripts>kept</scripts>") == "kept"
+  end
+
+  test "a code fence loses its fence lines and keeps the code" do
+    assert text("Before\n```elixir\nlet x = 1\n```\nafter") == "Before let x = 1 after"
+  end
+
+  test "an underscore or an asterisk inside a word is not emphasis" do
+    assert text("foo_bar_ baz") == "foo_bar_ baz"
+    assert text("foo*bar* baz") == "foo*bar* baz"
+  end
+
+  test "markup around tags is still removed" do
+    assert text("**<b>bold</b>** here") == "bold here"
+  end
+
+  test "unclosed markers in a huge value finish quickly" do
+    for unit <- ["**a ", "__a ", "~~a ", "<a ", "[a ", "< "] do
+      input = String.duplicate(unit, 200_000)
+      {micros, _result} = :timer.tc(fn -> PlainText.convert(input, 4_000) end)
+
+      assert micros < 2_000_000, "#{inspect(unit)} took #{div(micros, 1000)} ms"
+    end
+  end
+
+  test "the limit applies to the decoded text and the result has no trailing space" do
+    assert PlainText.convert("aaaa &amp; bbbb", 6) == "aaaa &"
+    assert PlainText.convert("aaaa bbbb", 5) == "aaaa"
+  end
 end

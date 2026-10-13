@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
   """
 
   alias PhoenixKit.Utils.Slug
+  alias PhoenixKitEcommerce.Options
 
   @type value :: %{key: String.t(), label: String.t()}
   @type option :: %{
@@ -20,7 +21,11 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
           values: [value()]
         }
 
-  @doc "The options of `product`, sorted by key; options without a usable value are left out."
+  @doc """
+  The options of `product`, sorted by key; options without a usable value are
+  left out, and sets whose keys collapse to one key (`"a:b"` and `"a_b"`) are
+  merged into one option.
+  """
   @spec extract(PhoenixKitEcommerce.Product.t()) :: [option()]
   def extract(product) do
     meta = map(product.metadata)
@@ -32,24 +37,26 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     values
     |> Enum.sort_by(fn {key, _labels} -> to_string(key) end)
     |> Enum.flat_map(fn {raw_key, labels} ->
-      key = raw_key |> to_string() |> String.replace(":", "_")
-      entries = entries(slugs, to_string(raw_key), key, labels)
+      raw_key = to_string(raw_key)
+      key = raw_key |> String.trim() |> neutral()
+      entries = entries(slugs, raw_key, key, labels)
 
-      case entries do
-        [] ->
-          []
-
-        _some ->
-          [
-            %{
-              key: key,
-              label: set_label(names, to_string(raw_key), key),
-              affects_price: Map.has_key?(modifiers, to_string(raw_key)),
-              values: entries
-            }
-          ]
+      if entries == [] do
+        []
+      else
+        [
+          %{
+            key: key,
+            label: set_label(names, raw_key),
+            affects_price: Options.has_nonzero_modifiers?(Map.get(modifiers, raw_key)),
+            values: entries
+          }
+        ]
       end
     end)
+    |> Enum.group_by(& &1.key)
+    |> Enum.sort_by(fn {key, _group} -> key end)
+    |> Enum.map(fn {_key, [first | rest]} -> Enum.reduce(rest, first, &merge/2) end)
   end
 
   @doc "`[\"size:large\", ...]`, sorted and unique."
@@ -81,8 +88,8 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
 
   defp value_key(slugs, key, label) do
     case slugs |> map() |> Map.get(key) |> map() |> Map.get(label) do
-      slug when is_binary(slug) and slug != "" -> slug
-      _none -> fallback_key(label)
+      slug when is_binary(slug) and slug != "" -> neutral(slug)
+      _none -> label |> fallback_key() |> neutral()
     end
   end
 
@@ -93,11 +100,23 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     end
   end
 
-  defp set_label(names, raw_key, key) do
+  # The pair format is `key:value`, so neither part may hold a colon.
+  defp neutral(key), do: String.replace(key, ":", "_")
+
+  # The set's display name, else the same humanised key the rest of the module shows.
+  defp set_label(names, raw_key) do
     case Map.get(names, raw_key) do
       name when is_binary(name) and name != "" -> name
-      _none -> key
+      _none -> Options.humanize_key(raw_key)
     end
+  end
+
+  defp merge(option, acc) do
+    %{
+      acc
+      | affects_price: acc.affects_price or option.affects_price,
+        values: Enum.uniq_by(acc.values ++ option.values, & &1.key)
+    }
   end
 
   defp map(%{} = value), do: value

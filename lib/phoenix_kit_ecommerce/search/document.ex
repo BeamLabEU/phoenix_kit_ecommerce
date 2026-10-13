@@ -7,7 +7,17 @@ defmodule PhoenixKitEcommerce.Search.Document do
   Text is language-resolved the way the storefront resolves it
   (`Translations.get/3`: the exact language, then the shop's default language,
   then any value), so a product with no German title is still found by the
-  German search, under its default-language title.
+  German search, under its default-language title. A blank value counts as
+  missing, so an empty German title falls back as well.
+
+  The index holds the names as stored: the storefront-only `shop_name_prefixes`
+  setting (`Translations.get_display/4`) does not decide what can be found, and
+  nothing reindexes when it changes.
+
+  Only `active` categories of the chain are indexed (their names, their uuids
+  and the leaf `category_uuid`): a hidden, deleted or unlisted ancestor, or an
+  unlisted category of the product itself, is never named or searchable
+  through the product, although the product itself stays listed.
 
   The weights of the `tsvector` the indexer builds from these parts:
   title A; vendor, tags and category names B (`:text_b`); option set names and
@@ -33,6 +43,7 @@ defmodule PhoenixKitEcommerce.Search.Document do
   end
 
   defp row(%Record{product: product, chain: chain, facts: facts}, language, title) do
+    chain = Enum.filter(chain, &(&1.status == "active"))
     options = OptionKeys.extract(product)
     labels = OptionKeys.labels(options)
     category_names = Enum.map(chain, &category_name(&1, language))
@@ -75,21 +86,39 @@ defmodule PhoenixKitEcommerce.Search.Document do
   end
 
   defp title(product, language) do
-    product |> Translations.get_display(:title, language) |> blank_to_nil()
+    product |> localized(:title, language) |> blank_to_nil()
   end
 
   defp category_name(category, language) do
-    case Translations.get_display(category, :name, language) do
+    case localized(category, :name, language) do
       name when is_binary(name) -> name
       _other -> ""
     end
   end
 
+  # The body when it has text, else the short description.
   defp description(product, language) do
-    body = product |> Translations.get(:body_html, language) |> blank_to_nil()
-    text = body || Translations.get(product, :description, language)
-    PlainText.convert(text, @description_limit) || ""
+    text =
+      Enum.find_value([:body_html, :description], fn field ->
+        product |> localized(field, language) |> PlainText.convert(@description_limit)
+      end)
+
+    text || ""
   end
+
+  # `Translations.get/3` with blank values left out, so an empty string in the
+  # requested language does not defeat the fallback.
+  defp localized(entity, field, language) do
+    entity
+    |> Map.update(field, %{}, &drop_blank/1)
+    |> Translations.get(field, language)
+  end
+
+  defp drop_blank(%{} = values) do
+    values |> Enum.reject(fn {_language, value} -> blank_to_nil(value) == nil end) |> Map.new()
+  end
+
+  defp drop_blank(_other), do: %{}
 
   defp on_sale?(%Decimal{} = price, %Decimal{} = compare_at) do
     Decimal.compare(price, 0) == :gt and Decimal.compare(compare_at, price) == :gt

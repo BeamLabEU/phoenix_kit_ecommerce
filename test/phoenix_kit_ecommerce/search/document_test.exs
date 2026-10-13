@@ -20,6 +20,7 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
   end
 
   @root Ecto.UUID.generate()
+  @mid Ecto.UUID.generate()
   @leaf Ecto.UUID.generate()
 
   defp category(uuid, names, parent),
@@ -146,6 +147,9 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
     assert Decimal.equal?(row.discount_pct, Decimal.new("20.00"))
     assert Decimal.equal?(row.compare_at_price, Decimal.new("25.00"))
 
+    third = Document.build(record(%{compare_at_price: Decimal.new("30.00")}), "en")
+    assert Decimal.equal?(third.discount_pct, Decimal.new("33.33"))
+
     flat = Document.build(record(%{compare_at_price: Decimal.new("20.00")}), "en")
     assert flat.on_sale == false
     assert flat.discount_pct == nil
@@ -199,7 +203,7 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
     assert row.text_d == "Full body"
 
     capped = Document.build(record(%{body_html: %{"en" => long}}), "en")
-    assert String.length(capped.text_d) <= 5_000
+    assert String.length(capped.text_d) in 4_990..5_000
   end
 
   test "an inserted_at that is a NaiveDateTime is read as UTC" do
@@ -207,5 +211,103 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
     assert row.item_inserted_at == ~U[2026-01-02 03:04:05Z]
 
     assert Document.build(record(%{inserted_at: nil}), "en").item_inserted_at == nil
+  end
+
+  test "the row holds exactly the keys the indexer writes" do
+    row = Document.build(record(), "en")
+
+    assert row |> Map.keys() |> Enum.sort() ==
+             Enum.sort(~w(item_uuid language regconfig title text_b text_c text_d category_uuid
+                          category_path category_path_uuids vendor tags option_pairs option_labels
+                          made_to_order on_sale price compare_at_price discount_pct sort_position
+                          item_inserted_at)a)
+  end
+
+  test "a missing position sorts as 0 and a nil made_to_order is false" do
+    record = record(%{made_to_order: nil})
+    row = Document.build(%{record | facts: %Facts{record.facts | position: nil}}, "en")
+
+    assert row.sort_position == 0
+    assert row.made_to_order == false
+  end
+
+  test "tags that are not strings are dropped" do
+    assert Document.build(record(%{tags: ["a", 1, nil, "b"]}), "en").tags == ["a", "b"]
+  end
+
+  test "a blank value in the requested language falls back like a missing one" do
+    row =
+      Document.build(
+        record(%{
+          title: %{"en" => "Red Vase", "de" => ""},
+          body_html: %{"en" => "English body", "de" => "  "}
+        }),
+        "de"
+      )
+
+    assert row.title == "Red Vase"
+    assert row.text_d == "English body"
+
+    names = [category(@root, %{"en" => "Home", "de" => ""}, nil)]
+    assert Document.build(record(%{}, names), "de").category_path == ["Home"]
+  end
+
+  test "the description falls through to the short one when the body is blank or has no text" do
+    short = %{description: %{"en" => "Short words"}}
+
+    assert Document.build(record(Map.put(short, :body_html, %{"en" => "   "})), "en").text_d ==
+             "Short words"
+
+    assert Document.build(record(Map.put(short, :body_html, %{"en" => "<p></p>"})), "en").text_d ==
+             "Short words"
+
+    assert Document.build(record(Map.put(short, :body_html, %{"en" => "Body"})), "en").text_d ==
+             "Body"
+  end
+
+  test "names are indexed as stored: the storefront name prefix does not strip them" do
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_name_prefixes", "3D Printed")
+
+    named = [category(@root, %{"en" => "3D Printed Home"}, nil)]
+    row = Document.build(record(%{title: %{"en" => "3D Printed Red Vase"}}, named), "en")
+
+    assert row.title == "3D Printed Red Vase"
+    assert row.category_path == ["3D Printed Home"]
+    assert row.text_b =~ "3D Printed Home"
+  end
+
+  describe "categories that are not active" do
+    defp hidden_chain(status) do
+      [
+        category(@root, %{"en" => "Home"}, nil),
+        %{category(@mid, %{"en" => "Secret"}, @root) | status: status},
+        category(@leaf, %{"en" => "Vases"}, @mid)
+      ]
+    end
+
+    test "a hidden, deleted or unlisted ancestor is neither named, searchable nor listed" do
+      for status <- ["hidden", "unlisted", "deleted", "weird"] do
+        row = Document.build(record(%{}, hidden_chain(status)), "en")
+
+        assert row.category_path == ["Home", "Vases"]
+        assert row.category_path_uuids == [@root, @leaf]
+        assert row.category_uuid == @leaf
+        refute row.text_b =~ "Secret"
+        assert row.text_b == "Acme ceramic gift Home Vases"
+      end
+    end
+
+    test "the product's own unlisted category is not exposed either" do
+      chain = [
+        category(@root, %{"en" => "Home"}, nil),
+        %{category(@leaf, %{"en" => "Vases"}, @root) | status: "unlisted"}
+      ]
+
+      row = Document.build(record(%{}, chain), "en")
+
+      assert row.category_path == ["Home"]
+      assert row.category_path_uuids == [@root]
+      assert row.category_uuid == @root
+    end
   end
 end
