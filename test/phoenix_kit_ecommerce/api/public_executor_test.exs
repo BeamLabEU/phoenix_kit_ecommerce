@@ -202,6 +202,81 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     assert [%{"path" => "currency", "allowed" => ["EUR", "USD"]}] = body["context"]["errors"]
   end
 
+  # One letter and 300 combining marks: a single grapheme, 301 code points. The
+  # schema counts code points, `SearchParams` counts graphemes, so only the
+  # schema's own bound refuses it.
+  @many_marks "a" <> String.duplicate("\u0301", 300)
+
+  test "the schema bounds hold on their own: a vendor and an option value over 200 code points" do
+    assert {422, body, _} = call("shop.search_products", %{"vendor" => @many_marks})
+    assert [%{"path" => "vendor", "limit" => 200}] = body["context"]["errors"]
+
+    assert {422, body, _} =
+             call("shop.search_products", %{"options" => %{"size" => [@many_marks]}})
+
+    assert [%{"path" => "options.size[0]", "limit" => 200}] = body["context"]["errors"]
+
+    assert {422, body, _} =
+             call("shop.search_products_batch", %{"queries" => [%{"vendor" => @many_marks}]})
+
+    assert [%{"path" => "queries[0].vendor"}] = body["context"]["errors"]
+  end
+
+  test "the schema bounds hold on their own: more than 50 values of one option" do
+    values = Enum.map(1..51, &"v#{&1}")
+
+    assert {422, body, _} = call("shop.search_products", %{"options" => %{"size" => values}})
+
+    assert [%{"path" => "options.size", "limit" => 50, "message" => message}] =
+             body["context"]["errors"]
+
+    assert message =~ "50 items"
+  end
+
+  test "the schema bounds hold on their own: a price string over 40 characters that is a number" do
+    # 41 zeros parse as 0, so only the schema's maxLength refuses them.
+    assert {200, _, _} = call("shop.search_products", %{"price_max" => String.duplicate("0", 40)})
+
+    for name <- ["price_min", "price_max"] do
+      assert {422, body, _} =
+               call("shop.search_products", %{name => String.duplicate("0", 41)})
+
+      assert [%{"path" => ^name, "limit" => 40}] = body["context"]["errors"]
+    end
+  end
+
+  test "an option key is counted in bytes before graphemes: a string of marks is refused, never walked" do
+    marks = fn n -> "a" <> String.duplicate("\u0301", n) end
+
+    # 1 grapheme but 901 bytes: over 4 bytes per allowed character
+    for key <- [marks.(450), marks.(900_000)] do
+      assert {422, body, _} = call("shop.search_products", %{"options" => %{key => ["x"]}})
+      assert [%{"path" => "options"}] = body["context"]["errors"]
+    end
+
+    # 200 two-byte characters are within the limit
+    assert {200, _, _} =
+             call("shop.search_products", %{"options" => %{String.duplicate("é", 200) => ["x"]}})
+  end
+
+  test "an option key echoed in an error path is cut at 64 bytes, as core cuts its own" do
+    key = String.duplicate("k", 150)
+
+    assert {422, body, _} =
+             call("shop.search_products", %{"options" => %{key => ["a" <> <<0>> <> "b"]}})
+
+    assert [%{"path" => path}] = body["context"]["errors"]
+    assert path == "options." <> String.duplicate("k", 64) <> "..."
+
+    assert {200, %{"results" => [%{"error" => error}]}, _} =
+             call("shop.search_products_batch", %{
+               "queries" => [%{"options" => %{key => ["a" <> <<0>> <> "b"]}}]
+             })
+
+    assert [%{"path" => batch_path}] = error["context"]["errors"]
+    assert batch_path == "queries[0].options." <> String.duplicate("k", 64) <> "..."
+  end
+
   test "schema errors name the field: a limit of 0, a field that is not an item field" do
     assert {422, body, _} = call("shop.search_products", %{"limit" => 0})
     assert [%{"path" => "limit"}] = body["context"]["errors"]

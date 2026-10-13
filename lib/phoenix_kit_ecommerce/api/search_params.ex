@@ -25,6 +25,8 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   @max_option_keys 20
   @max_option_values 50
   @max_text_length 200
+  # The longest option key echoed in an error path, in bytes.
+  @max_path_key 64
   # A price above this is refused before it is turned into a Decimal.
   @max_price 1_000_000_000_000_000
 
@@ -129,7 +131,6 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
     if Decimal.compare(base, 0) == :lt, do: Decimal.new(0), else: base
   end
 
-  defp parse_decimal(value) when is_integer(value) and value > @max_price, do: :error
   defp parse_decimal(value) when is_integer(value), do: non_negative(Decimal.new(value))
   defp parse_decimal(value) when is_float(value), do: non_negative(Decimal.from_float(value))
 
@@ -183,7 +184,7 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
         {acc,
          error(
            state,
-           "options.#{key}",
+           "options." <> path_key(key),
            "must be a list of 1 to #{@max_option_values} value keys of at most #{@max_text_length} characters",
            %{limit: @max_option_values}
          )}
@@ -202,9 +203,21 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
 
   # A NUL byte is refused by Postgres (22021) and would be a 500 on every
   # request that carries it; `Query.clean_q/1` removes it from the search text,
-  # the other text filters are refused here instead.
-  defp text?(value, max_length),
-    do: not String.contains?(value, <<0>>) and String.length(value) <= max_length
+  # the other text filters are refused here instead. A character is at most
+  # four bytes, so a longer string is refused before its graphemes are counted:
+  # one letter followed by a million combining marks costs a size check, not a
+  # walk over the whole string.
+  defp text?(value, max_length) do
+    byte_size(value) <= 4 * max_length and not String.contains?(value, <<0>>) and
+      String.length(value) <= max_length
+  end
+
+  # An error path carries a key the client chose; keep it as short as core
+  # keeps its own paths.
+  defp path_key(key) when byte_size(key) > @max_path_key,
+    do: String.byte_slice(key, 0, @max_path_key) <> "..."
+
+  defp path_key(key), do: key
 
   defp put_vendor(state, input) do
     case Map.get(input, "vendor") do
