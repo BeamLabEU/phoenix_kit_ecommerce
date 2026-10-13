@@ -537,6 +537,91 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert String.length(reason) < 150
   end
 
+  describe "a picture that cannot be fetched never takes the call down" do
+    @cdn "cdn.sec-test.example"
+
+    setup do
+      lookup = :inet_db.res_option(:lookup)
+      :inet_db.set_lookup([:file, :native])
+      :inet_db.add_host({93, 184, 216, 34}, [String.to_charlist(@cdn)])
+
+      on_exit(fn ->
+        :inet_db.del_host({93, 184, 216, 34})
+        :inet_db.set_lookup(lookup)
+      end)
+    end
+
+    test "a host name URL with a space is refused for its row, with no request and no log line of it",
+         %{catalogue: catalogue, ctx: ctx} do
+      serve(%{})
+      item = F.item!(catalogue)
+      url = "https://#{@cdn}/a b.png?sig=SUPERSECRETSIGNATURE"
+
+      {answer, log} =
+        with_log([level: :debug], fn -> attach([row(item, [%{"url" => url}])], ctx) end)
+
+      assert {:ok, %{"results" => [result]}} = answer
+      assert result["action"] == "error"
+      assert [%{"path" => "images[0].url"}] = result["error"]["context"]["errors"]
+      refute inspect(answer) =~ "SUPERSECRETSIGNATURE"
+      refute log =~ "SUPERSECRETSIGNATURE"
+      refute_received {:requested, _}
+    end
+
+    test "a very long file name is shortened, the picture is stored",
+         %{catalogue: catalogue, ctx: ctx, first: first} do
+      item = F.item!(catalogue)
+      path = "/" <> String.duplicate("a", 300) <> ".png"
+      serve(%{path => {"image/png", first}})
+
+      assert {:ok, %{"results" => [%{"attached" => 1, "failed" => []}]}} =
+               attach([row(item, [host_image(path)])], ctx)
+
+      [file_uuid] = F.reload!(item).data["media_order"]
+      assert String.length(Storage.get_file(file_uuid).original_file_name) <= 130
+    end
+
+    test "a redirect to a URL with a non-ASCII path fails that picture; the others are kept",
+         %{catalogue: catalogue, ctx: ctx, first: first} do
+      item = F.item!(catalogue)
+      test_pid = self()
+
+      Req.Test.stub(@stub, fn conn ->
+        send(test_pid, {:requested, conn.request_path})
+
+        case conn.request_path do
+          "/ok.png" ->
+            conn
+            |> Plug.Conn.put_resp_content_type("image/png")
+            |> Plug.Conn.send_resp(200, first)
+
+          "/moved.png" ->
+            conn
+            |> Plug.Conn.put_resp_header("location", "https://#{@cdn}/caf\u00E9.png?sig=SECRET")
+            |> Plug.Conn.send_resp(302, "")
+        end
+      end)
+
+      {answer, log} =
+        with_log([level: :debug], fn ->
+          attach(
+            [row(item, [host_image("/ok.png"), host_image("/moved.png?sig=SECRET")])],
+            ctx
+          )
+        end)
+
+      assert {:ok, %{"results" => [result]}} = answer
+      assert result["attached"] == 1
+      assert [%{"url" => failed_url, "reason" => reason}] = result["failed"]
+      assert failed_url == "https://#{@cdn}/moved.png"
+      assert reason =~ "percent-encoded"
+      refute log =~ "SECRET"
+      refute inspect(answer) =~ "SECRET"
+    end
+
+    defp host_image(path), do: %{"url" => "https://#{@cdn}" <> path}
+  end
+
   describe "the storefront cache" do
     setup do
       start_supervised!(PhoenixKit.Cache.Registry)

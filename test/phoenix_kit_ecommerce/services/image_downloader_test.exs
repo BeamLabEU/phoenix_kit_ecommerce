@@ -79,6 +79,16 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
       assert opts[:headers] == [{"host", "cdn.example.com:8443"}]
     end
 
+    test "a URL that is not strictly valid does not raise" do
+      assert {url, _opts} =
+               ImageDownloader.pinned_request(
+                 "https://cdn.example.com/a b.png?sig=abc",
+                 {93, 184, 216, 34}
+               )
+
+      assert url =~ "93.184.216.34"
+    end
+
     test "an IPv6 address is bracketed in the URL" do
       assert {"https://[2606:4700::1]/a.jpg", opts} =
                ImageDownloader.pinned_request(
@@ -87,6 +97,48 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
                )
 
       assert opts[:connect_options] == [hostname: "cdn.example.com"]
+    end
+  end
+
+  describe "a URL the request cannot be built from" do
+    test "is refused as invalid before any lookup or request" do
+      for url <- [
+            "https://cdn.example.com/a b.png?sig=abc",
+            "https://cdn.example.com/caf\u00E9.png",
+            "https://cdn.example.com/a|b.png",
+            "https://cdn.example.com/a.png?x={y}"
+          ] do
+        assert ImageDownloader.check_url(url) == {:error, :invalid_url}
+        assert {:error, :invalid_url} = ImageDownloader.download_image(url, opts())
+      end
+    end
+
+    test "a redirect to such a URL fails the picture, it does not crash" do
+      Req.Test.stub(@stub, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://93.184.216.34/caf\u00E9.png")
+        |> Plug.Conn.send_resp(302, "")
+      end)
+
+      assert {:error, :invalid_url} = ImageDownloader.download_image(@url, opts())
+    end
+  end
+
+  describe "download_batch/3 — one URL cannot take the caller down" do
+    test "a crash while fetching is a failed picture and its URL reaches no log line" do
+      url = @url <> "?sig=SUPERSECRETSIGNATURE"
+      crash = fn _conn -> raise "boom" end
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert [{^url, {:error, :download_failed}}] =
+                   ImageDownloader.download_batch([url], nil,
+                     req_options: [plug: crash],
+                     redact_query: true
+                   )
+        end)
+
+      refute log =~ "SUPERSECRETSIGNATURE"
     end
   end
 

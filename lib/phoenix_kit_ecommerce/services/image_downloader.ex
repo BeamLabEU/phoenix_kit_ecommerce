@@ -515,7 +515,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     indexed_urls
     |> Task.async_stream(
       fn {url, index} ->
-        result = download_and_store(url, user_uuid, opts)
+        result = guarded_download(url, user_uuid, opts)
 
         if on_progress do
           on_progress.(url, result, index, total)
@@ -538,6 +538,21 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
         Logger.warning("Task exited for URL #{log_url(url, opts)}: #{inspect(reason)}")
         {url, {:error, {:task_exit, reason}}}
     end)
+  end
+
+  # One URL's work never takes the caller down: the batch's tasks are linked
+  # to it, and a crash report of a task prints its arguments - the URL, with
+  # a signed query string in it. Only the shape of the failure is logged.
+  defp guarded_download(url, user_uuid, opts) do
+    download_and_store(url, user_uuid, opts)
+  rescue
+    exception ->
+      Logger.error("[ImageDownloader] Download crashed: #{inspect(exception.__struct__)}")
+      {:error, :download_failed}
+  catch
+    kind, _reason ->
+      Logger.error("[ImageDownloader] Download crashed: #{kind}")
+      {:error, :download_failed}
   end
 
   @doc """
@@ -652,6 +667,11 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       is_nil(uri.host) or uri.host == "" ->
         {:error, :invalid_host}
 
+      # `URI.parse/1` is lenient; a space, a non-ASCII character or a `|` in
+      # the URL is not something the request can be built from.
+      match?({:error, _}, URI.new(url)) ->
+        {:error, :invalid_url}
+
       true ->
         # Upgrade HTTP to HTTPS for security
         url =
@@ -762,12 +782,13 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   def pinned_request(url, nil), do: {url, []}
 
   def pinned_request(url, address) when is_tuple(address) do
-    # `URI.new!/1`, not `parse/1`: it leaves the deprecated `authority`
-    # field nil, so `to_string/1` rebuilds the authority from the pinned
-    # host rather than echoing the original one.
-    uri = URI.new!(url)
+    # `authority` is cleared so `to_string/1` rebuilds it from the pinned
+    # host rather than echoing the original one. `parse/1`, not `new!/1`:
+    # a URL that cannot be parsed strictly never gets here (`validate_url/2`
+    # refuses it), and this function must not be the place that raises.
+    uri = URI.parse(url)
     ip = address |> :inet.ntoa() |> to_string()
-    pinned_url = URI.to_string(%{uri | host: ip})
+    pinned_url = URI.to_string(%{uri | host: ip, authority: nil})
 
     host_header =
       if uri.port in [nil, URI.default_port(uri.scheme)],
@@ -1042,6 +1063,10 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     Path.join(System.tmp_dir!(), "phx_img_#{random}.#{ext}")
   end
 
+  # `original_file_name` is a varchar(255): a long last path segment must
+  # not reach the insert.
+  @max_filename_base_chars 120
+
   defp extract_filename_from_url(url, content_type) do
     uri = URI.parse(url)
 
@@ -1058,7 +1083,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
           |> List.first()
           |> case do
             "" -> "image"
-            name -> Path.rootname(name)
+            name -> name |> Path.rootname() |> String.slice(0, @max_filename_base_chars)
           end
       end
 

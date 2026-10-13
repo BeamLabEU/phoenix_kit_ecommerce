@@ -363,6 +363,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   defp reason_text(:private_address_blocked), do: "the address is private or does not resolve"
   defp reason_text(:invalid_scheme), do: "only http and https URLs are accepted"
   defp reason_text(:invalid_host), do: "the URL has no host"
+  defp reason_text(:invalid_url), do: "the URL contains characters that must be percent-encoded"
   defp reason_text(:timeout), do: "the download timed out"
   defp reason_text(:not_found), do: "the server answered 404"
   defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)
