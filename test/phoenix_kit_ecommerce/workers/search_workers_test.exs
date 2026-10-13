@@ -81,6 +81,18 @@ defmodule PhoenixKitEcommerce.Workers.SearchWorkersTest do
     assert paths() == []
   end
 
+  test "a reindex job does nothing while the shop module is switched off" do
+    product = legacy_product!(%{"en" => "Red Vase"})
+    root = legacy_category!(%{"en" => "Home"})
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+
+    assert :ok = perform(SearchReindexWorker, %{"kind" => "item", "uuid" => product.uuid})
+    assert :ok = perform(SearchReindexWorker, %{"kind" => "items", "uuids" => [product.uuid]})
+    assert :ok = perform(SearchReindexWorker, %{"kind" => "category", "uuid" => root.uuid})
+
+    assert paths() == []
+  end
+
   test "both workers use the shop_search queue and a rebuild is unique" do
     assert to_string(SearchReindexWorker.new(%{}).changes.queue) == "shop_search"
     assert to_string(SearchRebuildWorker.new(%{}).changes.queue) == "shop_search"

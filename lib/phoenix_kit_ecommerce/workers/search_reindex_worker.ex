@@ -12,20 +12,27 @@ defmodule PhoenixKitEcommerce.Workers.SearchReindexWorker do
 
   Uses the `shop_search` queue (declared by `PhoenixKitEcommerce.oban_queues/0`).
   Enqueue through `PhoenixKitEcommerce.Search.Jobs`, which coalesces bursts.
+  While the shop module is switched off a job does nothing, as with the rebuild
+  worker: jobs queued before the switch-off leave the index as it is.
   """
 
   use Oban.Worker, queue: :shop_search, max_attempts: 3
 
+  alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.Search.Indexer
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"kind" => "item", "uuid" => uuid}}), do: reindex([uuid])
+  def perform(%Oban.Job{} = job) do
+    if Shop.enabled?(), do: run(job), else: :ok
+  end
 
-  def perform(%Oban.Job{args: %{"kind" => "items", "uuids" => uuids}}) when is_list(uuids),
+  defp run(%Oban.Job{args: %{"kind" => "item", "uuid" => uuid}}), do: reindex([uuid])
+
+  defp run(%Oban.Job{args: %{"kind" => "items", "uuids" => uuids}}) when is_list(uuids),
     do: reindex(uuids)
 
-  def perform(%Oban.Job{args: %{"kind" => "category", "uuid" => uuid}}) when is_binary(uuid) do
+  defp run(%Oban.Job{args: %{"kind" => "category", "uuid" => uuid}}) when is_binary(uuid) do
     uuid
     |> Loader.subtree_uuids(Loader.categories())
     |> Loader.item_ids_in_categories()
@@ -33,7 +40,7 @@ defmodule PhoenixKitEcommerce.Workers.SearchReindexWorker do
   end
 
   # Only the argument keys are reported: the values are ids from an event.
-  def perform(%Oban.Job{args: args}),
+  defp run(%Oban.Job{args: args}),
     do: {:cancel, "unknown search job, argument keys: #{inspect(Map.keys(args))}"}
 
   defp reindex(uuids) do
