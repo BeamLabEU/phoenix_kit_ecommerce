@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.23 - 2026-10-13
+
+### Fixed
+
+- **My Orders filter and pagination.** The status filter and the page
+  buttons patched to the bare `/dashboard/orders`, so neither applied.
+  `Helpers.page_path/3` now takes a `query` and appends it encoded
+  (review of #89).
+
 ## 0.5.22 - 2026-10-13
 
 ### Added
