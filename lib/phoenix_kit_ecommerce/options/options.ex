@@ -59,6 +59,8 @@ defmodule PhoenixKitEcommerce.Options do
   - Final: ($20 + $10) * 1.20 = $36
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.OptionTypes
   alias PhoenixKitEcommerce.ShopConfig
@@ -421,17 +423,69 @@ defmodule PhoenixKitEcommerce.Options do
   end
 
   @doc """
+  Changes a category's option list as it is stored NOW.
+
+  The category row is locked for the length of the call and `fun` is handed
+  the list read under that lock, so a writer applies only its own change: a
+  form that loaded the category earlier cannot write back a copy that
+  predates another admin's edit. `update_category_options/2` replaces the
+  whole list and is for callers that mean to.
+
+  `fun` answers `{:ok, list}` (yields the updated category), `{:ok, list,
+  result}` (yields `result`), `{:unchanged, result}` (writes nothing) or
+  `{:error, reason}` (rolls back). A list that fails validation is refused.
+  """
+  @spec transform_category_options(Category.t(), ([map()] -> term())) ::
+          {:ok, term()} | {:error, term()}
+  def transform_category_options(%Category{uuid: uuid}, fun) when is_function(fun, 1) do
+    repo().transaction(fn ->
+      case lock_category(uuid) do
+        nil ->
+          repo().rollback(:category_not_found)
+
+        category ->
+          category
+          |> get_category_options()
+          |> fun.()
+          |> apply_category_change(category)
+      end
+    end)
+  end
+
+  defp lock_category(uuid) do
+    repo().one(from(c in Category, where: c.uuid == ^uuid, lock: "FOR UPDATE"))
+  end
+
+  defp apply_category_change({:ok, updated}, category),
+    do: write_category_options(category, updated, & &1)
+
+  defp apply_category_change({:ok, updated, result}, category),
+    do: write_category_options(category, updated, fn _category -> result end)
+
+  defp apply_category_change({:unchanged, result}, _category), do: result
+  defp apply_category_change({:error, reason}, _category), do: repo().rollback(reason)
+
+  defp write_category_options(category, updated, finish) do
+    case update_category_options(category, updated) do
+      {:ok, category} -> finish.(category)
+      {:error, reason} -> repo().rollback(reason)
+    end
+  end
+
+  @doc """
   Adds a single option to category schema.
   """
   def add_category_option(%Category{} = category, opt) when is_map(opt) do
     with {:ok, validated} <- OptionTypes.validate_option(opt) do
-      current = get_category_options(category)
+      transform_category_options(category, &append_category_option(&1, validated))
+    end
+  end
 
-      if Enum.any?(current, &(&1["key"] == validated["key"])) do
-        {:error, {:option_key_exists_in_category, validated["key"]}}
-      else
-        update_category_options(category, current ++ [validated])
-      end
+  defp append_category_option(current, option) do
+    if Enum.any?(current, &(&1["key"] == option["key"])) do
+      {:error, {:option_key_exists_in_category, option["key"]}}
+    else
+      {:ok, current ++ [option]}
     end
   end
 
@@ -439,9 +493,9 @@ defmodule PhoenixKitEcommerce.Options do
   Removes an option from category schema by key.
   """
   def remove_category_option(%Category{} = category, key) when is_binary(key) do
-    current = get_category_options(category)
-    updated = Enum.reject(current, &(&1["key"] == key))
-    update_category_options(category, updated)
+    transform_category_options(category, fn current ->
+      {:ok, Enum.reject(current, &(&1["key"] == key))}
+    end)
   end
 
   # ============================================

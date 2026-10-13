@@ -59,6 +59,7 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   therefore before whatever sleep that iteration might otherwise start).
   """
 
+  alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.Shopify.ShopDomain
 
   @page_limit 250
@@ -67,6 +68,8 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   @default_retry_after_seconds 5
   @max_retry_after_seconds 60
   @max_pages 200
+  @max_redirects 3
+  @redirect_statuses [301, 302, 303, 307, 308]
   @default_deadline_ms :timer.minutes(2)
 
   @doc """
@@ -99,6 +102,10 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
 
     * `:req_options` — keyword list merged into `Req.new/1` (e.g. `plug:`
       to stub the transport in tests).
+    * `:address_check` — `(host -> {:ok, pin} | :error)`, asked for every
+      redirect hop that leaves the shop host. Defaults to
+      `ImageDownloader.public_address/1`; tests pass a stub so no DNS is
+      queried.
     * `:page_delay_ms` — pause between page requests, to stay gentle with
       the storefront's rate limit. Defaults to 500ms; tests pass `0`.
     * `:deadline_ms` — the wall-clock budget for the whole fetch (paging
@@ -112,10 +119,14 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
     end
   end
 
-  # Redirects stay on here, unlike `AdminClient`: this request carries no
-  # credential, and a `*.myshopify.com` storefront answers with a redirect
-  # to the store's primary domain whenever it has one. The chain is short
-  # and a response that is not a product list is reported by shape only.
+  # Redirects are followed here, unlike `AdminClient`: this request carries
+  # no credential, and a `*.myshopify.com` storefront answers with a redirect
+  # to the store's primary domain whenever it has one. They are followed by
+  # `get/3`, not by Req, because a `Location` header is the remote side's
+  # word: every hop must be https on the default port and, off the validated
+  # shop host, resolve only to public addresses — and the connection is
+  # pinned to the address that was checked. A response that is not a product
+  # list is reported by shape only.
   defp do_fetch_products(shop_domain, opts) do
     # `retry: false` — this module owns 429 handling itself (the 429
     # clauses in `fetch_pages/6` below), because that requires resuming
@@ -126,9 +137,14 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
     # take 30+ real seconds to surface in tests before this module had
     # its own 429 handling.
     req =
-      [base_url: "https://#{shop_domain}", retry: false, max_redirects: 3]
+      [base_url: "https://#{shop_domain}", retry: false, redirect: false]
       |> Keyword.merge(Keyword.get(opts, :req_options, []))
       |> Req.new()
+      |> Req.Request.put_private(:shop_host, shop_domain)
+      |> Req.Request.put_private(
+        :address_check,
+        Keyword.get(opts, :address_check, &ImageDownloader.public_address/1)
+      )
 
     page_delay_ms = Keyword.get(opts, :page_delay_ms, @default_page_delay_ms)
     deadline_ms = Keyword.get(opts, :deadline_ms, @default_deadline_ms)
@@ -150,7 +166,7 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   end
 
   defp do_fetch_page(req, page, acc, page_delay_ms, retries_left, deadline) do
-    case Req.get(req, url: "/products.json", params: [limit: @page_limit, page: page]) do
+    case get(req, "/products.json", limit: @page_limit, page: page) do
       {:ok, %{status: 200, body: %{"products" => products}}} when is_list(products) ->
         handle_page(req, page, acc, page_delay_ms, products, deadline)
 
@@ -170,6 +186,61 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # One GET, with the redirect chain walked here (see `do_fetch_products/2`).
+  defp get(req, path, params) do
+    current = "https://" <> Req.Request.get_private(req, :shop_host) <> path
+    result = Req.get(req, url: path, params: params)
+    follow_redirects(result, req, current, @max_redirects)
+  end
+
+  defp follow_redirects({:ok, %{status: status} = response}, req, current, hops_left)
+       when status in @redirect_statuses do
+    with :ok <- redirect_budget(hops_left),
+         {:ok, url, pin_opts} <- redirect_target(req, response, current) do
+      req
+      |> Req.get([url: url] ++ pin_opts)
+      |> follow_redirects(req, url, hops_left - 1)
+    end
+  end
+
+  defp follow_redirects(result, _req, _current, _hops_left), do: result
+
+  defp redirect_budget(hops_left) when hops_left > 0, do: :ok
+  defp redirect_budget(_hops_left), do: {:error, :too_many_redirects}
+
+  defp redirect_target(req, response, current) do
+    with [location | _] <- Req.Response.get_header(response, "location"),
+         %URI{scheme: "https", host: host, port: port, userinfo: nil} = uri
+         when is_binary(host) and host != "" and port in [nil, 443] <-
+           safe_merge(current, location),
+         {:ok, pin} <- redirect_pin(req, host) do
+      {url, pin_opts} = ImageDownloader.pinned_request(URI.to_string(uri), pin)
+      {:ok, url, pin_opts}
+    else
+      {:error, _reason} = error -> error
+      _other -> {:error, {:redirect_refused, :unsafe_target}}
+    end
+  end
+
+  # The validated shop host needs no check or pin (`ShopDomain` bounded it to
+  # `*.myshopify.com`); any other host is a destination the remote side chose.
+  defp redirect_pin(req, host) do
+    if host == Req.Request.get_private(req, :shop_host) do
+      {:ok, nil}
+    else
+      case Req.Request.get_private(req, :address_check).(host) do
+        {:ok, pin} -> {:ok, pin}
+        :error -> {:error, {:redirect_refused, :private_address}}
+      end
+    end
+  end
+
+  defp safe_merge(current, location) do
+    URI.merge(URI.parse(current), location)
+  rescue
+    _ -> :error
   end
 
   # What the error carries is shown to the operator, so it names the shape of

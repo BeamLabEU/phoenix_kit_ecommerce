@@ -21,8 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   inventory and currency broadcasts.
 - **A second concurrent "Confirm Order"** goes to the placed order instead of
   showing "Failed to create order".
-- **The Shopify storefront fallback** follows at most 3 redirects and reports
-  an unexpected response by shape, not content.
+- **The Shopify storefront fallback** follows at most 3 redirects, each over
+  https on the default port and, off the shop's own host, to public addresses
+  only (the connection is pinned to the address that was checked), and
+  reports an unexpected response by shape, not content.
+- **Editing a category option no longer renames it**, and the category's
+  option edits (save, delete, reorder, base-currency re-pricing) apply to the
+  list as stored under a row lock instead of the form's copy, so concurrent
+  edits are no longer erased.
 - **The image-migration progress on the Imports page** refreshes its stats at
   most once a second instead of four queries per product.
 - **A failed `shop_product_source` read** is not retried or logged on every
