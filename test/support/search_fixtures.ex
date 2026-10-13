@@ -227,6 +227,24 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     %{usd: usd, eur: eur}
   end
 
+  @doc "The context map the executor hands a public handler (no actor; the tools here do not need one)."
+  def public_ctx(overrides \\ []) do
+    Map.merge(
+      %{
+        actor: nil,
+        scopes: [],
+        audience: :public,
+        language: "en",
+        currency: nil,
+        hosts: ["shop.test"],
+        base_url: "https://shop.test",
+        request_id: "req-1",
+        dry_run?: false
+      },
+      Map.new(overrides)
+    )
+  end
+
   @doc "The `data` map of an item or category with the given shop status."
   def shop_data(shop_status, extra \\ %{}) do
     %{"ecommerce" => Map.merge(%{"shop_status" => shop_status}, extra)}
