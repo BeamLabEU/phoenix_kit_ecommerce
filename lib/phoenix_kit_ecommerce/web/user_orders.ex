@@ -67,7 +67,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
     {:noreply,
      push_patch(socket,
-       to: Helpers.page_path(socket.assigns, "/dashboard/orders", map_to_keyword(filter_params))
+       to: Helpers.page_path(socket.assigns, "/dashboard/orders", filter_params)
      )}
   end
 
@@ -84,7 +84,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
     {:noreply,
      push_patch(socket,
-       to: Helpers.page_path(socket.assigns, "/dashboard/orders", map_to_keyword(params))
+       to: Helpers.page_path(socket.assigns, "/dashboard/orders", params)
      )}
   end
 
@@ -155,10 +155,6 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
     if socket.assigns.status_filter,
       do: Map.put(params, "status", socket.assigns.status_filter),
       else: params
-  end
-
-  defp map_to_keyword(map) when is_map(map) do
-    Enum.map(map, fn {k, v} -> {String.to_existing_atom(k), v} end)
   end
 
   # View helpers
