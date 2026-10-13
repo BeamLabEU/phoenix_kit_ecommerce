@@ -1088,6 +1088,10 @@ defmodule PhoenixKitEcommerce do
         priority: 310,
         match: :prefix,
         group: :shop,
+        # Also in the avatar dropdown, beside billing's "My Orders": with the
+        # user dashboard deprecated that menu is how a shopper gets back to
+        # the cart from any page. A core without `:user_menu` ignores it.
+        user_menu: true,
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]

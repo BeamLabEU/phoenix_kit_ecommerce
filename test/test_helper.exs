@@ -265,6 +265,44 @@ catalogue_exclude =
     [:catalogue]
   end
 
+# The avatar-dropdown flag (`Tab` option `:user_menu`, read by
+# `Tab.user_menu?/2`). An older core ignores the option, so the tests about
+# it run once the dep resolves to a release that ships it.
+user_menu_exclude =
+  if Code.ensure_loaded?(PhoenixKit.Dashboard.Tab) and
+       function_exported?(PhoenixKit.Dashboard.Tab, :user_menu?, 2) do
+    []
+  else
+    Logger.info(
+      "[test_helper] PhoenixKit.Dashboard.Tab.user_menu?/2 not available - avatar-dropdown " <>
+        "tab tests excluded. They will run automatically once `phoenix_kit` is " <>
+        "upgraded to a release that ships it."
+    )
+
+    [:requires_core_user_menu]
+  end
+
+# Billing's avatar-dropdown gate (`PhoenixKitBilling.user_menu_with_shop?/1`).
+# Billing releases up to 0.21.0 do not define it, so the test that drives it
+# runs once the dep resolves to a release that does.
+billing_user_menu_exclude =
+  if Code.ensure_loaded?(PhoenixKitBilling) and
+       function_exported?(PhoenixKitBilling, :user_menu_with_shop?, 1) do
+    []
+  else
+    Logger.info(
+      "[test_helper] PhoenixKitBilling.user_menu_with_shop?/1 not available - billing " <>
+        "avatar-dropdown gate test excluded. It will run automatically once " <>
+        "`phoenix_kit_billing` is upgraded to a release that ships it."
+    )
+
+    [:requires_billing_user_menu]
+  end
+
 ExUnit.start(
-  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+  exclude:
+    i18n_exclude ++
+      integration_exclude ++
+      transliteration_exclude ++
+      catalogue_exclude ++ user_menu_exclude ++ billing_user_menu_exclude
 )
