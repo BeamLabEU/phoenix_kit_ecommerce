@@ -128,10 +128,10 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     end
   end
 
-  # Every write of the Shopify sync into an item's `data` goes through here
-  # (spec 4.7, P3): the item's change log names the sync and shows the
-  # `data` sub-paths that changed, and the write is limited to those paths,
-  # so a value written by someone else since the item was read is kept.
+  # Every write of the Shopify sync into an item's `data` goes through here:
+  # the item's change log names the sync and shows the `data` sub-paths that
+  # changed, and the write is limited to those paths, so a value written by
+  # someone else since the item was read is kept.
   # `intended` is the `data` the writer meant to write (see
   # `ShopifyAttribution.prepare/3`).
   defp write_item(item, %{data: new_data} = attrs, intended, opts) do

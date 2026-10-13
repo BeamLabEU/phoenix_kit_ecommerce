@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttribution do
   @moduledoc """
   Attribution and write scope for the writes of the Shopify sync into
-  catalogue items (spec 4.7, prerequisite P3).
+  catalogue items.
 
   Two things go with every catalogue write the sync makes:
 
@@ -13,8 +13,8 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttribution do
       reads an item, builds a whole new `data` map and writes it back; without
       the paths a value written in between by the admin API (or by anyone) is
       overwritten by the stale copy. With them the catalogue keeps the fresh
-      value of every path the sync did not change (decision D4: last write
-      wins **per field**).
+      value of every path the sync did not change (last write wins **per
+      field**).
 
   The paths are not listed by hand. They are the paths whose value differs
   between the `data` the item had and the `data` the writer built, found by
