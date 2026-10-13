@@ -201,25 +201,9 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
 
   describe "when Postgres refuses the text" do
     # Nothing a caller can send reaches this branch (clean_q/1 sees to that),
-    # so the refusal is staged: a stand-in `websearch_to_tsquery` that raises,
-    # found before pg_catalog on the transaction's search path. All of it is
-    # rolled back with the test's sandbox transaction.
-    defp stage_refusal!(sqlstate, message) do
-      Repo.query!("CREATE SCHEMA search_refusal_stub")
-      Repo.query!("SET LOCAL search_path TO search_refusal_stub, pg_catalog, public")
-
-      Repo.query!("""
-      CREATE FUNCTION search_refusal_stub.websearch_to_tsquery(regconfig, text)
-      RETURNS tsquery LANGUAGE plpgsql AS $$
-      BEGIN
-        RAISE EXCEPTION '#{message}' USING ERRCODE = '#{sqlstate}', DETAIL = 'secret detail';
-      END
-      $$
-      """)
-    end
-
+    # so the refusal is staged (see `stage_tsquery_failure!/2`).
     test "a tsquery stack overflow answers empty and flagged, logging the SQLSTATE only" do
-      stage_refusal!("XX000", "tsquery stack too small")
+      stage_tsquery_failure!("XX000", "tsquery stack too small")
 
       log =
         capture_log(fn ->
@@ -235,24 +219,24 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     end
 
     test "invalid bytes (22021) are a refusal too" do
-      stage_refusal!("22021", "invalid byte sequence for encoding")
+      stage_tsquery_failure!("22021", "invalid byte sequence for encoding")
 
       capture_log(fn -> assert %{count: 0, refused?: true} = run(%{q: "vase"}) end)
     end
 
     test "every other database error is raised, not turned into an empty answer" do
-      stage_refusal!("57014", "canceling statement due to statement timeout")
+      stage_tsquery_failure!("57014", "canceling statement due to statement timeout")
       assert_raise Postgrex.Error, fn -> run(%{q: "vase"}) end
 
       # XX000 alone is not enough: only the tsquery stack message is a refusal
       Repo.query!("DROP FUNCTION search_refusal_stub.websearch_to_tsquery(regconfig, text)")
       Repo.query!("DROP SCHEMA search_refusal_stub")
-      stage_refusal!("XX000", "something else broke")
+      stage_tsquery_failure!("XX000", "something else broke")
       assert_raise Postgrex.Error, fn -> run(%{q: "vase"}) end
     end
 
     test "a filter with no search text does not run the probe at all" do
-      stage_refusal!("57014", "never called")
+      stage_tsquery_failure!("57014", "never called")
       assert %{count: 5, mode: :browse, refused?: false} = run(%{})
     end
   end
@@ -320,6 +304,37 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert ids(%{sort: :price_asc}) == [t.d, t.c, t.e, t.a, t.b]
     assert ids(%{sort: :price_desc}) == [t.b, t.a, t.e, t.c, t.d]
     assert ids(%{sort: :discount_desc}) == [t.a, t.b, t.c, t.e, t.d]
+  end
+
+  test "discount_desc puts the larger discount first, whichever product was created first", t do
+    small = legacy_product!(%{"en" => "Small Sale"}, %{price: "9.00", compare_at_price: "10.00"})
+    big = legacy_product!(%{"en" => "Big Sale"}, %{price: "5.00", compare_at_price: "10.00"})
+    {:ok, _} = Indexer.reindex_items([small.uuid, big.uuid])
+
+    assert ids(%{sort: :discount_desc}) == [big.uuid, t.a, small.uuid, t.b, t.c, t.e, t.d]
+  end
+
+  describe "field weights" do
+    # One word, `zephyr`, in one field of each product. The titles run against
+    # the expected order (Bravo, Charlie, Delta, Zephyr), so a tie in rank
+    # would put the products in the opposite order.
+    test "the same word ranks by the field it is in: title, vendor, option label, description" do
+      description = legacy_product!(%{"en" => "Bravo Lamp"}, %{description: %{"en" => "zephyr"}})
+
+      option =
+        legacy_product!(%{"en" => "Charlie Lamp"}, %{
+          metadata: %{"_option_values" => %{"size" => ["Zephyr"]}}
+        })
+
+      vendor = legacy_product!(%{"en" => "Delta Lamp"}, %{vendor: "Zephyr"})
+      title = legacy_product!(%{"en" => "Zephyr Lamp"})
+
+      {:ok, _} =
+        [description, option, vendor, title] |> Enum.map(& &1.uuid) |> Indexer.reindex_items()
+
+      assert %{mode: :fulltext, count: 4} = run(%{q: "zephyr"})
+      assert ids(%{q: "zephyr"}) == Enum.map([title, vendor, option, description], & &1.uuid)
+    end
   end
 
   test "newest sorts by the product's creation time", t do

@@ -226,6 +226,27 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     }
   end
 
+  @doc """
+  Stages a failure of the search text: a stand-in `websearch_to_tsquery` that
+  raises `message` with SQLSTATE `sqlstate`, found before pg_catalog on the
+  transaction's search path. Nothing a caller can send reaches such a failure,
+  so a test stages it. All of it is rolled back with the test's sandbox
+  transaction.
+  """
+  def stage_tsquery_failure!(sqlstate, message) do
+    Repo.query!("CREATE SCHEMA search_refusal_stub")
+    Repo.query!("SET LOCAL search_path TO search_refusal_stub, pg_catalog, public")
+
+    Repo.query!("""
+    CREATE FUNCTION search_refusal_stub.websearch_to_tsquery(regconfig, text)
+    RETURNS tsquery LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE EXCEPTION '#{message}' USING ERRCODE = '#{sqlstate}', DETAIL = 'secret detail';
+    END
+    $$
+    """)
+  end
+
   @doc "Replaces the currency table with USD (base, rate 1) and EUR (rate 0.909091)."
   def currencies! do
     PhoenixKit.Cache.clear(:billing_currencies)

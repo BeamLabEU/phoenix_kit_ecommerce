@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
 
   @moduletag :requires_core_api
 
+  import ExUnit.CaptureLog
   import PhoenixKitEcommerce.SearchFixtures
 
   alias PhoenixKit.API.Actor
@@ -96,6 +97,19 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     refute Enum.any?(out["facets"]["categories"], &(&1["id"] == unlisted.uuid))
   end
 
+  test "a category hidden after the index was written is not named in the facets either", t do
+    {:ok, _} = Shop.update_category(Shop.get_category(t.vases), %{status: "hidden"})
+
+    out = search!(%{})
+
+    # The index still holds the rows (the count is the index's), the facet does not name the category.
+    assert out["count"] == 5
+    names = Enum.map(out["facets"]["categories"], & &1["name"])
+    assert names == ["Bowls"]
+    # And the products in the hidden category are dropped from the items.
+    assert Enum.sort(item_ids(out)) == Enum.sort([t.b, t.d, t.e])
+  end
+
   test "the name of a hidden ancestor category cannot be found through q" do
     hidden = legacy_category!(%{"en" => "Zorblax"}, %{status: "hidden"})
     child = legacy_category!(%{"en" => "Plinth"}, %{parent_uuid: hidden.uuid})
@@ -115,6 +129,7 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
 
     options = out["facets"]["options"]
     assert Enum.map(options, & &1["key"]) == ["colour", "size"]
+    assert Enum.map(options, & &1["label"]) == ["Colour", "Size"]
     size = Enum.find(options, &(&1["key"] == "size"))
 
     assert size["values"] == [
@@ -427,6 +442,64 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
         assert length(block["items"]) == 1
         assert [%{"code" => "batch_limit_trimmed", "applied" => 1}] = block["warnings"]
       end
+    end
+
+    test "a query without a limit gets 10 products, one with a limit gets what it asks" do
+      for n <- 1..12 do
+        product = legacy_product!(%{"en" => "Bulk Item #{n}"}, %{vendor: "Bulk"})
+        {:ok, _} = Indexer.reindex_items([product.uuid])
+      end
+
+      out =
+        batch!(%{
+          "queries" => [
+            %{"vendor" => "Bulk"},
+            %{"vendor" => "Bulk", "limit" => 12},
+            %{"vendor" => "Bulk", "limit" => 3}
+          ]
+        })
+
+      assert [default, twelve, three] = out["results"]
+      assert {length(default["items"]), default["count"]} == {10, 12}
+      assert is_binary(default["next_cursor"])
+      assert {length(twelve["items"]), twelve["count"]} == {12, 12}
+      assert length(three["items"]) == 3
+
+      # A single search keeps its own default of 20.
+      assert length(search!(%{"vendor" => "Bulk"})["items"]) == 12
+    end
+
+    test "a query that raises is an internal_error block; the others run, and the log names only the exception" do
+      stage_tsquery_failure!("57014", "canceling statement due to statement timeout")
+
+      log =
+        capture_log(fn ->
+          out =
+            batch!(%{
+              "queries" => [
+                %{"ref" => "ok-1"},
+                %{"ref" => "boom", "q" => "vase"},
+                %{"ref" => "ok-2"}
+              ]
+            })
+
+          assert [first, second, third] = out["results"]
+          assert first["count"] == 5 and third["count"] == 5
+          assert second["ref"] == "boom"
+
+          assert second["error"] == %{
+                   "code" => "internal_error",
+                   "message" => "This query failed unexpectedly.",
+                   "context" => %{}
+                 }
+
+          refute Map.has_key?(second, "items")
+          assert [%{"index" => 0}, %{"index" => 1}, %{"index" => 2}] = out["results"]
+        end)
+
+      assert log =~ "a batch query failed: ** (Postgrex.Error)"
+      refute log =~ "vase"
+      refute log =~ "statement timeout"
     end
 
     test "trim_to_budget/3 trims a limit to what is left of the batch budget, never below 1" do

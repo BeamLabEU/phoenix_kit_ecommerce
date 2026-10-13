@@ -95,6 +95,23 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     assert item["discount_pct"] == 20
   end
 
+  test "a discount that is not a whole percent is rounded to one, up and down", %{
+    context: context
+  } do
+    for {price, compare_at, expected} <- [
+          {"5.00", "7.00", 29},
+          {"6.00", "7.00", 14},
+          {"2.00", "3.00", 33},
+          {"1.00", "3.00", 67}
+        ] do
+      product =
+        legacy_product!(%{"en" => "Vase #{price}"}, %{price: price, compare_at_price: compare_at})
+
+      assert Cards.list_item(record(product), context)["discount_pct"] == expected,
+             "#{price} against #{compare_at}"
+    end
+  end
+
   test "a product without a sale price has neither compare_at nor discount_pct", %{
     context: context
   } do

@@ -10,10 +10,17 @@ defmodule PhoenixKitEcommerce.API.PlainTextTest do
 
   defp text(raw), do: PlainText.convert(raw, 4_000)
 
-  defp assert_fast(input, limit_micros, label) do
-    {micros, _result} = :timer.tc(fn -> PlainText.convert(input, 4_000) end)
+  # Cost is counted in reductions of this process, not in milliseconds: the same
+  # input costs the same on a loaded machine, and a pattern that went quadratic
+  # costs orders of magnitude more. The bounds are about four times what the
+  # inputs cost today (at most 10.7 million, and 1.8 million, reductions).
+  defp assert_cheap(input, limit_reductions, label) do
+    {:reductions, before} = Process.info(self(), :reductions)
+    PlainText.convert(input, 4_000)
+    {:reductions, after_} = Process.info(self(), :reductions)
 
-    assert micros < limit_micros, "#{inspect(label)} took #{div(micros, 1000)} ms"
+    assert after_ - before < limit_reductions,
+           "#{inspect(label)} took #{after_ - before} reductions"
   end
 
   test "Markdown syntax is removed and the words stay" do
@@ -133,15 +140,15 @@ defmodule PhoenixKitEcommerce.API.PlainTextTest do
     assert text("**<b>bold</b>** here") == "bold here"
   end
 
-  test "unclosed markers in a huge value finish quickly" do
+  test "unclosed markers in a huge value stay cheap" do
     for unit <- ["**a ", "__a ", "~~a ", "<a ", "[a ", "< ", "&a", "&#"] do
-      assert_fast(String.duplicate(unit, 200_000), 1_500_000, unit)
+      assert_cheap(String.duplicate(unit, 200_000), 40_000_000, unit)
     end
   end
 
-  test "runs of blank lines in a huge value finish quickly, whatever follows them" do
+  test "runs of blank lines in a huge value stay cheap, whatever follows them" do
     for unit <- ["\n", " \n", "  \n", "\t\n"], tail <- ["", "-", "`", "|", "x", "1.", ">"] do
-      assert_fast(String.duplicate(unit, 100_000) <> tail, 300_000, {unit, tail})
+      assert_cheap(String.duplicate(unit, 100_000) <> tail, 8_000_000, {unit, tail})
     end
   end
 
