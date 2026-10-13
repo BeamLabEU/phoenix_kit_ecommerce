@@ -364,7 +364,12 @@ lib/phoenix_kit_ecommerce/
 ├── compat/           # transitional PhoenixKit.Modules.Shop.* delegate shims
 ├── services/         # image download + batch image migration
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
-│                     # ShopifyMediaSyncWorker, TranslationSweepWorker
+│                     # ShopifyMediaSyncWorker, TranslationSweepWorker,
+│                     # SearchReindexWorker, SearchRebuildWorker (queue shop_search)
+├── search/           # public search index: Entry, Dictionary, Trigram, OptionKeys,
+│                     # Document, Indexer, Query, Jobs, Subscriber
+├── api/              # public shop API tools: Visibility, Loader, Context, Cards,
+│                     # SearchParams, PublicTools, Public.Schemas, Public.Search, Public.Catalog
 ├── mix_tasks/        # install, deduplicate_products,
 │                     # backfill_translation_fingerprints (one-shot),
 │                     # backfill_image_fingerprints (after upgrading)
@@ -443,6 +448,10 @@ gets its topic, subscribe and broadcast functions in `Events`.
 | `shop:imports`, `shop:import:<import_log_uuid>` | CSV import completion, and one import's progress |
 | `shop:image_migration:batch`, `shop:image_migration:<product_uuid>` | image migration start/cancel/per-product completion, and one product's progress |
 | per-user and per-session cart topics | cart sync for real-time storefront updates |
+
+`Search.Subscriber` listens to the two topics above **and** to the catalogue's
+own topic (`PhoenixKitCatalogue.Catalogue.PubSub`, on the host's PubSub, a
+different server) and turns events into Oban jobs; it never indexes inline.
 
 ### Web layer
 
@@ -699,7 +708,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V3. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V4. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -715,6 +724,13 @@ install that already uses Shopify (a Shopify integration connection, or
 catalogue items / legacy products carrying a Shopify product id) and has no
 such row yet, so flipping the default to off does not switch its sync off on
 upgrade. It never overwrites an existing row; `down/1` leaves the row alone.
+V4 creates `phoenix_kit_shop_search_index` (one row per listed product per
+enabled language: weighted `tsvector`, lower-cased `title_trgm`, filter and
+sort keys; unique on `(item_uuid, language)`, GIN on `document`,
+`category_path_uuids` and `option_pairs`) and tries
+`CREATE EXTENSION IF NOT EXISTS pg_trgm`, building the trigram index only
+when the extension exists. The table is derived data: `down/1` leaves it, and
+`Search.Indexer.rebuild/0` refills it.
 
 Rules for the chain, all of which have been broken at least once:
 
@@ -810,6 +826,7 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 | Price display and storefront i18n | "Price on request" is snapshotted onto the cart line and the order line, never read live; every public LiveView calls `put_content_locale/1` in `mount/3`; `push_event` names, paths, route segments and setting keys are never wrapped in `gettext` | `dev_docs/guides/storefront.md` |
 | AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source. The sweep's chain, gates and budget are `PhoenixKitAI.TranslationSweep`'s — the worker supplies only the shop's gates, settings, candidates and prompts, and answers `:ai_unavailable` when the installed `phoenix_kit_ai` has no engine | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
 | Shipping destination picker | `Web.Components.ShippingDestinationPicker` (the one LiveComponent, justified in its moduledoc) is embedded by `CartPage` and `CheckoutPage` under the selected calculated method. Shipping is worked out ONCE per cart change by the parent (`Shop.shipping_quote_snapshot/2`: status, entry, presented, `blocks?`, service) and passed down — never recompute it in `render/1` or per component (packing, hashing, the service list and the provider's destination check are not free). The picker keeps no cart of its own: it saves, the shipping broadcast reaches the parent, the parent passes the new cart down; `:shipping_recheck` asks the parent to recompute when only the answer changed. Anything that calls the carrier on behalf of an anonymous shopper is bounded (one lookup in flight, `:shipping_lookup_interval`, capped texts, `Web.ShippingRequote` for automatic quotes: once per cart state, at most 3 in a row). A transient service failure is a retry, never "not available for this order". The shared display lines (ETA, COD fee, estimate note, reasons) are `Web.Components.ShippingDisplay`; DOM ids inside the picker derive from its `id` | `Web.Components.ShippingDestinationPicker`, `Web.ShippingRequote`, `PhoenixKitEcommerce.shipping_quote_snapshot/2` |
+| Public read API and search index | Visibility is decided only by `API.Visibility` and every public tool loads products through `API.Loader`; the index holds listed products and base-currency prices only; `Indexer` upserts first and deletes stale rows last, so a rebuild never empties the index, and does nothing when the shop catalogue cannot be resolved; a hidden product, a malformed id and an unknown id answer alike; money is converted only by `API.Context.money/2`; no value in a public answer is a `Decimal`, a `DateTime` or a struct | `API.Visibility`, `Search.Indexer`, `Search.Query`, `API.Public.*` moduledocs |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |
 
 ## Versioning & releases

@@ -18,6 +18,7 @@ E-commerce module for [PhoenixKit](https://github.com/BeamLabEU/phoenix_kit). Pr
 - **Real-time updates** — PubSub events for carts, products, categories, and inventory changes
 - **Admin dashboard** — LiveViews for managing products, categories, shipping, carts, imports, and settings
 - **User pages** — catalog, product detail, cart, checkout, order history, and order details
+- **Public read API** — full-text product search (PostgreSQL, per language, typo-tolerant with `pg_trgm`), product cards, category tree and similar products for AI agents and scripts, as REST and MCP tools of PhoenixKit core (needs a core with the shop API; off until `api_public_enabled` is on)
 - **Auto-discovery** — implements `PhoenixKit.Module` behaviour; PhoenixKit finds it at startup with zero config
 
 ## Installation
@@ -187,6 +188,36 @@ price = Shop.calculate_product_price(product, selected_specs)
 # Get methods available for a specific cart
 methods = Shop.get_available_shipping_methods(cart)
 ```
+
+### Public API: search and product tools
+
+With PhoenixKit core's shop API switched on (`api_public_enabled`), this module offers five read-only
+tools to anonymous callers, over REST (`POST /api/shop/v1/<tool>`) and MCP (`/mcp/shop`):
+
+| Tool | What it does |
+|---|---|
+| `shop.search_products` | Search by words, category branch, price, options, vendor and sale status; facets; exact count; cursor paging |
+| `shop.search_products_batch` | Up to 20 searches in one call (one rate-limit unit each) |
+| `shop.get_products` | Full cards for up to 50 ids; a discontinued product is a three-field stub; hidden or unknown ids are `not_found` |
+| `shop.list_categories` | The active categories as a tree with product counts |
+| `shop.similar_products` | Products in the same category or sharing an option value or tag |
+
+```bash
+curl -s -X POST https://shop.example.com/api/shop/v1/shop.search_products \
+  -H 'content-type: application/json' \
+  -d '{"q": "ceramic vase", "price_max": 30, "sort": "price_asc", "limit": 5}'
+```
+
+What a caller sees is decided by one rule (`PhoenixKitEcommerce.API.Visibility`): draft, inactive,
+deleted products and products in hidden or deleted categories are never shown; discontinued or
+archived ones appear only as a stub in `shop.get_products`. Prices come in the language and
+currency of the domain the request came to (a host maps domains with
+`config :phoenix_kit, :api_request_context, {Mod, :fun}`); `language` and `currency` inputs override.
+
+Search reads `phoenix_kit_shop_search_index`, kept fresh by `PhoenixKitEcommerce.Search.Subscriber`
+(catalogue and shop PubSub events, through Oban jobs on the `shop_search` queue) and rebuilt every
+night (`oban_crons/0`; `mix phoenix_kit.update` adds the queue and the cron entry to the host's
+Oban config). Without the `pg_trgm` extension search still works and only skips the typo fallback.
 
 ### CSV Import
 
