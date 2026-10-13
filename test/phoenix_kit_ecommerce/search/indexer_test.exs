@@ -325,6 +325,22 @@ defmodule PhoenixKitEcommerce.Search.IndexerTest do
     end
   end
 
+  describe "a 16-byte string is no id" do
+    test "reindex_items/2 neither writes a row for it nor removes the row of that product" do
+      {product, raw} = raw_uuid_product!(%{"en" => "Red Vase"})
+
+      assert {:ok, %{indexed: 0, removed: 0}} = Indexer.reindex_items([raw])
+      assert index_count() == 0
+
+      assert {:ok, %{indexed: 1}} = Indexer.reindex_items([product.uuid])
+      before = row_snapshot(product.uuid)
+
+      assert {:ok, %{indexed: 0, removed: 0}} = Indexer.reindex_items([raw])
+      assert index_count() == 1
+      assert row_snapshot(product.uuid) == before
+    end
+  end
+
   describe "overlapping runs" do
     test "an older run does not overwrite a newer row, its content or its stamp" do
       product = legacy_product!(%{"en" => "Red Bowl"})

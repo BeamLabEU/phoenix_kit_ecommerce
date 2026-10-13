@@ -48,11 +48,15 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
     test "a 16-byte string is no id, even when its bytes are those of a product's uuid" do
       {product, raw} = raw_uuid_product!(%{"en" => "Red Vase"})
       category = legacy_category!(%{"en" => "Vases"})
+      in_category = legacy_product!(%{"en" => "Blue Vase"}, %{category_uuid: category.uuid})
       assert byte_size(raw) == 16
       assert {:ok, product.uuid} == Ecto.UUID.cast(raw)
 
       assert Loader.load([raw]) == %{}
       assert Map.keys(Loader.load([raw, product.uuid])) == [product.uuid]
+
+      # the category does hold a product: only the 16-byte form of its id finds nothing
+      assert Loader.item_ids_in_categories([category.uuid]) == [in_category.uuid]
       assert Loader.item_ids_in_categories([Ecto.UUID.dump!(category.uuid)]) == []
     end
 
