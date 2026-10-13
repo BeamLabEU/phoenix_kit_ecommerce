@@ -107,22 +107,19 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # With `require_raster: true` the bytes must be a raster image, and the one
   # the declared type says: a Content-Type is the remote server's claim.
   defp check_content(temp_path, content_type, opts) do
-    if Keyword.get(opts, :require_raster, false) do
-      case Sniff.sniff(temp_path) do
-        {:ok, %{format: format, mime: ^content_type}} ->
-          if Sniff.raster?(format), do: :ok, else: reject_content(temp_path)
-
-        _other ->
-          reject_content(temp_path)
-      end
+    if Keyword.get(opts, :require_raster, false) and not raster_of_type?(temp_path, content_type) do
+      cleanup_temp_file(temp_path)
+      {:error, :content_mismatch}
     else
       :ok
     end
   end
 
-  defp reject_content(temp_path) do
-    cleanup_temp_file(temp_path)
-    {:error, :content_mismatch}
+  defp raster_of_type?(path, content_type) do
+    case Sniff.sniff(path) do
+      {:ok, %{format: format, mime: mime}} -> mime == content_type and Sniff.raster?(format)
+      _unknown -> false
+    end
   end
 
   @doc """
