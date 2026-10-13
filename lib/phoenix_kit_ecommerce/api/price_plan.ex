@@ -113,7 +113,7 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
             to: to,
             changes: changes,
             changed?: changes != %{},
-            dangerous?: dangerous?(cur, to, Keyword.fetch!(opts, :pct)),
+            dangerous?: dangerous?(cur, to, leaves, Keyword.fetch!(opts, :pct)),
             warnings: warnings(item, to, opts),
             leaves: leaves
           })
@@ -388,16 +388,29 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
   def moved_over?(_from, _to, _pct), do: false
 
-  defp dangerous?(cur, to, pct) do
+  # The base price is held when it moves past `pct` percent of itself. An
+  # option price is held when the leaf itself moves past `pct` percent of its
+  # own previous value, or - the case a new or zero leaf would otherwise slip
+  # through - when it adds or takes away more than `pct` percent of the
+  # product's current base price: that is the amount the customer's price of
+  # the option moves by, whatever the leaf was before. An unpriced product
+  # has no base to measure against, so only its first price is exempt.
+  defp dangerous?(cur, to, leaves, pct) do
     moved_over?(cur.price, to.price, pct) or
-      Enum.any?(leaf_keys(cur.price_modifiers), fn key ->
-        moved_over?(
-          cur.price_modifiers |> leaf(key) |> Money.to_decimal(),
-          to.price_modifiers |> leaf(key) |> Money.to_decimal(),
-          pct
-        )
-      end)
+      Enum.any?(leaves, &modifier_dangerous?(cur, to, &1, pct))
   end
+
+  defp modifier_dangerous?(cur, to, key, pct) do
+    from = cur.price_modifiers |> leaf(key) |> Money.to_decimal()
+    new = to.price_modifiers |> leaf(key) |> Money.to_decimal()
+
+    moved_over?(from, new, pct) or moved_over?(cur.price, shifted(cur.price, from, new), pct)
+  end
+
+  defp shifted(%Decimal{} = base, from, new),
+    do: base |> Decimal.add(new || Decimal.new(0)) |> Decimal.sub(from || Decimal.new(0))
+
+  defp shifted(_base, _from, _new), do: nil
 
   @doc "The change of `from` to `to` as a percentage of `from`, one decimal, or `nil`."
   @spec change_pct(Decimal.t() | nil, Decimal.t() | nil) :: String.t() | nil

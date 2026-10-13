@@ -10,7 +10,9 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
   neither read nor written.
 
   The tool is dangerous when any price above zero moves by more
-  than `api_confirm_price_change_pct` percent. A batch with more rows than
+  than `api_confirm_price_change_pct` percent, or when an option price is
+  added, changed or removed by more than that percent of the product's
+  current price. A batch with more rows than
   `api_confirm_batch_over` is held by core's executor for every admin write
   tool, so it is not asked here. With `ctx.dry_run?` the handler returns
   `{:preview, preview, fingerprint}` and writes nothing.

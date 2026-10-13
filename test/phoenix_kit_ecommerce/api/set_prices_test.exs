@@ -384,6 +384,33 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
       end
     end
 
+    test "a new option price is held by the size of the move against the product's price", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      F.attach_set!(item, "Size", "size", [{"XL", "xl"}])
+
+      modifier = fn amount ->
+        SetPrices.dangerous?(
+          %{
+            "items" => [
+              %{
+                "ref" => %{"id" => item.uuid},
+                "price_modifiers" => %{"size" => %{"xl" => amount}}
+              }
+            ]
+          },
+          ctx
+        )
+      end
+
+      assert modifier.("-99.00")
+      assert modifier.("9999999999.00")
+      refute modifier.("30.00")
+      assert modifier.("30.01")
+    end
+
     test "the size of the batch is core's rule, not this tool's", %{
       catalogue: catalogue,
       ctx: ctx

@@ -570,7 +570,8 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
 **Admin API**
 
 - `api_confirm_price_change_pct` — percent; a price above zero that moves by
-  more than this needs a confirmation (default: `30`; it has no `shop_` prefix). Read through `API.Settings.price_change_pct/0`, which
+  more than this needs a confirmation, and so does an option price added,
+  changed or removed by more than this percent of the product's current price (default: `30`; it has no `shop_` prefix). Read through `API.Settings.price_change_pct/0`, which
   reads any invalid value as the default.
 
 **Storefront display**

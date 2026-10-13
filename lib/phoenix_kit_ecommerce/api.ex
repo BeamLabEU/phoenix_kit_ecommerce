@@ -97,7 +97,7 @@ defmodule PhoenixKitEcommerce.API do
       description:
         "Sets the price, the compare-at price and the option prices of products. Give only what changes. " <>
           "Option prices are price_modifiers: option => value => amount, merged into the product's own; null removes one. A new option price needs the entities module enabled and the option in a set attached to the product. " <>
-          "A price move above the confirmation threshold is held for confirmation first. A first price is not held back." <>
+          "A price move above the confirmation threshold is held for confirmation first; an option price is measured against the product's current price. A first price is not held back." <>
           shopify_note() <> @retry_note,
       input_schema: Schemas.set_prices_input(),
       output_schema: Schemas.batch_output(),

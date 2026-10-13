@@ -178,10 +178,49 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
       refute plan.changed?
     end
 
-    test "moving a non-zero modifier past the threshold is dangerous; adding one is not" do
+    test "moving a non-zero modifier past the threshold is dangerous" do
       assert plan!(%{"price_modifiers" => %{"liquid" => %{"black" => "50.00"}}}).dangerous?
       assert plan!(%{"price_modifiers" => %{"liquid" => %{"black" => nil}}}).dangerous?
-      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "999.00"}}}).dangerous?
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"black" => "33.00"}}}).dangerous?
+    end
+
+    test "a new option price is judged against the product's price: a big discount or surcharge is held" do
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "-99.00"}}}).dangerous?
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "-100.00"}}}).dangerous?
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "999.00"}}}).dangerous?
+    end
+
+    test "a new option price at exactly the threshold is not held, one cent past it is" do
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "30.00"}}}).dangerous?
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "30.01"}}}).dangerous?
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "-30.00"}}}).dangerous?
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "-30.01"}}}).dangerous?
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "3.00"}}}).dangerous?
+    end
+
+    test "a stored zero option price is no exemption" do
+      zero =
+        item(%{data: %{"ecommerce" => %{"price_modifiers" => %{"liquid" => %{"red" => "0.00"}}}}})
+
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "9999999999.00"}}}, zero).dangerous?
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "1.00"}}}, zero).dangerous?
+    end
+
+    test "removing a large option price is held by the size of what is taken away" do
+      big =
+        item(%{
+          data: %{"ecommerce" => %{"price_modifiers" => %{"liquid" => %{"red" => "99.00"}}}}
+        })
+
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"red" => nil}}}, big).dangerous?
+    end
+
+    test "an unpriced product has no price to measure an option price against" do
+      for current <- [nil, dec("0.00")] do
+        unpriced = item(%{base_price: current})
+
+        refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "999.00"}}}, unpriced).dangerous?
+      end
     end
 
     test "refuses an unknown option and an unknown value, naming the allowed ones" do

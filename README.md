@@ -220,7 +220,8 @@ how an outside system feeds the product list.
 They work on the catalogue product source only; on the legacy source (or with
 a `phoenix_kit_catalogue` that predates the admin API) they answer
 `unsupported_source`. A price move of more than `api_confirm_price_change_pct`
-percent (default 30, set on the E-Commerce settings page by a user who also
+percent (an option price is measured against the product's current price;
+default 30, set on the E-Commerce settings page by a user who also
 holds core's `api` permission) is held for confirmation first, and so is any
 batch larger than core's `api_confirm_batch_over`. Keys, scopes and the switch
 are on core's Settings → API page.
