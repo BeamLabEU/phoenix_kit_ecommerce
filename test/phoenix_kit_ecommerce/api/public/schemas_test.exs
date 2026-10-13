@@ -1,6 +1,7 @@
 defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
   use ExUnit.Case, async: true
 
+  alias PhoenixKit.API.Validator
   alias PhoenixKitEcommerce.API.Public.Schemas
 
   test "control_fields/0 declares exactly language and currency, both strings" do
@@ -14,10 +15,10 @@ defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
   test "money, list item, card and stub schemas accept what the cards build" do
     money = %{"amount" => "12.50", "currency" => "EUR"}
 
-    assert {:ok, _} = PhoenixKit.API.Validator.validate(Schemas.money(), money)
+    assert {:ok, _} = Validator.validate(Schemas.money(), money)
 
     assert {:error, [%{path: "amount"}]} =
-             PhoenixKit.API.Validator.validate(Schemas.money(), %{
+             Validator.validate(Schemas.money(), %{
                "amount" => 12.5,
                "currency" => "EUR"
              })
@@ -32,19 +33,19 @@ defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
       "category_path" => [%{"id" => "c", "name" => "N"}]
     }
 
-    assert {:ok, _} = PhoenixKit.API.Validator.validate(Schemas.list_item(), item)
+    assert {:ok, _} = Validator.validate(Schemas.list_item(), item)
 
     assert {:ok, _} =
-             PhoenixKit.API.Validator.validate(Schemas.card(), Map.put(item, "tags", ["x"]))
+             Validator.validate(Schemas.card(), Map.put(item, "tags", ["x"]))
 
     assert {:ok, _} =
-             PhoenixKit.API.Validator.validate(Schemas.stub(), %{
+             Validator.validate(Schemas.stub(), %{
                "id" => "a",
                "title" => "T",
                "status" => "discontinued"
              })
 
     assert {:error, [%{path: "id"}]} =
-             PhoenixKit.API.Validator.validate(Schemas.stub(), %{"title" => "T", "status" => "x"})
+             Validator.validate(Schemas.stub(), %{"title" => "T", "status" => "x"})
   end
 end

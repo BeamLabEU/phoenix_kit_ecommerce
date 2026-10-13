@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.PubSub}
 
   alias PhoenixKit.Settings
+  alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Search.Subscriber
   alias PhoenixKitEcommerce.Test.Repo
@@ -113,7 +114,7 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
     [a, b] = for _ <- 1..2, do: Ecto.UUID.generate()
 
     deliver(pid, {:catalogue_bulk_change, catalogue, :trashed, [a], self()})
-    deliver(pid, {:catalogue_bulk_change, catalogue, :a_kind_phase_2a_adds, [b], self()})
+    deliver(pid, {:catalogue_bulk_change, catalogue, :some_future_kind, [b], self()})
     deliver(pid, {:catalogue_bulk_change, catalogue, :moved, nil, self()})
 
     assert jobs() == [
@@ -139,11 +140,13 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   end
 
   test "messages it does not know are ignored and the process keeps running", %{pid: pid} do
+    ref = Process.monitor(pid)
+
     deliver(pid, :unexpected)
     deliver(pid, {:catalogue_card_refresh, 1, 2, 3, 4, self()})
     deliver(pid, {:product_updated, :not_a_product})
 
-    assert Process.alive?(pid)
+    refute_received {:DOWN, ^ref, :process, ^pid, _reason}
     assert jobs() == []
   end
 
@@ -161,7 +164,7 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
     uuid = Ecto.UUID.generate()
     catalogue = Ecto.UUID.generate()
 
-    PhoenixKitCatalogue.Catalogue.PubSub.broadcast(:item, uuid, catalogue)
+    CataloguePubSub.broadcast(:item, uuid, catalogue)
     _ = :sys.get_state(pid)
 
     assert jobs() == [item_job(uuid)]
