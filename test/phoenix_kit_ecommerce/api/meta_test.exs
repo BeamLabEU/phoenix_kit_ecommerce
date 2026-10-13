@@ -24,6 +24,21 @@ defmodule PhoenixKitEcommerce.API.MetaTest do
     assert %{"key_prefix" => nil} = Meta.log_metadata(%{actor: nil}, "t")
   end
 
+  test "log metadata carries who approved the call when core's approval flow ran it, and only then" do
+    approved =
+      Meta.log_metadata(%{actor: %{key_prefix: "pk_ab"}, approved_by_uuid: "admin-1"}, "t")
+
+    assert approved["approved_by_uuid"] == "admin-1"
+
+    plain = Meta.log_metadata(%{actor: %{key_prefix: "pk_ab"}}, "t")
+    refute Map.has_key?(plain, "approved_by_uuid")
+
+    refute Map.has_key?(
+             Meta.log_metadata(%{actor: %{key_prefix: "pk_ab"}, approved_by_uuid: nil}, "t"),
+             "approved_by_uuid"
+           )
+  end
+
   test "term_class names the shape of a term and never its values" do
     assert Meta.term_class(:timeout) == ":timeout"
     assert Meta.term_class(%Ecto.Changeset{data: %{}, types: %{}}) == "Ecto.Changeset"
