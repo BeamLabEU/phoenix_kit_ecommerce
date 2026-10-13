@@ -60,6 +60,18 @@ defmodule PhoenixKitEcommerce.Migrations do
   `shopify_upgrade_statements/1`. `down/1` leaves the row alone: it is an
   admin-visible setting, not schema.
 
+  ## V4 — the public search index
+
+  Creates `phoenix_kit_shop_search_index`: one row per LISTED product per
+  enabled language, filled by `PhoenixKitEcommerce.Search.Indexer` (full-text
+  `document`, lower-cased `title_trgm`, filter and sort keys). The table is
+  derived data: the nightly rebuild repopulates it from the catalogue, so
+  `down/1` does not drop it. The migration also tries
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds the trigram index only
+  when the extension exists; a server without it (or a role that may not
+  create it) gets a notice, search works, and only the typo fallback is
+  skipped. See `search_index_statements/1`.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker and restores the V2 column
@@ -84,7 +96,7 @@ defmodule PhoenixKitEcommerce.Migrations do
 
   use Ecto.Migration
 
-  @current_version 3
+  @current_version 4
   @marker_prefix "pke_schema:"
   @version_table "phoenix_kit_shop_config"
 
@@ -171,6 +183,7 @@ defmodule PhoenixKitEcommerce.Migrations do
       indexes(prefix, p) ++
       v2_drop_currency_defaults(p) ++
       shopify_upgrade_statements(prefix) ++
+      search_index_statements(prefix) ++
       [marker_statement(p, @current_version)]
   end
 
@@ -275,6 +288,69 @@ defmodule PhoenixKitEcommerce.Migrations do
           INSERT INTO #{p}phoenix_kit_settings (key, value, module)
           VALUES ('shop_shopify_enabled', 'true', 'shop')
           ON CONFLICT (key) DO NOTHING;
+        END IF;
+      END
+      $$
+      """
+    ]
+  end
+
+  @doc """
+  The V4 step as data: seven idempotent statements (the optional `pg_trgm`
+  extension, the search table, three GIN and one unique index, and the
+  trigram index behind an extension check). See the moduledoc.
+  """
+  @spec search_index_statements(String.t()) :: [String.t()]
+  def search_index_statements(prefix \\ "public") do
+    prefix = validated_prefix(prefix: prefix)
+    p = "#{prefix}."
+    t = "#{p}phoenix_kit_shop_search_index"
+
+    [
+      """
+      DO $$
+      BEGIN
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'pg_trgm is not available (%); search will skip the typo fallback', SQLERRM;
+      END
+      $$
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{t} (
+        "uuid" uuid DEFAULT #{p}uuid_generate_v7() NOT NULL,
+        "item_uuid" uuid NOT NULL,
+        "language" character varying(16) NOT NULL,
+        "title" text NOT NULL,
+        "title_trgm" text NOT NULL,
+        "document" tsvector NOT NULL,
+        "category_uuid" uuid,
+        "category_path" text[] DEFAULT '{}'::text[] NOT NULL,
+        "category_path_uuids" uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+        "vendor" text,
+        "tags" text[] DEFAULT '{}'::text[] NOT NULL,
+        "option_pairs" text[] DEFAULT '{}'::text[] NOT NULL,
+        "option_labels" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "made_to_order" boolean DEFAULT false NOT NULL,
+        "on_sale" boolean DEFAULT false NOT NULL,
+        "price" numeric,
+        "compare_at_price" numeric,
+        "discount_pct" numeric,
+        "sort_position" integer DEFAULT 0 NOT NULL,
+        "item_inserted_at" timestamp with time zone,
+        "indexed_at" timestamp with time zone DEFAULT now() NOT NULL,
+        CONSTRAINT phoenix_kit_shop_search_index_pkey PRIMARY KEY ("uuid")
+      )
+      """,
+      "CREATE UNIQUE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_item_lang_idx ON #{t} USING btree (item_uuid, language)",
+      "CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_document_idx ON #{t} USING gin (document)",
+      "CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_category_idx ON #{t} USING gin (category_path_uuids)",
+      "CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_options_idx ON #{t} USING gin (option_pairs)",
+      """
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+          EXECUTE 'CREATE INDEX IF NOT EXISTS phoenix_kit_shop_search_index_title_trgm_idx ON #{t} USING gin (title_trgm gin_trgm_ops)';
         END IF;
       END
       $$

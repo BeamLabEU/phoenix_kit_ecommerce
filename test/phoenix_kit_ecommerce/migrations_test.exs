@@ -16,8 +16,8 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     phoenix_kit_shop_import_logs
   )
 
-  test "chain is V3 and marks phoenix_kit_shop_config" do
-    assert Migrations.current_version() == 3
+  test "chain is V4 and marks phoenix_kit_shop_config" do
+    assert Migrations.current_version() == 4
     assert Migrations.version_table() == "phoenix_kit_shop_config"
   end
 
@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
       assert Enum.any?(stmts, &String.contains?(&1, "CREATE TABLE IF NOT EXISTS public.#{t} ("))
     end
 
-    assert List.last(stmts) == "COMMENT ON TABLE public.phoenix_kit_shop_config IS 'pke_schema:3'"
+    assert List.last(stmts) == "COMMENT ON TABLE public.phoenix_kit_shop_config IS 'pke_schema:4'"
   end
 
   test "no statement can destroy data, in either direction" do
@@ -68,8 +68,9 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     stmts = Migrations.up_statements("public")
 
     # 10 tables + 2 functions + 23 constraints + 2 triggers + 39 indexes
-    # + 4 V2 `DROP DEFAULT`s + 1 V3 Shopify-default step + 1 marker
-    assert length(stmts) == 82
+    # + 4 V2 `DROP DEFAULT`s + 1 V3 Shopify-default step
+    # + 7 V4 search-index statements + 1 marker
+    assert length(stmts) == 89
 
     for name <- ~w(
           idx_shop_config_key
@@ -129,7 +130,9 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
         end
       end)
 
-    assert length(names) == 39
+    # 39 + the 4 guarded indexes of the search table + the trigram index
+    # (created inside a DO block, behind the extension check)
+    assert length(names) == 44
 
     assert names |> Enum.filter(&String.starts_with?(&1, "tenant_x_")) |> Enum.sort() ==
              @exempt_uuid_indexes |> Enum.map(&("tenant_x_" <> &1)) |> Enum.sort()
@@ -182,7 +185,12 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     stmts = Migrations.up_statements("public")
 
     assert Migrations.shopify_upgrade_statements("public") -- stmts == []
-    assert Enum.at(stmts, -2) == hd(Migrations.shopify_upgrade_statements("public"))
+
+    # V3's step is followed by V4's statements and then the marker.
+    step_at =
+      Enum.find_index(stmts, &(&1 == hd(Migrations.shopify_upgrade_statements("public"))))
+
+    assert step_at == length(stmts) - 2 - length(Migrations.search_index_statements("public"))
   end
 
   test "the Shopify-default step only ever inserts, and never overwrites" do
@@ -210,5 +218,40 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     for t <- ~w(trg_shop_product_slugs trg_shop_category_slugs) do
       assert joined =~ ~r/IF NOT EXISTS \(SELECT 1 FROM pg_trigger WHERE tgname = '#{t}'/
     end
+  end
+
+  test "V4 creates the search index table and its indexes, and treats pg_trgm as optional" do
+    stmts = Migrations.search_index_statements("public")
+    joined = Enum.join(stmts, "\n")
+
+    assert length(stmts) == 7
+    assert joined =~ "CREATE TABLE IF NOT EXISTS public.phoenix_kit_shop_search_index ("
+    assert joined =~ ~s("document" tsvector NOT NULL)
+
+    for name <- ~w(
+          phoenix_kit_shop_search_index_item_lang_idx
+          phoenix_kit_shop_search_index_document_idx
+          phoenix_kit_shop_search_index_category_idx
+          phoenix_kit_shop_search_index_options_idx
+          phoenix_kit_shop_search_index_title_trgm_idx
+        ) do
+      assert joined =~ "INDEX IF NOT EXISTS #{name} ON public.phoenix_kit_shop_search_index",
+             "missing index #{name}"
+    end
+
+    # The extension is created if the server has it; a refusal is a notice, not an error.
+    [extension | _] = stmts
+    assert extension =~ "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+    assert extension =~ "EXCEPTION WHEN OTHERS"
+
+    # The trigram index exists only when the extension does.
+    trigram = List.last(stmts)
+    assert trigram =~ "IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
+    assert trigram =~ "gin_trgm_ops"
+  end
+
+  test "rolling back to V3 only rewrites the marker: the search table is derived data and stays" do
+    assert Migrations.down_statements("public", 3) ==
+             ["COMMENT ON TABLE public.phoenix_kit_shop_config IS 'pke_schema:3'"]
   end
 end
