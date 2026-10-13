@@ -14,7 +14,9 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
 
   alias PhoenixKit.API.Actor
   alias PhoenixKit.API.Validator
+  alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.API.Cards
   alias PhoenixKitEcommerce.API.Public.Search
   alias PhoenixKitEcommerce.Search.Indexer
 
@@ -94,6 +96,16 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     refute Enum.any?(out["facets"]["categories"], &(&1["id"] == unlisted.uuid))
   end
 
+  test "the name of a hidden ancestor category cannot be found through q" do
+    hidden = legacy_category!(%{"en" => "Zorblax"}, %{status: "hidden"})
+    child = legacy_category!(%{"en" => "Plinth"}, %{parent_uuid: hidden.uuid})
+    item = legacy_product!(%{"en" => "Quiet Lamp"}, %{category_uuid: child.uuid, price: "9.00"})
+    {:ok, _} = Indexer.reindex_items([item.uuid])
+
+    assert search!(%{"q" => "lamp"})["count"] == 1
+    assert search!(%{"q" => "Zorblax"})["count"] == 0
+  end
+
   test "no query browses the shop", t do
     out = search!(%{})
 
@@ -169,6 +181,68 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     assert out["language"] == "de-DE"
     assert item_ids(out) == [g.uuid]
     assert hd(out["items"])["title"] == "Rote Vasen"
+  end
+
+  describe "item urls on a mapped domain" do
+    setup do
+      enable_languages!(["en-US", "de-DE"])
+      {:ok, _} = Settings.update_boolean_setting("default_language_no_prefix", true)
+
+      product = legacy_product!(%{"en-US" => "Plain Vase", "de-DE" => "Rote Vasen"})
+      {:ok, _} = Indexer.reindex_items([product.uuid])
+
+      %{product: product}
+    end
+
+    defp item_url(out, product) do
+      Enum.find(out["items"], &(&1["id"] == product.uuid))["url"]
+    end
+
+    test "search_products links to the language of the domain without a locale prefix", t do
+      url = %{"q" => "Vase"} |> search!(language: "de") |> item_url(t.product)
+
+      assert url =~ "https://shop.test/shop/product/"
+      refute url =~ "/de/"
+    end
+
+    test "search_products links to an explicitly asked other language with its prefix", t do
+      url =
+        %{"q" => "Vase", "language" => "en"} |> search!(language: "de") |> item_url(t.product)
+
+      assert url =~ "https://shop.test/en/shop/product/"
+    end
+
+    test "search_products_batch links to the language of the domain without a prefix", t do
+      assert %{"results" => [block]} =
+               batch!(%{"queries" => [%{"q" => "Vase"}]}, language: "de")
+
+      url = item_url(block, t.product)
+      assert url =~ "https://shop.test/shop/product/"
+      refute url =~ "/de/"
+    end
+
+    test "search_products_batch links to an explicitly asked other language with its prefix",
+         t do
+      assert %{"results" => [block]} =
+               batch!(%{"language" => "en", "queries" => [%{"q" => "Vase"}]}, language: "de")
+
+      assert item_url(block, t.product) =~ "https://shop.test/en/shop/product/"
+    end
+  end
+
+  test "fields takes at most as many names as an item has fields" do
+    all = Cards.list_fields()
+    too_many = ["title" | all]
+
+    assert {:ok, _} = Validator.validate(Search.search_input_schema(), %{"fields" => all})
+
+    assert {:error, [%{path: "fields"}]} =
+             Validator.validate(Search.search_input_schema(), %{"fields" => too_many})
+
+    assert {:error, [%{path: "queries[0].fields"}]} =
+             Validator.validate(Search.batch_input_schema(), %{
+               "queries" => [%{"fields" => too_many}]
+             })
   end
 
   test "a limit above 100 is trimmed with a warning, not refused" do

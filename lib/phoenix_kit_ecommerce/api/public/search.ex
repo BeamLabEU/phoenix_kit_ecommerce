@@ -160,9 +160,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   defp block(result, params, warnings, query, context, categories) do
     records = Loader.load(result.ids, language: context.language, categories: categories)
 
+    keys = item_keys(Map.get(query, "fields"))
+
     items =
       for id <- result.ids, %Record{state: :listed} = record <- [Map.get(records, id)] do
-        record |> Cards.list_item(context) |> pick(Map.get(query, "fields"))
+        record |> Cards.list_item(context) |> pick(keys)
       end
 
     warnings = if result.truncated?, do: warnings ++ [facets_truncated()], else: warnings
@@ -179,8 +181,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
     |> put_unless_empty("warnings", warnings)
   end
 
-  defp pick(item, fields) when is_list(fields), do: Map.take(item, ["id" | fields])
-  defp pick(item, _none), do: item
+  defp item_keys(fields) when is_list(fields), do: Enum.uniq(["id" | fields])
+  defp item_keys(_none), do: nil
+
+  defp pick(item, keys) when is_list(keys), do: Map.take(item, keys)
+  defp pick(item, nil), do: item
 
   defp facets_truncated do
     %{
@@ -312,6 +317,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
       },
       "fields" => %{
         "type" => "array",
+        "maxItems" => length(Cards.list_fields()),
         "items" => %{"type" => "string", "enum" => Cards.list_fields()},
         "description" => "Item fields to return; id is always returned."
       }

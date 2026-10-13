@@ -251,6 +251,15 @@ Repo-local aliases:
   global `shop_product_source` switch; a catalogue record also needs the
   `"catalogue"` module key on top of `shop.manage_catalog`
   (`Web.Helpers.admin_edit_permissions/1`).
+- **Every public API handler must run inside
+  `API.Context.with_request_currency/2`.** The wrapper sets the process's
+  request currency and the request's default language (the language of the
+  domain, which may differ from the language the caller asked for). Product
+  and category links are built from that default: on a mapped domain whose
+  language is served without a locale prefix, a handler that skips the
+  wrapper emits `/de/shop/...` links where the canonical link has no `/de/`
+  segment, and the host answers each of them with a redirect. Each public
+  handler has a test that checks the `url` of its items on such a domain.
 - **The test harness must apply billing's migration chain, not just core's.**
   This module reads and writes billing's schemas directly, and billing owns
   `phoenix_kit_currencies` from its own V2 on, so a test database built from
