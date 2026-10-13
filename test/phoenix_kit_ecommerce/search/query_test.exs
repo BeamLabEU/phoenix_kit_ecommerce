@@ -608,10 +608,15 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
       age!([{second.uuid, 1}, {first.uuid, 2}, {third.uuid, 3}])
       assert similar_to(base.uuid) == [second.uuid, first.uuid, third.uuid]
 
-      # one instant: the lower id first
+      # One instant: the lower id first. The rows are rewritten from the highest
+      # id down and read by a sequential scan (the unique index on the id would
+      # hand them over in id order by itself), so the order the scan produces
+      # is the reverse of the expected one and only the id tie-break fixes it.
+      Repo.query!("SET LOCAL enable_indexscan = off")
+      Repo.query!("SET LOCAL enable_bitmapscan = off")
       same = DateTime.utc_now()
 
-      for p <- [first, second, third] do
+      for p <- Enum.sort_by([first, second, third], & &1.uuid, :desc) do
         Repo.query!(
           "UPDATE phoenix_kit_shop_search_index SET item_inserted_at = $2 WHERE item_uuid = $1",
           [Ecto.UUID.dump!(p.uuid), same]
