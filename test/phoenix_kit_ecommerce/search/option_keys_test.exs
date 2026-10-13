@@ -155,6 +155,14 @@ defmodule PhoenixKitEcommerce.Search.OptionKeysTest do
     assert [%{key: "size", values: [%{key: "large", label: "Large"}]}] = options
   end
 
+  test "value labels are trimmed in the label and in the fallback key" do
+    options =
+      OptionKeys.extract(product(%{"_option_values" => %{"size" => ["  Large ", " ★ "]}}))
+
+    assert [%{values: [%{key: "large", label: "Large"}, %{key: "★", label: "★"}]}] = options
+    assert OptionKeys.pairs(options) == ["size:large", "size:★"]
+  end
+
   test "sets whose keys collapse to one key are merged into one option" do
     options =
       OptionKeys.extract(

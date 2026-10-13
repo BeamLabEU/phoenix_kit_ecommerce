@@ -80,7 +80,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
   defp entries(slugs, raw_key, key, labels) do
     entries =
       for label <- List.wrap(labels), is_binary(label), String.trim(label) != "" do
-        %{key: value_key(slugs, raw_key, label), label: label}
+        %{key: value_key(slugs, raw_key, label), label: String.trim(label)}
       end
 
     if key == "", do: [], else: Enum.uniq_by(entries, & &1.key)
@@ -89,7 +89,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
   defp value_key(slugs, key, label) do
     case slugs |> map() |> Map.get(key) |> map() |> Map.get(label) do
       slug when is_binary(slug) and slug != "" -> neutral(slug)
-      _none -> label |> fallback_key() |> neutral()
+      _none -> label |> String.trim() |> fallback_key() |> neutral()
     end
   end
 

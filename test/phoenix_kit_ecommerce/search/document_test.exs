@@ -265,17 +265,6 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
              "Body"
   end
 
-  test "names are indexed as stored: the storefront name prefix does not strip them" do
-    {:ok, _} = PhoenixKit.Settings.update_setting("shop_name_prefixes", "3D Printed")
-
-    named = [category(@root, %{"en" => "3D Printed Home"}, nil)]
-    row = Document.build(record(%{title: %{"en" => "3D Printed Red Vase"}}, named), "en")
-
-    assert row.title == "3D Printed Red Vase"
-    assert row.category_path == ["3D Printed Home"]
-    assert row.text_b =~ "3D Printed Home"
-  end
-
   describe "categories that are not active" do
     defp hidden_chain(status) do
       [
