@@ -118,7 +118,7 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
         "pricing" => %{
           "markup_percent" => Keyword.get(opts, :markup, "10"),
           "markup_fixed" => "0",
-          "round_to" => "1"
+          "round_to" => Keyword.get(opts, :round_to, "1")
         }
       }
 
@@ -152,6 +152,13 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
     }
 
   defp reload(cart), do: Shop.get_cart!(cart.uuid)
+
+  # The same method (service, settings, pricing) priced by another provider.
+  defp switch_provider!(method, provider) do
+    block = put_in(method.metadata["shipping_provider"]["provider"], provider)
+    {:ok, switched} = Shop.update_shipping_method(method, %{metadata: block.metadata})
+    switched
+  end
 
   defp ready_cart!(opts \\ []) do
     cart = cart_with!(product!(), Keyword.get(opts, :quantity, 2))
@@ -510,6 +517,52 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
       refute Map.has_key?(reload(cart).metadata, "shipping_quote")
     end
 
+    test "a method switched to another provider does not keep the old provider's quote" do
+      {cart, method} = ready_cart!()
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+      # The stub quotes 100, +10%.
+      assert amount?(cart.shipping_amount, "110")
+
+      switch_provider!(method, "strict")
+      cart = reload(cart)
+
+      assert Shop.shipping_quote_status(cart) == :stale
+      assert {:error, :shipping_quote_required} = order_from!(cart)
+
+      # Asked again, the new provider's price is the one charged: 20, +10%.
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+      assert amount?(cart.shipping_amount, "22")
+      assert {:ok, order} = order_from!(cart)
+      assert order.metadata["shipping_quote"]["provider"] == "strict"
+      assert amount?(order.metadata["shipping_quote"]["quote"]["amount"], "20")
+    end
+
+    test "a quote stored without a provider is stale" do
+      {cart, _method} = ready_cart!()
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+
+      legacy = age_quote!(cart, %{"provider" => nil})
+
+      assert Shop.shipping_quote_status(legacy) == :stale
+    end
+
+    test "an answer that was on its way while the provider was switched is not written" do
+      {cart, method} = ready_cart!()
+
+      StubProvider.put(%{
+        quote: fn _request, ctx ->
+          switch_provider!(method, "strict")
+          {:ok, %Quote{amount: Decimal.new(100), currency: ctx.currency}}
+        end
+      })
+
+      assert {:error, :stale} = Shop.quote_cart_shipping(cart)
+      refute Map.has_key?(reload(cart).metadata, "shipping_quote")
+    end
+
     test "context options and the locale reach the provider" do
       {cart, _method} = ready_cart!()
       test_pid = self()
@@ -783,6 +836,72 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
       {:ok, cart} = Shop.set_cart_shipping(cart, method!(service: "courier"), "US")
 
       assert reload(cart).metadata["note"] == "keep me"
+    end
+  end
+
+  describe "marked-up shipping is settled once" do
+    setup do
+      PhoenixKit.Cache.clear(:billing_currencies)
+      Currency.put_request_currency(nil)
+      on_exit(fn -> Currency.put_request_currency(nil) end)
+      Repo.delete_all(Currency)
+      :ok
+    end
+
+    defp base_currency!(code, places) do
+      {:ok, _} =
+        Billing.create_currency(%{
+          code: code,
+          name: code,
+          symbol: code,
+          is_default: true,
+          exchange_rate: "1.0",
+          decimal_places: places
+        })
+
+      PhoenixKit.Cache.clear(:billing_currencies)
+    end
+
+    defp marked_up_cart!(currency, markup) do
+      product = product!(%{"price" => Decimal.new("500"), "currency" => currency})
+      cart = cart_with!(product, 1)
+      method = method!(markup: markup, round_to: "")
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "US")
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+      cart
+    end
+
+    test "a base currency without decimals rounds the marked-up amount once" do
+      base_currency!("JPY", 0)
+      cart = marked_up_cart!("JPY", "0.495")
+      stub_quote(quote_with("100"))
+
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      # 100.495 is 100 yen; settling on cents first (100.50) would make it 101.
+      assert amount?(cart.shipping_amount, "100")
+    end
+
+    test "a base currency without decimals never shows fractional yen" do
+      base_currency!("JPY", 0)
+      cart = marked_up_cart!("JPY", "7.5")
+      stub_quote(quote_with("1234"))
+
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      # 1234 * 1.075 = 1326.55
+      assert amount?(cart.shipping_amount, "1327")
+    end
+
+    test "a base currency with cents settles on cents" do
+      base_currency!("USD", 2)
+      cart = marked_up_cart!("USD", "7.5")
+      stub_quote(quote_with("4.35"))
+
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      # 4.35 * 1.075 = 4.67625
+      assert amount?(cart.shipping_amount, "4.68")
     end
   end
 

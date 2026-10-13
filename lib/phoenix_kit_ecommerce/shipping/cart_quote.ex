@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
 
           %{
             "request_hash" => "...",
+            "provider" => "acme_post",
             "status" => "ok" | "fallback" | "unavailable",
             "quote" => Quote.to_map/1 | nil,
             "reason" => "too_heavy" | nil,
@@ -16,7 +17,10 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
 
       `request_hash` is `PhoenixKitEcommerce.Shipping.request_hash/1` of the
       request the answer belongs to; a quote whose hash differs from the
-      current request is stale and is never charged.
+      current request is stale and is never charged. `provider` is the key of
+      the provider that answered: the request does not name it, so a method
+      switched to another provider must not keep the old one's price. An entry
+      without it (stored before it existed) is stale.
 
   Pure helpers (no database, no network) over the metadata map. The cart
   functions that use them are in `PhoenixKitEcommerce`.
@@ -27,6 +31,7 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
   alias PhoenixKit.Utils.Date, as: UtilsDate
   alias PhoenixKitEcommerce.Shipping
   alias PhoenixKitEcommerce.Shipping.{Address, Codec, Destination, Locality, PickupPoint, Quote}
+  alias PhoenixKitEcommerce.ShippingMethod
 
   @destination_key "shipping_destination"
   @quote_key "shipping_quote"
@@ -40,6 +45,7 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
 
   @type stored :: %{
           request_hash: String.t() | nil,
+          provider: String.t() | nil,
           status: status(),
           quote: Quote.t() | nil,
           reason: String.t() | nil,
@@ -98,6 +104,7 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
     if status && usable?(status, quote) do
       %{
         request_hash: entry |> Codec.get(:request_hash) |> Codec.string(),
+        provider: entry |> Codec.get(:provider) |> Codec.string(),
         status: status,
         quote: quote,
         reason: entry |> Codec.get(:reason) |> Codec.string(),
@@ -160,22 +167,23 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
     cond do
       quote.currency not in currencies ->
         fallback = fallback_quote(method, currency)
-        build_entry(request_hash, "fallback", fallback, "unsupported_quote_currency")
+        build_entry(request_hash, method, "fallback", fallback, "unsupported_quote_currency")
 
       quote.source == :fallback ->
-        build_entry(request_hash, "fallback", quote, nil)
+        build_entry(request_hash, method, "fallback", quote, nil)
 
       true ->
-        build_entry(request_hash, "ok", quote, nil)
+        build_entry(request_hash, method, "ok", quote, nil)
     end
   end
 
   def entry(request_hash, {:error, reason}, method, [currency | _]) do
     if Shipping.business_error?(reason) do
-      build_entry(request_hash, "unavailable", nil, error_reason(reason))
+      build_entry(request_hash, method, "unavailable", nil, error_reason(reason))
     else
       build_entry(
         request_hash,
+        method,
         "fallback",
         fallback_quote(method, currency),
         error_reason(reason)
@@ -183,15 +191,21 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
     end
   end
 
-  defp build_entry(request_hash, status, quote, reason) do
+  defp build_entry(request_hash, method, status, quote, reason) do
     %{
       "request_hash" => request_hash,
+      "provider" => provider(method),
       "status" => status,
       "quote" => quote && Quote.to_map(quote),
       "reason" => reason,
       "fetched_at" => DateTime.to_iso8601(UtilsDate.utc_now())
     }
   end
+
+  @doc "The key of the provider that prices the method (`\"fixed\"` without a block)."
+  @spec provider(map() | nil) :: String.t() | nil
+  def provider(nil), do: nil
+  def provider(method), do: method |> ShippingMethod.shipping_config() |> Map.get(:provider)
 
   defp fallback_quote(method, currency) do
     %Quote{

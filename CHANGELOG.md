@@ -4,22 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.5.21 - 2026-10-12
+
+### Added
+
+- **Carrier-agnostic shipping providers and calculated rates** (#83). A
+  `Shipping.Provider` behaviour that carriers implement (services,
+  locality search, pickup points, quote, destination check), a facade that
+  runs a provider in an isolated, timed worker with telemetry, an ETS cache
+  (`Shipping.Cache`, started through `children/0`) and per-provider rate
+  limiting of the lookups a shopper's typing causes, and two built-in
+  providers: `fixed` (the method's own price, the default) and `table`
+  (weight bands). A host registers more with
+  `config :phoenix_kit_ecommerce, :shipping_providers, [MyCarrier]`; a
+  provider that needs credentials declares `integration/0` and its
+  connection is offered on the Integrations page.
+- **Shipping method cost calculation** (#83). The shipping method form has a
+  provider, service, provider settings (with locality search), markup
+  (percent and fixed) and optional rounding step; the methods list shows each
+  method's provider.
+- **Parcel dimensions** (#83). Products and catalogue items take length,
+  width and height in mm, categories and the shop a default box and weight
+  (settings page). Each cart line freezes its shipping profile, so a cart is
+  packed from its own snapshots.
+- **Destination and quote on the cart, checkout gated on both** (#83). The
+  cart keeps where the parcel goes and the provider's quote for exactly that
+  request; totals use the stored quote without calling the network, and
+  checkout is refused (`:shipping_quote_required`) while a calculated method
+  has no current quote. A transient provider failure falls back to the
+  method's price; a business refusal (too heavy, no service) makes the method
+  unavailable. The order keeps the provider, destination, quote and parcels.
+- **Destination picker** (#83). City search, pickup points with a filter, a
+  manual point code or an address, on the cart page and the checkout
+  shipping step, with automatic bounded re-quoting and the quote's price or
+  estimate, ETA, COD fee and fallback note; the destination and ETA show on
+  the confirmation and order pages. Translated for de, et, fr, ru and uk.
 
 ### Fixed
 
 - **Shipping providers, review of #83.** A provider refusal that carries
   details (`{:service_unavailable, "text"}`) no longer crashes the cart and
-  checkout pages. Provider crash reasons no longer carry the provider's
-  credentials into the log, the cache or the caller, and are bounded. A
-  cached quote is not served past the carrier's own `expires_at`. Provider
-  lists of anything but `Service`/`Locality`/`PickupPoint` structs are a bad
-  return instead of being cached. Setting a destination, picking a point and
+  checkout pages. Provider crash and bad-return diagnostics no longer carry
+  the provider's credentials: a malformed return is described by its shape
+  only, exception text has every credential value (and its inspect-escaped
+  form) redacted, and the log line is redacted the same way; all of it is
+  bounded. A stored quote now records the provider that answered and is
+  stale for any other, so a method switched to another provider, or an answer
+  that was in flight at the switch, can no longer charge or record the old
+  provider's price (quotes stored before this change are re-asked). A cached
+  quote is not served past the carrier's own `expires_at`. Provider lists of
+  anything but `Service`/`Locality`/`PickupPoint` structs are a bad return
+  instead of being cached. Setting a destination, picking a point and
   re-quoting are throttled per picker, and the manual/address events are
-  ignored without a matching service instead of crashing the page. Calculated
-  shipping settles on the base currency's decimal places (JPY no longer
-  shows fractional yen). The admin locality pick is by id, not list position.
-  A malformed `:shipping_provider_timeout` falls back to the default.
+  ignored without a matching service instead of crashing the page. A marked-up
+  quote in the base currency is rounded once, to the base currency's decimal
+  places (JPY shows whole yen). The admin locality pick is by id, not list
+  position. A malformed `:shipping_provider_timeout` falls back to the
+  default.
 
 ## 0.5.20 - 2026-10-11
 
