@@ -248,12 +248,15 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
       {resolver, fn -> Agent.get(calls, & &1) end}
     end
 
-    defp start_with(resolver) do
+    defp start_with(resolver, opts \\ []) do
       pid =
         start_supervised!(
           {Subscriber,
-           name: :search_subscriber_resolver, boot_check_ms: nil, shop_catalogue: resolver},
-          id: :resolver
+           Keyword.merge(
+             [name: :search_subscriber_resolver, boot_check_ms: nil, shop_catalogue: resolver],
+             opts
+           )},
+          id: make_ref()
         )
 
       _ = :sys.get_state(pid)
@@ -285,6 +288,78 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
 
       assert jobs() == []
       assert calls.() == 3
+    end
+
+    test "is looked up again before an event of another catalogue is dropped: a switch is noticed" do
+      [old, new] = for _ <- 1..2, do: Ecto.UUID.generate()
+      current = start_supervised!({Agent, fn -> old end}, id: make_ref())
+      {resolver, calls} = counting_resolver(fn -> Agent.get(current, & &1) end)
+      pid = start_with(resolver, recheck_ms: 0)
+      [first, switched, stale] = for _ <- 1..3, do: Ecto.UUID.generate()
+
+      deliver(pid, {:catalogue_data_changed, :item, first, old})
+      Agent.update(current, fn _ -> new end)
+      deliver(pid, {:catalogue_data_changed, :item, switched, new})
+      deliver(pid, {:catalogue_data_changed, :item, stale, old})
+
+      assert jobs() == [item_job(first), item_job(switched)]
+      assert calls.() == 3
+    end
+
+    test "is looked up again once per window, however many events of another catalogue arrive" do
+      shop = Ecto.UUID.generate()
+      {resolver, calls} = counting_resolver(fn -> shop end)
+      pid = start_with(resolver)
+
+      deliver(pid, {:catalogue_data_changed, :item, Ecto.UUID.generate(), shop})
+
+      for _ <- 1..5,
+          do:
+            deliver(
+              pid,
+              {:catalogue_data_changed, :item, Ecto.UUID.generate(), Ecto.UUID.generate()}
+            )
+
+      assert length(jobs()) == 1
+      assert calls.() == 1
+
+      # a window of no length: each dropped event costs exactly one more lookup
+      {resolver, calls} = counting_resolver(fn -> shop end)
+      pid = start_with(resolver, recheck_ms: 0, name: :search_subscriber_resolver_open)
+
+      deliver(pid, {:catalogue_data_changed, :item, Ecto.UUID.generate(), shop})
+
+      for _ <- 1..3,
+          do:
+            deliver(
+              pid,
+              {:catalogue_data_changed, :item, Ecto.UUID.generate(), Ecto.UUID.generate()}
+            )
+
+      assert calls.() == 4
+    end
+
+    test "is not looked up a second time for the event that has just caused a lookup" do
+      {resolver, calls} = counting_resolver(fn -> Ecto.UUID.generate() end)
+      pid = start_with(resolver, recheck_ms: 0)
+
+      deliver(pid, {:catalogue_data_changed, :item, Ecto.UUID.generate(), Ecto.UUID.generate()})
+
+      assert calls.() == 1
+    end
+
+    test "that exits lets the events through, with a warning that names no value" do
+      pid = start_with(fn -> exit(:boom_secret) end)
+      item = Ecto.UUID.generate()
+
+      log =
+        capture_log(fn ->
+          deliver(pid, {:catalogue_data_changed, :item, item, Ecto.UUID.generate()})
+        end)
+
+      assert jobs() == [item_job(item)]
+      assert log =~ "could not resolve the shop catalogue"
+      refute log =~ "boom_secret"
     end
 
     test "that cannot be looked up lets the events through, with a warning that names no value" do
