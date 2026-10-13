@@ -31,6 +31,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
       |> assign(:supported_types, OptionTypes.supported_types())
       |> assign(:show_media_selector, false)
       |> assign(:image_uuid, nil)
+      |> assign(:return_to, nil)
 
     {:ok, socket}
   end
@@ -44,6 +45,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     if socket.assigns.live_action in [:new, :edit] and catalogue_source_active?() do
       {:noreply, redirect_to_catalogue(socket)}
     else
+      socket = assign(socket, :return_to, Helpers.safe_return_to(params["return_to"]))
       {:noreply, apply_action(socket, socket.assigns.live_action, params)}
     end
   end
@@ -376,7 +378,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   def render(assigns) do
     ~H"""
       <div class="container flex-col mx-auto px-4 py-6 max-w-5xl">
-        <.admin_page_header back={Routes.path("/admin/shop/categories")}>
+        <.admin_page_header back={@return_to || Routes.path("/admin/shop/categories")}>
           <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-base-content">{@heading}</h1>
           <p class="text-sm sm:text-base text-base-content/60 mt-0.5">
             {if @live_action == :new, do: gettext("Create a new category"), else: gettext("Edit category details")}
@@ -780,7 +782,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
 
           <%!-- Submit --%>
           <div class="flex justify-end gap-4">
-            <.link navigate={Routes.path("/admin/shop/categories")} class="btn btn-outline">
+            <.link navigate={@return_to || Routes.path("/admin/shop/categories")} class="btn btn-outline">
               {gettext("Cancel")}
             </.link>
             <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
@@ -933,7 +935,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
         {:noreply,
          socket
          |> put_flash(:info, gettext("Category created"))
-         |> push_navigate(to: Routes.path("/admin/shop/categories"))}
+         |> push_navigate(to: socket.assigns.return_to || Routes.path("/admin/shop/categories"))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
@@ -957,7 +959,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
         {:noreply,
          socket
          |> put_flash(:info, gettext("Category updated"))
-         |> push_navigate(to: Routes.path("/admin/shop/categories"))}
+         |> push_navigate(to: socket.assigns.return_to || Routes.path("/admin/shop/categories"))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
