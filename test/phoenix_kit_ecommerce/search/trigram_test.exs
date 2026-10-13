@@ -23,6 +23,15 @@ defmodule PhoenixKitEcommerce.Search.TrigramTest do
     assert Trigram.available?() == installed?()
   end
 
+  test "available?/0 is false while the operator is not on the search path, though the extension is installed" do
+    assert installed?()
+
+    # Rolled back with the test's sandbox transaction.
+    Repo.query!("SET LOCAL search_path TO pg_catalog")
+
+    assert Trigram.available?() == false
+  end
+
   test "put_cache/1 overrides the answer until reset_cache/0" do
     Trigram.put_cache(false)
     assert Trigram.available?() == false

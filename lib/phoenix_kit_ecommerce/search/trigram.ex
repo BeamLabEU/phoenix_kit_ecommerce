@@ -1,7 +1,10 @@
 defmodule PhoenixKitEcommerce.Search.Trigram do
   @moduledoc """
-  Whether the `pg_trgm` extension is installed, which decides if search may
-  fall back to typo-tolerant matching.
+  Whether the `pg_trgm` extension is installed and its `%>` operator is
+  usable (found on the connection's search path), which decides if search may
+  fall back to typo-tolerant matching. An extension installed in a schema that
+  is not on the search path is not usable: the typo query would fail on every
+  misspelt search.
 
   The answer is cached for 60 seconds in a `:persistent_term` (one query per
   minute instead of one per search); an extension installed later is noticed
@@ -14,7 +17,14 @@ defmodule PhoenixKitEcommerce.Search.Trigram do
   @cache_key {__MODULE__, :available}
   @ttl_ms 60_000
 
-  @doc "True when `pg_trgm` is installed in the database."
+  # `to_regoperator` answers NULL, never an error, for an operator that does not
+  # resolve on the search path.
+  @check_sql """
+  SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')
+         AND to_regoperator('%>(text, text)') IS NOT NULL
+  """
+
+  @doc "True when `pg_trgm` is installed in the database and its `%>` operator resolves."
   @spec available?() :: boolean()
   def available? do
     now = System.monotonic_time(:millisecond)
@@ -25,7 +35,8 @@ defmodule PhoenixKitEcommerce.Search.Trigram do
     end
   end
 
-  @doc "Test hook: pins the cached answer for the next 60 seconds."
+  @doc false
+  # Test hook: pins the cached answer for the next 60 seconds.
   @spec put_cache(boolean()) :: :ok
   def put_cache(value) when is_boolean(value) do
     :persistent_term.put(@cache_key, {System.monotonic_time(:millisecond), value})
@@ -54,10 +65,7 @@ defmodule PhoenixKitEcommerce.Search.Trigram do
   defp last_known(nil), do: false
 
   defp check_installed do
-    case PhoenixKit.RepoHelper.repo().query(
-           "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')",
-           []
-         ) do
+    case PhoenixKit.RepoHelper.repo().query(@check_sql, []) do
       {:ok, %{rows: [[installed]]}} when is_boolean(installed) -> {:ok, installed}
       _other -> :error
     end
