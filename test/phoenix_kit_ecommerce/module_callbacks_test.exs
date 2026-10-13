@@ -95,4 +95,10 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
     assert {"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker} in entries
   end
+
+  test "children/0 contributes the search subscriber" do
+    ids = Enum.map(PhoenixKitEcommerce.children(), &Supervisor.child_spec(&1, []).id)
+
+    assert PhoenixKitEcommerce.Search.Subscriber in ids
+  end
 end
