@@ -64,6 +64,7 @@ defmodule PhoenixKitEcommerce.Options do
   alias PhoenixKitEcommerce.ShopConfig
 
   @global_schema_key "global_option_schema"
+  @global_options_lock "phoenix_kit_ecommerce:global_options"
 
   # ============================================
   # GLOBAL OPTIONS
@@ -96,6 +97,11 @@ defmodule PhoenixKitEcommerce.Options do
   @doc """
   Updates global option schema.
 
+  Replaces the WHOLE list. A caller holding a list it read earlier erases
+  whatever was added since; change one option through
+  `add_global_option/1`, `update_global_option/3`, `toggle_global_option/1`,
+  `reorder_global_options/1` or `remove_global_option/1` instead.
+
   ## Examples
 
       Options.update_global_options([
@@ -104,6 +110,138 @@ defmodule PhoenixKitEcommerce.Options do
       ])
   """
   def update_global_options(options) when is_list(options) do
+    change_global_options(fn _current -> {:ok, options} end)
+  end
+
+  @doc """
+  Adds a single option to global schema.
+  """
+  def add_global_option(opt) when is_map(opt) do
+    with {:ok, validated} <- OptionTypes.validate_option(opt) do
+      change_global_options(&append_global_option(&1, validated))
+    end
+  end
+
+  defp append_global_option(current, option) do
+    if Enum.any?(current, &(&1["key"] == option["key"])) do
+      {:error, {:option_key_exists, option["key"]}}
+    else
+      {:ok, current ++ [Map.put(option, "position", length(current))]}
+    end
+  end
+
+  @doc """
+  Merges `changes` into the global option `key`, leaving every other
+  option as it is stored now.
+
+  ## Options
+
+    * `:base` — the option as the caller last read it. Values the stored
+      option gained since then (an import adding one, another admin) are
+      kept, with their price modifiers, instead of being dropped by a form
+      that never saw them.
+  """
+  def update_global_option(key, changes, opts \\ []) when is_binary(key) and is_map(changes) do
+    base = Keyword.get(opts, :base)
+
+    change_global_option(key, fn stored ->
+      stored |> Map.merge(changes) |> keep_values_added_since(stored, base)
+    end)
+  end
+
+  @doc """
+  Flips the `enabled` flag of the global option `key` as it is stored now.
+  """
+  def toggle_global_option(key) when is_binary(key) do
+    change_global_option(key, fn stored ->
+      Map.put(stored, "enabled", Map.get(stored, "enabled", true) == false)
+    end)
+  end
+
+  @doc """
+  Reorders the global options to follow `ordered_keys`.
+
+  Options the list does not name (added after the caller read it) keep
+  their place after the named ones rather than disappearing.
+  """
+  def reorder_global_options(ordered_keys) when is_list(ordered_keys) do
+    change_global_options(fn current ->
+      named = Enum.flat_map(ordered_keys, &Enum.filter(current, fn opt -> opt["key"] == &1 end))
+      rest = Enum.reject(current, &(&1["key"] in ordered_keys))
+
+      {:ok,
+       (named ++ rest)
+       |> Enum.uniq_by(& &1["key"])
+       |> Enum.with_index()
+       |> Enum.map(fn {opt, idx} -> Map.put(opt, "position", idx) end)}
+    end)
+  end
+
+  @doc """
+  Removes an option from global schema by key.
+  """
+  def remove_global_option(key) when is_binary(key) do
+    change_global_options(fn current -> {:ok, Enum.reject(current, &(&1["key"] == key))} end)
+  end
+
+  defp change_global_option(key, fun) do
+    change_global_options(fn current ->
+      if Enum.any?(current, &(&1["key"] == key)) do
+        {:ok, Enum.map(current, fn opt -> if opt["key"] == key, do: fun.(opt), else: opt end)}
+      else
+        {:error, :option_not_found}
+      end
+    end)
+  end
+
+  # Values in `stored` that `base` did not have were added by someone else
+  # after the caller read the option.
+  defp keep_values_added_since(merged, stored, %{} = base)
+       when is_map_key(merged, "options") do
+    known = MapSet.new(base["options"] || [], &option_value_key/1)
+    present = MapSet.new(merged["options"] || [], &option_value_key/1)
+
+    added =
+      Enum.reject(stored["options"] || [], fn value ->
+        key = option_value_key(value)
+        MapSet.member?(known, key) or MapSet.member?(present, key)
+      end)
+
+    added_keys = Enum.map(added, &option_value_key/1)
+    stored_modifiers = Map.take(stored["price_modifiers"] || %{}, added_keys)
+
+    merged = Map.put(merged, "options", (merged["options"] || []) ++ added)
+
+    if is_map(merged["price_modifiers"]) do
+      Map.update!(merged, "price_modifiers", &Map.merge(stored_modifiers, &1))
+    else
+      merged
+    end
+  end
+
+  defp keep_values_added_since(merged, _stored, _base), do: merged
+
+  defp option_value_key(%{"value" => value}), do: value
+  defp option_value_key(value), do: value
+
+  # The global list is one JSON value in one row: every writer reads it,
+  # changes it and writes it back. The advisory lock makes that sequence
+  # exclusive, and `fun` is always handed the list as it is stored NOW, so a
+  # writer can only ever apply its own change.
+  defp change_global_options(fun) do
+    repo().transaction(fn ->
+      repo().query!("SELECT pg_advisory_xact_lock(hashtext($1))", [@global_options_lock])
+
+      with {:ok, updated} <- fun.(get_global_options()),
+           {:ok, config} <- write_global_options(updated) do
+        config
+      else
+        {:error, reason} -> repo().rollback(reason)
+      end
+    end)
+  end
+
+  defp write_global_options(options) do
     with {:ok, validated} <- OptionTypes.validate_options(options) do
       wrapped_value = %{"options" => validated}
 
@@ -119,31 +257,6 @@ defmodule PhoenixKitEcommerce.Options do
           |> repo().update()
       end
     end
-  end
-
-  @doc """
-  Adds a single option to global schema.
-  """
-  def add_global_option(opt) when is_map(opt) do
-    with {:ok, validated} <- OptionTypes.validate_option(opt) do
-      current = get_global_options()
-
-      # Check for duplicate key
-      if Enum.any?(current, &(&1["key"] == validated["key"])) do
-        {:error, "Option with key '#{validated["key"]}' already exists"}
-      else
-        update_global_options(current ++ [validated])
-      end
-    end
-  end
-
-  @doc """
-  Removes an option from global schema by key.
-  """
-  def remove_global_option(key) when is_binary(key) do
-    current = get_global_options()
-    updated = Enum.reject(current, &(&1["key"] == key))
-    update_global_options(updated)
   end
 
   @doc """
@@ -182,36 +295,16 @@ defmodule PhoenixKitEcommerce.Options do
       })
   """
   def add_value_to_global_option(key, value_or_map) when is_binary(key) do
-    case get_global_option_by_key(key) do
-      nil ->
-        {:error, "Global option '#{key}' not found"}
+    change_global_option(key, fn option ->
+      current_options = option["options"] || []
+      new_value = normalize_option_value(value_or_map, current_options)
 
-      option ->
-        do_add_value_to_option(key, option, value_or_map)
-    end
-  end
-
-  defp do_add_value_to_option(key, option, value_or_map) do
-    current_options = option["options"] || []
-    new_value = normalize_option_value(value_or_map, current_options)
-
-    if value_exists?(current_options, new_value) do
-      {:ok, option}
-    else
-      updated_option = Map.put(option, "options", current_options ++ [new_value])
-      replace_global_option(key, updated_option)
-    end
-  end
-
-  defp replace_global_option(key, updated_option) do
-    all_options = get_global_options()
-
-    updated_all =
-      Enum.map(all_options, fn opt ->
-        if opt["key"] == key, do: updated_option, else: opt
-      end)
-
-    update_global_options(updated_all)
+      if value_exists?(current_options, new_value) do
+        option
+      else
+        Map.put(option, "options", current_options ++ [new_value])
+      end
+    end)
   end
 
   # Normalize value to match existing format (string or map)
@@ -297,7 +390,7 @@ defmodule PhoenixKitEcommerce.Options do
       current = get_category_options(category)
 
       if Enum.any?(current, &(&1["key"] == validated["key"])) do
-        {:error, "Option with key '#{validated["key"]}' already exists in this category"}
+        {:error, {:option_key_exists_in_category, validated["key"]}}
       else
         update_category_options(category, current ++ [validated])
       end
@@ -953,14 +1046,21 @@ defmodule PhoenixKitEcommerce.Options do
     end
   end
 
-  # Converts snake_case key to human-readable label.
-  # Example: "main_color" -> "Main Color"
-  defp humanize_key(key) do
+  @doc """
+  An option key as a label: `"material_type"` -> `"Material Type"`.
+
+  The one definition; the web helpers and the order-line description use it
+  too.
+  """
+  @spec humanize_key(term()) :: String.t()
+  def humanize_key(key) when is_binary(key) do
     key
     |> String.replace("_", " ")
     |> String.split(" ")
     |> Enum.map_join(" ", &String.capitalize/1)
   end
+
+  def humanize_key(key), do: to_string(key)
 
   # Merges schema specs with discovered specs.
   # Schema specs take priority - discovered specs are only added if their key

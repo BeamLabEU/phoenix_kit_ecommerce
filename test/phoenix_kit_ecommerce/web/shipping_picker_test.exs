@@ -1658,10 +1658,15 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
 
   # The view has caught up with everything in flight: the events the picker
   # raised, the broadcasts they caused, the carrier's answers.
+  #
+  # The async work is real (`start_async` around the carrier stub, plus the
+  # database writes its answer leads to), so how long it takes depends on
+  # what else the machine is running: the wait is generous, and returns as
+  # soon as nothing is in flight.
   defp settle(view) do
     for _round <- 1..2 do
       _ = :sys.get_state(view.pid)
-      render_async(view)
+      render_async(view, 5_000)
     end
 
     :ok

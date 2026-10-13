@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShippingDisplay
   alias PhoenixKitEcommerce.Web.Helpers, as: ShopHelpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [format_price: 2, profile_display_name: 1, profile_address: 1, profile_email: 1]
@@ -87,6 +88,10 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   def handle_params(_params, uri, socket) do
     {:noreply, assign(socket, :url_path, URI.parse(uri).path)}
   end
+
+  # This page takes no events; one pushed at it anyway is ignored.
+  @impl true
+  def handle_event(event, _params, socket), do: ShopHelpers.ignore_event(event, socket)
 
   # View helpers
 

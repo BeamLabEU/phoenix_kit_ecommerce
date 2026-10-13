@@ -130,6 +130,8 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.TranslationSweepSettings, as: SweepSettings
   alias PhoenixKitEcommerce.Web.Authz
+  alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
   alias PhoenixKitEcommerce.Workers.TranslationSweepWorker, as: SweepWorker
 
   # phoenix_kit_ai is an OPTIONAL dependency (see mix.exs) — this whole
@@ -611,21 +613,21 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # same shape as `Web.ShopifySync`)
   # ============================================================
 
-  def handle_event("request_translate:" <> scope, %{"uuids" => uuids}, socket) do
+  def handle_event("request_translate:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :translate, scope, uuids)
+      open_pending(socket, :translate, scope, cast_uuids(params["uuids"]))
     end)
   end
 
-  def handle_event("request_retranslate:" <> scope, %{"uuids" => uuids}, socket) do
+  def handle_event("request_retranslate:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :retranslate, scope, uuids)
+      open_pending(socket, :retranslate, scope, cast_uuids(params["uuids"]))
     end)
   end
 
-  def handle_event("request_stamp:" <> scope, %{"uuids" => uuids}, socket) do
+  def handle_event("request_stamp:" <> scope, params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      open_pending(socket, :stamp, scope, uuids)
+      open_pending(socket, :stamp, scope, cast_uuids(params["uuids"]))
     end)
   end
 
@@ -840,6 +842,19 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # Empty selection is a no-op — matches the toolbar buttons' own
   # `disabled` state and stops a stale/tampered client event from opening
   # a confirmation for zero actual resources.
+  # The selection is client input: anything that is not a list of uuids is
+  # dropped here, before it reaches a query.
+  defp cast_uuids(uuids) when is_list(uuids) do
+    Enum.flat_map(uuids, fn uuid ->
+      case Ecto.UUID.cast(uuid) do
+        {:ok, uuid} -> [uuid]
+        :error -> []
+      end
+    end)
+  end
+
+  defp cast_uuids(_other), do: []
+
   defp open_pending(socket, _verb, _scope, []), do: {:noreply, socket}
 
   defp open_pending(socket, verb, scope, uuids) do
@@ -951,11 +966,35 @@ defmodule PhoenixKitEcommerce.Web.Translations do
     end)
   end
 
+  # One audit row per confirmed bulk verb: counts only, never the texts.
+  defp log_bulk(socket, verb, metadata) do
+    Activity.log("shop.translations_" <> verb,
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      metadata: metadata
+    )
+  end
+
+  defp enqueue_metadata(uuids, enqueued, conflicts, errors) do
+    %{
+      "resources" => length(uuids),
+      "enqueued" => count_of(enqueued),
+      "conflicts" => count_of(conflicts),
+      "errors" => count_of(errors)
+    }
+  end
+
+  defp count_of(value) when is_integer(value), do: value
+  defp count_of(value) when is_list(value), do: length(value)
+  defp count_of(_value), do: 0
+
   defp do_confirm(socket, %{verb: :stop}) do
     socket = assign(socket, :pending, nil)
 
     case cancel_pending_translation_jobs() do
       {:ok, count} ->
+        log_bulk(socket, "stopped", %{"count" => count})
+
         {:noreply,
          socket
          |> put_flash(
@@ -974,7 +1013,12 @@ defmodule PhoenixKitEcommerce.Web.Translations do
       # when a confirmed full run (1330 jobs, design §8) is spending money
       # it shouldn't. Reporting the second as the first would leave them
       # believing the queue was stopped while it drains at 45s a call.
-      {:error, _reason} ->
+      {:error, reason} ->
+        Activity.log_failed("shop.translations_stopped", reason,
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket)
+        )
+
         {:noreply,
          socket
          |> put_flash(
@@ -987,6 +1031,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   defp do_confirm(socket, %{verb: :translate, uuids: uuids, lang: lang}) do
     {enqueued, conflicts, errors} = bulk_translate(socket, uuids, lang)
+    log_bulk(socket, "queued", enqueue_metadata(uuids, enqueued, conflicts, errors))
 
     {:noreply,
      socket
@@ -997,6 +1042,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   defp do_confirm(socket, %{verb: :retranslate, uuids: uuids, lang: lang, field: field}) do
     {enqueued, conflicts, errors} = bulk_retranslate(socket, uuids, lang, field)
+    log_bulk(socket, "requeued", enqueue_metadata(uuids, enqueued, conflicts, errors))
 
     {:noreply,
      socket
@@ -1007,6 +1053,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
 
   defp do_confirm(socket, %{verb: :stamp, uuids: uuids, lang: lang, field: field}) do
     count = bulk_stamp(socket, uuids, lang, field)
+    log_bulk(socket, "stamped", %{"count" => count})
 
     {:noreply,
      socket
@@ -1030,6 +1077,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # origin differs.
   defp do_confirm(socket, %{verb: :stamp_all, uuids: uuids, lang: lang, field: field}) do
     count = bulk_stamp(socket, uuids, lang, field)
+    log_bulk(socket, "stamped", %{"count" => count})
 
     {:noreply,
      socket
@@ -1056,6 +1104,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # explicitly stamps or translates it, same as any other `:unknown` row.
   defp do_confirm(socket, %{verb: :reset_all, uuids: uuids, lang: lang, field: field}) do
     count = bulk_reset_reference(socket, uuids, lang, field)
+    log_bulk(socket, "reference_reset", %{"count" => count})
 
     {:noreply,
      socket
@@ -1284,7 +1333,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   # identical note: any message shape not explicitly matched above must
   # not crash a mounted admin session.
   @impl true
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   # ============================================================
   # Helpers
@@ -2017,17 +2066,17 @@ defmodule PhoenixKitEcommerce.Web.Translations do
           <.empty_state :if={@diagnostics == []} title={gettext("No AI requests logged for shop resources yet")} variant="compact" />
           <div :for={entry <- @diagnostics} id={"diagnostic-#{entry.uuid}"} class="border border-base-300 rounded-lg p-3 mb-2">
             <div class="flex flex-wrap items-center gap-2 text-sm">
-              <span class={if(entry.status == "success", do: "badge badge-success badge-sm", else: "badge badge-error badge-sm")}>{entry.status}</span>
+              <span class={if(entry.status == "success", do: "badge badge-success badge-sm", else: "badge badge-error badge-sm")}>{StatusLabels.translation_entry(entry.status)}</span>
               <span class="font-mono text-xs">{entry.resource_type}:{entry.resource_uuid}</span>
               <.time_ago datetime={entry.inserted_at} />
             </div>
             <div :if={entry.error_message} class="text-error text-sm mt-1">{entry.error_message}</div>
-            <details :if={entry.response} class="mt-2">
+            <details :if={entry.response} class="mt-2" phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}>
               <summary class="cursor-pointer text-sm text-base-content/60">{gettext("Raw model response")}</summary>
               <pre class="whitespace-pre-wrap text-xs bg-base-200 rounded p-2 mt-1 max-h-64 overflow-y-auto" phx-no-curly-interpolation><%= entry.response %></pre>
             </details>
             <% sent_prompt = prompt_text(entry.messages) %>
-            <details :if={sent_prompt} id={"diagnostic-prompt-#{entry.uuid}"} class="mt-2">
+            <details :if={sent_prompt} id={"diagnostic-prompt-#{entry.uuid}"} class="mt-2" phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}>
               <summary class="cursor-pointer text-sm text-base-content/60">{gettext("Prompt as sent")}</summary>
               <pre class="whitespace-pre-wrap text-xs bg-base-200 rounded p-2 mt-1 max-h-64 overflow-y-auto" phx-no-curly-interpolation><%= sent_prompt %></pre>
             </details>

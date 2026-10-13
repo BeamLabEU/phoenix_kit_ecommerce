@@ -35,11 +35,11 @@ pages.
   the code that does call `PhoenixKitCatalogue.*` directly (the
   `ProductSource.Catalogue` adapter, `Catalogue.Writer`, the Shopify
   variants/collections/media sync) only runs behind `Code.ensure_loaded?/1`
-  once a host declares the dep, with `@compile {:no_warn_undefined, …}` and
-  matching `.dialyzer_ignore.exs` entries. Its `:catalogue`-tagged tests
-  need the test-only path bridge in `mix.exs` (`catalogue_test_deps/0`), or
-  they run by themselves when `phoenix_kit_warehouse` is resolved, which
-  brings `phoenix_kit_catalogue` in transitively.
+  once a host declares the dep, with `@compile {:no_warn_undefined, …}`. Its
+  `:catalogue`-tagged tests need the test-only path bridge in `mix.exs`
+  (`catalogue_test_deps/0`), or they run by themselves when
+  `phoenix_kit_warehouse` is resolved, which brings `phoenix_kit_catalogue`
+  in transitively.
 - **Consumed by:** no sibling declares a dependency on this module. Core
   reaches the old `PhoenixKit.Modules.Shop.*` namespace through the
   transitional shims in `lib/phoenix_kit_ecommerce/compat/`, and
@@ -132,6 +132,12 @@ Repo-local aliases:
   category/filter sidebar renders in the page templates for everyone. Admin
   LiveViews do not wrap themselves in a layout; core's admin shell supplies
   it.
+- **The storefront's `<head>` tags are the host's to render.** The catalog,
+  category and product pages assign `og`, `canonical_url` and
+  `hreflang_links`; core's root layout reads `og` only (its canonical link
+  comes from `og.url`), so `hreflang` alternates appear only when the host's
+  root layout renders `hreflang_links`. `Test.Layouts.root/1` renders all
+  three so a test can assert a page still supplies them.
 - **Gettext** is this module's own backend (`PhoenixKitEcommerce.Gettext`,
   catalogues under `priv/gettext/{en,et,ru,de,fr,uk}`). A `gettext("…")` added
   anywhere under `web/` lands in THIS catalogue, so it needs
@@ -145,6 +151,20 @@ Repo-local aliases:
   English beside translated siblings.
 - **Never wrap in `gettext`:** `push_event` names, URL paths, route segments,
   setting keys. Translating one breaks at runtime in every non-English locale.
+- **A stored status is rendered through `Web.StatusLabels`** (`order/1`,
+  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`),
+  never as its raw value: the value keys badge classes, filters and audit
+  metadata, the label is what a person reads. A new status value needs its
+  own `gettext` clause there.
+- **A context error is an atom or a tagged tuple with a clause in
+  `Errors.message/1`**, never an English sentence: the reason is matched on
+  and logged, the sentence is translated where it is shown. Each message is
+  pinned in `errors_test.exs`.
+- **Every public LiveView ends its `handle_event/3` clauses with the
+  `Helpers.ignore_event/2` catch-all.** Anyone can push any event at a public
+  page; an unknown name or a payload no clause takes must not crash the view.
+- **Text stored on an order line is resolved in the locale of the process
+  converting the cart** — the buyer's — and never re-translated on read.
 - **JS hooks:** none. If one is ever needed, ship it as a prebuilt bundle
   declared by `js_sources/0` under a namespaced global — never registered from
   an inline `<script>`, which morphdom does not execute on LiveView
@@ -389,8 +409,11 @@ Admin and Storefront APIs.
 
 ### PubSub topics
 
-Broadcast through `PhoenixKit.PubSub.Manager` (the HOST's PubSub), from
-`PhoenixKitEcommerce.Events`.
+Broadcast and subscribed through `PhoenixKitEcommerce.Events`, which uses
+`PhoenixKit.PubSub.Manager` — core's own PubSub server, not the one
+`PhoenixKit.PubSubHelper` resolves from the host's config. A publisher on one
+and a subscriber on the other never meet and nothing fails, so a new topic
+gets its topic, subscribe and broadcast functions in `Events`.
 
 | Topic | Carries |
 |---|---|
@@ -398,6 +421,8 @@ Broadcast through `PhoenixKit.PubSub.Manager` (the HOST's PubSub), from
 | `shop:products:<product_uuid>` | one product's changes |
 | `shop:categories` | category created/updated/deleted, bulk status/parent/delete |
 | `shop:inventory` | inventory changes |
+| `shop:imports`, `shop:import:<import_log_uuid>` | CSV import completion, and one import's progress |
+| `shop:image_migration:batch`, `shop:image_migration:<product_uuid>` | image migration start/cancel/per-product completion, and one product's progress |
 | per-user and per-session cart topics | cart sync for real-time storefront updates |
 
 ### Web layer
@@ -465,7 +490,10 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_product_source` — `"legacy"` (default) or `"catalogue"`; stored in
   `phoenix_kit_shop_config`, not `PhoenixKit.Settings`. Read through
   `PhoenixKitEcommerce.ProductSource.current/0`, which fails closed to
-  Legacy when `phoenix_kit_catalogue` is not loaded.
+  Legacy when `phoenix_kit_catalogue` is not loaded or the read fails. The
+  value is memoized per process for `:product_source_memo_ms` (application
+  env, default 1000, `0` in tests): nothing in this package writes the row,
+  so there is no write to invalidate a shared cache on.
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
@@ -601,7 +629,13 @@ settings-layer error.
   answers `false` (fail closed). Off hides the Shopify Sync tab, redirects the
   sync page, empties `integration_providers/0` and `required_integrations/0`
   (the provider cache is cleared on toggle). The stored connection and its
-  token are never touched. Installs that used Shopify under the old default of
+  token are never touched.
+- The connection's `shop_domain` is accepted only as a bare
+  `<store>.myshopify.com` host (`Shopify.ShopDomain`): it is interpolated
+  into the URL every Admin API request goes to with the access token
+  attached. For the same reason `Shopify.AdminClient` follows no redirect
+  and no next-page link to another host, and bounds a paginated read by
+  page count and wall clock. Installs that used Shopify under the old default of
   `true` get the row written by the chain's V3 step (below).
 
 **Stock tracking — read through `PhoenixKitEcommerce.StockTracking`**

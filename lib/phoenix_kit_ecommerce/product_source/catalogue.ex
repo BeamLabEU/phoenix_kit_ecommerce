@@ -96,7 +96,15 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     # One batch resolution for the whole page of categories — never one
     # query per category (see `Query.resolve_category_images/1`'s doc).
     images_by_uuid = Query.resolve_category_images(categories, opts)
-    Enum.map(categories, &build_category(&1, opts, images_by_uuid))
+    # Likewise the parents: one read for every parent the page needs.
+    parents_by_uuid = parents_by_uuid(categories, opts)
+
+    Enum.map(categories, fn category ->
+      View.category_view(category,
+        parent: listed_parent(category, parents_by_uuid),
+        featured_image_uuid: Map.get(images_by_uuid, category.uuid)
+      )
+    end)
   end
 
   @impl PhoenixKitEcommerce.ProductSource
@@ -142,6 +150,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   def product_counts_by_category do
     Query.product_counts_by_category()
   end
+
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_products(opts \\ []), do: opts |> with_catalogue() |> Query.count_items()
+
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_categories, do: [] |> with_catalogue() |> Query.count_categories()
+
+  # `metadata_option` filters read the legacy products' `_option_values`;
+  # catalogue items are filtered by attribute set instead, so there is
+  # nothing of that kind to discover here.
+  @impl PhoenixKitEcommerce.ProductSource
+  def discover_filterable_options, do: []
 
   # ============================================================
   # FILTER AGGREGATION
@@ -392,6 +412,32 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
       parent: resolve_parent(category, opts),
       featured_image_uuid: Map.get(images_by_uuid, category.uuid)
     )
+  end
+
+  # `nil` when `:parent` was not asked for. Parents already on the page are
+  # reused; the rest come from a single query, however many there are.
+  defp parents_by_uuid(categories, opts) do
+    if preload_parent?(opts) do
+      listed = Map.new(categories, &{&1.uuid, &1})
+
+      categories
+      |> Enum.map(& &1.parent_uuid)
+      |> Enum.reject(&(is_nil(&1) or is_map_key(listed, &1)))
+      |> Enum.uniq()
+      |> Query.list_categories_by_uuids(opts)
+      |> Map.new(&{&1.uuid, &1})
+      |> Map.merge(listed)
+    end
+  end
+
+  defp listed_parent(_category, nil), do: nil
+  defp listed_parent(%{parent_uuid: nil}, _parents_by_uuid), do: nil
+
+  defp listed_parent(category, parents_by_uuid) do
+    case Map.get(parents_by_uuid, category.parent_uuid) do
+      nil -> nil
+      parent -> View.category_view(parent)
+    end
   end
 
   defp resolve_parent(%{parent_uuid: nil}, _opts), do: nil

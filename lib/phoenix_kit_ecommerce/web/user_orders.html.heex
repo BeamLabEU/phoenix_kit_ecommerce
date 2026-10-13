@@ -98,8 +98,8 @@
                   </p>
                 </div>
                 <div class="ml-4 flex-shrink-0 text-right">
-                  <span class={"badge #{status_badge_class(order.status)} capitalize"}>
-                    {order.status}
+                  <span id={"order-status-#{order.uuid}"} class={"badge #{status_badge_class(order.status)} capitalize"}>
+                    {StatusLabels.order(order.status)}
                   </span>
                   <div class="text-lg font-bold mt-1">
                     {format_price(order.total, Shop.currency_for_code(order.currency))}

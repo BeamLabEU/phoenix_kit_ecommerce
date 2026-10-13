@@ -40,6 +40,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
+  alias PhoenixKitEcommerce.Web.Helpers
 
   import TranslationTabs
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
@@ -620,6 +621,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   def handle_info({:media_selector_closed}, socket) do
     {:noreply, assign(socket, :show_media_selector, false)}
   end
+
+  @impl true
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   defp apply_media_selection(socket, :gallery, file_uuids) do
     current = socket.assigns.all_image_uuids
@@ -1268,7 +1272,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
               %{
                 "key" => key,
-                "label" => (schema_opt && schema_opt["label"]) || slot_label || humanize_key(key),
+                "label" => (schema_opt && schema_opt["label"]) || slot_label || Options.humanize_key(key),
                 "type" => (schema_opt && schema_opt["type"]) || "select",
                 "options" => values,
                 "imported" => true
@@ -1826,7 +1830,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
                 <%= for {option_key, option_values} <- get_mappable_options(assigns) do %>
                   <div class="p-4 bg-base-200 rounded-lg mb-4">
-                    <h3 class="font-medium mb-3">{humanize_key(option_key)}</h3>
+                    <h3 class="font-medium mb-3">{Options.humanize_key(option_key)}</h3>
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                       <%= for value <- option_values do %>
                         <div class="flex flex-col gap-2">
@@ -1961,7 +1965,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
             <.link navigate={Routes.path("/admin/shop/products")} class="btn btn-ghost">
               {gettext("Cancel")}
             </.link>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
               <.icon name="hero-check" class="w-5 h-5 mr-2" />
               {if @live_action == :new, do: gettext("Create Product"), else: gettext("Update Product")}
             </button>
@@ -2649,14 +2653,6 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # Get image mapping for option key + value from metadata
   defp get_image_mapping(metadata, option_key, value) do
     get_in(metadata, ["_image_mappings", option_key, value])
-  end
-
-  # Humanize option key for display (color -> Color, frame_material -> Frame material)
-  defp humanize_key(key) do
-    key
-    |> String.replace("_", " ")
-    |> String.split(" ")
-    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   # Numeric minimum over Decimals — `Enum.min/2` compares %Decimal{} structs

@@ -210,7 +210,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                   <.input
                     field={@form[:name]}
                     type="text"
-                    label={gettext("Name") <> " *"}
+                    label={gettext("Name")}
                     placeholder={gettext("Standard Shipping")}
                     required
                   />
@@ -450,7 +450,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
             <.link navigate={Routes.path("/admin/shop/shipping")} class="btn btn-outline">
               {gettext("Cancel")}
             </.link>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
               <.icon name="hero-check" class="w-4 h-4 mr-2" />
               {if @live_action == :new, do: gettext("Create Method"), else: gettext("Update Method")}
             </button>

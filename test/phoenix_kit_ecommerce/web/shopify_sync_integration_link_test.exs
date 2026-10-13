@@ -49,7 +49,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncIntegrationLinkTest do
     end
   end
 
-  defp connect_shopify do
+  defp connect_shopify(domain \\ "test-shop.myshopify.com") do
     enable_shopify!()
 
     {:ok, %{uuid: uuid}} =
@@ -57,11 +57,29 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncIntegrationLinkTest do
 
     {:ok, _} =
       Integrations.save_setup(uuid, %{
-        "shop_domain" => "test-shop.myshopify.com",
+        "shop_domain" => domain,
         "access_token" => "shpat_test_token"
       })
 
     uuid
+  end
+
+  describe "the connection's shop domain" do
+    test "one that is not a bare myshopify.com host is called out on the page", %{conn: conn} do
+      connect_shopify("https://test-shop.example.com/admin")
+
+      {:ok, view, _html} = live(conn, @page)
+
+      assert has_element?(view, "#shopify-domain-invalid", "my-store.myshopify.com")
+    end
+
+    test "a valid one shows no such warning", %{conn: conn} do
+      connect_shopify()
+
+      {:ok, view, _html} = live(conn, @page)
+
+      refute has_element?(view, "#shopify-domain-invalid")
+    end
   end
 
   describe "connected" do

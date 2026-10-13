@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKit.Integrations.Providers, as: IntegrationProviders
   alias PhoenixKit.Settings
   alias PhoenixKit.Users.Auth
+  alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
@@ -26,6 +27,16 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   # phoenix_kit_ai is an OPTIONAL dependency (see mix.exs) — this page must
   # compile and render fine without it. See `ai_translations_available?/0`.
   @compile {:no_warn_undefined, PhoenixKitAI.Translations}
+
+  # Core's Integrations pages: the connection's own page when one exists,
+  # the list otherwise. A fixed segment after `/integrations/` is read by
+  # core as a connection uuid.
+  defp shopify_integration_path do
+    case PhoenixKit.Integrations.list_connections("shopify", owner: :system) do
+      [%{uuid: uuid} | _rest] -> "/admin/settings/integrations/#{uuid}"
+      [] -> "/admin/settings/integrations"
+    end
+  end
 
   @impl true
   def mount(_params, _session, socket) do
@@ -53,6 +64,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
+      |> assign(
+        :can_manage_integrations?,
+        Scope.has_module_access?(
+          socket.assigns[:phoenix_kit_current_scope],
+          "integrations_system"
+        )
+      )
       |> assign(
         :notify_cart_first_item,
         Settings.get_setting_cached("shop_notify_cart_first_item", "false") == "true"
@@ -530,7 +548,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               </div>
 
               <div class="flex justify-end mt-4">
-                <button type="submit" id="shipping-parcel-defaults-save" class="btn btn-primary btn-sm">
+                <button type="submit" phx-disable-with={gettext("Saving…")} id="shipping-parcel-defaults-save" class="btn btn-primary btn-sm">
                   {gettext("Save")}
                 </button>
               </div>
@@ -596,7 +614,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   <span>{user.email}</span>
                 </label>
               <% end %>
-              <button type="submit" class="btn btn-primary btn-sm mt-2">
+              <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm mt-2">
                 {gettext("Save recipients")}
               </button>
             </form>
@@ -861,7 +879,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 placeholder={gettext("e.g. EE")}
                 class="input w-32 uppercase"
               />
-              <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
+              <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm">{gettext("Save")}</button>
             </form>
           </div>
         </div>
@@ -944,7 +962,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               }
             >
               <.link
-                navigate={Routes.path("/admin/settings/integrations/website")}
+                :if={@can_manage_integrations?}
+                id="shop-shopify-connect"
+                navigate={Routes.path(shopify_integration_path())}
                 class="btn btn-ghost"
               >
                 {gettext("Connect")}
@@ -963,7 +983,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <h2 class="card-title text-xl">
                 <.icon name="hero-funnel" class="w-6 h-6" /> {gettext("Storefront Filters")}
               </h2>
-              <button phx-click="reset_default_filters" class="btn btn-ghost btn-xs">
+              <button phx-click="reset_default_filters" phx-disable-with={gettext("Working…")} class="btn btn-ghost btn-xs">
                 {gettext("Reset to defaults")}
               </button>
             </div>
@@ -1017,6 +1037,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                         <%= if filter["type"] in ["metadata_option", "attribute_set"] do %>
                           <button
                             phx-click="remove_filter"
+                            phx-disable-with="…"
                             phx-value-key={filter["key"]}
                             class="btn btn-outline btn-error btn-xs tooltip tooltip-bottom"
                             data-tip={gettext("Remove")}
@@ -1074,7 +1095,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 class="input input-sm w-48"
                 required
               />
-              <button type="submit" class="btn btn-outline btn-sm gap-1">
+              <button type="submit" phx-disable-with={gettext("Adding...")} class="btn btn-outline btn-sm gap-1">
                 <.icon name="hero-plus" class="w-3 h-3" /> {gettext("Add")}
               </button>
             </form>
@@ -1167,7 +1188,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   placeholder={gettext("e.g. 3D Printed")}
                   class="input input-bordered flex-1 max-w-md"
                 />
-                <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
+                <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm">{gettext("Save")}</button>
               </form>
             </div>
 

@@ -70,7 +70,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
           card_fields={fn method ->
             [
               %{
-                label: "Price",
+                label: gettext("Price"),
                 value:
                   if(PhoenixKitEcommerce.ShippingMethod.pay_on_delivery?(method),
                     do: gettext("Paid on delivery"),
@@ -78,7 +78,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
                   )
               },
               %{
-                label: "Delivery",
+                label: gettext("Delivery"),
                 value:
                   PhoenixKitEcommerce.ShippingMethod.delivery_estimate(method) || "-"
               },
@@ -103,6 +103,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
               <.table_row_menu_divider />
               <.table_row_menu_button
                 phx-click="delete"
+                phx-disable-with={gettext("Deleting…")}
                 phx-value-uuid={method.uuid}
                 data-confirm={gettext("Delete this shipping method?")}
                 icon="hero-trash"
@@ -157,7 +158,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
                     <% end %>
                     <%= if method.free_above_amount do %>
                       <div class="text-xs text-success">
-                        Free above {format_price(method.free_above_amount, @currency)}
+                        {gettext("Free above %{amount}",
+                          amount: format_price(method.free_above_amount, @currency)
+                        )}
                       </div>
                     <% end %>
                   </.table_default_cell>
@@ -205,6 +208,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethods do
                         <.table_row_menu_divider />
                         <.table_row_menu_button
                           phx-click="delete"
+                          phx-disable-with={gettext("Deleting…")}
                           phx-value-uuid={method.uuid}
                           data-confirm={gettext("Delete this shipping method?")}
                           icon="hero-trash"

@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @impl true
   def mount(_params, _session, socket) do
@@ -82,6 +83,10 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
     {:noreply, push_patch(socket, to: Routes.path("/dashboard/orders", map_to_keyword(params)))}
   end
+
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
   # Private functions
 

@@ -237,6 +237,35 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
   # The products table as the `Product` schema itself targets it: its
   # compile-time `@schema_prefix` (core's `PhoenixKit.SchemaPrefix`),
   # quoted, or the bare source under the default `public` install.
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_products(opts \\ []) do
+    Product
+    |> count_filter(:status, Keyword.get(opts, :status))
+    |> count_filter(:product_type, Keyword.get(opts, :product_type))
+    |> repo().aggregate(:count)
+  end
+
+  defp count_filter(query, _field, nil), do: query
+  defp count_filter(query, field, value), do: where(query, [p], field(p, ^field) == ^value)
+
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_categories, do: repo().aggregate(Category, :count)
+
+  @impl PhoenixKitEcommerce.ProductSource
+  def discover_filterable_options do
+    sql = """
+    SELECT key, COUNT(DISTINCT p.uuid) AS product_count
+    FROM #{products_table()} p,
+         jsonb_object_keys(COALESCE(p.metadata->'_option_values', '{}'::jsonb)) AS key
+    WHERE p.status = 'active'
+    GROUP BY key
+    ORDER BY product_count DESC
+    """
+
+    %{rows: rows} = repo().query!(sql, [])
+    Enum.map(rows, fn [key, count] -> %{key: key, count: count} end)
+  end
+
   defp products_table do
     source = Product.__schema__(:source)
 
