@@ -4,7 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.5.22 - 2026-10-13
+
+### Added
+
+- **Share image on the storefront `og` map** (#85): the product and category
+  pages carry their image for link previews.
+- **My Cart in the avatar menu** (#88), through the `Tab` option
+  `user_menu: true`; a core without it ignores the key.
+- **Edit and save return to the page you came from** (#87): the legacy
+  product and category forms honour a local `return_to`.
+
+### Changed
+
+- **Guest checkout reuses an unconfirmed account only when guest checkout
+  created it** (#84). Reuse needs the guest stamp AND an order the guest path
+  itself marked for that email (`metadata["guest_checkout"]`,
+  `guest_checkout_email`). ⚠️ A guest account created before this release
+  carries neither mark on its orders, so that customer's next guest checkout
+  with the same email is answered "already registered" and they sign in or
+  reset their password instead. There is no automatic backfill: the stamps
+  cannot be derived safely from old data, which an account holder can write.
+- **The admin Edit link picks its editor by the record's own `origin`**
+  (#86), not the global product source; a catalogue record also needs the
+  `"catalogue"` permission. Under the catalogue source the legacy forms still
+  redirect to the catalogue, so a legacy-origin link is meaningful only in a
+  transitional mixed store.
+- **Storefront links carry no locale segment on a single-language site**
+  (#89); a product or category page stays in its own language instead of
+  redirecting into the slug's.
+- **Quality sweep** (#84): public LiveViews ignore unknown or malformed
+  events; statuses render through translated labels; Shopify shop domains
+  must be `*.myshopify.com` and the Admin API follows no redirect; cart
+  quantity is bounded; global options are edited under a lock; bulk and
+  translation mutations are logged; admin and storefront literals translated.
 
 ### Fixed
 
