@@ -18,6 +18,14 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   the run that started last. Ties (equal stamps) are written, so the newest
   stamp always wins and a repeated run with one stamp is idempotent.
 
+  One case is not covered: a row is only skipped when it exists. If a newer run
+  removed the row of a product that has just become unlisted, an older and
+  slower run that still saw the product as listed can insert that row again,
+  because there is nothing left to compare its stamp with. The card builder
+  re-checks the product's visibility when it reads the results, so such a
+  leftover row never reaches a shopper; it stays in the index until the next
+  reindex of the product or the nightly rebuild removes it.
+
     * `reindex_items/1` - the given product ids (an item edit, a bulk change).
     * `rebuild/0` - the whole shop (the nightly safety net). If the shop's
       catalogue cannot be resolved it returns `{:error, :no_catalogue}` and

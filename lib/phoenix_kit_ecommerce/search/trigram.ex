@@ -6,8 +6,9 @@ defmodule PhoenixKitEcommerce.Search.Trigram do
   The answer is cached for 60 seconds in a `:persistent_term` (one query per
   minute instead of one per search); an extension installed later is noticed
   within a minute. Only a successful check is cached: when the query fails the
-  last known answer (or `false`) is returned for that call and the next call asks again. Without the extension search still works: it only skips
-  the typo fallback (`PhoenixKitEcommerce.Search.Query`).
+  last known answer (or `false`) is returned for that call and the next call asks
+  again. Without the extension search still works: it only skips the typo
+  fallback (`PhoenixKitEcommerce.Search.Query`).
   """
 
   @cache_key {__MODULE__, :available}
