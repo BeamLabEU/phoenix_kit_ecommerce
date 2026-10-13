@@ -1107,6 +1107,20 @@ defmodule PhoenixKitEcommerce do
   @impl PhoenixKit.Module
   def migration_module, do: PhoenixKitEcommerce.Migrations
 
+  # The public search index: reindex and rebuild jobs run on their own small
+  # queue, so a nightly rebuild cannot hold up imports or images.
+  # `mix phoenix_kit.update` adds the queue to a host's Oban config; it never
+  # changes a limit the host already has.
+  @impl PhoenixKit.Module
+  def oban_queues, do: [shop_search: [limit: 2, kind: :batch]]
+
+  # One entry per worker module, no args (core's contract for module crons).
+  # `mix phoenix_kit.update` writes it into the host's Oban crontab.
+  # Defined WITHOUT `@impl`: `oban_crons/0` and `api_tools/0` are optional
+  # callbacks that only a core with the shop API declares, and an `@impl` for a
+  # callback the core does not declare is a compile warning.
+  def oban_crons, do: [{"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker}]
+
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see
   `PhoenixKitAI.Translatables`).

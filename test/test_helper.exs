@@ -300,10 +300,30 @@ billing_user_menu_exclude =
     [:requires_billing_user_menu]
   end
 
+# Phase 3a registers tools and cron entries through callbacks that exist only in
+# a core with the shop API (`PhoenixKit.API.*`, `PhoenixKit.ObanCrons`). Tests of
+# those are tagged :requires_core_api and are EXCLUDED AT RUN TIME on a core
+# without the API. The tag does not stop a test file from being COMPILED, so
+# those files must not use `%PhoenixKit.API.Actor{}` / `%PhoenixKit.API.Tool{}`
+# struct literals (a CompileError aborts the whole `mix test` run on a released
+# core); they build structs with `struct/2` and match on maps.
+api_exclude =
+  if Code.ensure_loaded?(PhoenixKit.API.Tool) and Code.ensure_loaded?(PhoenixKit.ObanCrons) do
+    []
+  else
+    Logger.info(
+      "[test_helper] PhoenixKit.API.Tool / PhoenixKit.ObanCrons not available - " <>
+        "public API tests excluded. They run once `phoenix_kit` resolves to a core " <>
+        "with the shop API."
+    )
+
+    [:requires_core_api]
+  end
+
 ExUnit.start(
   exclude:
     i18n_exclude ++
       integration_exclude ++
       transliteration_exclude ++
-      catalogue_exclude ++ user_menu_exclude ++ billing_user_menu_exclude
+      catalogue_exclude ++ user_menu_exclude ++ billing_user_menu_exclude ++ api_exclude
 )

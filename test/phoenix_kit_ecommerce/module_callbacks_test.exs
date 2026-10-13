@@ -82,4 +82,17 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
     assert menu_ids == [:dashboard_cart]
   end
+
+  test "oban_queues/0 declares the shop_search queue the search workers run on" do
+    specs = PhoenixKit.ObanQueues.declared([PhoenixKitEcommerce])
+
+    assert Enum.any?(specs, &(&1.name == :shop_search and &1.limit == 2 and &1.kind == :batch))
+  end
+
+  @tag :requires_core_api
+  test "oban_crons/0 declares the nightly search rebuild once, without conflicts" do
+    assert {entries, []} = PhoenixKit.ObanCrons.declared([PhoenixKitEcommerce])
+
+    assert {"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker} in entries
+  end
 end
