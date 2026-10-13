@@ -33,6 +33,7 @@ support_dir = Path.expand("support", __DIR__)
   "notification_assertions.ex",
   "checkout_fixtures.ex",
   "shopify_fixtures.ex",
+  "search_fixtures.ex",
   "data_case.ex",
   "live_case.ex"
 ]
