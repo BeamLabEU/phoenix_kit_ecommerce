@@ -6,9 +6,9 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   the rule that the write tools exist only on a core that can hold a
   dangerous call for confirmation.
 
-  Needs core's tool registry (phase 1a): tagged `:core_api`. The tests of the
-  write tools are tagged `:core_confirm` (core also has the confirmation flow
-  of phase 1c); the one that pins the reduced list is `:core_no_confirm`.
+  Needs core's tool registry: tagged `:core_api`. The tests of the write tools
+  are tagged `:core_confirm` (core also has the confirmation flow); the one
+  that pins the reduced list is `:core_no_confirm`.
   `test_helper.exs` excludes what does not apply to the core in use.
   """
 
@@ -16,10 +16,12 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
 
   @moduletag :core_api
 
-  @compile {:no_warn_undefined, [PhoenixKit.API.Tool, PhoenixKit.API.Validator]}
+  @compile {:no_warn_undefined,
+            [PhoenixKit.API.Tool, PhoenixKit.API.Executor, PhoenixKit.API.ToolLint]}
 
+  alias PhoenixKit.API.Executor
   alias PhoenixKit.API.Tool
-  alias PhoenixKit.API.Validator
+  alias PhoenixKit.API.ToolLint
 
   @uuid "0192a7c0-0000-7000-8000-000000000001"
   @row %{"ref" => %{"sku" => "A"}}
@@ -28,7 +30,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
 
   defp validate(tool_name, input) do
     tool = Map.fetch!(tools(), tool_name)
-    Validator.validate(Validator.close_schema(tool.input_schema, %{}), input)
+    Executor.validate_input(tool, input)
   end
 
   describe "the read tool" do
@@ -89,6 +91,10 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
              }
     end
 
+    test "core's tool lint passes for the whole set" do
+      assert :ok = ToolLint.check_tools(PhoenixKitEcommerce.api_tools())
+    end
+
     test "every tool is valid for core and every handler and danger function is exported" do
       for tool <- PhoenixKitEcommerce.api_tools() do
         assert {:ok, _} = Tool.validate(tool)
@@ -108,7 +114,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       assert tools["ecommerce.set_prices"].annotations.destructive
       assert tools["ecommerce.set_prices"].danger == {PhoenixKitEcommerce.API, :set_prices_danger}
 
-      # the size of a batch is core's rule (E13): no other tool has a danger function
+      # the size of a batch is core's rule: no other tool has a danger function
       assert tools["ecommerce.set_availability"].danger == nil
       assert tools["ecommerce.attach_images"].danger == nil
       refute tools["ecommerce.set_availability"].annotations.destructive

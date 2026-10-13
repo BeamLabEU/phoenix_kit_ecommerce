@@ -1,6 +1,6 @@
 defmodule PhoenixKitEcommerce.API do
   @moduledoc """
-  The e-commerce tools of the admin API (spec 6.2): what
+  The e-commerce tools of the admin API: what
   `PhoenixKitEcommerce.api_tools/0` hands to core, and the handlers core
   calls as `apply(PhoenixKitEcommerce.API, fun, [input, ctx])`.
 
@@ -149,7 +149,7 @@ defmodule PhoenixKitEcommerce.API do
   end
 
   # A call that downloads is priced by the pictures it downloads, on a core
-  # whose `Tool` has the `cost` field (phase 1b, `{Module, :function}` called
+  # whose `Tool` has the `cost` field (`{Module, :function}` called
   # with the raw input). A core without the field is not told about it:
   # `Tool.new!/1` would refuse an unknown key.
   defp cost_option do
