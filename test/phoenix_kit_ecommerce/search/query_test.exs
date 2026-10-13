@@ -73,7 +73,10 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
   end
 
   test "the language's stemming applies: a plural finds the singular", t do
-    assert ids(%{q: "vases"}) |> Enum.sort() == Enum.sort([t.a, t.c, t.e])
+    # :fulltext, not :typo: the pg_trgm fallback would find these rows too.
+    result = run(%{q: "vases"})
+    assert result.mode == :fulltext
+    assert Enum.sort(result.ids) == Enum.sort([t.a, t.c, t.e])
   end
 
   test "a query uses the configuration of the requested language (en, de, fr)" do
@@ -88,9 +91,15 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
 
     {:ok, _} = Indexer.reindex_items([g.uuid])
 
-    assert ids(%{q: "Vase"}, "de") == [g.uuid]
-    assert g.uuid in ids(%{q: "Vase"}, "en")
-    assert ids(%{q: "assiette"}, "fr") == [g.uuid]
+    # Each answer must be :fulltext, not :typo: the pg_trgm fallback finds a
+    # near spelling with any configuration, so only the mode tells that the
+    # query was parsed with the language's own one.
+    assert %{mode: :fulltext, ids: [id]} = run(%{q: "Vase"}, "de")
+    assert id == g.uuid
+    assert %{mode: :fulltext, ids: ids_en} = run(%{q: "Vase"}, "en")
+    assert g.uuid in ids_en
+    assert %{mode: :fulltext, ids: [id]} = run(%{q: "assiette"}, "fr")
+    assert id == g.uuid
     refute g.uuid in ids(%{q: "assiette"}, "en")
   end
 
@@ -466,39 +475,83 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
   end
 
   describe "similar/2 ordering inside one category rank" do
-    # Each test creates its candidates in the order that would put the right
-    # answer LAST if the criterion under test were missing (the newest product
-    # wins the final tie-break), and keeps every other criterion equal.
+    # The index rows are aged by hand: products created in one test share a
+    # second, and then the newest tie-break would not depend on creation order.
+    # Each test gives the age that would put the right answer LAST if the
+    # criterion under test were missing (the newest product wins the final
+    # tie-break), and keeps every other criterion equal.
+
+    defp age!(hours_ago_by_uuid) do
+      now = DateTime.utc_now()
+
+      for {uuid, hours} <- hours_ago_by_uuid do
+        Repo.query!(
+          "UPDATE phoenix_kit_shop_search_index SET item_inserted_at = $2 WHERE item_uuid = $1",
+          [Ecto.UUID.dump!(uuid), DateTime.add(now, -hours * 3600)]
+        )
+      end
+
+      :ok
+    end
+
+    defp similar_to(base_uuid), do: Query.similar(Query.entry(base_uuid, "en"), 10)
+
+    defp options(values), do: %{metadata: %{"_option_values" => values}}
 
     test "more shared tags first" do
       more = legacy_product!(%{"en" => "Two Shared"}, %{tags: ["sim-x", "sim-y"]})
       fewer = legacy_product!(%{"en" => "One Shared"}, %{tags: ["sim-x"]})
       base = legacy_product!(%{"en" => "Tag Base"}, %{tags: ["sim-x", "sim-y"]})
       {:ok, _} = Indexer.reindex_items([more.uuid, fewer.uuid, base.uuid])
+      age!([{more.uuid, 5}, {fewer.uuid, 1}])
 
-      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [more.uuid, fewer.uuid]
+      assert similar_to(base.uuid) == [more.uuid, fewer.uuid]
     end
 
     test "more shared option values first" do
-      options = fn values -> %{metadata: %{"_option_values" => values}} end
-
       more =
         legacy_product!(
           %{"en" => "Two Options"},
-          options.(%{"finish" => ["Matte"], "bulk" => ["Big"]})
+          options(%{"finish" => ["Matte"], "bulk" => ["Big"]})
         )
 
-      fewer = legacy_product!(%{"en" => "One Option"}, options.(%{"finish" => ["Matte"]}))
+      fewer = legacy_product!(%{"en" => "One Option"}, options(%{"finish" => ["Matte"]}))
 
       base =
         legacy_product!(
           %{"en" => "Option Base"},
-          options.(%{"finish" => ["Matte"], "bulk" => ["Big"]})
+          options(%{"finish" => ["Matte"], "bulk" => ["Big"]})
         )
 
       {:ok, _} = Indexer.reindex_items([more.uuid, fewer.uuid, base.uuid])
+      age!([{more.uuid, 5}, {fewer.uuid, 1}])
 
-      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [more.uuid, fewer.uuid]
+      assert similar_to(base.uuid) == [more.uuid, fewer.uuid]
+    end
+
+    test "tags and option values count together" do
+      # both = 1 tag + 1 option (2); tag_only and option_only = 1 each. A count
+      # of tags alone or of options alone ties `both` with one of the others,
+      # and the newer one then wins.
+      both =
+        legacy_product!(
+          %{"en" => "Both"},
+          Map.put(options(%{"finish" => ["Matte"]}), :tags, ["sim-t"])
+        )
+
+      option_only = legacy_product!(%{"en" => "Option Only"}, options(%{"finish" => ["Matte"]}))
+      tag_only = legacy_product!(%{"en" => "Tag Only"}, %{tags: ["sim-t"]})
+
+      base =
+        legacy_product!(
+          %{"en" => "Sum Base"},
+          Map.put(options(%{"finish" => ["Matte"]}), :tags, ["sim-t"])
+        )
+
+      {:ok, _} = Indexer.reindex_items([both.uuid, option_only.uuid, tag_only.uuid, base.uuid])
+      age!([{both.uuid, 6}, {option_only.uuid, 2}, {tag_only.uuid, 1}])
+
+      assert similar_to(base.uuid) == [both.uuid, tag_only.uuid, option_only.uuid]
     end
 
     test "a price within 50 percent of the product's own comes before a distant one" do
@@ -506,8 +559,51 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
       far = legacy_product!(%{"en" => "Far Price"}, %{tags: ["sim-p"], price: "100.00"})
       base = legacy_product!(%{"en" => "Price Base"}, %{tags: ["sim-p"], price: "20.00"})
       {:ok, _} = Indexer.reindex_items([near.uuid, far.uuid, base.uuid])
+      age!([{near.uuid, 5}, {far.uuid, 1}])
 
-      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [near.uuid, far.uuid]
+      assert similar_to(base.uuid) == [near.uuid, far.uuid]
+    end
+
+    test "the price band is 50 to 150 percent, both ends included" do
+      product = fn title, price ->
+        legacy_product!(%{"en" => title}, %{tags: ["sim-b"], price: price})
+      end
+
+      in_high = product.("High Edge In", "30.00")
+      in_low = product.("Low Edge In", "10.00")
+      out_high = product.("High Edge Out", "30.01")
+      out_low = product.("Low Edge Out", "9.99")
+      base = product.("Band Base", "20.00")
+      uuids = Enum.map([in_high, in_low, out_high, out_low, base], & &1.uuid)
+      {:ok, _} = Indexer.reindex_items(uuids)
+      age!([{in_high.uuid, 8}, {in_low.uuid, 6}, {out_high.uuid, 4}, {out_low.uuid, 2}])
+
+      # inside the band first, each group newest first
+      assert similar_to(base.uuid) == [in_low.uuid, in_high.uuid, out_low.uuid, out_high.uuid]
+    end
+
+    test "otherwise equal, the newest product comes first, then the lower id" do
+      first = legacy_product!(%{"en" => "Tie First"}, %{tags: ["sim-n"]})
+      second = legacy_product!(%{"en" => "Tie Second"}, %{tags: ["sim-n"]})
+      third = legacy_product!(%{"en" => "Tie Third"}, %{tags: ["sim-n"]})
+      base = legacy_product!(%{"en" => "Tie Base"}, %{tags: ["sim-n"]})
+      {:ok, _} = Indexer.reindex_items([first.uuid, second.uuid, third.uuid, base.uuid])
+
+      # created first, second, third: the age order is second, first, third
+      age!([{second.uuid, 1}, {first.uuid, 2}, {third.uuid, 3}])
+      assert similar_to(base.uuid) == [second.uuid, first.uuid, third.uuid]
+
+      # one instant: the lower id first
+      same = DateTime.utc_now()
+
+      for p <- [first, second, third] do
+        Repo.query!(
+          "UPDATE phoenix_kit_shop_search_index SET item_inserted_at = $2 WHERE item_uuid = $1",
+          [Ecto.UUID.dump!(p.uuid), same]
+        )
+      end
+
+      assert similar_to(base.uuid) == Enum.sort([first.uuid, second.uuid, third.uuid])
     end
   end
 end
