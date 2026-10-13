@@ -443,6 +443,68 @@ gets its topic, subscribe and broadcast functions in `Events`.
   RECOGNISES an existing signed one — the order-confirmation page is
   deliberately reachable while the shop is disabled, because it is a receipt.
 
+### Admin API tools
+
+`PhoenixKitEcommerce.api_tools/0` (no `@impl`, like `notification_types/0`)
+returns `PhoenixKitEcommerce.API.tools/0`: `ecommerce.get_prices`,
+`ecommerce.set_prices`, `ecommerce.set_availability`, `ecommerce.attach_images`
+(the shop API design, §6.2). Rules that must hold:
+
+- **The write tools are offered only when core enforces the confirmation
+  gate** (`Keys.active?/1` and `Flow.gate/1`, see
+  `API.confirmation_available?/0`). A core that cannot hold a dangerous call
+  for confirmation would run a large price cut on the first call.
+- **Everything the tools do to the catalogue goes through three adapters:**
+  `API.Gate` (the product source is the catalogue and the catalogue is new
+  enough, judged by what it exports, not by its version), `API.Refs`
+  (`PhoenixKitCatalogue.API.resolve_refs/2`) and `API.CatalogueWrites`
+  (`Catalogue.update_items/2`). If the catalogue's shapes change, only these
+  change. Anything else answers `unsupported_source` and writes nothing.
+- **Writes are limited to the `data` sub-paths a row changes**
+  (`data_owned_paths`; an option price is one path per leaf), so a concurrent
+  writer of any other field, the Shopify sync included, is never overwritten.
+  The Shopify writer does the same (`Catalogue.ShopifyAttribution`), and a
+  write that changes no `data` path sends `data_owned_paths: []`, never no
+  option. A default that `ItemCommerce.cast/2` fills in for a field the sync
+  did not touch is therefore not stored by the sync.
+- **A product's own status is read with the storefront's rule**
+  (`View.merchant_status/1`, `View.product_status/2`, made public for this):
+  a product with no `shop_status` counts as `active`. Never a second copy.
+  `get_prices` calls the result `shop_status_visible`: it does not look at
+  the product's category, which the storefront also checks.
+- **Only `set_prices` has a `danger` function** (the price rule). The size of
+  a batch is core's rule (`api_confirm_batch_over`, applied to every admin
+  write tool by the executor).
+- **Prices are decimal strings with at most 2 decimals** (`API.Money`). A
+  third decimal is refused, never rounded.
+- **`attach_images` always passes `private_networks: :forbid`** to the
+  downloader; `shop_image_import_allow_private_networks` is for the shop's
+  own CSV import and does not apply to an API caller. It also passes
+  `redact_query: true` (a signed URL's query string is a credential and
+  reaches no log line and no stored `source_url`), a 10 MB limit per picture,
+  and, on a core with the field, a `cost` of one rate-limit unit per picture.
+- **A write that changed a product clears `StorefrontCache`** (once per call
+  in `API.Batch.write/3`, once per product in `API.AttachImages`), like the
+  Shopify sync does. A dry run and an unchanged row leave it alone.
+- **Shopify is optional.** Nothing in the tools needs a product to be linked
+  to it; the description of `set_prices` and a row warning mention the sync
+  only while it is on.
+- `api_confirm_price_change_pct` (default 30, `API.Settings`) is the one
+  e-commerce setting of the API; it has no `shop_` prefix because the spec
+  names it so. Changing it takes `shop.manage_settings` **and** core's `api`
+  permission (`Web.Authz.can_manage_api?/1`).
+- `PhoenixKitEcommerce.warehouse_source_kinds/0` offers the `shop_order` kind
+  to Warehouse (`WarehouseSourceKind`); only orders placed by the storefront
+  checkout count, and no label shows the customer.
+- A `validation_failed` answer with `context.reason` `database_error`,
+  `storage_error` or `unexpected` is not the caller's fault and is worth
+  retrying; any other `validation_failed` should be fixed first.
+
+Tests: the API's tests are tagged by what they need (`:catalogue_api`,
+`:old_catalogue`, `:no_catalogue`, `:core_api`, `:core_confirm`,
+`:core_no_confirm`, `:warehouse`; see `test/test_helper.exs`). Run the suite
+once per build and read the excluded count each time.
+
 ### Permissions
 
 The `"shop"` key is admin-area READ access. Four sub-permissions carry the
@@ -498,6 +560,13 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
   `enforce_product_currency?/0`.
+
+**Admin API**
+
+- `api_confirm_price_change_pct` — percent; a price above zero that moves by
+  more than this needs a confirmation (default: `30`; no `shop_` prefix, the
+  spec names it so). Read through `API.Settings.price_change_pct/0`, which
+  reads any invalid value as the default.
 
 **Storefront display**
 

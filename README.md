@@ -203,6 +203,35 @@ methods = Shop.get_available_shipping_methods(cart)
 # /admin/shop/imports/:uuid
 ```
 
+### Admin API
+
+On a core that ships the shop API (`phoenix_kit` phase 1a and later), this
+module offers four admin tools over REST and MCP, for an accounting system, a
+script or an AI agent. Shopify is not needed: on a shop without it, the API is
+how an outside system feeds the product list.
+
+| Tool | Does | Scope |
+|---|---|---|
+| `ecommerce.get_prices` | prices, option prices, visibility | `ecommerce.prices:read` |
+| `ecommerce.set_prices` | price, compare-at price, option prices | `ecommerce.prices:write` |
+| `ecommerce.set_availability` | visibility, made to order | `ecommerce.availability:write` |
+| `ecommerce.attach_images` | pictures by URL, at most 20 per call | `ecommerce.images:write` |
+
+They work on the catalogue product source only; on the legacy source (or with
+a `phoenix_kit_catalogue` that predates the admin API) they answer
+`unsupported_source`. A price move of more than `api_confirm_price_change_pct`
+percent (default 30, set on the E-Commerce settings page by a user who also
+holds core's `api` permission) is held for confirmation first, and so is any
+batch larger than core's `api_confirm_batch_over`. Keys, scopes and the switch
+are on core's Settings → API page.
+
+A `validation_failed` answer with `context.reason` `database_error`,
+`storage_error` or `unexpected` is not a problem with the request and is worth
+retrying; any other `validation_failed` should be fixed first.
+
+The module also offers the `shop_order` kind to Warehouse, so a shop order can
+be the basis of a goods issue.
+
 ### Shopify Sync
 
 One-way, human-confirmed sync that keeps existing products current
