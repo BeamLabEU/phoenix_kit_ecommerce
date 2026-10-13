@@ -34,7 +34,8 @@ support_dir = Path.expand("support", __DIR__)
   "checkout_fixtures.ex",
   "shopify_fixtures.ex",
   "data_case.ex",
-  "live_case.ex"
+  "live_case.ex",
+  "api_fixtures.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -265,6 +266,38 @@ catalogue_exclude =
     [:catalogue]
   end
 
+# The admin API's tests need three things this repo does not declare as
+# dependencies, so each family runs only against a build that has what it
+# needs. Run the suite once per build and read the excluded count.
+#
+#   :catalogue_api     a catalogue with the API (resolve_refs/2, update_items/2)
+#   :old_catalogue     a catalogue WITHOUT it
+#   :no_catalogue      no phoenix_kit_catalogue at all
+#   :core_api          a core with the tool registry (PhoenixKit.API.Tool)
+#   :core_confirm      ... and the confirmation flow (PhoenixKit.API.Confirm)
+#   :core_no_confirm   ... and not the confirmation flow
+#   :warehouse         phoenix_kit_warehouse with SourceKinds
+catalogue_loaded? = Code.ensure_loaded?(PhoenixKitCatalogue)
+catalogue_api? = PhoenixKitEcommerce.API.Gate.catalogue_api_ready?()
+core_api? = Code.ensure_loaded?(PhoenixKit.API.Tool)
+core_confirm? = Code.ensure_loaded?(PhoenixKit.API.Confirm)
+
+admin_api_exclude =
+  [
+    if(catalogue_api?, do: nil, else: :catalogue_api),
+    if(catalogue_loaded? and not catalogue_api?, do: nil, else: :old_catalogue),
+    if(catalogue_loaded?, do: :no_catalogue, else: nil),
+    if(core_api?, do: nil, else: :core_api),
+    if(core_confirm?, do: :core_no_confirm, else: :core_confirm),
+    if(Code.ensure_loaded?(PhoenixKitWarehouse.SourceKinds), do: nil, else: :warehouse)
+  ]
+  |> Enum.reject(&is_nil/1)
+
+IO.puts("[test_helper] admin API test families excluded: #{inspect(admin_api_exclude)}")
+
 ExUnit.start(
-  exclude: i18n_exclude ++ integration_exclude ++ transliteration_exclude ++ catalogue_exclude
+  exclude:
+    i18n_exclude ++
+      integration_exclude ++
+      transliteration_exclude ++ catalogue_exclude ++ admin_api_exclude
 )
