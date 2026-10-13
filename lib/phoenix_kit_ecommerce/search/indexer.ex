@@ -69,7 +69,12 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
           {:ok, %{indexed: non_neg_integer(), removed: non_neg_integer()}}
   def reindex_items(uuids, opts \\ []) when is_list(uuids) do
     if Loader.source_resolvable?() do
-      uuids = uuids |> Enum.filter(&(is_binary(&1) and UUIDUtils.valid?(&1))) |> Enum.uniq()
+      uuids =
+        uuids
+        |> Enum.filter(&(is_binary(&1) and UUIDUtils.valid?(&1)))
+        |> Enum.map(&String.downcase/1)
+        |> Enum.uniq()
+
       started = started_at(opts)
       indexed = index_all(uuids, started, opts)
       removed = delete_stale(uuids, started, opts)

@@ -11,6 +11,16 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
   alias PhoenixKitEcommerce.API.Record
 
   describe "load/2" do
+    test "answers an upper-case id under the canonical lower-case key, once" do
+      product = legacy_product!(%{"en" => "Red Vase"})
+
+      records = Loader.load([String.upcase(product.uuid)])
+
+      assert Map.keys(records) == [product.uuid]
+      assert records[product.uuid].id == product.uuid
+      assert Map.keys(Loader.load([String.upcase(product.uuid), product.uuid])) == [product.uuid]
+    end
+
     test "returns a listed record with its category chain, root first" do
       root = legacy_category!(%{"en" => "Home"})
       leaf = legacy_category!(%{"en" => "Vases"}, %{parent_uuid: root.uuid})

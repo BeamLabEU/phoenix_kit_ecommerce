@@ -218,6 +218,18 @@ defmodule PhoenixKitEcommerce.API.LoaderCatalogueTest do
     refute Loader.catalogue_listed?()
   end
 
+  test "load/2 answers an upper-case id under the canonical lower-case key, once" do
+    catalogue = catalogue_source!()
+    item = catalogue_item!(catalogue, "Vase")
+
+    assert %{} = records = Loader.load([String.upcase(item.uuid)])
+    assert Map.keys(records) == [item.uuid]
+    assert records[item.uuid].id == item.uuid
+    assert records[item.uuid].state == :listed
+
+    assert Map.keys(Loader.load([String.upcase(item.uuid), item.uuid])) == [item.uuid]
+  end
+
   test "all_ids/0 lists every item of the shop catalogue, whatever its status" do
     catalogue = catalogue_source!()
     a = catalogue_item!(catalogue, "A")

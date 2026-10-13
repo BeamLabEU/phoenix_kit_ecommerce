@@ -167,6 +167,16 @@ defmodule PhoenixKitEcommerce.Search.IndexerTest do
     assert rows(product.uuid) == []
   end
 
+  test "an upper-case id is the same product: its rows are kept" do
+    product = legacy_product!(%{"en" => "Red Vase"})
+    {:ok, _} = Indexer.reindex_items([product.uuid])
+    before = rows(product.uuid)
+    assert before != []
+
+    assert {:ok, %{removed: 0}} = Indexer.reindex_items([String.upcase(product.uuid)])
+    assert rows(product.uuid) == before
+  end
+
   test "a deleted product loses its rows" do
     product = legacy_product!(%{"en" => "Red Vase"})
     {:ok, _} = Indexer.reindex_items([product.uuid])

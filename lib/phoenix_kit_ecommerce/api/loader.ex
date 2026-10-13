@@ -51,7 +51,7 @@ defmodule PhoenixKitEcommerce.API.Loader do
   """
   @spec load([term()], keyword()) :: %{String.t() => Record.t()}
   def load(ids, opts \\ []) when is_list(ids) do
-    ids = ids |> Enum.filter(&valid_uuid?/1) |> Enum.uniq()
+    ids = ids |> Enum.filter(&valid_uuid?/1) |> Enum.map(&String.downcase/1) |> Enum.uniq()
 
     if ids == [] do
       %{}

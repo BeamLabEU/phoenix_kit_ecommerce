@@ -35,6 +35,31 @@ defmodule PhoenixKitEcommerce.Search.IndexerCatalogueTest do
     assert titles() == ["Listed"]
   end
 
+  test "reindex_items/1 treats an upper-case id as the same product and keeps its rows" do
+    catalogue = catalogue_source!()
+    item = catalogue_item!(catalogue, "Red Vase")
+    {:ok, _} = Indexer.reindex_items([item.uuid])
+    before = Repo.all(from(e in Entry, where: e.item_uuid == ^item.uuid, select: e.title))
+    assert before != []
+
+    assert {:ok, %{indexed: indexed, removed: 0}} =
+             Indexer.reindex_items([String.upcase(item.uuid)])
+
+    assert indexed == length(before)
+    assert Repo.all(from(e in Entry, where: e.item_uuid == ^item.uuid, select: e.title)) == before
+  end
+
+  test "reindex_items/2 writes a product once when its id comes in two spellings" do
+    catalogue = catalogue_source!()
+    item = catalogue_item!(catalogue, "Red Vase")
+
+    assert {:ok, %{indexed: indexed, removed: 0}} =
+             Indexer.reindex_items([String.upcase(item.uuid), item.uuid], chunk_size: 1)
+
+    assert indexed == Repo.aggregate(Entry, :count)
+    assert indexed > 0
+  end
+
   test "dialect language codes are kept in the row and fall back to the primary title" do
     enable_languages!(["en-US", "de-DE", "fr-FR"])
     catalogue = catalogue_source!()
