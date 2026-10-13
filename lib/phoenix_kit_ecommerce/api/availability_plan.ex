@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
   @moduledoc """
   Plans one row of `ecommerce.set_availability`: the two independent fields
-  the spec names (6.2), mapped onto the catalogue item's `data["ecommerce"]`:
+  the tool takes, mapped onto the catalogue item's `data["ecommerce"]`:
 
     * `"visibility"` (`draft`, `active`, `archived`) is `shop_status`;
     * `"made_to_order"` (boolean) is `made_to_order`.

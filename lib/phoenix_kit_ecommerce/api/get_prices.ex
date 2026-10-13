@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.API.GetPrices do
   @moduledoc """
-  `ecommerce.get_prices`: prices and visibility of products by reference
-  (spec 6.2). Read only.
+  `ecommerce.get_prices`: prices and visibility of products by reference.
+  Read only.
 
   Answers, per product: `price` and `compare_at` as money objects in the
   product's currency, the `price_modifiers` (option => value => amount, the

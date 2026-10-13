@@ -1,6 +1,6 @@
 defmodule PhoenixKitEcommerce.API.Fingerprint do
   @moduledoc """
-  The value fingerprint of a dry run (spec 4.4): a hash of the **current
+  The value fingerprint of a dry run: a hash of the **current
   values** of the fields an operation would touch, for the rows it would
   touch. Core stores it with the confirmation code and asks for it again when
   the code is used; if anything the operation reads has changed since the
