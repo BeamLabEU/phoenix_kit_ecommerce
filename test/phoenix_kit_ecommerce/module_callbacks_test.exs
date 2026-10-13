@@ -22,8 +22,20 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
     assert is_list(tools)
 
-    if not Code.ensure_loaded?(PhoenixKit.API.Tool) do
-      assert tools == []
+    cond do
+      not Code.ensure_loaded?(PhoenixKit.API.Tool) ->
+        assert tools == []
+
+      PhoenixKitEcommerce.API.confirmation_available?() ->
+        assert tools |> Enum.map(& &1.name) |> Enum.sort() == [
+                 "ecommerce.attach_images",
+                 "ecommerce.get_prices",
+                 "ecommerce.set_availability",
+                 "ecommerce.set_prices"
+               ]
+
+      true ->
+        assert Enum.map(tools, & &1.name) == ["ecommerce.get_prices"]
     end
   end
 

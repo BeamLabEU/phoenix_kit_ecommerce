@@ -241,6 +241,30 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
       assert F.reload!(item).data["ecommerce"]["shop_status"] == "archived"
     end
 
+    test "a batch above core's row threshold is held for confirmation and writes nothing", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      previous = Settings.get_setting("api_confirm_batch_over")
+      {:ok, _} = Settings.update_setting("api_confirm_batch_over", "2")
+      on_exit(fn -> Settings.update_setting("api_confirm_batch_over", previous || "50") end)
+
+      items = for _ <- 1..3, do: F.item!(catalogue)
+
+      input = %{
+        "items" =>
+          for(item <- items, do: %{"ref" => %{"id" => item.uuid}, "visibility" => "archived"})
+      }
+
+      conn = call(token, "ecommerce.set_availability", input)
+
+      assert conn.status == 200
+      assert %{"executed" => false, "status" => "confirmation_required"} = json(conn)
+
+      for item <- items,
+          do: assert(F.reload!(item).data["ecommerce"]["shop_status"] == "active")
+    end
+
     test "refuses a visibility that is not offered with 422", %{
       catalogue: catalogue,
       token: token
