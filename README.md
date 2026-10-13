@@ -203,9 +203,9 @@ methods = Shop.get_available_shipping_methods(cart)
 # /admin/shop/imports/:uuid
 ```
 
-### Admin API
+### Admin API tools (REST and MCP)
 
-On a core that ships the shop API (`phoenix_kit` phase 1a and later), this
+On a `phoenix_kit` core that ships the admin API (the tool registry), this
 module offers four admin tools over REST and MCP, for an accounting system, a
 script or an AI agent. Shopify is not needed: on a shop without it, the API is
 how an outside system feeds the product list.
@@ -334,7 +334,7 @@ end
 
 ### Settings
 
-Keys are `shop_`-prefixed. (Earlier revisions of this table listed
+Keys are `shop_`-prefixed, except `api_confirm_price_change_pct`. (Earlier revisions of this table listed
 unprefixed names that the code never read.)
 
 | Key | Type | Default | Description |
@@ -347,6 +347,7 @@ unprefixed names that the code never read.)
 | `shop_sidebar_show_categories` | boolean | `true` | Show the category sidebar |
 | `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
 | `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+| `api_confirm_price_change_pct` | integer | `30` | Admin API: a price move above this percent needs a confirmation. Not `shop_`-prefixed |
 
 `shop_catalog_vocabulary` exists because a shop selling colour grading reads
 badly under "No products match your filters". Each option is a separately

@@ -341,7 +341,10 @@ lib/phoenix_kit_ecommerce/
 ├── catalogue/        # duck-typed phoenix_kit_catalogue extension slot:
 │                     # Extension, ItemCommerce, CategoryCommerce, ShopSections,
 │                     # ShopStatusColumn, Writer (Shopify -> catalogue),
-│                     # ValueResolver, SetSlug
+│                     # ShopifyAttribution, ValueResolver, SetSlug
+├── api.ex            # the admin API tools offered to core (api_tools/0)
+├── api/              # the tools' handlers, plans and adapters to core/catalogue
+├── warehouse_source_kind.ex # the shop_order kind offered to Warehouse
 ├── compat/           # transitional PhoenixKit.Modules.Shop.* delegate shims
 ├── services/         # image download + batch image migration
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
@@ -448,18 +451,21 @@ gets its topic, subscribe and broadcast functions in `Events`.
 `PhoenixKitEcommerce.api_tools/0` (no `@impl`, like `notification_types/0`)
 returns `PhoenixKitEcommerce.API.tools/0`: `ecommerce.get_prices`,
 `ecommerce.set_prices`, `ecommerce.set_availability`, `ecommerce.attach_images`
-(the shop API design, §6.2). Rules that must hold:
+Rules that must hold:
 
 - **The write tools are offered only when core enforces the confirmation
   gate** (`Keys.active?/1` and `Flow.gate/1`, see
   `API.confirmation_available?/0`). A core that cannot hold a dangerous call
   for confirmation would run a large price cut on the first call.
-- **Everything the tools do to the catalogue goes through three adapters:**
-  `API.Gate` (the product source is the catalogue and the catalogue is new
-  enough, judged by what it exports, not by its version), `API.Refs`
+- **The batch reads and writes go through three adapters:** `API.Gate` (the
+  product source is the catalogue and the catalogue is new enough, judged by
+  what it exports, not by its version), `API.Refs`
   (`PhoenixKitCatalogue.API.resolve_refs/2`) and `API.CatalogueWrites`
-  (`Catalogue.update_items/2`). If the catalogue's shapes change, only these
-  change. Anything else answers `unsupported_source` and writes nothing.
+  (`Catalogue.update_items/2`). Three call sites reach the catalogue
+  directly: `AttachImages` (`Attachments.attach_files/3` and
+  `Catalogue.get_item/1`) and `SetPrices` (`AttributeSets.resolve_for_items/2`);
+  `Gate.catalogue_api_ready?/0` does not probe them. Anything the gate refuses
+  answers `unsupported_source` and writes nothing.
 - **Writes are limited to the `data` sub-paths a row changes**
   (`data_owned_paths`; an option price is one path per leaf), so a concurrent
   writer of any other field, the Shopify sync included, is never overwritten.
@@ -542,7 +548,7 @@ primary operator of a default install.
 
 ### Settings keys
 
-All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
+All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api_confirm_price_change_pct`.
 
 **Behaviour**
 
@@ -564,8 +570,7 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 **Admin API**
 
 - `api_confirm_price_change_pct` — percent; a price above zero that moves by
-  more than this needs a confirmation (default: `30`; no `shop_` prefix, the
-  spec names it so). Read through `API.Settings.price_change_pct/0`, which
+  more than this needs a confirmation (default: `30`; it has no `shop_` prefix). Read through `API.Settings.price_change_pct/0`, which
   reads any invalid value as the default.
 
 **Storefront display**
@@ -832,6 +837,15 @@ running by themselves once the dep is upgraded: `:integration` (no database),
 `:requires_phoenix_kit_i18n_api` (core without
 `Dashboard.Tab.localized_label/1`), `:requires_core_transliteration` (core
 without `Utils.Slug` transliteration).
+
+The admin API's tests need a core with the tool registry, a catalogue with the
+admin API and `phoenix_kit_warehouse` with source kinds, none of which this
+package declares as a requirement. Their families (`:core_api`, `:core_confirm`,
+`:core_no_confirm`, `:catalogue_api`, `:old_catalogue`, `:no_catalogue`,
+`:warehouse`) are excluded or included by what the build has (see
+`test/test_helper.exs`, which prints the excluded set): run the suite once per
+build and read the excluded count. `test/support/api_case.ex` and
+`api_fixtures.ex` are the shared case and fixtures.
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),

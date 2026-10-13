@@ -8,9 +8,14 @@
   # ignore in phoenix_kit_staff / phoenix_kit_billing / phoenix_kit_catalogue
   # / phoenix_kit_projects.)
   {"lib/phoenix_kit_ecommerce/gettext.ex", :call_without_opaque},
-  # The admin API's e-commerce tools call core's tool registry and the catalogue's
-  # admin API (`PhoenixKitCatalogue.API.resolve_refs/2`, `Catalogue.update_items/2`),
-  # which no released core or catalogue ships yet.
+  # The admin API's e-commerce tools call core's tool registry and API config
+  # (`PhoenixKit.API.Tool`, `PhoenixKit.API.Config`, used by settings.ex) and the
+  # catalogue's admin API (`PhoenixKitCatalogue.API.resolve_refs/2`,
+  # `Catalogue.update_items/2`), which no released core or catalogue ships yet.
+  # Dialyzer reports a missing module as `:unknown_function` and a missing
+  # function of a loaded module (`Catalogue.update_items/2`) as `:call_to_missing`.
+  # Remove these entries when a released core and catalogue ship the API: they
+  # then become "unnecessary skips" and fail `mix precommit`.
   {"lib/phoenix_kit_ecommerce/api.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/api/refs.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex", :call_to_missing},
