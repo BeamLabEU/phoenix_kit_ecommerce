@@ -71,6 +71,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.Search.Jobs, as: SearchJobs
   alias PhoenixKitEcommerce.Shipping
   alias PhoenixKitEcommerce.Shipping.CartPacking
   alias PhoenixKitEcommerce.Shipping.CartQuote
@@ -1723,8 +1724,11 @@ defmodule PhoenixKitEcommerce do
         )
 
       # Does not broadcast, so the storefront cache (`StorefrontCache`) is
-      # cleared here.
-      if count > 0, do: StorefrontCache.clear()
+      # cleared and the search index told here.
+      if count > 0 do
+        StorefrontCache.clear()
+        SearchJobs.enqueue_items(uuids)
+      end
 
       count
     end
@@ -1743,8 +1747,11 @@ defmodule PhoenixKitEcommerce do
       {count, _} = repo().delete_all(query)
 
       # Does not broadcast, so the storefront cache (`StorefrontCache`) is
-      # cleared here.
-      if count > 0, do: StorefrontCache.clear()
+      # cleared and the search index told here.
+      if count > 0 do
+        StorefrontCache.clear()
+        SearchJobs.enqueue_items(ids)
+      end
 
       count
     end

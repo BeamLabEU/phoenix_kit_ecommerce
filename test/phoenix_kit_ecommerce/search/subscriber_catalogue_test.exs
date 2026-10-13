@@ -88,6 +88,26 @@ defmodule PhoenixKitEcommerce.Search.SubscriberCatalogueTest do
     assert {"SearchReindexWorker", %{"kind" => "category", "uuid" => category.uuid}} in jobs(pid)
   end
 
+  test "real writes in another catalogue of the install enqueue nothing; the shop's do", %{
+    pid: pid
+  } do
+    shop = catalogue_source!()
+    {:ok, other} = Catalogue.create_catalogue(%{name: "Warehouse stock"})
+    clear_jobs(pid)
+
+    spare_parts = catalogue_category!(other, "Spare parts")
+    foreign = catalogue_item!(other, "Spare Vase", %{category_uuid: spare_parts.uuid})
+    {:ok, _} = Catalogue.update_item(foreign, %{name: "Spare Bowl"})
+    {:ok, _} = Catalogue.update_category(spare_parts, %{name: "Parts"})
+    assert Catalogue.bulk_trash_items([foreign.uuid], []) == {1, nil}
+
+    assert jobs(pid) == []
+
+    own = catalogue_item!(shop, "Red Vase")
+
+    assert named_or_rebuild?(jobs(pid), own.uuid)
+  end
+
   # A job covers an item when it names it (a single or a batch job) or when it
   # is a full rebuild.
   defp named_or_rebuild?(jobs, uuid) do

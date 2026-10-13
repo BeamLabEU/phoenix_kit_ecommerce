@@ -15,13 +15,23 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Search.Subscriber
+  alias PhoenixKitEcommerce.Search.Trigram
   alias PhoenixKitEcommerce.Test.Repo
 
+  import ExUnit.CaptureLog
+
   setup do
-    pid = start_supervised!({Subscriber, name: :search_subscriber_test, boot_check_ms: nil})
+    shop = Ecto.UUID.generate()
+
+    pid =
+      start_supervised!(
+        {Subscriber,
+         name: :search_subscriber_test, boot_check_ms: nil, shop_catalogue: fn -> shop end}
+      )
+
     # The first message the process handles is its own :subscribe; wait for it.
     _ = :sys.get_state(pid)
-    %{pid: pid}
+    %{pid: pid, shop: shop}
   end
 
   defp deliver(pid, message) do
@@ -76,9 +86,11 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
            ]
   end
 
-  test "a catalogue item event enqueues that item; one without an id rebuilds", %{pid: pid} do
+  test "a catalogue item event enqueues that item; one without an id rebuilds", %{
+    pid: pid,
+    shop: catalogue
+  } do
     item = Ecto.UUID.generate()
-    catalogue = Ecto.UUID.generate()
 
     deliver(pid, {:catalogue_data_changed, :item, item, catalogue})
     deliver(pid, {:catalogue_data_changed, :item, nil, catalogue})
@@ -90,10 +102,10 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   end
 
   test "catalogue category events, rebuild kinds, and kinds the index does not care about", %{
-    pid: pid
+    pid: pid,
+    shop: catalogue
   } do
     category = Ecto.UUID.generate()
-    catalogue = Ecto.UUID.generate()
 
     deliver(pid, {:catalogue_data_changed, :category, category, catalogue})
     deliver(pid, {:catalogue_data_changed, :attribute_set, Ecto.UUID.generate(), catalogue})
@@ -108,9 +120,9 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   end
 
   test "a catalogue bulk change with ids reindexes them, any kind; without ids it rebuilds", %{
-    pid: pid
+    pid: pid,
+    shop: catalogue
   } do
-    catalogue = Ecto.UUID.generate()
     [a, b] = for _ <- 1..2, do: Ecto.UUID.generate()
 
     deliver(pid, {:catalogue_bulk_change, catalogue, :trashed, [a], self()})
@@ -123,11 +135,16 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
              {"SearchRebuildWorker", %{"catalogue_uuid" => catalogue}}
            ]
 
-    other = Ecto.UUID.generate()
-    deliver(pid, {:catalogue_bulk_change, other, :restored, [], self()})
+    # A second rebuild of the same catalogue is the one job already waiting.
+    deliver(pid, {:catalogue_bulk_change, catalogue, :restored, [], self()})
 
-    assert List.last(jobs()) == {"SearchRebuildWorker", %{"catalogue_uuid" => other}}
-    assert length(jobs()) == 4
+    assert length(jobs()) == 3
+  end
+
+  test "a bulk category delete rebuilds the index", %{pid: pid} do
+    deliver(pid, {:categories_bulk_deleted, [Ecto.UUID.generate()]})
+
+    assert jobs() == [{"SearchRebuildWorker", %{}}]
   end
 
   test "nothing is enqueued while the shop module is disabled", %{pid: pid} do
@@ -160,14 +177,151 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
   end
 
   @tag :catalogue
-  test "events broadcast on the catalogue topic reach the subscriber", %{pid: pid} do
+  test "events broadcast on the catalogue topic reach the subscriber", %{
+    pid: pid,
+    shop: catalogue
+  } do
     uuid = Ecto.UUID.generate()
-    catalogue = Ecto.UUID.generate()
 
     CataloguePubSub.broadcast(:item, uuid, catalogue)
     _ = :sys.get_state(pid)
 
     assert jobs() == [item_job(uuid)]
+  end
+
+  describe "events of another catalogue" do
+    test "are dropped, whatever their kind", %{pid: pid} do
+      other = Ecto.UUID.generate()
+      [a, b] = for _ <- 1..2, do: Ecto.UUID.generate()
+
+      deliver(pid, {:catalogue_data_changed, :item, a, other})
+      deliver(pid, {:catalogue_data_changed, :item, nil, other})
+      deliver(pid, {:catalogue_data_changed, :category, b, other})
+      deliver(pid, {:catalogue_data_changed, :attribute_set, a, other})
+      deliver(pid, {:catalogue_bulk_change, other, :trashed, [a, b], self()})
+      deliver(pid, {:catalogue_bulk_change, other, :moved, nil, self()})
+
+      assert jobs() == []
+    end
+
+    test "are dropped while the shop's own events and those that name no catalogue pass", %{
+      pid: pid,
+      shop: shop
+    } do
+      [own, nameless, foreign] = for _ <- 1..3, do: Ecto.UUID.generate()
+
+      deliver(pid, {:catalogue_data_changed, :item, foreign, Ecto.UUID.generate()})
+      deliver(pid, {:catalogue_data_changed, :item, own, shop})
+      deliver(pid, {:catalogue_data_changed, :item, nameless, nil})
+
+      assert jobs() == [item_job(own), item_job(nameless)]
+    end
+
+    test "are all dropped on the Legacy source, which has no shop catalogue" do
+      pid =
+        start_supervised!({Subscriber, name: :search_subscriber_legacy, boot_check_ms: nil},
+          id: :legacy
+        )
+
+      _ = :sys.get_state(pid)
+
+      deliver(pid, {:catalogue_data_changed, :item, Ecto.UUID.generate(), Ecto.UUID.generate()})
+
+      deliver(
+        pid,
+        {:catalogue_bulk_change, Ecto.UUID.generate(), :trashed, [Ecto.UUID.generate()], self()}
+      )
+
+      assert jobs() == []
+    end
+  end
+
+  describe "the shop's catalogue uuid" do
+    defp counting_resolver(answer) do
+      calls = start_supervised!({Agent, fn -> 0 end}, id: make_ref())
+
+      resolver = fn ->
+        Agent.update(calls, &(&1 + 1))
+        answer.()
+      end
+
+      {resolver, fn -> Agent.get(calls, & &1) end}
+    end
+
+    defp start_with(resolver) do
+      pid =
+        start_supervised!(
+          {Subscriber,
+           name: :search_subscriber_resolver, boot_check_ms: nil, shop_catalogue: resolver},
+          id: :resolver
+        )
+
+      _ = :sys.get_state(pid)
+      pid
+    end
+
+    test "is looked up once and remembered, not read for every event" do
+      shop = Ecto.UUID.generate()
+      {resolver, calls} = counting_resolver(fn -> shop end)
+      pid = start_with(resolver)
+
+      for _ <- 1..3,
+          do: deliver(pid, {:catalogue_data_changed, :item, Ecto.UUID.generate(), shop})
+
+      assert length(jobs()) == 3
+      assert calls.() == 1
+    end
+
+    test "is asked again while there is none, so a catalogue created a moment ago is not missed" do
+      {resolver, calls} = counting_resolver(fn -> nil end)
+      pid = start_with(resolver)
+
+      for _ <- 1..3,
+          do:
+            deliver(
+              pid,
+              {:catalogue_data_changed, :item, Ecto.UUID.generate(), Ecto.UUID.generate()}
+            )
+
+      assert jobs() == []
+      assert calls.() == 3
+    end
+
+    test "that cannot be looked up lets the events through, with a warning that names no value" do
+      pid = start_with(fn -> raise "boom: secret" end)
+      item = Ecto.UUID.generate()
+
+      log =
+        capture_log(fn ->
+          deliver(pid, {:catalogue_data_changed, :item, item, Ecto.UUID.generate()})
+        end)
+
+      assert jobs() == [item_job(item)]
+      assert log =~ "could not resolve the shop catalogue: RuntimeError"
+      refute log =~ "secret"
+    end
+  end
+
+  describe "the boot check" do
+    setup do
+      on_exit(&Trigram.reset_cache/0)
+    end
+
+    test "warns once when pg_trgm is missing", %{pid: pid} do
+      Trigram.put_cache(false)
+
+      log = capture_log(fn -> deliver(pid, :boot_check) end)
+
+      assert log =~ "pg_trgm is not installed"
+    end
+
+    test "stays quiet when pg_trgm is there", %{pid: pid} do
+      Trigram.put_cache(true)
+
+      log = capture_log(fn -> deliver(pid, :boot_check) end)
+
+      refute log =~ "pg_trgm"
+    end
   end
 
   test "the boot check enqueues a rebuild when the index is empty", %{pid: pid} do
