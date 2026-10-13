@@ -81,6 +81,29 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
     assert row["made_to_order"] == false
   end
 
+  test "a product with a price but no currency, its own or the shop's, answers no price instead of money in no currency",
+       %{catalogue: catalogue, ctx: ctx} do
+    Repo.update_all(PhoenixKitBilling.Currency, set: [is_default: false])
+    PhoenixKit.Cache.clear(:billing_currencies)
+    on_exit(fn -> PhoenixKit.Cache.clear(:billing_currencies) end)
+    assert PhoenixKitEcommerce.get_base_currency() == nil
+
+    item =
+      F.item!(catalogue, %{
+        base_price: Decimal.new("12.00"),
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{"shop_status" => "active", "compare_at_price" => "15.00"}
+        }
+      })
+
+    assert {:ok, %{"results" => [row]}} = run([%{"id" => item.uuid}], ctx)
+
+    assert row["currency"] == nil
+    assert row["price"] == nil
+    assert row["compare_at"] == nil
+  end
+
   test "shop_status_visible is the storefront's verdict for every status a product can be in",
        %{catalogue: catalogue, ctx: ctx} do
     for status <- ["active", "inactive", "discontinued"],

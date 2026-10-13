@@ -57,8 +57,8 @@ defmodule PhoenixKitEcommerce.API.GetPrices do
       "ref" => ref,
       "id" => item.uuid,
       "currency" => currency,
-      "price" => Money.money(current.price, currency),
-      "compare_at" => Money.money(current.compare_at, currency),
+      "price" => priced(current.price, currency),
+      "compare_at" => priced(current.compare_at, currency),
       "price_modifiers" => modifiers(current.price_modifiers),
       "visibility" => availability.visibility,
       "made_to_order" => availability.made_to_order,
@@ -66,6 +66,11 @@ defmodule PhoenixKitEcommerce.API.GetPrices do
       "shop_status_visible" => View.product_status(item, ecommerce) == "active"
     }
   end
+
+  # An amount without a currency is not a price a client can use: it is
+  # answered as no price rather than as money in no currency.
+  defp priced(_amount, nil), do: nil
+  defp priced(amount, currency), do: Money.money(amount, currency)
 
   # Amounts as decimal strings, whatever was stored (a host migration may have
   # stored numbers); a leaf that is not a number is shown as it is.
