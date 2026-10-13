@@ -137,10 +137,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
   item in the Shopify syncs.
   """
   @spec shopify_linked?(map() | nil) :: boolean()
-  def shopify_linked?(ecommerce) do
-    shopify = (is_map(ecommerce) && Map.get(ecommerce, "shopify")) || %{}
-    is_map(shopify) and Enum.any?(["handle", "product_id"], &(shopify[&1] not in [nil, ""]))
-  end
+  def shopify_linked?(%{"shopify" => %{} = shopify}),
+    do: Enum.any?(["handle", "product_id"], &(shopify[&1] not in [nil, ""]))
+
+  def shopify_linked?(_ecommerce), do: false
 
   @doc """
   Merges `params` (submitted form/API values, or `nil`) over `current`

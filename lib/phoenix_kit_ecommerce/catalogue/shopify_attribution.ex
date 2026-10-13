@@ -88,8 +88,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttribution do
 
   @doc """
   The paths whose value differs between `old` and `new`, as lists of keys.
-  Maps are followed to the depth of `@max_depth`; a value that is not a map on
-  both sides is a leaf.
+  Maps are followed down to paths of three keys, and of four under
+  `["ecommerce", "price_modifiers"]`, where a missing (`nil`) old side is
+  followed too when the new side is a map. Any other value that is not a map
+  on both sides is a leaf.
   """
   @spec changed_paths(map(), map()) :: [[String.t()]]
   def changed_paths(old, new), do: walk(old, new, [], 1)
@@ -120,7 +122,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopifyAttribution do
   # new side is: a product (or option) with no option prices yet gets its first
   # ones from the sync, and listing it as a whole would overwrite an option
   # price the API stored in it after the sync read the item.
-  defp descend?(before, current, path, depth) when is_map(current) and depth < @modifiers_depth do
+  defp descend?(before, current, path, depth) when is_map(current) do
     depth < max_depth(path) and (is_map(before) or (is_nil(before) and modifiers_path?(path)))
   end
 
