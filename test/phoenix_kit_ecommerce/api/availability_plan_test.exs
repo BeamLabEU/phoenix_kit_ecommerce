@@ -68,6 +68,17 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlanTest do
     assert {:ok, _} = AvailabilityPlan.plan(%{"visibility" => "active"}, on_request)
   end
 
+  test "a stored price that is not a finite number counts as no price" do
+    for bad <- [Decimal.new("NaN"), Decimal.new("Infinity")] do
+      unpriced = item(%{"shop_status" => "draft"}, %{base_price: bad})
+
+      assert {:error, [%{path: "visibility", message: message}]} =
+               AvailabilityPlan.plan(%{"visibility" => "active"}, unpriced)
+
+      assert message =~ "set a price first"
+    end
+  end
+
   test "a free product (price zero) can be made active" do
     free = item(%{"shop_status" => "draft"}, %{base_price: Decimal.new(0)})
 

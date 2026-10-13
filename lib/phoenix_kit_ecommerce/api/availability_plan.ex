@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
 
   import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1, error: 3, put_if: 4]
 
+  alias PhoenixKitEcommerce.API.PricePlan
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
 
@@ -87,7 +88,7 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
   end
 
   defp publish_error("active", item, cur) do
-    if cur.visibility != "active" and is_nil(item.base_price) and not price_on_request?(item),
+    if cur.visibility != "active" and unpriced?(item) and not price_on_request?(item),
       do: [
         error(
           "visibility",
@@ -148,6 +149,9 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
   # The catalogue's own status wins on the storefront: an item that is not
   # `active` in the catalogue stays hidden whatever the shop status says.
   defp warnings(item), do: if(item.status == "active", do: [], else: ["item_not_active"])
+
+  # A stored price that is not a finite number (NaN, Infinity) is no price.
+  defp unpriced?(item), do: is_nil(PricePlan.current(item).price)
 
   defp price_on_request?(item), do: Map.get(ecommerce(item), "price_on_request", false) == true
 
