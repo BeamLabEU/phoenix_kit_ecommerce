@@ -126,6 +126,36 @@ defmodule PhoenixKitEcommerce.API.BatchTest do
     end
   end
 
+  describe "plan/2 and a product given twice" do
+    test "a later row of a product whose earlier row planned fails as a duplicate, unplanned" do
+      rows = [row(0, nil), %{row(1, nil) | item: %{uuid: "u0"}}]
+      test_pid = self()
+
+      planned =
+        Batch.plan(rows, fn %{index: index} ->
+          send(test_pid, {:planned, index})
+          {:ok, plan()}
+        end)
+
+      assert [%{error: nil}, %{error: %{"code" => "duplicate_line"}, plan: nil}] = planned
+      assert_received {:planned, 0}
+      refute_received {:planned, 1}
+    end
+
+    test "a later row of a product whose earlier row failed is planned" do
+      rows = [row(0, nil), %{row(1, nil) | item: %{uuid: "u0"}}]
+
+      planned =
+        Batch.plan(rows, fn
+          %{index: 0} -> {:error, Rows.error(:validation_failed, "bad")}
+          %{index: 1} -> {:ok, plan()}
+        end)
+
+      assert [%{error: %{"code" => "validation_failed"}}, %{error: nil, plan: %{changed?: true}}] =
+               planned
+    end
+  end
+
   describe "plan/2" do
     test "plans resolved rows only, and a planner error fails just that row" do
       rows = [row(0, nil), row(1, nil), failed(2)]

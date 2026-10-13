@@ -29,7 +29,7 @@ defmodule PhoenixKitEcommerce.API.Batch do
           extra: map()
         }
 
-  @doc "Resolves the `\"ref\"` of every item. A product named twice fails from its second row on."
+  @doc "Resolves the `\"ref\"` of every item."
   @spec load([map()], String.t()) :: [row()]
   def load(items, catalogue_uuid) when is_list(items) do
     refs = Enum.map(items, &Map.get(&1, "ref"))
@@ -38,7 +38,6 @@ defmodule PhoenixKitEcommerce.API.Batch do
     |> Enum.zip(Refs.resolve(refs, catalogue_uuid))
     |> Enum.with_index()
     |> Enum.map(fn {{input, answer}, index} -> row(index, input, answer) end)
-    |> mark_duplicates()
   end
 
   defp row(index, input, {:ok, item}),
@@ -65,54 +64,45 @@ defmodule PhoenixKitEcommerce.API.Batch do
       extra: %{}
     }
 
-  defp mark_duplicates(rows) do
-    {rows, _seen} =
-      Enum.map_reduce(rows, %{}, fn
-        %{item: nil} = row, seen ->
-          {row, seen}
-
-        %{item: item} = row, seen ->
-          case Map.fetch(seen, item.uuid) do
-            {:ok, first} ->
-              error =
-                Rows.error(
-                  :duplicate_line,
-                  "This product is already given in items[#{first}].",
-                  %{
-                    "first_index" => first
-                  }
-                )
-
-              {fail(row, error), seen}
-
-            :error ->
-              {row, Map.put(seen, item.uuid, row.index)}
-          end
-      end)
-
-    rows
-  end
-
   @doc "Marks a row as failed."
   @spec fail(row(), Rows.t()) :: row()
   def fail(row, error), do: %{row | error: error, plan: nil}
 
   @doc """
   Plans every row that resolved. `planner` takes the row and returns
-  `{:ok, plan}` or `{:error, row_error}`.
+  `{:ok, plan}` or `{:error, row_error}`. A product named again after a row
+  of it was planned successfully fails with `duplicate_line` and is not
+  planned; a row that failed does not claim its product, so a later valid
+  row of it still goes through.
   """
   @spec plan([row()], (row() -> {:ok, map()} | {:error, Rows.t()})) :: [row()]
   def plan(rows, planner) do
-    Enum.map(rows, fn
-      %{error: nil} = row ->
-        case planner.(row) do
-          {:ok, plan} -> %{row | plan: plan}
-          {:error, error} -> fail(row, error)
-        end
+    {rows, _planned} =
+      Enum.map_reduce(rows, %{}, fn
+        %{error: nil, item: item} = row, planned ->
+          plan_once(row, Map.fetch(planned, item.uuid), planner, planned)
 
-      row ->
-        row
-    end)
+        row, planned ->
+          {row, planned}
+      end)
+
+    rows
+  end
+
+  defp plan_once(row, {:ok, first}, _planner, planned) do
+    error =
+      Rows.error(:duplicate_line, "This product is already given in items[#{first}].", %{
+        "first_index" => first
+      })
+
+    {fail(row, error), planned}
+  end
+
+  defp plan_once(row, :error, planner, planned) do
+    case planner.(row) do
+      {:ok, plan} -> {%{row | plan: plan}, Map.put(planned, row.item.uuid, row.index)}
+      {:error, error} -> {fail(row, error), planned}
+    end
   end
 
   @doc """
