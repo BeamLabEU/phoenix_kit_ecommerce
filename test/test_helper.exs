@@ -320,10 +320,30 @@ api_exclude =
     [:requires_core_api]
   end
 
+# The typo fallback needs the pg_trgm extension. Without it those tests are
+# excluded (and counted in the summary), never silently passed.
+trigram_exclude =
+  if repo_available do
+    try do
+      Ecto.Adapters.SQL.Sandbox.unboxed_run(TestRepo, fn ->
+        TestRepo.query("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')", [])
+      end)
+      |> case do
+        {:ok, %{rows: [[true]]}} -> []
+        _other -> [:requires_pg_trgm]
+      end
+    rescue
+      _error -> [:requires_pg_trgm]
+    end
+  else
+    []
+  end
+
 ExUnit.start(
   exclude:
     i18n_exclude ++
       integration_exclude ++
       transliteration_exclude ++
-      catalogue_exclude ++ user_menu_exclude ++ billing_user_menu_exclude ++ api_exclude
+      catalogue_exclude ++
+      user_menu_exclude ++ billing_user_menu_exclude ++ api_exclude ++ trigram_exclude
 )

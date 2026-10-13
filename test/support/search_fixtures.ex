@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
   alias PhoenixKit.Settings
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Search.Indexer
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Test.Repo
 
@@ -128,6 +129,77 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
 
     {:ok, item} = Catalogue.create_item(Map.merge(base, attrs))
     item
+  end
+
+  @doc """
+  The shop most search tests use (English titles; languages as they are):
+
+      Home
+      |- Vases:  Red Ceramic Vase (Acme, gift, 20.00, was 25.00, size Large + colour Red)
+      |          Green Vase Small (10.00, made to order, size Small)
+      |- Bowls:  Blue Glass Bowl (Beta, 35.00)
+      (none):    Wooden Spoon (gift, 5.00, description "handmade from oak")
+                 Plant Stand (15.00, description "A stand for a vase")
+
+  Everything is indexed. Returns the uuids: `home`, `vases`, `bowls` (categories)
+  and `a` Red Ceramic Vase, `b` Blue Glass Bowl, `c` Green Vase Small,
+  `d` Wooden Spoon, `e` Plant Stand.
+  """
+  def sample_shop! do
+    home = legacy_category!(%{"en" => "Home"})
+    vases = legacy_category!(%{"en" => "Vases"}, %{parent_uuid: home.uuid})
+    bowls = legacy_category!(%{"en" => "Bowls"}, %{parent_uuid: home.uuid})
+
+    a =
+      legacy_product!(%{"en" => "Red Ceramic Vase"}, %{
+        category_uuid: vases.uuid,
+        vendor: "Acme",
+        tags: ["gift"],
+        price: "20.00",
+        compare_at_price: "25.00",
+        metadata: %{"_option_values" => %{"size" => ["Large"], "colour" => ["Red"]}}
+      })
+
+    b =
+      legacy_product!(%{"en" => "Blue Glass Bowl"}, %{
+        category_uuid: bowls.uuid,
+        vendor: "Beta",
+        price: "35.00"
+      })
+
+    c =
+      legacy_product!(%{"en" => "Green Vase Small"}, %{
+        category_uuid: vases.uuid,
+        price: "10.00",
+        made_to_order: true,
+        metadata: %{"_option_values" => %{"size" => ["Small"]}}
+      })
+
+    d =
+      legacy_product!(%{"en" => "Wooden Spoon"}, %{
+        price: "5.00",
+        tags: ["gift"],
+        description: %{"en" => "handmade from oak"}
+      })
+
+    e =
+      legacy_product!(%{"en" => "Plant Stand"}, %{
+        price: "15.00",
+        description: %{"en" => "A stand for a vase"}
+      })
+
+    {:ok, _} = Indexer.reindex_items(Enum.map([a, b, c, d, e], & &1.uuid))
+
+    %{
+      home: home.uuid,
+      vases: vases.uuid,
+      bowls: bowls.uuid,
+      a: a.uuid,
+      b: b.uuid,
+      c: c.uuid,
+      d: d.uuid,
+      e: e.uuid
+    }
   end
 
   @doc "The `data` map of an item or category with the given shop status."
