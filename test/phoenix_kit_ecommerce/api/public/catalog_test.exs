@@ -12,12 +12,42 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Public.Catalog
+  alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Search.Indexer
+  alias PhoenixKitEcommerce.Test.Repo
 
   setup do
     disable_languages!()
     currencies!()
     sample_shop!()
+  end
+
+  defp count_queries(fun) do
+    handler_id = {:catalog_query_count, make_ref()}
+    test_pid = self()
+
+    :telemetry.attach(
+      handler_id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, _metadata, _config -> send(test_pid, :query_ran) end,
+      nil
+    )
+
+    try do
+      fun.()
+    after
+      :telemetry.detach(handler_id)
+    end
+
+    drain(0)
+  end
+
+  defp drain(count) do
+    receive do
+      :query_ran -> drain(count + 1)
+    after
+      0 -> count
+    end
   end
 
   defp get!(input, overrides \\ []) do
@@ -138,6 +168,33 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert Enum.map(out["results"], & &1["ref"]) == [t.b, t.a, t.b, String.upcase(t.a)]
     end
 
+    test "a 16-byte string is not an id, even when its bytes are those of a listed product", t do
+      raw = Ecto.UUID.dump!(t.a)
+      assert byte_size(raw) == 16
+
+      out = get!(%{"ids" => [raw, t.a]})
+
+      assert [%{"error" => %{"code" => "not_found"}}, %{"product" => %{"id" => id}}] =
+               out["results"]
+
+      assert id == t.a
+    end
+
+    test "a repeated id is loaded and built once: the cost does not grow with the repeats", t do
+      # Warm the settings and currency caches so that both calls do the same work.
+      get!(%{"ids" => [t.a]})
+
+      once = count_queries(fn -> get!(%{"ids" => [t.a]}) end)
+      many = count_queries(fn -> get!(%{"ids" => List.duplicate(t.a, 6)}) end)
+
+      assert once > 0
+      assert many == once
+
+      out = get!(%{"ids" => List.duplicate(t.a, 3)})
+      assert Enum.map(out["results"], & &1["product"]["id"]) == [t.a, t.a, t.a]
+      assert out["summary"]["found"] == 3
+    end
+
     test "format: markdown returns the description as Markdown" do
       product =
         legacy_product!(%{"en" => "Described"}, %{
@@ -211,8 +268,7 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert Enum.all?(home["children"], &(&1["children"] == []))
     end
 
-    test "hidden and unlisted categories are not shown, and a child of a hidden parent becomes a root",
-         t do
+    test "hidden and unlisted categories are not shown, and a child of a hidden parent becomes a root" do
       secret = legacy_category!(%{"en" => "Secret"}, %{status: "hidden"})
       _unlisted = legacy_category!(%{"en" => "Quiet"}, %{status: "unlisted"})
       orphan = legacy_category!(%{"en" => "Orphan"}, %{parent_uuid: secret.uuid})
@@ -225,19 +281,54 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert Enum.find(out["categories"], &(&1["name"] == "Orphan"))["id"] == orphan.uuid
     end
 
-    test "counts only listed products: a product hidden since the index was written still counts until it is re-indexed",
+    test "roots and children are ordered by position, then by name, whatever the creation order",
          t do
-      # The count comes from the index. After a re-index it drops the product.
+      # Created out of order, so neither creation order nor name order alone is the answer.
+      _zeta = legacy_category!(%{"en" => "Zeta"})
+      _aardvark = legacy_category!(%{"en" => "Aardvark"})
+      _last = legacy_category!(%{"en" => "Last"}, %{position: 5})
+      _middle = legacy_category!(%{"en" => "Middle"}, %{position: 2})
+      _attic = legacy_category!(%{"en" => "Attic"}, %{parent_uuid: t.home, position: 9})
+      _cellar = legacy_category!(%{"en" => "Cellar"}, %{parent_uuid: t.home, position: 1})
+
+      nodes = list!()["categories"]
+
+      assert Enum.map(nodes, & &1["name"]) == ["Aardvark", "Home", "Zeta", "Middle", "Last"]
+
+      home = Enum.find(nodes, &(&1["id"] == t.home))
+      assert Enum.map(home["children"], & &1["name"]) == ["Bowls", "Vases", "Cellar", "Attic"]
+    end
+
+    test "a category with no slug has no page: slug and url are left out together" do
+      bare = legacy_category!(%{"en" => "Bare"})
+      {1, _} = Repo.update_all(from(c in Category, where: c.uuid == ^bare.uuid), set: [slug: %{}])
+
+      nodes = list!()["categories"]
+      node = Enum.find(nodes, &(&1["id"] == bare.uuid))
+      listed = Enum.find(nodes, &(&1["name"] == "Home"))
+
+      assert node["name"] == "Bare"
+      refute Map.has_key?(node, "slug")
+      refute Map.has_key?(node, "url")
+      assert is_binary(listed["slug"]) and is_binary(listed["url"])
+    end
+
+    test "a product hidden since the index was written still counts until it is re-indexed", t do
+      # The counts come from the index, not from live products: the aggregate lags
+      # a hidden product by the re-index delay (items and cards are always live).
       {:ok, _} = Shop.update_product(Shop.get_product!(t.a), %{status: "draft"})
+      assert vases_count() == 2
+
       {:ok, _} = Indexer.reindex_items([t.a])
+      assert vases_count() == 1
+    end
 
-      vases =
-        list!()["categories"]
-        |> hd()
-        |> Map.fetch!("children")
-        |> Enum.find(&(&1["name"] == "Vases"))
-
-      assert vases["product_count"] == 1
+    defp vases_count do
+      list!()["categories"]
+      |> hd()
+      |> Map.fetch!("children")
+      |> Enum.find(&(&1["name"] == "Vases"))
+      |> Map.fetch!("product_count")
     end
 
     @tag :requires_core_api
@@ -270,10 +361,11 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert similar!(%{"id" => t.b})["items"] == []
     end
 
-    test "unknown, malformed and not-listed ids are all not_found" do
+    test "unknown, malformed and not-listed ids are all not_found", t do
       draft = legacy_product!(%{"en" => "Draft Lamp"}, %{status: "draft"})
 
-      for id <- [Ecto.UUID.generate(), "garbage", draft.uuid] do
+      # A 16-byte string with the bytes of a listed product is no id either.
+      for id <- [Ecto.UUID.generate(), "garbage", draft.uuid, Ecto.UUID.dump!(t.a)] do
         assert {:error, :not_found, "No such product.", _context} =
                  Catalog.similar_products(%{"id" => id}, public_ctx())
       end

@@ -8,9 +8,13 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
   through it: a hidden product, a malformed id and an unknown id produce the
   same `not_found`, so an answer never tells a caller that a hidden product
   exists.
+
+  `shop.list_categories` answers an empty tree while the shop's catalogue is
+  not active (archived, or not found), as every product of it is then not found.
+  Its counts come from the search index and can lag a changed product by the
+  re-index delay; the products themselves are always read live.
   """
 
-  alias PhoenixKit.Utils.UUID, as: UUIDUtils
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Cards
   alias PhoenixKitEcommerce.API.Context
@@ -38,25 +42,34 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     end
   end
 
+  # Each distinct id is loaded once and its card built once, however often the
+  # caller repeats it; the answer still has one row per input id, in order.
   defp products_answer(ids, format, context) do
-    canonical = Enum.map(ids, &canonical_id/1)
-    records = canonical |> Enum.reject(&is_nil/1) |> Loader.load(language: context.language)
+    canonical = Enum.map(ids, &Loader.canonical_uuid/1)
+    unique = canonical |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    records = Loader.load(unique, language: context.language)
+
+    products =
+      Map.new(unique, fn id -> {id, product(Map.get(records, id), context, format)} end)
 
     results =
       ids
       |> Enum.zip(canonical)
-      |> Enum.map(fn {ref, id} -> row(ref, id && Map.get(records, id), context, format) end)
+      |> Enum.map(fn {ref, id} -> row(ref, id && Map.get(products, id)) end)
 
     %{"results" => results, "summary" => summary(results)}
   end
 
-  defp row(ref, %Record{state: :listed} = record, context, format),
-    do: %{"ref" => ref, "product" => Cards.card(record, context, format: format)}
+  defp product(%Record{state: :listed} = record, context, format),
+    do: Cards.card(record, context, format: format)
 
-  defp row(ref, %Record{state: :discontinued} = record, context, _format),
-    do: %{"ref" => ref, "product" => Cards.stub(record, context)}
+  defp product(%Record{state: :discontinued} = record, context, _format),
+    do: Cards.stub(record, context)
 
-  defp row(ref, _hidden_or_unknown, _context, _format), do: %{"ref" => ref, "error" => @not_found}
+  defp product(_hidden_or_unknown, _context, _format), do: nil
+
+  defp row(ref, nil), do: %{"ref" => ref, "error" => @not_found}
+  defp row(ref, product), do: %{"ref" => ref, "product" => product}
 
   defp summary(results) do
     %{
@@ -67,14 +80,6 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     }
   end
 
-  # A 36-character UUID in any letter case; anything else (a 16-byte string
-  # that `Ecto.UUID.cast/1` would take for a raw UUID included) is no id.
-  defp canonical_id(id) when is_binary(id) do
-    if UUIDUtils.valid?(id), do: String.downcase(id)
-  end
-
-  defp canonical_id(_other), do: nil
-
   # --- shop.list_categories --------------------------------------------------
 
   @spec list_categories(map(), map()) :: {:ok, map()} | {:error, atom(), String.t(), map()}
@@ -84,15 +89,22 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     end
   end
 
+  # An archived or missing shop catalogue lists nothing (a product of it is
+  # not found either), so the tree is empty rather than a list of categories
+  # with no products.
   defp categories_answer(context) do
-    categories =
-      Loader.categories()
-      |> Map.values()
-      |> Enum.filter(&(&1.status == "active"))
+    if Loader.catalogue_listed?() do
+      categories =
+        Loader.categories()
+        |> Map.values()
+        |> Enum.filter(&(&1.status == "active"))
 
-    counts = Query.category_counts(context.language)
+      counts = Query.category_counts(context.language)
 
-    %{"categories" => tree(categories, counts, context), "count" => length(categories)}
+      %{"categories" => tree(categories, counts, context), "count" => length(categories)}
+    else
+      %{"categories" => [], "count" => 0}
+    end
   end
 
   defp tree(categories, counts, context) do
@@ -102,25 +114,27 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     categories
     |> Enum.filter(&(is_nil(&1.parent_uuid) or not MapSet.member?(known, &1.parent_uuid)))
     |> sort(context)
-    |> Enum.map(&category_node(&1, by_parent, counts, context, MapSet.new([&1.uuid])))
+    |> Enum.map(&category_node(&1, by_parent, counts, context))
   end
 
-  defp category_node(category, by_parent, counts, context, seen) do
+  # Only the subtrees of roots are walked, and a category has one parent, so a
+  # cycle of parents (which contains no root) is never reached.
+  defp category_node(category, by_parent, counts, context) do
     children =
       by_parent
       |> Map.get(category.uuid, [])
-      |> Enum.reject(&MapSet.member?(seen, &1.uuid))
       |> sort(context)
-      |> Enum.map(&category_node(&1, by_parent, counts, context, MapSet.put(seen, &1.uuid)))
+      |> Enum.map(&category_node(&1, by_parent, counts, context))
 
     own = Map.get(counts, category.uuid, 0)
     language = context.language
+    slug = Cards.link_slug(category, language)
 
     %{
       "id" => category.uuid,
       "name" => Translations.get_display(category, :name, language) || "",
-      "slug" => Translations.get_slug(category, language),
-      "url" => Context.absolute(context, Shop.category_url(category, language)),
+      "slug" => slug,
+      "url" => slug && Context.absolute(context, Shop.category_url(category, language)),
       "product_count" => own,
       "total_count" => own + Enum.sum(Enum.map(children, & &1["total_count"])),
       "children" => children
@@ -164,7 +178,7 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
 
   # The base product must be listed now (a live check) and indexed, else not_found.
   defp listed_entry(id, context) do
-    with uuid when is_binary(uuid) <- canonical_id(id),
+    with uuid when is_binary(uuid) <- Loader.canonical_uuid(id),
          %{} = entry <- Query.entry(uuid, context.language),
          %Record{state: :listed} <- Map.get(Loader.load([uuid], language: context.language), uuid) do
       {:ok, entry}

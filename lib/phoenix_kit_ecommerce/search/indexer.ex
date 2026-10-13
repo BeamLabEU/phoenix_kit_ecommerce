@@ -46,7 +46,6 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   require Logger
 
   alias PhoenixKit.RepoHelper
-  alias PhoenixKit.Utils.UUID, as: UUIDUtils
   alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.API.Record
   alias PhoenixKitEcommerce.Search.Document
@@ -79,8 +78,8 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
     if Loader.source_resolvable?() do
       uuids =
         uuids
-        |> Enum.filter(&(is_binary(&1) and UUIDUtils.valid?(&1)))
-        |> Enum.map(&String.downcase/1)
+        |> Enum.map(&Loader.canonical_uuid/1)
+        |> Enum.reject(&is_nil/1)
         |> Enum.uniq()
 
       started = started_at(opts)

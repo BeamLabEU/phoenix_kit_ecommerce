@@ -1,7 +1,10 @@
 defmodule PhoenixKitEcommerce.API.Public.CatalogCatalogueTest do
   @moduledoc """
-  `shop.get_products` over catalogue items: the four item states of the
-  catalogue and the two shop statuses, row by row (spec 7.1).
+  The public catalogue tools on the Catalogue source. `shop.get_products` over
+  catalogue items: the item states of the catalogue (active, inactive, deleted,
+  discontinued) and the shop statuses of `API.Visibility`, row by row.
+  `shop.list_categories` and `shop.similar_products` over the shop's catalogue
+  and a second catalogue of the same install.
 
   `async: false`: the shop's catalogue is found by name across the database.
   """
@@ -9,9 +12,14 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogCatalogueTest do
 
   @moduletag :catalogue
 
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+
   import PhoenixKitEcommerce.SearchFixtures
 
+  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.Public.Catalog
+  alias PhoenixKitEcommerce.Search.Indexer
+  alias PhoenixKitEcommerce.Test.Repo
 
   setup do
     disable_languages!()
@@ -81,5 +89,94 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogCatalogueTest do
 
     assert {:ok, %{"summary" => %{"found" => 0, "not_found" => 1}}} =
              Catalog.get_products(%{"ids" => [in_deleted.uuid]}, public_ctx())
+  end
+
+  describe "list_categories and similar_products" do
+    setup do
+      catalogue = catalogue_source!()
+      home = catalogue_category!(catalogue, "Home")
+
+      vases =
+        catalogue_category!(catalogue, "Vases", %{
+          parent_uuid: home.uuid,
+          slug: %{"en" => "vases"}
+        })
+
+      backstage = catalogue_category!(catalogue, "Backstage", %{data: shop_data("hidden")})
+
+      vase = catalogue_item!(catalogue, "Red Vase", %{category_uuid: vases.uuid})
+      twin = catalogue_item!(catalogue, "Blue Vase", %{category_uuid: vases.uuid})
+      _unseen = catalogue_item!(catalogue, "Backstage Vase", %{category_uuid: backstage.uuid})
+
+      {:ok, other} = Catalogue.create_catalogue(%{name: "Warehouse stock"})
+      spare_parts = catalogue_category!(other, "Spare parts")
+      foreign = catalogue_item!(other, "Spare Vase", %{category_uuid: spare_parts.uuid})
+
+      {:ok, _} = Indexer.rebuild()
+
+      %{catalogue: catalogue, home: home, vases: vases, vase: vase, twin: twin, foreign: foreign}
+    end
+
+    defp categories!(overrides \\ []) do
+      assert {:ok, out} = Catalog.list_categories(%{}, public_ctx(overrides))
+      out
+    end
+
+    defp similar!(id) do
+      Catalog.similar_products(%{"id" => id}, public_ctx())
+    end
+
+    test "list_categories shows the active categories of the shop's catalogue with their counts",
+         t do
+      out = categories!()
+
+      assert out["count"] == 2
+      assert [home] = out["categories"]
+      assert home["id"] == t.home.uuid
+      assert home["product_count"] == 0
+      assert home["total_count"] == 2
+      assert [vases] = home["children"]
+      assert {vases["id"], vases["name"], vases["product_count"]} == {t.vases.uuid, "Vases", 2}
+      assert vases["slug"] == "vases"
+      assert String.starts_with?(vases["url"], "https://shop.test/")
+      assert String.ends_with?(vases["url"], "/shop/category/vases")
+      # "Home" was given no slug: it has no page, so no slug and no url.
+      refute Map.has_key?(home, "slug")
+      refute Map.has_key?(home, "url")
+    end
+
+    test "list_categories of an archived shop catalogue is empty, not a list of empty categories",
+         t do
+      {:ok, _} = Catalogue.update_catalogue(t.catalogue, %{status: "archived"})
+
+      assert categories!() == %{"categories" => [], "count" => 0}
+    end
+
+    test "similar_products finds the other item of the category, in the shop's catalogue only",
+         t do
+      assert {:ok, %{"items" => items, "count" => 1}} = similar!(t.vase.uuid)
+      assert Enum.map(items, & &1["id"]) == [t.twin.uuid]
+    end
+
+    test "an item of another catalogue is neither a similar product nor a base, whatever the index holds",
+         t do
+      # An index row for the foreign item, in the shop's category: stale or planted.
+      Repo.query!(
+        """
+        INSERT INTO phoenix_kit_shop_search_index
+          (item_uuid, language, title, title_trgm, document, category_uuid)
+        VALUES ($1, 'en', 'Spare Vase', 'spare vase', to_tsvector('simple', 'spare vase'), $2)
+        """,
+        [Ecto.UUID.dump!(t.foreign.uuid), Ecto.UUID.dump!(t.vases.uuid)]
+      )
+
+      assert {:ok, %{"items" => items}} = similar!(t.vase.uuid)
+      assert Enum.map(items, & &1["id"]) == [t.twin.uuid]
+
+      assert {:error, :not_found, _message, _context} = similar!(t.foreign.uuid)
+
+      assert {:ok, %{"summary" => %{"not_found" => 1}}} =
+               Catalog.get_products(%{"ids" => [t.foreign.uuid]}, public_ctx())
+    end
   end
 end

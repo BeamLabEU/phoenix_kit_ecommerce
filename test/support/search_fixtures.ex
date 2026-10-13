@@ -63,6 +63,30 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     product
   end
 
+  # Raw bytes the lower-casing of a mangled id cannot disturb: none is an ASCII
+  # upper-case letter.
+  @raw_safe_uuid "10203060-7080-7090-a0b0-c0d0e0f01020"
+
+  @doc """
+  An active legacy product whose uuid, written as 16 raw bytes, no
+  lower-casing changes. Returns `{product, raw}`: `raw` is the 16-byte string
+  `Ecto.UUID.cast/1` takes for that uuid and no API caller can send as an id.
+  """
+  def raw_uuid_product!(titles) do
+    product = legacy_product!(titles)
+
+    # One statement: the slug rows reference the product, and the check runs at its end.
+    Repo.query!(
+      """
+      WITH moved AS (UPDATE phoenix_kit_shop_products SET uuid = $2 WHERE uuid = $1 RETURNING 1)
+      UPDATE phoenix_kit_shop_product_slugs SET product_uuid = $2 WHERE product_uuid = $1
+      """,
+      [Ecto.UUID.dump!(product.uuid), Ecto.UUID.dump!(@raw_safe_uuid)]
+    )
+
+    {%{product | uuid: @raw_safe_uuid}, Ecto.UUID.dump!(@raw_safe_uuid)}
+  end
+
   defp decimal_field(key, value) when key in [:price, :compare_at_price] and is_binary(value),
     do: Decimal.new(value)
 

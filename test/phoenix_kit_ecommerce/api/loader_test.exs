@@ -45,6 +45,28 @@ defmodule PhoenixKitEcommerce.API.LoaderTest do
       assert Loader.load([]) == %{}
     end
 
+    test "a 16-byte string is no id, even when its bytes are those of a product's uuid" do
+      {product, raw} = raw_uuid_product!(%{"en" => "Red Vase"})
+      category = legacy_category!(%{"en" => "Vases"})
+      assert byte_size(raw) == 16
+      assert {:ok, product.uuid} == Ecto.UUID.cast(raw)
+
+      assert Loader.load([raw]) == %{}
+      assert Map.keys(Loader.load([raw, product.uuid])) == [product.uuid]
+      assert Loader.item_ids_in_categories([Ecto.UUID.dump!(category.uuid)]) == []
+    end
+
+    test "canonical_uuid/1 is the lower-case form of a 36-character UUID and nothing else" do
+      id = Ecto.UUID.generate()
+      assert Loader.canonical_uuid(id) == id
+      assert Loader.canonical_uuid(String.upcase(id)) == id
+      assert Loader.canonical_uuid(Ecto.UUID.bingenerate()) == nil
+      assert Loader.canonical_uuid(String.replace(id, "-", "")) == nil
+      assert Loader.canonical_uuid(id <> " ") == nil
+      assert Loader.canonical_uuid(nil) == nil
+      assert Loader.canonical_uuid(42) == nil
+    end
+
     test "a draft product is hidden and an archived one is a stub" do
       draft = legacy_product!(%{"en" => "Draft"}, %{status: "draft"})
       archived = legacy_product!(%{"en" => "Archived"}, %{status: "archived"})

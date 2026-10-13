@@ -51,7 +51,7 @@ defmodule PhoenixKitEcommerce.API.Loader do
   """
   @spec load([term()], keyword()) :: %{String.t() => Record.t()}
   def load(ids, opts \\ []) when is_list(ids) do
-    ids = ids |> Enum.filter(&valid_uuid?/1) |> Enum.map(&String.downcase/1) |> Enum.uniq()
+    ids = ids |> Enum.map(&canonical_uuid/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
     if ids == [] do
       %{}
@@ -143,7 +143,7 @@ defmodule PhoenixKitEcommerce.API.Loader do
   @doc "The ids of the products that sit directly in any of `category_uuids`."
   @spec item_ids_in_categories([String.t()]) :: [String.t()]
   def item_ids_in_categories(category_uuids) when is_list(category_uuids) do
-    case Enum.filter(category_uuids, &valid_uuid?/1) do
+    case category_uuids |> Enum.map(&canonical_uuid/1) |> Enum.reject(&is_nil/1) do
       [] -> []
       uuids -> products_in_categories(uuids)
     end
@@ -286,5 +286,15 @@ defmodule PhoenixKitEcommerce.API.Loader do
     }
   end
 
-  defp valid_uuid?(value), do: is_binary(value) and UUIDUtils.valid?(value)
+  @doc """
+  The canonical (lower-case) form of a 36-character UUID string; `nil` for
+  anything else. `Ecto.UUID.cast/1` also takes any 16-byte string for raw UUID
+  bytes, which is not an id a caller can send, so the length is checked first.
+  """
+  @spec canonical_uuid(term()) :: String.t() | nil
+  def canonical_uuid(value) when is_binary(value) and byte_size(value) == 36 do
+    if UUIDUtils.valid?(value), do: String.downcase(value)
+  end
+
+  def canonical_uuid(_other), do: nil
 end

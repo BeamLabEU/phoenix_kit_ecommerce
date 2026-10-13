@@ -41,10 +41,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
     on_request? = PriceDisplay.on_request?(product)
     {low, high} = Shop.get_price_range(product)
 
-    # A product with no slug in any language has no page to link to:
-    # `Shop.product_url/2` would answer `/en/shop/product/` (an empty slug), so
-    # `slug` and `url` are left out together.
-    slug = blank_to_nil(Translations.get_slug(product, language))
+    slug = link_slug(product, language)
 
     %{
       "id" => record.id,
@@ -65,6 +62,15 @@ defmodule PhoenixKitEcommerce.API.Cards do
     }
     |> compact()
   end
+
+  @doc """
+  The slug of a product or a category in `language`, `nil` when it has none.
+  Something with no slug in any language has no page to link to
+  (`Shop.product_url/2` would answer `/en/shop/product/`, an empty slug), so
+  `slug` and `url` are left out together.
+  """
+  @spec link_slug(map(), String.t()) :: String.t() | nil
+  def link_slug(entity, language), do: blank_to_nil(Translations.get_slug(entity, language))
 
   @doc """
   The full card. Options: `format: "text"` (default; plain text: HTML tags and
