@@ -235,6 +235,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
               <%= unless config.is_default do %>
                 <.table_row_menu_button
                   phx-click="set_default"
+                  phx-disable-with={gettext("Working…")}
                   phx-value-uuid={config.uuid}
                   icon="hero-star"
                   label="Set Default"
@@ -242,6 +243,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
               <% end %>
               <.table_row_menu_button
                 phx-click="toggle_active"
+                phx-disable-with={gettext("Working…")}
                 phx-value-uuid={config.uuid}
                 icon={if config.active, do: "hero-eye-slash", else: "hero-eye"}
                 label={if config.active, do: "Deactivate", else: "Activate"}
@@ -255,6 +257,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
               <.table_row_menu_divider />
               <.table_row_menu_button
                 phx-click="delete_config"
+                phx-disable-with={gettext("Deleting…")}
                 phx-value-uuid={config.uuid}
                 data-confirm="Delete this configuration?"
                 icon="hero-trash"
@@ -339,6 +342,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                         <%= unless config.is_default do %>
                           <.table_row_menu_button
                             phx-click="set_default"
+                            phx-disable-with={gettext("Working…")}
                             phx-value-uuid={config.uuid}
                             icon="hero-star"
                             label="Set Default"
@@ -346,6 +350,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                         <% end %>
                         <.table_row_menu_button
                           phx-click="toggle_active"
+                          phx-disable-with={gettext("Working…")}
                           phx-value-uuid={config.uuid}
                           icon={if config.active, do: "hero-eye-slash", else: "hero-eye"}
                           label={if config.active, do: "Deactivate", else: "Activate"}
@@ -359,6 +364,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                         <.table_row_menu_divider />
                         <.table_row_menu_button
                           phx-click="delete_config"
+                          phx-disable-with={gettext("Deleting…")}
                           phx-value-uuid={config.uuid}
                           data-confirm="Delete this configuration?"
                           icon="hero-trash"
@@ -619,7 +625,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                 <button type="button" phx-click="close_modal" class="btn btn-ghost">
                   Cancel
                 </button>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
                   {if @editing_config, do: "Update", else: "Create"}
                 </button>
               </div>

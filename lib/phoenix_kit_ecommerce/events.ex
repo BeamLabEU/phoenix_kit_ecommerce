@@ -195,6 +195,52 @@ defmodule PhoenixKitEcommerce.Events do
     PhoenixKitBilling.Events.subscribe_currencies()
   end
 
+  # ============================================
+  # IMPORTS AND IMAGE MIGRATION
+  # ============================================
+  #
+  # Publisher (the Oban workers, `Services.ImageMigration`) and subscriber
+  # (the admin pages) both go through the functions below, so they cannot end
+  # up on two different PubSub servers.
+
+  @doc "Topic carrying every CSV import's completion and failure."
+  def imports_topic, do: "shop:imports"
+
+  @doc "Topic carrying one CSV import's progress."
+  def import_topic(import_log_uuid) when not is_nil(import_log_uuid),
+    do: "shop:import:#{import_log_uuid}"
+
+  @doc "Topic carrying the image migration's start, cancel and per-product completion."
+  def image_migration_batch_topic, do: "shop:image_migration:batch"
+
+  @doc "Topic carrying one product's image migration progress."
+  def image_migration_topic(product_uuid) when not is_nil(product_uuid),
+    do: "shop:image_migration:#{product_uuid}"
+
+  @doc "Subscribes to `imports_topic/0`."
+  def subscribe_imports, do: Manager.subscribe(imports_topic())
+
+  @doc "Subscribes to `import_topic/1`."
+  def subscribe_import(import_log_uuid), do: Manager.subscribe(import_topic(import_log_uuid))
+
+  @doc "Subscribes to `image_migration_batch_topic/0`."
+  def subscribe_image_migration, do: Manager.subscribe(image_migration_batch_topic())
+
+  @doc "Broadcasts `message` on `imports_topic/0`."
+  def broadcast_imports(message), do: broadcast(imports_topic(), message)
+
+  @doc "Broadcasts `message` on `import_topic/1`."
+  def broadcast_import(import_log_uuid, message),
+    do: broadcast(import_topic(import_log_uuid), message)
+
+  @doc "Broadcasts `message` on `image_migration_batch_topic/0`."
+  def broadcast_image_migration_batch(message),
+    do: broadcast(image_migration_batch_topic(), message)
+
+  @doc "Broadcasts `message` on `image_migration_topic/1`."
+  def broadcast_image_migration(product_uuid, message),
+    do: broadcast(image_migration_topic(product_uuid), message)
+
   @doc """
   Subscribes to cart events for a specific cart.
   Subscribes to all relevant topics (user and/or session).
@@ -203,6 +249,19 @@ defmodule PhoenixKitEcommerce.Events do
     cart
     |> cart_topics()
     |> Enum.each(&Manager.subscribe/1)
+  end
+
+  @doc """
+  Subscribes to the cart topics of a visitor, known by `user_uuid` and/or
+  `session_id` before any cart has been read.
+
+  A page that reads the cart first and subscribes afterwards loses an update
+  that lands in between; the identity is all the topics need.
+  """
+  def subscribe_to_cart_of(user_uuid, session_id) do
+    if user_uuid, do: subscribe_to_user_cart(user_uuid)
+    if session_id, do: subscribe_to_session_cart(session_id)
+    :ok
   end
 
   @doc """

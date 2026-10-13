@@ -27,7 +27,46 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             "This cart is already being converted to an order."
         )
 
+    test ":cart_base_unavailable",
+      do:
+        assert(
+          Errors.message(:cart_base_unavailable) ==
+            "The shop's base currency changed and this cart cannot be updated right now. Please try again later."
+        )
+
     test ":cart_empty", do: assert(Errors.message(:cart_empty) == "The cart is empty.")
+
+    test ":currency_mismatch",
+      do:
+        assert(
+          Errors.message(:currency_mismatch) ==
+            "This item is priced in a different currency and cannot be added right now."
+        )
+
+    test ":currency_unavailable",
+      do:
+        assert(
+          Errors.message(:currency_unavailable) ==
+            "This cart's currency is not available right now."
+        )
+
+    test ":invalid_quantity",
+      do: assert(Errors.message(:invalid_quantity) == "That quantity is not available.")
+
+    test ":option_not_found",
+      do: assert(Errors.message(:option_not_found) == "That option no longer exists.")
+
+    test "a changeset becomes one generic message and never quotes what was typed" do
+      changeset =
+        {%{}, %{email: :string}}
+        |> Ecto.Changeset.cast(%{"email" => "private@example.com"}, [:email])
+        |> Ecto.Changeset.add_error(:email, "is taken: private@example.com")
+
+      message = Errors.message(changeset)
+
+      assert message == "The data could not be saved. Check the values and try again."
+      refute message =~ "private@example.com"
+    end
 
     test ":cart_not_active",
       do: assert(Errors.message(:cart_not_active) == "This cart is no longer active.")

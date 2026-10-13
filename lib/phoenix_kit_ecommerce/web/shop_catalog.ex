@@ -196,7 +196,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
   # Catch-all: an unrecognised message must not take the LiveView down.
   @impl true
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   defp reload_catalog_products(socket) do
     filter_opts =

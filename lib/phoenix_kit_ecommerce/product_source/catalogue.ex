@@ -143,6 +143,18 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
     Query.product_counts_by_category()
   end
 
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_products(opts \\ []), do: opts |> with_catalogue() |> Query.count_items()
+
+  @impl PhoenixKitEcommerce.ProductSource
+  def count_categories, do: [] |> with_catalogue() |> Query.count_categories()
+
+  # `metadata_option` filters read the legacy products' `_option_values`;
+  # catalogue items are filtered by attribute set instead, so there is
+  # nothing of that kind to discover here.
+  @impl PhoenixKitEcommerce.ProductSource
+  def discover_filterable_options, do: []
+
   # ============================================================
   # FILTER AGGREGATION
   # ============================================================

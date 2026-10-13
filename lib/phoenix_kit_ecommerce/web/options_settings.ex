@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.OptionTypes
   alias PhoenixKitEcommerce.Web.Authz
@@ -183,19 +185,34 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
     end
   end
 
-  defp save_option_change(nil, current, opt) do
-    opt = Map.put(opt, "position", length(current))
-    Options.add_global_option(opt)
+  defp save_option_change(nil, opt), do: Options.add_global_option(opt)
+
+  # `base: editing` — the option as this page loaded it, so values added to
+  # it since (a CSV import does that) survive the save.
+  defp save_option_change(editing, opt),
+    do: Options.update_global_option(editing["key"], opt, base: editing)
+
+  # One audit row per mutation of the global options. The key is the option's
+  # machine name, never customer data.
+  defp log_option(socket, action, key, metadata \\ %{}) do
+    Activity.log(action,
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "global_option",
+      metadata: Map.put(metadata, "key", key)
+    )
   end
 
-  defp save_option_change(editing, current, opt) do
-    updated =
-      Enum.map(current, fn o ->
-        if o["key"] == editing["key"], do: Map.merge(o, opt), else: o
-      end)
-
-    Options.update_global_options(updated)
+  defp log_option_failed(socket, action, key, reason) do
+    Activity.log_failed(action, reason,
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "global_option",
+      metadata: %{"key" => key}
+    )
   end
+
+  defp reload_options(socket), do: assign(socket, :options, Options.get_global_options())
 
   @impl true
   def render(assigns) do
@@ -334,6 +351,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                       <button
                         type="button"
                         phx-click="delete_option"
+                        phx-disable-with="…"
                         phx-value-key={opt["key"]}
                         data-confirm="Delete this option? This cannot be undone."
                         class="btn btn-ghost btn-sm text-error tooltip tooltip-bottom"
@@ -637,7 +655,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                 <button type="button" phx-click="close_modal" class="btn btn-ghost">
                   Cancel
                 </button>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
                   {if @editing_option, do: "Update", else: "Create"}
                 </button>
               </div>
@@ -823,87 +841,84 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
   defp gated_event("save_option", %{"option" => params}, socket) do
     form_data = parse_form_params(params)
     opt = build_option(form_data)
-
-    current = socket.assigns.options
     editing = socket.assigns.editing_option
+    action = if editing, do: "shop.global_option_updated", else: "shop.global_option_created"
 
-    result = save_option_change(editing, current, opt)
-
-    case result do
+    case save_option_change(editing, opt) do
       {:ok, _} ->
+        log_option(socket, action, opt["key"], %{"type" => opt["type"]})
+
         {:noreply,
          socket
-         |> assign(:options, Options.get_global_options())
+         |> reload_options()
          |> assign(:show_modal, false)
          |> assign(:editing_option, nil)
          |> assign(:form_data, initial_form_data())
-         |> put_flash(:info, if(editing, do: "Option updated", else: "Option created"))}
+         |> put_flash(
+           :info,
+           if(editing, do: gettext("Option updated"), else: gettext("Option created"))
+         )}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+        log_option_failed(socket, action, opt["key"], reason)
+        {:noreply, socket |> reload_options() |> put_flash(:error, Errors.message(reason))}
     end
   end
 
   defp gated_event("delete_option", %{"key" => key}, socket) do
     case Options.remove_global_option(key) do
       {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:options, Options.get_global_options())
-         |> put_flash(:info, "Option deleted")}
+        log_option(socket, "shop.global_option_deleted", key)
+
+        {:noreply, socket |> reload_options() |> put_flash(:info, gettext("Option deleted"))}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+        log_option_failed(socket, "shop.global_option_deleted", key, reason)
+        {:noreply, socket |> reload_options() |> put_flash(:error, Errors.message(reason))}
     end
   end
 
   defp gated_event("toggle_enabled", %{"key" => key}, socket) do
-    current = socket.assigns.options
-
-    updated =
-      Enum.map(current, fn opt ->
-        if opt["key"] == key do
-          current_enabled = Map.get(opt, "enabled", true)
-          Map.put(opt, "enabled", !current_enabled)
-        else
-          opt
-        end
-      end)
-
-    case Options.update_global_options(updated) do
+    case Options.toggle_global_option(key) do
       {:ok, _} ->
-        toggled = Enum.find(updated, &(&1["key"] == key))
-        label = if Map.get(toggled, "enabled", true), do: "enabled", else: "disabled"
+        socket = reload_options(socket)
+        toggled = Enum.find(socket.assigns.options, &(&1["key"] == key)) || %{}
+        enabled? = Map.get(toggled, "enabled", true)
+        log_option(socket, "shop.global_option_toggled", key, %{"enabled" => enabled?})
 
-        {:noreply,
-         socket
-         |> assign(:options, Options.get_global_options())
-         |> put_flash(:info, "Option #{key} #{label}")}
+        message =
+          if enabled?,
+            do: gettext("Option %{key} enabled", key: key),
+            else: gettext("Option %{key} disabled", key: key)
+
+        {:noreply, put_flash(socket, :info, message)}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+        log_option_failed(socket, "shop.global_option_toggled", key, reason)
+        {:noreply, socket |> reload_options() |> put_flash(:error, Errors.message(reason))}
     end
   end
 
-  defp gated_event("reorder_options", %{"ordered_ids" => ordered_keys}, socket) do
-    current = socket.assigns.options
+  defp gated_event("reorder_options", %{"ordered_ids" => ordered_keys}, socket)
+       when is_list(ordered_keys) do
+    ordered_keys = Enum.filter(ordered_keys, &is_binary/1)
 
-    # Reorder options based on new order
-    reordered =
-      ordered_keys
-      |> Enum.with_index()
-      |> Enum.map(fn {key, idx} ->
-        opt = Enum.find(current, &(&1["key"] == key))
-        if opt, do: Map.put(opt, "position", idx), else: nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    case Options.update_global_options(reordered) do
+    case Options.reorder_global_options(ordered_keys) do
       {:ok, _} ->
-        {:noreply, assign(socket, :options, Options.get_global_options())}
+        Activity.log("shop.global_options_reordered",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "global_option",
+          metadata: %{"count" => length(ordered_keys)}
+        )
+
+        {:noreply, reload_options(socket)}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Reorder failed: #{reason}")}
+        log_option_failed(socket, "shop.global_options_reordered", nil, reason)
+        {:noreply, socket |> reload_options() |> put_flash(:error, Errors.message(reason))}
     end
   end
+
+  defp gated_event(_event, _params, socket), do: {:noreply, socket}
 end

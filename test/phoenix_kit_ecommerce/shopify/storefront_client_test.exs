@@ -471,4 +471,13 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClientTest do
       assert elapsed_ms < 900
     end
   end
+
+  test "a shop domain that is not a bare myshopify.com host is refused without a request" do
+    Req.Test.stub(@stub, fn _conn -> flunk("no request should be made") end)
+
+    for domain <- ["internal-host:8443/x#", "shop.example.com", ""] do
+      assert StorefrontClient.fetch_products(domain, req_options()) ==
+               {:error, :invalid_shop_domain}
+    end
+  end
 end

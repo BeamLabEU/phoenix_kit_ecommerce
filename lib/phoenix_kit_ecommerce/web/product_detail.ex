@@ -273,7 +273,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                             image_uuid == @selected_image_uuid && "ring-2 ring-primary ring-offset-2"
                           ]}
                         >
-                          <img src={url} alt="Thumbnail" class="w-full h-full object-cover" />
+                          <img src={url} alt={gettext("Thumbnail")} class="w-full h-full object-cover" />
                         </button>
                       <% end %>
                     <% end %>
@@ -639,7 +639,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
             </label>
             <div class="modal-action">
               <button phx-click="cancel_delete" class="btn">{gettext("Cancel")}</button>
-              <button phx-click="delete" class="btn btn-error">
+              <button phx-click="delete" phx-disable-with={gettext("Deleting…")} class="btn btn-error">
                 <.icon name="hero-trash" class="w-4 h-4 mr-2" /> {gettext("Delete")}
               </button>
             </div>

@@ -334,10 +334,10 @@ defmodule PhoenixKitEcommerce.Web.Components.FilterHelpers do
   defp parse_decimal(""), do: nil
 
   defp parse_decimal(val) when is_binary(val) do
-    case Decimal.parse(val) do
+    # The whole value or nothing: "10abc" is not ten.
+    case Decimal.parse(String.trim(val)) do
       {decimal, ""} -> decimal
-      {decimal, _} -> decimal
-      :error -> nil
+      _ -> nil
     end
   end
 

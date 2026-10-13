@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Errors do
 
     * plain atoms — `:not_found`, `:cart_empty`, `:product_not_found`, etc.
     * strings — passed through unchanged (legacy / interpolated messages)
+    * changesets — one generic "could not be saved" message
     * anything else — rendered as `"Unexpected error: <inspect>"` so
       nothing silently surfaces a raw struct
 
@@ -45,6 +46,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :invalid_csv_format
           | :invalid_destination
           | :invalid_host
+          | :invalid_quantity
           | :invalid_scheme
           | :missing_content_type
           | :missing_slug
@@ -53,6 +55,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :no_images_downloaded
           | :no_shipping_method
           | :not_found
+          | :option_not_found
           | :payment_option_not_found
           | :product_not_found
           | :rate_limited
@@ -102,6 +105,7 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:invalid_csv_format), do: gettext("The CSV file format is invalid.")
   def message(:invalid_destination), do: gettext("The delivery details are not valid.")
   def message(:invalid_host), do: gettext("The URL host is not allowed.")
+  def message(:invalid_quantity), do: gettext("That quantity is not available.")
   def message(:invalid_scheme), do: gettext("The URL scheme is not allowed.")
   def message(:missing_content_type), do: gettext("The response is missing a content type.")
   def message(:missing_slug), do: gettext("A slug is required.")
@@ -110,6 +114,7 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:no_images_downloaded), do: gettext("No images could be downloaded.")
   def message(:no_shipping_method), do: gettext("No shipping method is available.")
   def message(:not_found), do: gettext("The requested record was not found.")
+  def message(:option_not_found), do: gettext("That option no longer exists.")
   def message(:payment_option_not_found), do: gettext("The payment option could not be found.")
   def message(:product_not_found), do: gettext("The product could not be found.")
   def message(:rate_limited), do: gettext("Too many requests. Please try again later.")
@@ -124,6 +129,10 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:unknown_format), do: gettext("The file format is not recognized.")
 
   def message(reason) when is_binary(reason), do: reason
+
+  # Never the changeset itself: its errors quote the values that were typed.
+  def message(%Ecto.Changeset{}),
+    do: gettext("The data could not be saved. Check the values and try again.")
 
   def message(reason) do
     gettext("Unexpected error: %{reason}", reason: inspect(reason))

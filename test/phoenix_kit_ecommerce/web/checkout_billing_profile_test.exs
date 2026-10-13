@@ -370,6 +370,70 @@ defmodule PhoenixKitEcommerce.Web.CheckoutBillingProfileTest do
     end
   end
 
+  describe "confirm_order outside the review step" do
+    setup :logged_in_checkout
+
+    test "is ignored: no order, the cart stays active, the billing form stays up", %{
+      conn: conn,
+      user: user,
+      cart: cart
+    } do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      assert has_element?(view, @form)
+      refute has_element?(view, "button[phx-click='confirm_order']")
+
+      render_click(view, "confirm_order", %{})
+
+      assert has_element?(view, @form)
+      assert Shop.get_cart!(cart.uuid).status == "active"
+      assert Billing.list_user_orders(user.uuid) == []
+    end
+  end
+
+  describe "convert_cart_to_order/2 with a payment option that requires billing details" do
+    setup :logged_in_checkout
+
+    setup %{cart: cart} do
+      {:ok, option} = billing_less_option()
+      {:ok, option} = Billing.update_payment_option(option, %{"requires_billing_profile" => true})
+      {:ok, cart} = Shop.set_cart_payment_option(cart, option)
+
+      {:ok, cart: cart, option: option}
+    end
+
+    test "a cart that ships nothing is refused without any billing details", ctx do
+      assert {:error, {:billing_incomplete, _missing}} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid)
+
+      assert Shop.get_cart!(ctx.cart.uuid).status == "active"
+    end
+
+    test "and with details that name nobody", ctx do
+      blank = %{"email" => "x@example.com", "first_name" => " ", "country" => "EE"}
+
+      assert {:error, {:billing_incomplete, ["name"]}} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: blank)
+    end
+
+    test "a name and a country are enough - no street address for a digital order", ctx do
+      data = %{"email" => "x@example.com", "first_name" => "Ann", "country" => "EE"}
+
+      assert {:ok, _order} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: data)
+    end
+
+    test "an option that does not require them still converts without", ctx do
+      {:ok, _} = Billing.update_payment_option(ctx.option, %{"requires_billing_profile" => false})
+
+      # The same nameless details the test above is refused for.
+      blank = %{"email" => "x@example.com", "first_name" => " ", "country" => "EE"}
+
+      assert {:ok, _order} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: blank)
+    end
+  end
+
   describe "logged-in shopper with a saved profile" do
     setup :logged_in_checkout
 

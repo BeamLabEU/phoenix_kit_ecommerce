@@ -35,11 +35,11 @@ pages.
   the code that does call `PhoenixKitCatalogue.*` directly (the
   `ProductSource.Catalogue` adapter, `Catalogue.Writer`, the Shopify
   variants/collections/media sync) only runs behind `Code.ensure_loaded?/1`
-  once a host declares the dep, with `@compile {:no_warn_undefined, …}` and
-  matching `.dialyzer_ignore.exs` entries. Its `:catalogue`-tagged tests
-  need the test-only path bridge in `mix.exs` (`catalogue_test_deps/0`), or
-  they run by themselves when `phoenix_kit_warehouse` is resolved, which
-  brings `phoenix_kit_catalogue` in transitively.
+  once a host declares the dep, with `@compile {:no_warn_undefined, …}`. Its
+  `:catalogue`-tagged tests need the test-only path bridge in `mix.exs`
+  (`catalogue_test_deps/0`), or they run by themselves when
+  `phoenix_kit_warehouse` is resolved, which brings `phoenix_kit_catalogue`
+  in transitively.
 - **Consumed by:** no sibling declares a dependency on this module. Core
   reaches the old `PhoenixKit.Modules.Shop.*` namespace through the
   transitional shims in `lib/phoenix_kit_ecommerce/compat/`, and
@@ -389,8 +389,11 @@ Admin and Storefront APIs.
 
 ### PubSub topics
 
-Broadcast through `PhoenixKit.PubSub.Manager` (the HOST's PubSub), from
-`PhoenixKitEcommerce.Events`.
+Broadcast and subscribed through `PhoenixKitEcommerce.Events`, which uses
+`PhoenixKit.PubSub.Manager` — core's own PubSub server, not the one
+`PhoenixKit.PubSubHelper` resolves from the host's config. A publisher on one
+and a subscriber on the other never meet and nothing fails, so a new topic
+gets its topic, subscribe and broadcast functions in `Events`.
 
 | Topic | Carries |
 |---|---|
@@ -398,6 +401,8 @@ Broadcast through `PhoenixKit.PubSub.Manager` (the HOST's PubSub), from
 | `shop:products:<product_uuid>` | one product's changes |
 | `shop:categories` | category created/updated/deleted, bulk status/parent/delete |
 | `shop:inventory` | inventory changes |
+| `shop:imports`, `shop:import:<import_log_uuid>` | CSV import completion, and one import's progress |
+| `shop:image_migration:batch`, `shop:image_migration:<product_uuid>` | image migration start/cancel/per-product completion, and one product's progress |
 | per-user and per-session cart topics | cart sync for real-time storefront updates |
 
 ### Web layer
@@ -465,7 +470,10 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_product_source` — `"legacy"` (default) or `"catalogue"`; stored in
   `phoenix_kit_shop_config`, not `PhoenixKit.Settings`. Read through
   `PhoenixKitEcommerce.ProductSource.current/0`, which fails closed to
-  Legacy when `phoenix_kit_catalogue` is not loaded.
+  Legacy when `phoenix_kit_catalogue` is not loaded or the read fails. The
+  value is memoized per process for `:product_source_memo_ms` (application
+  env, default 1000, `0` in tests): nothing in this package writes the row,
+  so there is no write to invalidate a shared cache on.
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
@@ -601,7 +609,13 @@ settings-layer error.
   answers `false` (fail closed). Off hides the Shopify Sync tab, redirects the
   sync page, empties `integration_providers/0` and `required_integrations/0`
   (the provider cache is cleared on toggle). The stored connection and its
-  token are never touched. Installs that used Shopify under the old default of
+  token are never touched.
+- The connection's `shop_domain` is accepted only as a bare
+  `<store>.myshopify.com` host (`Shopify.ShopDomain`): it is interpolated
+  into the URL every Admin API request goes to with the access token
+  attached. For the same reason `Shopify.AdminClient` follows no redirect
+  and no next-page link to another host, and bounds a paginated read by
+  page count and wall clock. Installs that used Shopify under the old default of
   `true` get the row written by the chain's V3 step (below).
 
 **Stock tracking — read through `PhoenixKitEcommerce.StockTracking`**

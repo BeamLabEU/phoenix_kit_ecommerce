@@ -61,6 +61,21 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
       assert Enum.map(results, & &1.name) == ["Red Vase"]
     end
 
+    test "search matches the SKU", %{catalogue: catalogue} do
+      create_item(catalogue, %{
+        name: "Red Vase",
+        sku: "VASE-RED-0042",
+        base_price: Decimal.new("10.00"),
+        status: "active"
+      })
+
+      create_item(catalogue, %{name: "Blue Vase", base_price: Decimal.new("10.00")})
+
+      assert [%{name: "Red Vase"}] = Query.list_items(search: "red-0042")
+      # `_` is a LIKE wildcard; a SKU's own underscore must match literally.
+      assert Query.list_items(search: "VASE_RED") == []
+    end
+
     test "search matches a non-primary language bucket's _name / _description, like the legacy adapter",
          %{catalogue: catalogue} do
       create_item(catalogue, %{

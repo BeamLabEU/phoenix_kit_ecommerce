@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
@@ -63,6 +64,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     # default row resolves `nil` and the changeset rejects it. That is the
     # intended loud failure, but it must not reach a shopper as a MatchError
     # crashing the page — the shop is simply not open for business yet.
+    # Before the cart is read (real-time sync across tabs): an update landing
+    # between a read and a later subscription would never reach this page.
+    if connected?(socket), do: Events.subscribe_to_cart_of(user_uuid, session_id)
+
     case Shop.get_or_create_cart(user_uuid: user_uuid, session_id: session_id) do
       {:ok, cart} -> mount_with_cart(socket, cart, session_id, current_language)
       {:error, _reason} -> {:ok, shop_unavailable(socket)}
@@ -78,12 +83,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp mount_with_cart(socket, cart, session_id, current_language) do
-    cart = refresh_pay_on_delivery_shipping(cart)
-
-    # Subscribe to cart events for real-time sync across tabs
-    if connected?(socket) do
-      Events.subscribe_to_cart(cart)
-    end
+    cart = cart |> rebase_cart() |> refresh_pay_on_delivery_shipping()
 
     # Shipping selection only happens on this page when it hasn't been
     # skipped entirely and the shop's configured selection position is
@@ -123,10 +123,12 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   @impl true
   def handle_event("update_quantity", %{"item_uuid" => item_uuid, "quantity" => quantity}, socket) do
-    quantity = max(1, Helpers.parse_int(quantity, 1))
+    quantity = quantity |> Helpers.parse_int(1) |> max(1) |> min(CartItem.max_quantity())
 
     update_item_quantity(socket, item_uuid, quantity)
   end
+
+  def handle_event("update_quantity", _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("remove_item", %{"item_uuid" => item_uuid}, socket) do
@@ -395,7 +397,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   # more than one, so adding a single new event shape would have started
   # crashing live sessions with no change here at all.
   @impl true
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   @impl true
   def render(assigns) do
@@ -569,6 +571,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                             <td>
                               <button
                                 phx-click="remove_item"
+                                phx-disable-with="…"
                                 phx-value-item_uuid={item.uuid}
                                 class="btn btn-ghost btn-sm text-error"
                               >
@@ -804,6 +807,16 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   # the old fee in the cart's stored totals. A failed refresh (the cart was
   # converted meanwhile) keeps the cart as loaded; the summary then shows
   # the amount it actually holds - see `PriceDisplay.cart_shipping_pay_on_delivery?/1`.
+  # A cart frozen against a previous base currency is rebased by the context
+  # whenever it is written to; a shopper who only LOOKS at it must not see
+  # the old figures either. A cart that cannot be rebased is shown as it is.
+  defp rebase_cart(cart) do
+    case Shop.rebase_cart(cart) do
+      {:ok, rebased} -> rebased
+      _ -> cart
+    end
+  end
+
   defp refresh_pay_on_delivery_shipping(cart) do
     case Shop.refresh_pay_on_delivery_shipping(cart) do
       {:ok, refreshed} -> refreshed

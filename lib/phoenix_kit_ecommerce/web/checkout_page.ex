@@ -65,12 +65,42 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     session_id = session["shop_session_id"]
     user_uuid = if user, do: user.uuid
 
+    # Before the cart is read: an update landing between a read and a later
+    # subscription would never reach this page.
+    if connected?(socket) do
+      Events.subscribe_to_cart_of(user_uuid, session_id)
+      Events.subscribe_currencies()
+    end
+
     case Shop.find_active_cart(user_uuid: user_uuid, session_id: session_id) do
       nil ->
-        {:ok, redirect_to_cart(socket, gettext("Your cart is empty"))}
+        {:ok, redirect_without_cart(socket, user_uuid, session)}
 
       cart ->
-        handle_cart_validation(socket, refresh_pay_on_delivery_shipping(cart), user)
+        cart = cart |> rebase_cart() |> refresh_pay_on_delivery_shipping()
+        handle_cart_validation(socket, cart, user)
+    end
+  end
+
+  # Same as the cart page: a shopper who only looks at a cart frozen against
+  # a previous base currency must not see the old figures.
+  defp rebase_cart(cart) do
+    case Shop.rebase_cart(cart) do
+      {:ok, rebased} -> rebased
+      _ -> cart
+    end
+  end
+
+  # No active cart is also what a shopper finds when this page lost its
+  # process after their order was committed but before it sent them on. The
+  # confirmation page does its own authorization; the session id is offered
+  # only under the condition that page accepts one.
+  defp redirect_without_cart(socket, user_uuid, session) do
+    session_id = if session["shop_session_trusted"] == true, do: session["shop_session_id"]
+
+    case Shop.recent_checkout_order_uuid(user_uuid: user_uuid, session_id: session_id) do
+      nil -> redirect_to_cart(socket, gettext("Your cart is empty"))
+      order_uuid -> push_navigate(socket, to: Routes.path("/checkout/complete/#{order_uuid}"))
     end
   end
 
@@ -136,10 +166,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     is_guest = is_nil(user)
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
-    # Subscribe to cart events for real-time sync across tabs
     if connected?(socket) do
-      Events.subscribe_to_cart(cart)
-      Events.subscribe_currencies()
       PhoenixKitEcommerce.Notifications.checkout_started(cart)
     end
 
@@ -520,6 +547,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp clean_for_type(data, "company"), do: Map.drop(data, @individual_only_fields)
   defp clean_for_type(data, _individual), do: Map.drop(data, @company_only_fields)
 
+  defp billing_incomplete_message(cart) do
+    if Shop.cart_requires_shipping?(cart) do
+      gettext("Please complete the billing address - a physical order needs one")
+    else
+      gettext("Please complete your billing details - this payment method needs them")
+    end
+  end
+
   defp redirect_to_cart(socket, message) do
     socket
     |> put_flash(:error, message)
@@ -736,6 +771,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   @impl true
+  # Only from the review step: the button exists nowhere else, and every
+  # earlier step is where billing and shipping get settled.
+  def handle_event("confirm_order", _params, %{assigns: %{step: step}} = socket)
+      when step != :review do
+    {:noreply, socket}
+  end
+
   def handle_event("confirm_order", _params, socket) do
     # A carrier-priced method is ordered at a price the carrier just gave. One
     # that aged out since the review was drawn is renewed first (the button is
@@ -1123,13 +1165,23 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> push_navigate(to: Routes.path("/checkout/complete/#{order.uuid}"))
   end
 
+  # A second click on "Confirm Order" lands here: the first one already made
+  # the order, so the shopper goes to it instead of reading an error.
   defp handle_order_result({:error, :cart_not_active}, socket) do
-    message = Errors.message(:cart_not_active)
+    case Shop.converted_order_uuid(socket.assigns.cart.uuid) do
+      nil ->
+        message = Errors.message(:cart_not_active)
 
-    socket
-    |> assign(:processing, false)
-    |> assign(:error_message, message)
-    |> put_flash(:error, message)
+        socket
+        |> assign(:processing, false)
+        |> assign(:error_message, message)
+        |> put_flash(:error, message)
+
+      order_uuid ->
+        socket
+        |> assign(:processing, false)
+        |> push_navigate(to: Routes.path("/checkout/complete/#{order_uuid}"))
+    end
   end
 
   defp handle_order_result({:error, :cart_empty}, socket) do
@@ -1210,10 +1262,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:step, :billing)
     |> assign(:use_new_profile, true)
-    |> put_flash(
-      :error,
-      gettext("Please complete the billing address - a physical order needs one")
-    )
+    |> put_flash(:error, billing_incomplete_message(socket.assigns.cart))
   end
 
   defp handle_order_result({:error, reason}, socket)
@@ -1397,7 +1446,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # more than one, so adding a single new event shape would have started
   # crashing live sessions with no change here at all.
   @impl true
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   # ============================================
   # ASYNC: THE CARRIER'S PRICE ON THE REVIEW
@@ -1494,6 +1543,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
               id="checkout-fx-drift-reprice"
               class="btn btn-sm btn-outline"
               phx-click="refresh_cart_rate"
+              phx-disable-with={gettext("Working…")}
             >
               {gettext("Reprice at the current rate")}
             </button>
@@ -2284,6 +2334,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         <button
           id="checkout-confirm-order"
           phx-click="confirm_order"
+          phx-disable-with={gettext("Processing...")}
           class={["btn btn-primary btn-lg"]}
           disabled={@processing or @shipping_blocked or @requoting}
         >

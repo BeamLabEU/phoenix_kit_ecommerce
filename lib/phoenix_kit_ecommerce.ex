@@ -1375,24 +1375,11 @@ defmodule PhoenixKitEcommerce do
   Used by admin UI to auto-suggest available filters.
   """
   def discover_filterable_options do
-    sql = """
-    SELECT key, COUNT(DISTINCT p.uuid) AS product_count
-    FROM phoenix_kit_shop_products p,
-         jsonb_object_keys(COALESCE(p.metadata->'_option_values', '{}'::jsonb)) AS key
-    WHERE p.status = 'active'
-    GROUP BY key
-    ORDER BY product_count DESC
-    """
-
-    case repo().query(sql, []) do
-      {:ok, %{rows: rows}} ->
-        Enum.map(rows, fn [key, count] -> %{key: key, count: count} end)
-
-      _ ->
-        []
-    end
+    ProductSource.current().discover_filterable_options()
   rescue
-    _ -> []
+    error ->
+      Logger.error("[Shop] discovering filterable options failed: #{Exception.message(error)}")
+      []
   end
 
   @doc """
@@ -2858,6 +2845,7 @@ defmodule PhoenixKitEcommerce do
     # next to old-base ones (see that function's doc). A no-op when the
     # cart's base is current.
     with :ok <- validate_shop_enabled(),
+         :ok <- validate_quantity(quantity),
          :ok <- validate_cart_currency(cart, product),
          {:ok, cart} <- rebase_cart(cart) do
       if map_size(selected_specs) > 0 do
@@ -2878,11 +2866,22 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, _opts)
       when is_integer(quantity) do
     with :ok <- validate_shop_enabled(),
+         :ok <- validate_quantity(quantity),
          :ok <- validate_cart_currency(cart, product),
          {:ok, cart} <- rebase_cart(cart) do
       add_simple_product_to_cart(cart, product, quantity, nil, false)
     end
   end
+
+  defp validate_quantity(quantity) when is_integer(quantity) and quantity > 0 do
+    if quantity <= CartItem.max_quantity(), do: :ok, else: {:error, :invalid_quantity}
+  end
+
+  defp validate_quantity(_quantity), do: {:error, :invalid_quantity}
+
+  # Adding to a line that already exists stops at the ceiling rather than
+  # failing: the shopper asked for more of something already in the cart.
+  defp add_quantity(current, added), do: min(current + added, CartItem.max_quantity())
 
   defp validate_shop_enabled do
     if enabled?(), do: :ok, else: {:error, :shop_disabled}
@@ -3052,7 +3051,7 @@ defmodule PhoenixKitEcommerce do
               # recomputed here: the line is already frozen from its
               # first add (§4.4), and a re-add must never change what a
               # returning line already agreed to.
-              new_qty = item.quantity + quantity
+              new_qty = add_quantity(item.quantity, quantity)
               item |> CartItem.changeset(%{quantity: new_qty}) |> repo().update!()
           end
 
@@ -3198,7 +3197,7 @@ defmodule PhoenixKitEcommerce do
 
             item ->
               # Update quantity (price already frozen from first add)
-              new_qty = item.quantity + quantity
+              new_qty = add_quantity(item.quantity, quantity)
               item |> CartItem.changeset(%{quantity: new_qty}) |> repo().update!()
           end
 
@@ -3639,7 +3638,13 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Updates item quantity in cart.
   """
-  def update_cart_item(%CartItem{} = item, quantity) when quantity > 0 do
+  def update_cart_item(%CartItem{} = item, 0), do: remove_from_cart(item)
+
+  def update_cart_item(%CartItem{} = item, quantity) do
+    with :ok <- validate_quantity(quantity), do: do_update_cart_item(item, quantity)
+  end
+
+  defp do_update_cart_item(item, quantity) do
     result =
       repo().transaction(fn ->
         cart = lock_active_cart!(item.cart_uuid)
@@ -3662,8 +3667,6 @@ defmodule PhoenixKitEcommerce do
         error
     end
   end
-
-  def update_cart_item(%CartItem{} = item, 0), do: remove_from_cart(item)
 
   @doc """
   Removes item from cart.
@@ -4668,7 +4671,7 @@ defmodule PhoenixKitEcommerce do
         |> repo().insert!()
 
       existing_item ->
-        new_qty = existing_item.quantity + item.quantity
+        new_qty = add_quantity(existing_item.quantity, item.quantity)
         existing_item |> CartItem.changeset(%{quantity: new_qty}) |> repo().update!()
     end
   end
@@ -4941,16 +4944,88 @@ defmodule PhoenixKitEcommerce do
       {:error, reason} ->
         # A failed checkout is exactly what an operator wants to see later
         # ("customers keep bouncing off shipping"), so the attempt is
-        # recorded too - PII-safe, no billing details.
+        # recorded too - PII-safe, no billing details. A repeated submit of
+        # a cart that is converting or already became an order is not one:
+        # the checkout succeeded.
         _ =
-          PhoenixKitEcommerce.Activity.log_failed("shop.order_converted", reason,
-            actor_uuid: cart.user_uuid,
-            resource_type: "cart",
-            resource_uuid: cart.uuid,
-            mode: "checkout"
-          )
+          if not duplicate_conversion?(cart, reason) do
+            PhoenixKitEcommerce.Activity.log_failed("shop.order_converted", reason,
+              actor_uuid: cart.user_uuid,
+              resource_type: "cart",
+              resource_uuid: cart.uuid,
+              mode: "checkout"
+            )
+          end
 
         {:error, reason}
+    end
+  end
+
+  defp duplicate_conversion?(%Cart{uuid: uuid}, reason)
+       when reason in [:cart_not_active, :cart_already_converting] do
+    Cart
+    |> where([c], c.uuid == ^uuid and c.status in ["converting", "converted"])
+    |> repo().exists?()
+  end
+
+  defp duplicate_conversion?(_cart, _reason), do: false
+
+  @doc """
+  The uuid of the order a cart was converted into, or `nil` when the cart
+  is not a converted one.
+  """
+  @spec converted_order_uuid(term()) :: String.t() | nil
+  def converted_order_uuid(cart_uuid) when is_binary(cart_uuid) do
+    if UUIDUtils.valid?(cart_uuid) do
+      Cart
+      |> where([c], c.uuid == ^cart_uuid and c.status == "converted")
+      |> select([c], c.metadata["order_uuid"])
+      |> repo().one()
+    end
+  end
+
+  def converted_order_uuid(_cart_uuid), do: nil
+
+  # How long after a checkout the shopper who placed it is still sent to
+  # its confirmation rather than told their cart is empty.
+  @recent_checkout_seconds 300
+
+  @doc """
+  The uuid of the order this shopper placed through checkout in the last
+  few minutes, or `nil`.
+
+  A checkout page that loses its process after the conversion committed
+  remounts onto no active cart; this is how it finds the order instead of
+  reporting an empty cart. Matched on the order's own owner (`:user_uuid`)
+  or the session that placed it (`:session_id`, as stamped on the order) —
+  the same two facts the confirmation page authorizes on, so the caller
+  only ever learns of an order that page would show it.
+  """
+  @spec recent_checkout_order_uuid(keyword()) :: String.t() | nil
+  def recent_checkout_order_uuid(opts) do
+    user_uuid = Keyword.get(opts, :user_uuid)
+    session_id = Keyword.get(opts, :session_id)
+    cutoff = DateTime.add(UtilsDate.utc_now(), -@recent_checkout_seconds, :second)
+
+    query =
+      Billing.Order
+      |> where([o], o.inserted_at >= ^cutoff)
+      |> where([o], fragment("?->>'source' = 'shop_checkout'", o.metadata))
+      |> order_by([o], desc: o.inserted_at, desc: o.uuid)
+      |> limit(1)
+      |> select([o], o.uuid)
+
+    cond do
+      is_binary(user_uuid) ->
+        query |> where([o], o.user_uuid == ^user_uuid) |> repo().one()
+
+      is_binary(session_id) and session_id != "" ->
+        query
+        |> where([o], fragment("?->>'session_id' = ?", o.metadata, ^session_id))
+        |> repo().one()
+
+      true ->
+        nil
     end
   end
 
@@ -5240,24 +5315,48 @@ defmodule PhoenixKitEcommerce do
   # the CONTEXT, because the LiveView's completeness check lives on the
   # review step and a crafted confirm_order event skips it, and because
   # saved billing profiles were never required to carry an address at all.
+  #
+  # A cart that ships nothing needs no address, but a payment option flagged
+  # `requires_billing_profile` still needs to know who is paying: the same
+  # crafted event would otherwise place that order with no billing details
+  # at all.
   defp validate_billing_completeness(%Cart{} = cart, opts) do
-    if items_require_shipping?(cart.items) do
-      cond do
-        uuid = Keyword.get(opts, :billing_profile_uuid) ->
-          validate_profile_completeness(uuid)
+    cond do
+      items_require_shipping?(cart.items) ->
+        validate_billing_details(opts, :address)
 
-        is_map(Keyword.get(opts, :billing_data)) ->
-          validate_billing_data_completeness(Keyword.get(opts, :billing_data))
+      payment_option_requires_billing?(cart) ->
+        validate_billing_details(opts, :identity)
 
-        true ->
-          {:error, {:billing_incomplete, ["billing details"]}}
-      end
-    else
-      :ok
+      true ->
+        :ok
     end
   end
 
-  defp validate_profile_completeness(uuid) do
+  defp validate_billing_details(opts, level) do
+    cond do
+      uuid = Keyword.get(opts, :billing_profile_uuid) ->
+        validate_profile_completeness(uuid, level)
+
+      is_map(Keyword.get(opts, :billing_data)) ->
+        validate_billing_data_completeness(Keyword.get(opts, :billing_data), level)
+
+      true ->
+        {:error, {:billing_incomplete, ["billing details"]}}
+    end
+  end
+
+  defp payment_option_requires_billing?(%Cart{payment_option_uuid: nil}), do: false
+
+  defp payment_option_requires_billing?(%Cart{payment_option_uuid: uuid}) do
+    match?(%{requires_billing_profile: true}, PhoenixKitBilling.get_payment_option(uuid))
+  rescue
+    _ -> true
+  end
+
+  # `level` is `:address` (a deliverable address) or `:identity` (who is
+  # paying: a name and a country, no street address).
+  defp validate_profile_completeness(uuid, level) do
     case PhoenixKitBilling.get_billing_profile(uuid) do
       nil ->
         {:error, :billing_profile_not_found}
@@ -5269,34 +5368,28 @@ defmodule PhoenixKitEcommerce do
             _ -> blank_field?(profile.first_name) and blank_field?(profile.name)
           end
 
-        missing =
-          [
-            {name_missing, "name"},
-            {blank_field?(profile.address_line1), "address_line1"},
-            {blank_field?(profile.city), "city"},
-            {blank_field?(profile.postal_code), "postal_code"},
-            {blank_field?(profile.country), "country"}
-          ]
-          |> Enum.filter(&elem(&1, 0))
-          |> Enum.map(&elem(&1, 1))
-
-        if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
+        missing_billing_fields(
+          name_missing,
+          &blank_field?(Map.get(profile, String.to_existing_atom(&1))),
+          level
+        )
     end
   end
 
-  defp validate_billing_data_completeness(data) do
+  defp validate_billing_data_completeness(data, level) do
     name_missing = blank_field?(data["first_name"]) and blank_field?(data["company_name"])
 
-    missing =
-      [
-        {name_missing, "name"},
-        {blank_field?(data["address_line1"]), "address_line1"},
-        {blank_field?(data["city"]), "city"},
-        {blank_field?(data["postal_code"]), "postal_code"},
-        {blank_field?(data["country"]), "country"}
-      ]
-      |> Enum.filter(&elem(&1, 0))
-      |> Enum.map(&elem(&1, 1))
+    missing_billing_fields(name_missing, &blank_field?(data[&1]), level)
+  end
+
+  defp missing_billing_fields(name_missing, blank?, level) do
+    fields =
+      case level do
+        :address -> ~w(address_line1 city postal_code country)
+        :identity -> ~w(country)
+      end
+
+    missing = if(name_missing, do: ["name"], else: []) ++ Enum.filter(fields, blank?)
 
     if missing == [], do: :ok, else: {:error, {:billing_incomplete, missing}}
   end
@@ -5766,6 +5859,14 @@ defmodule PhoenixKitEcommerce do
   defp valid_billing_data?(data), do: is_map(data) and Map.has_key?(data, "email")
 
   defp create_guest_user_and_assign_cart(cart, billing_data) do
+    if registered_account_email?(billing_data["email"]) do
+      {:error, :email_already_registered}
+    else
+      do_create_guest_user_and_assign_cart(cart, billing_data)
+    end
+  end
+
+  defp do_create_guest_user_and_assign_cart(cart, billing_data) do
     case Auth.create_guest_user(%{
            email: billing_data["email"],
            first_name: billing_data["first_name"],
@@ -5775,7 +5876,9 @@ defmodule PhoenixKitEcommerce do
         assign_cart_and_return(cart, user)
 
       {:error, :email_exists_unconfirmed, user} ->
-        assign_cart_and_return(cart, user)
+        if guest_checkout_account?(user),
+          do: assign_cart_and_return(cart, user),
+          else: {:error, :email_already_registered}
 
       {:error, :email_exists_confirmed} ->
         {:error, :email_already_registered}
@@ -5784,6 +5887,30 @@ defmodule PhoenixKitEcommerce do
         {:error, changeset}
     end
   end
+
+  # An unconfirmed account somebody REGISTERED has a password its creator
+  # knows, and the typed email proves nothing about who that is: attaching
+  # the order to it hands the shopper's name, address and phone to whoever
+  # signed up with their address first. Only an account guest checkout itself
+  # created (random password, core's `"source"` stamp) is reused. Asked before
+  # `Auth.create_guest_user/1` because that call writes the typed name onto
+  # the unconfirmed row it finds.
+  defp registered_account_email?(email) when is_binary(email) do
+    case Auth.get_user_by_email(email) do
+      nil -> false
+      user -> not guest_checkout_account?(user)
+    end
+  end
+
+  defp registered_account_email?(_email), do: false
+
+  defp guest_checkout_account?(%{
+         confirmed_at: nil,
+         custom_fields: %{"source" => "guest_checkout"}
+       }),
+       do: true
+
+  defp guest_checkout_account?(_user), do: false
 
   defp assign_cart_and_return(cart, %{uuid: user_uuid} = user) do
     case assign_cart_to_user(cart, user) do
@@ -6412,45 +6539,25 @@ defmodule PhoenixKitEcommerce do
 
   defp format_item_description(%CartItem{product_slug: slug, selected_specs: specs}) do
     specs_text =
-      Enum.map_join(specs, ", ", fn {key, value} -> "#{humanize_key(key)}: #{value}" end)
+      Enum.map_join(specs, ", ", fn {key, value} -> "#{Options.humanize_key(key)}: #{value}" end)
 
     "#{slug} (#{specs_text})"
   end
 
-  # Convert key to human-readable format: "material_type" -> "Material Type"
-  defp humanize_key(key) when is_binary(key) do
-    key
-    |> String.replace("_", " ")
-    |> String.split(" ")
-    |> Enum.map_join(" ", &String.capitalize/1)
-  end
-
-  defp humanize_key(key), do: to_string(key)
-
-  defp count_products do
-    Product |> repo().aggregate(:count)
+  # The dashboard's totals come from the ACTIVE product source: under the
+  # catalogue source the legacy tables are empty or stale.
+  defp count_products(opts \\ []) do
+    ProductSource.current().count_products(opts)
   rescue
     _ -> 0
   end
 
-  defp count_products_by_status(status) do
-    Product
-    |> where([p], p.status == ^status)
-    |> repo().aggregate(:count)
-  rescue
-    _ -> 0
-  end
+  defp count_products_by_status(status), do: count_products(status: status)
 
-  defp count_products_by_type(product_type) do
-    Product
-    |> where([p], p.product_type == ^product_type)
-    |> repo().aggregate(:count)
-  rescue
-    _ -> 0
-  end
+  defp count_products_by_type(product_type), do: count_products(product_type: product_type)
 
   defp count_categories do
-    Category |> repo().aggregate(:count)
+    ProductSource.current().count_categories()
   rescue
     _ -> 0
   end

@@ -42,6 +42,39 @@ defmodule PhoenixKitEcommerce.Web.SettingsShopifyTest do
     assert html =~ Routes.path("/admin/shop/shopify-sync")
   end
 
+  describe "the Connect link" do
+    setup %{conn: conn} do
+      enable_shopify!()
+      permissions = ["integrations_system" | shop_permissions()]
+
+      {:ok, with_integrations: put_test_scope(conn, fake_scope(permissions: permissions))}
+    end
+
+    test "goes to the Integrations list while nothing is connected", ctx do
+      {:ok, view, _html} = live(ctx.with_integrations, "/en/admin/shop/settings")
+
+      assert has_element?(view, ~s(#shop-shopify-connect[href$="/admin/settings/integrations"]))
+    end
+
+    test "goes to the Shopify connection's own page once there is one", ctx do
+      {:ok, %{uuid: uuid}} = Integrations.add_connection("shopify", "Test Shop")
+
+      {:ok, view, _html} = live(ctx.with_integrations, "/en/admin/shop/settings")
+
+      assert has_element?(
+               view,
+               ~s(#shop-shopify-connect[href$="/admin/settings/integrations/#{uuid}"])
+             )
+    end
+
+    test "is not offered to a role without access to Integrations", %{conn: conn} do
+      conn = put_test_scope(conn, fake_scope(roles: ["Admin"]))
+      {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+      refute has_element?(view, "#shop-shopify-connect")
+    end
+  end
+
   test "disabling flips the setting, logs Activity, and drops the link", %{conn: conn} do
     enable_shopify!()
 

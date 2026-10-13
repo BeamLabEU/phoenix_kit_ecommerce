@@ -131,6 +131,36 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     end
   end
 
+  @doc "Number of items matching `opts` (the filters of `list_items/1`)."
+  @spec count_items(keyword()) :: non_neg_integer()
+  def count_items(opts \\ []) do
+    case resolve_catalogue_uuid(opts) do
+      nil ->
+        0
+
+      uuid ->
+        CatItem
+        |> where([i], i.catalogue_uuid == ^uuid)
+        |> apply_item_filters(opts)
+        |> repo().aggregate(:count)
+    end
+  end
+
+  @doc "Number of the shop catalogue's categories matching `opts`."
+  @spec count_categories(keyword()) :: non_neg_integer()
+  def count_categories(opts \\ []) do
+    case resolve_catalogue_uuid(opts) do
+      nil ->
+        0
+
+      uuid ->
+        CatCategory
+        |> where([c], c.catalogue_uuid == ^uuid)
+        |> apply_category_filters(opts)
+        |> repo().aggregate(:count)
+    end
+  end
+
   @doc "Fetches one item by uuid, scoped to the shop catalogue. `nil` on a miss."
   @spec get_item(String.t(), keyword()) :: CatItem.t() | nil
   def get_item(uuid, opts \\ [])
@@ -814,8 +844,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
 
     Enum.reduce(filters, query, fn %{key: key, values: slugs}, q ->
       case set_uuid_for_key(key, sets) do
+        # The filter names a set that no longer exists (deleted or renamed
+        # since the link was made). Its badge still shows as active, so the
+        # honest answer is no items — not every item, as if it were off.
         nil ->
-          q
+          where(q, false)
 
         set_uuid ->
           # `item_attribute_sets` is unique on `(item_uuid, set_uuid)`, so
@@ -850,8 +883,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp filter_by_search(query, nil), do: query
   defp filter_by_search(query, ""), do: query
 
-  # Matches the primary `name`/`description` columns, the `tags` list,
-  # and — like `Legacy.filter_by_product_search/2`'s `jsonb_each_text`
+  # Matches the primary `name`/`description` columns, the `sku`, the `tags`
+  # list, and — like `Legacy.filter_by_product_search/2`'s `jsonb_each_text`
   # over every localized field — every language bucket's `_name` and
   # `_description` in `data` (`data["fr-FR"]["_name"]`, …), so a shopper
   # searching in a non-primary language finds the translated title.
@@ -865,10 +898,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
       query,
       [i],
       fragment(
-        "(? ILIKE ? OR COALESCE(?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'ecommerce'->'tags', '[]'::jsonb)) AS tag WHERE tag ILIKE ?) OR EXISTS (SELECT 1 FROM jsonb_each(?) AS lang(key, value) WHERE jsonb_typeof(lang.value) = 'object' AND (COALESCE(lang.value->>'_name', '') ILIKE ? OR COALESCE(lang.value->>'_description', '') ILIKE ?)))",
+        "(? ILIKE ? OR COALESCE(?, '') ILIKE ? OR COALESCE(?, '') ILIKE ? OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?->'ecommerce'->'tags', '[]'::jsonb)) AS tag WHERE tag ILIKE ?) OR EXISTS (SELECT 1 FROM jsonb_each(?) AS lang(key, value) WHERE jsonb_typeof(lang.value) = 'object' AND (COALESCE(lang.value->>'_name', '') ILIKE ? OR COALESCE(lang.value->>'_description', '') ILIKE ?)))",
         i.name,
         ^term,
         i.description,
+        ^term,
+        i.sku,
         ^term,
         i.data,
         ^term,
