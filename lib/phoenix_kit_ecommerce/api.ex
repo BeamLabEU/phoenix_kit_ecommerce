@@ -30,7 +30,7 @@ defmodule PhoenixKitEcommerce.API do
   # same two markers.
   @markers [{PhoenixKit.API.Keys, :active?, 1}, {PhoenixKit.API.Flow, :gate, 1}]
 
-  @retry_note " A validation_failed error with context.reason database_error or unexpected is not a problem with the request and is worth retrying; any other validation_failed should be fixed first."
+  @retry_note " A validation_failed error with context.reason database_error, storage_error or unexpected is not a problem with the request and is worth retrying; any other validation_failed should be fixed first."
 
   @doc "The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the tool registry."
   @spec tools() :: [struct()]

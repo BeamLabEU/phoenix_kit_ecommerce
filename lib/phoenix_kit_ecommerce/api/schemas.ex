@@ -162,7 +162,11 @@ defmodule PhoenixKitEcommerce.API.Schemas do
                   "additionalProperties" => false,
                   "required" => ["url"],
                   "properties" => %{
-                    "url" => %{"type" => "string", "maxLength" => 2048, "pattern" => "^https?://"},
+                    "url" => %{
+                      "type" => "string",
+                      "maxLength" => 2048,
+                      "pattern" => "^https?://[^/@?#]*([/?#]|$)"
+                    },
                     "featured" => %{"type" => "boolean"}
                   }
                 }

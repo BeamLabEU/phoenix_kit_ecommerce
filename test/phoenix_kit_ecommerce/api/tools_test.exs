@@ -95,6 +95,17 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       assert :ok = ToolLint.check_tools(PhoenixKitEcommerce.api_tools())
     end
 
+    test "the write tools' descriptions name every transient reason they can answer with" do
+      for name <- [
+            "ecommerce.set_prices",
+            "ecommerce.set_availability",
+            "ecommerce.attach_images"
+          ],
+          reason <- ["database_error", "storage_error", "unexpected"] do
+        assert tools()[name].description =~ reason, "#{name} does not mention #{reason}"
+      end
+    end
+
     test "every tool is valid for core and every handler and danger function is exported" do
       for tool <- PhoenixKitEcommerce.api_tools() do
         assert {:ok, _} = Tool.validate(tool)
@@ -206,7 +217,25 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
 
       assert {:ok, _} = validate("ecommerce.attach_images", ok)
 
-      for url <- ["file:///etc/passwd", "ftp://x/y.png", "//cdn.example/a.png"] do
+      # an @ after the host is not a credential
+      for url <- [
+            "https://cdn.example",
+            "https://cdn.example/a@b.png",
+            "https://cdn.example?u=a@b"
+          ] do
+        input = %{"items" => [Map.put(@row, "images", [%{"url" => url}])]}
+        assert {:ok, _} = validate("ecommerce.attach_images", input), "#{url} must be accepted"
+      end
+
+      for url <- [
+            "file:///etc/passwd",
+            "ftp://x/y.png",
+            "//cdn.example/a.png",
+            "https://user:secret@cdn.example/a.png",
+            "https://token@cdn.example/a.png",
+            "https://@cdn.example/a.png",
+            "https://cdn.example@evil.example/a.png"
+          ] do
         input = %{"items" => [Map.put(@row, "images", [%{"url" => url}])]}
         assert {:error, _} = validate("ecommerce.attach_images", input), "#{url} must be refused"
       end

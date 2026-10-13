@@ -192,6 +192,60 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert F.reload!(item).data["media_order"] in [nil, []]
   end
 
+  test "a URL with credentials in it is refused and reaches no log line, answer or request", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    serve(%{})
+    item = F.item!(catalogue)
+    url = "https://user:sekrit@93.184.216.34/a.png"
+
+    {answers, log} =
+      with_log([level: :debug], fn ->
+        {attach([row(item, [%{"url" => url}])], ctx),
+         attach_raw([row(item, [%{"url" => url}])], ctx)}
+      end)
+
+    # the schema refuses it ...
+    assert {{:error, :validation_failed, _message, %{errors: [%{path: path} | _]}}, raw} = answers
+    assert path == "items[0].images[0].url"
+
+    # ... and the planner refuses it too, were one to get past the schema
+    assert {:ok, %{"results" => [result]}} = raw
+    assert result["action"] == "error"
+    assert result["error"]["code"] == "validation_failed"
+    assert [%{"path" => "images[0].url"}] = result["error"]["context"]["errors"]
+
+    refute inspect(answers) =~ "sekrit"
+    refute log =~ "sekrit"
+    refute_received {:requested, _}
+    assert F.reload!(item).data["media_order"] in [nil, []]
+  end
+
+  test "a fragment of the URL is in no stored source_url and not in the answer for a failed picture",
+       %{
+         catalogue: catalogue,
+         ctx: ctx,
+         first: first
+       } do
+    item = F.item!(catalogue)
+    serve(%{"/ok.png" => {"image/png", first}, "/doc.pdf" => {"application/pdf", "%PDF"}})
+
+    assert {:ok, %{"results" => [result]}} =
+             attach(
+               [row(item, [image("/ok.png#sekrit1"), image("/doc.pdf#sekrit2")])],
+               ctx
+             )
+
+    assert [%{"url" => failed_url}] = result["failed"]
+    assert failed_url == @host <> "/doc.pdf"
+
+    [file_uuid] = F.reload!(item).data["media_order"]
+    file = Storage.get_file(file_uuid)
+    assert file.metadata["source_url"] == @host <> "/ok.png"
+    refute inspect({result, file.metadata}) =~ "sekrit"
+  end
+
   test "a redirect to a private address fails the picture and attaches nothing", %{
     catalogue: catalogue,
     ctx: ctx

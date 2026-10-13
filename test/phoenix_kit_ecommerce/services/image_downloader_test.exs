@@ -24,6 +24,27 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
     |> Plug.Conn.send_resp(200, body)
   end
 
+  describe "source_key/1" do
+    test "drops the query, the fragment and the credentials, keeps the rest" do
+      assert ImageDownloader.source_key("https://cdn.example.com/a.jpg?v=1#top") ==
+               "https://cdn.example.com/a.jpg"
+
+      assert ImageDownloader.source_key("https://user:secret@cdn.example.com:8443/a.jpg") ==
+               "https://cdn.example.com:8443/a.jpg"
+
+      assert ImageDownloader.source_key("https://token@cdn.example.com/a@b.jpg?x=y@z") ==
+               "https://cdn.example.com/a@b.jpg"
+
+      assert ImageDownloader.source_key("https://cdn.example.com/a.jpg") ==
+               "https://cdn.example.com/a.jpg"
+    end
+
+    test "is nil for anything that is not a string" do
+      assert ImageDownloader.source_key(nil) == nil
+      assert ImageDownloader.source_key(42) == nil
+    end
+  end
+
   describe "pinned_request/2" do
     test "a nil pin leaves the URL and options untouched" do
       assert ImageDownloader.pinned_request("https://cdn.example.com/a.jpg", nil) ==

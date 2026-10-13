@@ -133,7 +133,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     * `:near_duplicates` - `false` skips step 2 and the fingerprint
       (default: `true`)
     * `:redact_query` - `true` logs and stores the URL without its query
-      string (`source_key/1`) after the request has been made with the full
+      string, fragment and credentials (`source_key/1`) after the request has been made with the full
       URL, so a signed URL's credential reaches neither the log nor the
       file's `source_url` metadata (default: `false`; the admin API passes
       `true`)
@@ -218,12 +218,15 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
 
   @doc """
   The form a download URL is matched in: the URL with its query string
-  (Shopify's `?v=<timestamp>`) removed. `nil` for anything that is not a
-  string.
+  (Shopify's `?v=<timestamp>`), its fragment and any `user:password@` part
+  removed. `nil` for anything that is not a string.
   """
   @spec source_key(term()) :: String.t() | nil
   def source_key(url) when is_binary(url) do
-    url |> URI.parse() |> Map.put(:query, nil) |> URI.to_string()
+    url
+    |> URI.parse()
+    |> Map.merge(%{query: nil, fragment: nil, userinfo: nil, authority: nil})
+    |> URI.to_string()
   end
 
   def source_key(_url), do: nil

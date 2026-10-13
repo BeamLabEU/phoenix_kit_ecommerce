@@ -12,8 +12,9 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   with no featured picture gets its first new one. At most 20 pictures per
   call, each at most `max_image_bytes/0` (10 MB, a fifth of the importer's
   own default). The call is synchronous. A signed URL's query string is a
-  credential: the downloader is told to redact it from its log lines and
-  from the `source_url` it stores, and no answer repeats it.
+  credential: the downloader is told to redact it (and any fragment) from its
+  log lines and from the `source_url` it stores, and no answer repeats it. A
+  URL with credentials in it (`user:password@host`) is refused.
 
   With `ctx.dry_run?` the URLs are checked (scheme, host, resolution into a
   private range) and nothing is fetched or stored.
@@ -38,10 +39,6 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   @max_image_bytes 10 * 1024 * 1024
   @max_reason_chars 80
 
-  # Req options injected into every download, for the tests' plug adapter.
-  # Compiled in only for the test environment: no other build reads it.
-  @test_download_opts_key if Mix.env() == :test, do: :api_image_download_opts, else: nil
-
   @doc "The most pictures one call may attach."
   @spec max_images() :: pos_integer()
   def max_images, do: @max_images
@@ -51,8 +48,9 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   def max_image_bytes, do: @max_image_bytes
 
   @doc """
-  Rate-limit units of one call: one per picture asked for, at least one. It
-  is the tool's `cost` on a core that has the field: core's default rule
+  Rate-limit units of one call: one per picture asked for, at least one and
+  at most `max_images/0` (a call over that limit is refused anyway, and must
+  not be charged more than a full one). It is the tool's `cost` on a core that has the field: core's default rule
   prices a write by rows (`max(1, ceil(rows / 50))`), which would make a call
   that downloads up to 20 pictures cost one unit.
 
@@ -67,6 +65,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       _row -> 0
     end)
     |> Enum.sum()
+    |> min(@max_images)
     |> max(1)
   end
 
@@ -141,12 +140,15 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   end
 
   defp url_errors({%{"url" => url}, index}) do
-    case ImageDownloader.check_url(url, private_networks: :forbid) do
-      :ok ->
-        []
+    path = "images[#{index}].url"
 
-      {:error, reason} ->
-        [PlanSupport.error("images[#{index}].url", reason_text(reason))]
+    if is_binary(url) and URI.parse(url).userinfo != nil do
+      [PlanSupport.error(path, "must not contain credentials (user:password@)")]
+    else
+      case ImageDownloader.check_url(url, private_networks: :forbid) do
+        :ok -> []
+        {:error, reason} -> [PlanSupport.error(path, reason_text(reason))]
+      end
     end
   end
 
@@ -278,7 +280,11 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
             {[{url, uuid, how} | ok], failed}
 
           {:error, reason} ->
-            {ok, [%{"url" => strip_query(url), "reason" => reason_text(reason)} | failed]}
+            {ok,
+             [
+               %{"url" => ImageDownloader.source_key(url), "reason" => reason_text(reason)}
+               | failed
+             ]}
         end
       end)
 
@@ -306,14 +312,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       max_bytes: @max_image_bytes,
       private_networks: :forbid,
       redact_query: true
-    ] ++ test_download_opts()
-  end
-
-  defp test_download_opts do
-    case @test_download_opts_key do
-      nil -> []
-      key -> Application.get_env(:phoenix_kit_ecommerce, key, [])
-    end
+    ] ++ Application.get_env(:phoenix_kit_ecommerce, :api_image_download_opts, [])
   end
 
   # The picture marked featured, if its file is known; else, when the product
@@ -360,10 +359,6 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
         })
     )
   end
-
-  # The URL without its query string: a signed URL carries a credential, and
-  # an answer or a log line must not repeat it.
-  defp strip_query(url), do: url |> String.split("?", parts: 2) |> hd()
 
   defp reason_text(:private_address_blocked), do: "the address is private or does not resolve"
   defp reason_text(:invalid_scheme), do: "only http and https URLs are accepted"
