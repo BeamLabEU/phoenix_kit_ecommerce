@@ -41,6 +41,8 @@ defmodule PhoenixKitEcommerce.Search.Query do
     * `options` - `%{option_key => [option_value]}`, both in their slug form
       (`"size" => ["large"]`, not `"Large"`): OR within a key, AND across keys.
     * `vendor` - a string compared case-insensitively, or `nil`.
+      Neither a vendor nor an option key or value may hold a NUL byte (Postgres
+      refuses it and the call raises); `API.SearchParams` rejects it.
     * `on_sale`, `made_to_order` - `true`, `false` (the complement) or `nil`.
     * `sort` - one of `:relevance` (default), `:price_asc`, `:price_desc`,
       `:discount_desc`, `:newest`; anything else raises `FunctionClauseError`.
@@ -56,6 +58,15 @@ defmodule PhoenixKitEcommerce.Search.Query do
   relevance rank is a float, which makes a keyset cursor fragile; the shop's
   catalogue is hundreds to low thousands of products, and `count` is exact
   either way.
+
+  ## Size
+
+  A search reads the rows of one language: the count, the page and the facets
+  (up to 5000 rows) are three passes over the matched set. That is
+  milliseconds for a few thousand rows per language. On an index of tens of
+  thousands of rows a many-term query or a long misspelt one takes seconds, and
+  a request is charged one rate-limit unit whatever the size of the index; such
+  an install needs a database `statement_timeout` for these queries.
   """
 
   import Ecto.Query, warn: false
@@ -146,8 +157,7 @@ defmodule PhoenixKitEcommerce.Search.Query do
   # The `%>` operator reads the threshold from the session setting
   # `pg_trgm.word_similarity_threshold` (default 0.6). `SET LOCAL` needs one
   # transaction around the count, the page and the facets, so the typo path
-  # runs in one and the setting dies with it. Verified with psql:
-  # `select set_config('pg_trgm.word_similarity_threshold', '0.45', true)`.
+  # runs in one and the setting dies with it.
   defp in_typo_transaction(fun) do
     repo = RepoHelper.repo()
 

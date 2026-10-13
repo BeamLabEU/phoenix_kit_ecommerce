@@ -101,6 +101,57 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     end
   end
 
+  test "a price bound too large to convert is a 422 in another currency too, never a 500" do
+    for input <- [
+          %{"currency" => "EUR", "price_max" => 10 ** 7_000},
+          %{"currency" => "EUR", "price_min" => 10 ** 20_000},
+          %{"currency" => "EUR", "price_max" => String.duplicate("9", 40)},
+          %{"currency" => "EUR", "price_max" => 1.0e300}
+        ] do
+      assert {422, body, _} = call("shop.search_products", input)
+      assert [%{"path" => "price_" <> _}] = body["context"]["errors"]
+    end
+
+    # 10.00 EUR is 11.00 USD: the 10.00 and 5.00 products.
+    assert {200, %{"count" => 2}, _} =
+             call("shop.search_products", %{"currency" => "EUR", "price_max" => "10"})
+  end
+
+  test "a NUL byte in a vendor or an option is a 422 that names it, in a batch one error block" do
+    # The NUL arrives the way a client sends it: as a JSON escape.
+    json = fn input -> input |> JSON.encode!() |> JSON.decode!() end
+    nul = <<0>>
+
+    for {input, path} <- [
+          {%{"vendor" => "Ac" <> nul <> "me"}, "vendor"},
+          {%{"options" => %{("si" <> nul <> "ze") => ["large"]}}, "options"},
+          {%{"options" => %{"size" => ["la" <> nul <> "rge"]}}, "options.size"}
+        ] do
+      assert {422, body, _} = call("shop.search_products", json.(input))
+      assert [%{"path" => ^path}] = body["context"]["errors"]
+    end
+
+    {200, batch, _} =
+      call(
+        "shop.search_products_batch",
+        json.(%{"queries" => [%{"vendor" => "Ac" <> nul}, %{"vendor" => "acme"}]})
+      )
+
+    assert [bad, good] = batch["results"]
+    assert bad["error"]["code"] == "validation_failed"
+    assert good["count"] == 1
+  end
+
+  test "an option value or an option list over the limits is a 422 before any handler runs" do
+    for options <- [
+          %{"size" => [String.duplicate("a", 201)]},
+          %{"size" => Enum.map(1..51, &"v#{&1}")}
+        ] do
+      assert {422, body, _} = call("shop.search_products", %{"options" => options})
+      assert [%{"path" => "options.size" <> _}] = body["context"]["errors"]
+    end
+  end
+
   test "language and currency are accepted; any other field is a 422, the control fields of write tools included" do
     assert {200, %{"currency" => "EUR"}, _} =
              call("shop.search_products", %{

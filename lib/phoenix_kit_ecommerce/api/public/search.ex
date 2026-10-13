@@ -299,10 +299,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
         "additionalProperties" => %{
           "type" => "array",
           "minItems" => 1,
-          "items" => %{"type" => "string"}
+          "maxItems" => SearchParams.max_option_values(),
+          "items" => %{"type" => "string", "maxLength" => SearchParams.max_text_length()}
         }
       },
-      "vendor" => %{"type" => "string", "maxLength" => 200},
+      "vendor" => %{"type" => "string", "maxLength" => SearchParams.max_text_length()},
       "on_sale" => %{
         "type" => "boolean",
         "description" => "true: only products with a sale price; false: only products without."

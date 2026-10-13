@@ -61,6 +61,15 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
     assert [%{path: "category_id"}] = errors(%{"category_id" => 7})
   end
 
+  test "a 16-byte string is no category id, though Ecto.UUID.cast/1 takes it for raw UUID bytes" do
+    raw = Ecto.UUID.bingenerate()
+    assert byte_size(raw) == 16
+    assert {:ok, _uuid} = Ecto.UUID.cast(raw)
+
+    assert [%{path: "category_id"}] = errors(%{"category_id" => raw})
+    assert [%{path: "category_id"}] = errors(%{"category_id" => "abcdefghijklmnop"})
+  end
+
   test "prices accept numbers and decimal strings and refuse the rest" do
     assert {%{price_min: min, price_max: max}, []} =
              ok(%{"price_min" => 5, "price_max" => "12.50"})
@@ -73,6 +82,20 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
 
     for bad <- [-1, "-1", "abc", "NaN", "Infinity", "", true, %{}] do
       assert [%{path: "price_min"}] = errors(%{"price_min" => bad}), inspect(bad)
+    end
+  end
+
+  test "a bound above the ceiling is an error in the base currency and in any other, never a crash" do
+    huge = [10 ** 20_000, 10 ** 7_000, 1.0e300, String.duplicate("9", 39), "1000000000000001"]
+
+    for ctx <- [context(), context("EUR")], bad <- huge, name <- ["price_min", "price_max"] do
+      assert [%{path: ^name}] = errors(%{name => bad}, ctx), inspect({ctx.currency.code, name})
+    end
+
+    # The ceiling itself is still a price.
+    for ctx <- [context(), context("EUR")] do
+      assert {%{price_max: max}, []} = ok(%{"price_max" => 1_000_000_000_000_000}, ctx)
+      assert Decimal.compare(max, 0) == :gt
     end
   end
 
@@ -121,6 +144,25 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
         ] do
       assert [%{path: "options" <> _}] = errors(%{"options" => bad}), inspect(bad, limit: 5)
     end
+  end
+
+  test "a NUL byte or an over-long text in a vendor or an option is an error, not a database failure" do
+    nul = <<0>>
+    long = String.duplicate("a", 201)
+
+    assert [%{path: "vendor"}] = errors(%{"vendor" => "Ac" <> nul <> "me"})
+    assert [%{path: "vendor"}] = errors(%{"vendor" => long})
+    assert [%{path: "options"}] = errors(%{"options" => %{("si" <> nul <> "ze") => ["large"]}})
+    assert [%{path: "options"}] = errors(%{"options" => %{long => ["large"]}})
+    assert [%{path: "options.size"}] = errors(%{"options" => %{"size" => ["la" <> nul <> "rge"]}})
+    assert [%{path: "options.size"}] = errors(%{"options" => %{"size" => [long]}})
+
+    longest = String.duplicate("a", 200)
+
+    assert {%{options: %{^longest => [^longest]}}, []} =
+             ok(%{"options" => %{longest => [longest]}})
+
+    assert {%{vendor: ^longest}, []} = ok(%{"vendor" => longest})
   end
 
   test "vendor, on_sale and made_to_order" do

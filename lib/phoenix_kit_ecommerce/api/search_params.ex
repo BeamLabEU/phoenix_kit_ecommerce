@@ -17,13 +17,14 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   """
 
   alias PhoenixKitEcommerce.API.Context
+  alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.Search.Query
 
   @default_limit 20
   @max_limit 100
   @max_option_keys 20
   @max_option_values 50
-  @max_vendor_length 200
+  @max_text_length 200
   # A price above this is refused before it is turned into a Decimal.
   @max_price 1_000_000_000_000_000
 
@@ -34,6 +35,14 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
     "discount_desc" => :discount_desc,
     "newest" => :newest
   }
+
+  @doc "The longest vendor, option key or option value, in characters."
+  @spec max_text_length() :: pos_integer()
+  def max_text_length, do: @max_text_length
+
+  @doc "How many values one option key may list."
+  @spec max_option_values() :: pos_integer()
+  def max_option_values, do: @max_option_values
 
   @doc "Allowed values of `sort`."
   @spec sorts() :: [String.t()]
@@ -69,14 +78,11 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
       nil ->
         state
 
-      id when is_binary(id) ->
-        case Ecto.UUID.cast(id) do
-          {:ok, uuid} -> put(state, :category_id, uuid)
-          :error -> error(state, "category_id", "must be a UUID")
+      id ->
+        case Loader.canonical_uuid(id) do
+          nil -> error(state, "category_id", "must be a UUID")
+          uuid -> put(state, :category_id, uuid)
         end
-
-      _other ->
-        error(state, "category_id", "must be a UUID")
     end
   end
 
@@ -162,8 +168,13 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
 
   defp option({key, values}, {acc, state}) do
     cond do
-      not is_binary(key) or String.trim(key) == "" or String.contains?(key, ":") ->
-        {acc, error(state, "options", "attribute keys must be non-empty and contain no colon")}
+      not valid_key?(key) ->
+        {acc,
+         error(
+           state,
+           "options",
+           "attribute keys must be 1 to #{@max_text_length} characters with no colon"
+         )}
 
       valid_values?(values) ->
         {Map.put(acc, key, Enum.uniq(values)), state}
@@ -173,16 +184,27 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
          error(
            state,
            "options.#{key}",
-           "must be a list of 1 to #{@max_option_values} value keys",
+           "must be a list of 1 to #{@max_option_values} value keys of at most #{@max_text_length} characters",
            %{limit: @max_option_values}
          )}
     end
   end
 
+  defp valid_key?(key) do
+    is_binary(key) and String.trim(key) != "" and not String.contains?(key, ":") and
+      text?(key, @max_text_length)
+  end
+
   defp valid_values?(values) do
     is_list(values) and values != [] and length(values) <= @max_option_values and
-      Enum.all?(values, &(is_binary(&1) and &1 != ""))
+      Enum.all?(values, &(is_binary(&1) and &1 != "" and text?(&1, @max_text_length)))
   end
+
+  # A NUL byte is refused by Postgres (22021) and would be a 500 on every
+  # request that carries it; `Query.clean_q/1` removes it from the search text,
+  # the other text filters are refused here instead.
+  defp text?(value, max_length),
+    do: not String.contains?(value, <<0>>) and String.length(value) <= max_length
 
   defp put_vendor(state, input) do
     case Map.get(input, "vendor") do
@@ -195,12 +217,12 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   defp vendor(state, ""), do: state
 
   defp vendor(state, trimmed) do
-    if String.length(trimmed) > @max_vendor_length do
-      error(state, "vendor", "must be at most #{@max_vendor_length} characters", %{
-        limit: @max_vendor_length
-      })
-    else
+    if text?(trimmed, @max_text_length) do
       put(state, :vendor, trimmed)
+    else
+      error(state, "vendor", "must be at most #{@max_text_length} characters, with no NUL", %{
+        limit: @max_text_length
+      })
     end
   end
 
