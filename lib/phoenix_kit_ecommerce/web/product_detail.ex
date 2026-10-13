@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -273,7 +274,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                             image_uuid == @selected_image_uuid && "ring-2 ring-primary ring-offset-2"
                           ]}
                         >
-                          <img src={url} alt="Thumbnail" class="w-full h-full object-cover" />
+                          <img src={url} alt={gettext("Thumbnail")} class="w-full h-full object-cover" />
                         </button>
                       <% end %>
                     <% end %>
@@ -525,7 +526,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                 <h2 class="card-title">{gettext("Status")}</h2>
                 <div class="flex items-center gap-2">
                   <span class={status_badge_class(@product.status)}>
-                    {String.capitalize(@product.status)}
+                    {StatusLabels.product(@product.status)}
                   </span>
                 </div>
               </div>
@@ -639,7 +640,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
             </label>
             <div class="modal-action">
               <button phx-click="cancel_delete" class="btn">{gettext("Cancel")}</button>
-              <button phx-click="delete" class="btn btn-error">
+              <button phx-click="delete" phx-disable-with={gettext("Deleting…")} class="btn btn-error">
                 <.icon name="hero-trash" class="w-4 h-4 mr-2" /> {gettext("Delete")}
               </button>
             </div>

@@ -1242,7 +1242,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
         <p :if={@errors[:point]} class="fieldset-label text-error">{@errors[:point]}</p>
       </fieldset>
 
-      <button id={"#{@pid}-manual-apply"} type="submit" class="btn btn-primary btn-sm">
+      <button id={"#{@pid}-manual-apply"} type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm">
         {gettext("Apply")}
       </button>
     </form>
@@ -1335,7 +1335,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
         </fieldset>
       </div>
 
-      <button id={"#{@pid}-address-apply"} type="submit" class="btn btn-primary btn-sm">
+      <button id={"#{@pid}-address-apply"} type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm">
         {gettext("Apply")}
       </button>
     </form>

@@ -261,7 +261,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
 
   # Catch-all: an unrecognised message must not take the LiveView down.
   @impl true
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   defp reload_category_products(socket) do
     filter_opts =
@@ -343,6 +343,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
     path = build_filter_path(socket.assigns, socket.assigns.active_filters, page: next_page)
     {:noreply, push_patch(socket, to: path)}
   end
+
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
   @impl true
   def render(assigns) do

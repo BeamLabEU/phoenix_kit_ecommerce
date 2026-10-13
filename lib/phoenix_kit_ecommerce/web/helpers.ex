@@ -14,6 +14,8 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   # don't declare the optional dependency.
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Paths}
 
+  require Logger
+
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Modules.Storage
@@ -418,6 +420,64 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   def parse_int(_value, default), do: default
 
   # ---------------------------------------------------------------------------
+  # Unhandled messages
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  The `handle_info/2` catch-all of every shop LiveView: notes the message
+  it ignored at `:debug` and carries on.
+
+  Only the message's SHAPE is logged (`{:cart_updated, _}`), never its
+  contents — the payloads here are carts, orders and products.
+  """
+  @spec ignore_message(term(), Phoenix.LiveView.Socket.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
+  def ignore_message(message, socket) do
+    Logger.debug(fn ->
+      "[Shop] #{inspect(socket.view)} ignored message #{message_shape(message)}"
+    end)
+
+    {:noreply, socket}
+  end
+
+  @doc """
+  The `handle_event/3` catch-all of every public shop LiveView: an event
+  the page does not know, or a known one pushed with a payload its clause
+  does not take, is noted at `:debug` and dropped instead of crashing the
+  view. Anyone can push anything at a public page.
+
+  Only the event NAME is logged, bounded - never the params.
+  """
+  @spec ignore_event(term(), Phoenix.LiveView.Socket.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
+  def ignore_event(event, socket) do
+    Logger.debug(fn ->
+      "[Shop] #{inspect(socket.view)} ignored event #{event |> inspect() |> String.slice(0, 80)}"
+    end)
+
+    {:noreply, socket}
+  end
+
+  @doc false
+  def message_shape(message) when is_atom(message), do: inspect(message)
+
+  def message_shape(message) when is_tuple(message) and tuple_size(message) > 0 do
+    case elem(message, 0) do
+      tag when is_atom(tag) ->
+        "{" <>
+          Enum.join([inspect(tag) | List.duplicate("_", tuple_size(message) - 1)], ", ") <> "}"
+
+      _ ->
+        "a #{tuple_size(message)}-tuple"
+    end
+  end
+
+  def message_shape(%module{}), do: "%#{inspect(module)}{}"
+  def message_shape(message) when is_map(message), do: "a map"
+  def message_shape(message) when is_list(message), do: "a list"
+  def message_shape(_message), do: "a term"
+
+  # ---------------------------------------------------------------------------
   # Image helpers (for catalog list pages - uses featured_image_uuid)
   # ---------------------------------------------------------------------------
 
@@ -480,14 +540,7 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
   Example: "material_type" -> "Material Type"
   """
-  def humanize_key(key) when is_binary(key) do
-    key
-    |> String.replace("_", " ")
-    |> String.split(" ")
-    |> Enum.map_join(" ", &String.capitalize/1)
-  end
-
-  def humanize_key(key), do: to_string(key)
+  defdelegate humanize_key(key), to: PhoenixKitEcommerce.Options
 
   # ---------------------------------------------------------------------------
   # Billing profile helpers

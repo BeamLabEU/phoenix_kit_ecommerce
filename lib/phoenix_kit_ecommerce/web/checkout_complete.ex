@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitEcommerce.Web.Components.ShippingDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   import PhoenixKitEcommerce.Web.Helpers,
     only: [
@@ -167,6 +168,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> put_flash(:error, message)
     |> push_navigate(to: Routes.path("/shop"))
   end
+
+  # This page takes no events; one pushed at it anyway is ignored.
+  @impl true
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
   @impl true
   def render(assigns) do
@@ -386,7 +391,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                 <h3 class="font-medium">{gettext("Order Status")}</h3>
                 <p class="text-sm text-base-content/60">{gettext("Your order is being processed")}</p>
               </div>
-              <div class="badge badge-warning badge-lg capitalize">{@order.status}</div>
+              <div id="order-status-badge" class="badge badge-warning badge-lg capitalize">{StatusLabels.order(@order.status)}</div>
             </div>
           </div>
         </div>

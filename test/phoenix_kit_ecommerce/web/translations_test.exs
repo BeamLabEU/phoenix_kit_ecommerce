@@ -230,6 +230,40 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
       {:ok, conn: put_test_scope(conn, fake_scope())}
     end
 
+    test "a selection that is not a list of uuids opens nothing and crashes nothing", %{
+      conn: conn
+    } do
+      product = create_product()
+      {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
+
+      for verb <- ~w(request_translate request_retranslate request_stamp),
+          params <- [%{}, %{"uuids" => "not-a-list"}, %{"uuids" => %{"0" => product.uuid}}] do
+        refute render_click(view, "#{verb}:all:all", params) =~ "Translate?"
+      end
+
+      refute render_click(view, "request_translate:all:all", %{"uuids" => ["not-a-uuid", 7]}) =~
+               "Translate?"
+    end
+
+    test "malformed entries are dropped and the real ones still go through", %{conn: conn} do
+      product = create_product()
+      {:ok, view, _html} = live(conn, "/en/admin/shop/translations")
+
+      html =
+        render_click(view, "request_translate:all:all", %{
+          "uuids" => ["not-a-uuid", product.uuid, nil]
+        })
+
+      assert html =~ "Translate?"
+      confirm!(view)
+
+      assert length(jobs_for(product.uuid)) == 2
+
+      assert_activity_logged("shop.translations_queued",
+        metadata_has: %{"resources" => 1, "enqueued" => 2}
+      )
+    end
+
     test "request opens a confirm modal; confirm enqueues missing∪stale languages", %{
       conn: conn
     } do
@@ -565,6 +599,7 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
       html = confirm!(view)
 
       assert html =~ "Stamped 30 resources"
+      assert_activity_logged("shop.translations_stamped", metadata_has: %{"count" => 30})
 
       reloaded_last = Shop.get_product!(last.uuid)
       assert TranslationFingerprint.get(reloaded_last.metadata, "de", "title") != nil
@@ -609,6 +644,7 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
       html = confirm!(view)
 
       assert html =~ "Reset the reference for 30 resources"
+      assert_activity_logged("shop.translations_reference_reset", metadata_has: %{"count" => 30})
 
       reloaded_last = Shop.get_product!(last.uuid)
       assert TranslationFingerprint.get(reloaded_last.metadata, "de", "title") == nil
@@ -786,6 +822,7 @@ defmodule PhoenixKitEcommerce.Web.TranslationsTest do
       assert repo().get(Oban.Job, category_job.id).state == "cancelled"
       refute repo().get(Oban.Job, foreign_job.id).state == "cancelled"
       assert html =~ "Cancelled"
+      assert_activity_logged("shop.translations_stopped", metadata_has: %{"count" => 2})
     end
 
     test "denied without shop.manage_settings", %{conn: conn} do

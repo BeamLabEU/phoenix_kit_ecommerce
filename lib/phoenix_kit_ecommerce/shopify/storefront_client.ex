@@ -59,6 +59,8 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   therefore before whatever sleep that iteration might otherwise start).
   """
 
+  alias PhoenixKitEcommerce.Shopify.ShopDomain
+
   @page_limit 250
   @default_page_delay_ms 500
   @max_retries 5
@@ -105,6 +107,15 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
   """
   @spec fetch_products(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def fetch_products(shop_domain, opts \\ []) do
+    with {:ok, host} <- ShopDomain.validate(shop_domain) do
+      do_fetch_products(host, opts)
+    end
+  end
+
+  # Redirects stay on here, unlike `AdminClient`: this request carries no
+  # credential, and a `*.myshopify.com` storefront answers with a redirect
+  # to the store's primary domain whenever it has one.
+  defp do_fetch_products(shop_domain, opts) do
     # `retry: false` — this module owns 429 handling itself (the 429
     # clauses in `fetch_pages/6` below), because that requires resuming
     # the *same* page with the accumulator intact and respecting

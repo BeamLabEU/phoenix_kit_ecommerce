@@ -27,8 +27,8 @@
                 </div>
               </div>
               <div class="flex-shrink-0 ml-4">
-                <span class={"badge #{status_badge_class(@order.status)} badge-lg capitalize"}>
-                  {@order.status}
+                <span id="order-status-badge" class={"badge #{status_badge_class(@order.status)} badge-lg capitalize"}>
+                  {StatusLabels.order(@order.status)}
                 </span>
               </div>
             </div>
@@ -195,8 +195,8 @@
             <div class="mb-4">
               <span class="text-sm text-base-content/70">{gettext("Status")}</span>
               <div class="mt-1">
-                <span class={"badge #{status_badge_class(@order.status)} capitalize"}>
-                  {@order.status}
+                <span id="order-summary-status" class={"badge #{status_badge_class(@order.status)} capitalize"}>
+                  {StatusLabels.order(@order.status)}
                 </span>
               </div>
             </div>

@@ -12,6 +12,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.OptionTypes
   alias PhoenixKitEcommerce.ProductSource
@@ -294,6 +295,27 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     end
   end
 
+  # `verb` is "saved", "deleted" or "reordered"; an option key is its machine
+  # name.
+  defp log_category_options(socket, verb, metadata) do
+    Activity.log("shop.category_option_" <> verb,
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "category",
+      resource_uuid: socket.assigns.category.uuid,
+      metadata: metadata
+    )
+  end
+
+  defp log_category_options_failed(socket, verb, reason) do
+    Activity.log_failed("shop.category_option_" <> verb, reason,
+      actor_uuid: Activity.actor_uuid(socket),
+      actor_role: Activity.actor_role(socket),
+      resource_type: "category",
+      resource_uuid: socket.assigns.category.uuid
+    )
+  end
+
   defp apply_option_change(current, nil, opt) do
     opt = Map.put(opt, "position", length(current))
     current ++ [opt]
@@ -309,6 +331,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     case Options.update_category_options(socket.assigns.category, updated_opts) do
       {:ok, updated_category} ->
         merged = Options.merge_schemas(socket.assigns.global_options, updated_opts)
+        log_category_options(socket, "saved", %{"count" => length(updated_opts)})
 
         {:noreply,
          socket
@@ -324,8 +347,8 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
          )}
 
       {:error, reason} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Error: %{reason}", reason: inspect(reason)))}
+        log_category_options_failed(socket, "saved", reason)
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
     end
   end
 
@@ -345,6 +368,9 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
   def handle_info({:media_selector_closed}, socket) do
     {:noreply, assign(socket, :show_media_selector, false)}
   end
+
+  @impl true
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   @impl true
   def render(assigns) do
@@ -482,7 +508,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                         <img
                           src={get_storage_image_url(@image_uuid, "thumbnail")}
                           class="w-24 h-24 object-cover rounded-lg shadow"
-                          alt="Category image"
+                          alt={gettext("Category image")}
                         />
                         <button
                           type="button"
@@ -705,6 +731,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                           <button
                             type="button"
                             phx-click="delete_category_option"
+                            phx-disable-with="…"
                             phx-value-key={opt["key"]}
                             data-confirm={gettext("Remove this option?")}
                             class="btn btn-ghost btn-xs text-error"
@@ -756,7 +783,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
             <.link navigate={Routes.path("/admin/shop/categories")} class="btn btn-outline">
               {gettext("Cancel")}
             </.link>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
               <.icon name="hero-check" class="w-4 h-4 mr-2" />
               {if @live_action == :new, do: gettext("Create Category"), else: gettext("Update Category")}
             </button>
@@ -868,7 +895,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
                 <button type="button" phx-click="close_opt_modal" class="btn btn-ghost">
                   {gettext("Cancel")}
                 </button>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
                   {if @editing_opt, do: gettext("Update"), else: gettext("Add")}
                 </button>
               </div>
@@ -1109,6 +1136,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     case Options.update_category_options(socket.assigns.category, updated_opts) do
       {:ok, updated_category} ->
         merged = Options.merge_schemas(socket.assigns.global_options, updated_opts)
+        log_category_options(socket, "deleted", %{"key" => key})
 
         {:noreply,
          socket
@@ -1118,8 +1146,8 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
          |> put_flash(:info, gettext("Option removed"))}
 
       {:error, reason} ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Error: %{reason}", reason: inspect(reason)))}
+        log_category_options_failed(socket, "deleted", reason)
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
     end
   end
 
@@ -1138,6 +1166,7 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
     case Options.update_category_options(socket.assigns.category, reordered) do
       {:ok, updated_category} ->
         merged = Options.merge_schemas(socket.assigns.global_options, reordered)
+        log_category_options(socket, "reordered", %{"count" => length(reordered)})
 
         {:noreply,
          socket
@@ -1146,12 +1175,8 @@ defmodule PhoenixKitEcommerce.Web.CategoryForm do
          |> assign(:merged_preview, merged)}
 
       {:error, reason} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           gettext("Reorder failed: %{reason}", reason: inspect(reason))
-         )}
+        log_category_options_failed(socket, "reordered", reason)
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
     end
   end
 end
