@@ -32,23 +32,36 @@ defmodule PhoenixKitEcommerce.API do
 
   @retry_note " A validation_failed error with context.reason database_error, storage_error or unexpected is not a problem with the request and is worth retrying; any other validation_failed should be fixed first."
 
-  @doc "The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the tool registry."
-  @spec tools() :: [struct()]
-  def tools do
+  @doc """
+  The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the
+  tool registry. `markers` are the `{module, function, arity}` triples that
+  must exist for the write tools to be offered (see `confirmation_available?/1`).
+  """
+  @spec tools([{module(), atom(), arity()}]) :: [struct()]
+  def tools(markers \\ @markers) do
     if Code.ensure_loaded?(Tool) do
-      [get_prices_tool()] ++ if(confirmation_available?(), do: write_tools(), else: [])
+      [get_prices_tool()] ++ if(confirmation_available?(markers), do: write_tools(), else: [])
     else
       []
     end
   end
 
-  @doc "Whether core enforces the confirmation gate the write tools depend on."
-  @spec confirmation_available?() :: boolean()
-  def confirmation_available? do
-    Enum.all?(@markers, fn {module, function, arity} ->
+  @doc """
+  Whether core enforces the confirmation gate the write tools depend on:
+  every `{module, function, arity}` of `markers` is loaded and exported. The
+  default is the pair of functions core has only when it has both the
+  confirmation codes and the enforcement.
+  """
+  @spec confirmation_available?([{module(), atom(), arity()}]) :: boolean()
+  def confirmation_available?(markers \\ @markers) do
+    Enum.all?(markers, fn {module, function, arity} ->
       Code.ensure_loaded?(module) and function_exported?(module, function, arity)
     end)
   end
+
+  @doc false
+  @spec markers() :: [{module(), atom(), arity()}]
+  def markers, do: @markers
 
   defp write_tools,
     do: [set_prices_tool(), set_availability_tool(), attach_images_tool()]

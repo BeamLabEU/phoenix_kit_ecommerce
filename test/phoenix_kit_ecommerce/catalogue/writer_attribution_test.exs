@@ -145,13 +145,33 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterAttributionTest do
     refute Map.has_key?(ecommerce, "made_to_order")
   end
 
-  test "image ids written by the media sync keep their own attribution", %{item: item} do
+  test "image ids written by the media sync keep their own attribution and name the actor", %{
+    item: item
+  } do
     product = %{"id" => 9001, "images" => []}
+    user = F.user!()
 
-    assert {:ok, _} = Writer.sync_images(item, product, user_uuid: F.user!().uuid)
+    assert {:ok, _} = Writer.sync_images(item, product, user_uuid: user.uuid)
 
     assert_activity_logged("item.updated",
       resource_uuid: item.uuid,
+      actor_uuid: user.uuid,
+      metadata_has: %{"via" => "shopify_sync"}
+    )
+  end
+
+  test "an item the sync creates names the sync in the change log" do
+    product = %{
+      "id" => 4242,
+      "handle" => "created-by-sync",
+      "title" => "Created by sync",
+      "variants" => [%{"price" => "9.00"}]
+    }
+
+    assert {:ok, created} = Writer.create_from_shopify(product, "en")
+
+    assert_activity_logged("item.created",
+      resource_uuid: created.uuid,
       metadata_has: %{"via" => "shopify_sync"}
     )
   end

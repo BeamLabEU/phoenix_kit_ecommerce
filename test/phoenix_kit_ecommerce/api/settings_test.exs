@@ -35,6 +35,25 @@ defmodule PhoenixKitEcommerce.API.SettingsTest do
     end
   end
 
+  describe "price_change_pct/1 when the read fails" do
+    test "a read that raises or exits is the default, never 'no limit'" do
+      reads = [
+        fn _key, _default -> raise "settings are unavailable" end,
+        fn _key, _default -> exit(:noproc) end,
+        fn _key, _default -> nil end
+      ]
+
+      for read <- reads do
+        assert ApiSettings.price_change_pct(read) == 30
+      end
+    end
+
+    test "a value the reader returns is judged like a stored one" do
+      assert ApiSettings.price_change_pct(fn _key, _default -> 7 end) == 7
+      assert ApiSettings.price_change_pct(fn _key, _default -> 1001 end) == 30
+    end
+  end
+
   describe "put_price_change_pct/1" do
     test "stores a whole number from 0 to 1000 under the shop module" do
       assert {:ok, _} = ApiSettings.put_price_change_pct(15)

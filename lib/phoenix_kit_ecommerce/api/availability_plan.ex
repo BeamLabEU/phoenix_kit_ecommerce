@@ -172,9 +172,11 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
 
   # The fields a planned row writes go through `ItemCommerce`, so a value the
   # namespace would refuse is a row error before anything is stored.
-  defp validate_write(%{changed?: false} = plan), do: {:ok, plan}
+  @doc false
+  @spec validate_write(map()) :: {:ok, map()} | {:error, [map()]}
+  def validate_write(%{changed?: false} = plan), do: {:ok, plan}
 
-  defp validate_write(plan) do
+  def validate_write(plan) do
     ecommerce = get_in(plan.attrs, [:data, "ecommerce"])
 
     case ItemCommerce.cast(ecommerce, nil) do

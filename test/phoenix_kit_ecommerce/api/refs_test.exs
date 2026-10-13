@@ -63,6 +63,34 @@ defmodule PhoenixKitEcommerce.API.RefsTest do
     assert found.uuid == ok.uuid
   end
 
+  test "an empty or blank sku or external_id is refused, whatever the catalogue holds", %{
+    catalogue: catalogue
+  } do
+    F.item!(catalogue, %{sku: ""})
+
+    answers =
+      Refs.resolve(
+        [
+          %{"sku" => ""},
+          %{"sku" => " "},
+          %{"sku" => "\t\n"},
+          %{"external_id" => ""},
+          %{"external_id" => "   "}
+        ],
+        catalogue.uuid
+      )
+
+    assert [
+             {:error, %{"code" => "validation_failed", "message" => "sku must not be empty"}},
+             {:error, %{"code" => "validation_failed", "message" => "sku must not be empty"}},
+             {:error, %{"code" => "validation_failed", "message" => "sku must not be empty"}},
+             {:error,
+              %{"code" => "validation_failed", "message" => "external_id must not be empty"}},
+             {:error,
+              %{"code" => "validation_failed", "message" => "external_id must not be empty"}}
+           ] = answers
+  end
+
   test "a trashed product and a product of another catalogue are not found", %{
     catalogue: catalogue
   } do

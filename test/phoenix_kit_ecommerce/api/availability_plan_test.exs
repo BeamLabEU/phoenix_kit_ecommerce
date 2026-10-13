@@ -97,6 +97,23 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlanTest do
     assert plan.warnings == ["item_not_active"]
   end
 
+  describe "validate_write/1" do
+    # The planner refuses an unknown visibility first, so no row can reach the
+    # second line of defence; a hand-built plan does.
+    test "refuses through ItemCommerce a shop_status the namespace would refuse" do
+      plan = %{changed?: true, attrs: %{data: %{"ecommerce" => %{"shop_status" => "weird"}}}}
+
+      assert {:error, [%{path: "shop_status"}]} = AvailabilityPlan.validate_write(plan)
+    end
+
+    test "passes valid values, and a plan that changes nothing" do
+      plan = %{changed?: true, attrs: %{data: %{"ecommerce" => %{"shop_status" => "active"}}}}
+
+      assert {:ok, ^plan} = AvailabilityPlan.validate_write(plan)
+      assert {:ok, %{changed?: false}} = AvailabilityPlan.validate_write(%{changed?: false})
+    end
+  end
+
   describe "the Shopify warning" do
     defp linked(overrides \\ %{}),
       do:

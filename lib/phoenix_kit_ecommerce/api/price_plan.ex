@@ -472,9 +472,11 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   # before anything is stored. Only the leaves the row writes are checked: a
   # stored leaf this module does not touch is none of the row's business, and
   # refusing the row because of it would block an unrelated edit.
-  defp validate_write(%{changed?: false} = plan), do: {:ok, plan}
+  @doc false
+  @spec validate_write(map()) :: {:ok, map()} | {:error, [map()]}
+  def validate_write(%{changed?: false} = plan), do: {:ok, plan}
 
-  defp validate_write(plan) do
+  def validate_write(plan) do
     params =
       %{}
       |> put_param(

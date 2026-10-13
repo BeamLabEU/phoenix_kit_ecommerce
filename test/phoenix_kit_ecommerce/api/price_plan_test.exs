@@ -380,6 +380,34 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
     end
   end
 
+  describe "validate_write/1" do
+    # Money already refuses what ItemCommerce would, so no row can reach the
+    # second line of defence; a hand-built plan does.
+    test "refuses through ItemCommerce a value Money would have let through" do
+      plan = %{
+        changed?: true,
+        changes: %{"compare_at" => %{}},
+        to: %{compare_at: dec("-1.00")},
+        leaves: []
+      }
+
+      assert {:error, [%{path: "compare_at_price", allowed: nil}]} =
+               PricePlan.validate_write(plan)
+    end
+
+    test "passes a plan whose written values are valid, and one that changes nothing" do
+      plan = %{
+        changed?: true,
+        changes: %{"compare_at" => %{}},
+        to: %{compare_at: dec("5.00")},
+        leaves: []
+      }
+
+      assert {:ok, ^plan} = PricePlan.validate_write(plan)
+      assert {:ok, %{changed?: false}} = PricePlan.validate_write(%{changed?: false})
+    end
+  end
+
   describe "the Shopify warning" do
     test "appears only while the sync is on and the item is linked to Shopify" do
       assert "shopify_sync_may_overwrite" in plan!(%{"price" => "110.00"}, item(),

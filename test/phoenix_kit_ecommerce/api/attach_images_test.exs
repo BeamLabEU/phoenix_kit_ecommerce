@@ -79,6 +79,24 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     File.read!(path)
   end
 
+  # The same picture saved again as a lossy JPEG: other bytes, other file name.
+  defp reencode(png) do
+    base =
+      Path.join(System.tmp_dir!(), "attach_images_copy_#{System.unique_integer([:positive])}")
+
+    File.write!(base <> ".png", png)
+
+    {_, 0} =
+      System.cmd("convert", [base <> ".png", "-quality", "60", base <> ".jpg"],
+        stderr_to_stdout: true
+      )
+
+    jpeg = File.read!(base <> ".jpg")
+    File.rm(base <> ".png")
+    File.rm(base <> ".jpg")
+    jpeg
+  end
+
   # Serves `%{"/path" => {content_type, body}}` and reports each request to the test.
   defp serve(routes) do
     test_pid = self()
@@ -153,6 +171,33 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert result["reused"] == 1
     assert result["downloaded"] == 0
     assert F.reload!(one).data["media_order"] == F.reload!(two).data["media_order"]
+  end
+
+  test "a re-encoded copy of a picture the shop already has reuses that file instead of storing another",
+       %{catalogue: catalogue, ctx: ctx, first: first, second: second} do
+    one = F.item!(catalogue)
+    two = F.item!(catalogue)
+
+    serve(%{
+      "/a.png" => {"image/png", first},
+      "/copy.jpg" => {"image/jpeg", reencode(first)},
+      "/other.png" => {"image/png", second}
+    })
+
+    assert {:ok, _} = attach([row(one, [image("/a.png")])], ctx)
+    [stored] = F.reload!(one).data["media_order"]
+
+    assert {:ok, %{"results" => [copy, different]}} =
+             attach([row(two, [image("/copy.jpg")]), row(one, [image("/other.png")])], ctx)
+
+    assert_received {:requested, "/copy.jpg"}
+    assert copy["downloaded"] == 1
+    assert F.reload!(two).data["media_order"] == [stored]
+
+    # a different picture is still stored as a new file
+    assert different["attached"] == 1
+    assert [^stored, other] = F.reload!(one).data["media_order"]
+    assert other != stored
   end
 
   test "private addresses and other schemes are refused even with the import setting on, and nothing is fetched",

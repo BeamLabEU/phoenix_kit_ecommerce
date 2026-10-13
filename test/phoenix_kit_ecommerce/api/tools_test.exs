@@ -50,6 +50,13 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       assert {:ok, _} = validate("ecommerce.get_prices", input)
     end
 
+    test "refuses an empty sku or external_id (a blank one is the handler's to refuse)" do
+      for key <- ["sku", "external_id"] do
+        assert {:error, _} = validate("ecommerce.get_prices", %{"refs" => [%{key => ""}]})
+        assert {:ok, _} = validate("ecommerce.get_prices", %{"refs" => [%{key => " "}]})
+      end
+    end
+
     test "refuses no refs, a malformed id, an unknown field and a control field" do
       assert {:error, _} = validate("ecommerce.get_prices", %{"refs" => []})
       assert {:error, _} = validate("ecommerce.get_prices", %{"refs" => [%{"id" => "nope"}]})
@@ -59,6 +66,34 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
 
       assert {:error, _} =
                validate("ecommerce.get_prices", %{"refs" => [%{"sku" => "a"}], "dry_run" => true})
+    end
+  end
+
+  describe "the confirmation markers" do
+    test "a core that lacks any marker is not one that can hold a dangerous call" do
+      assert PhoenixKitEcommerce.API.confirmation_available?([{Enum, :map, 2}])
+      assert PhoenixKitEcommerce.API.confirmation_available?([])
+      refute PhoenixKitEcommerce.API.confirmation_available?([{Enum, :no_such_function, 1}])
+      refute PhoenixKitEcommerce.API.confirmation_available?([{NoSuchModule, :gate, 1}])
+
+      refute PhoenixKitEcommerce.API.confirmation_available?([
+               {Enum, :map, 2},
+               {NoSuchModule, :gate, 1}
+             ])
+    end
+
+    test "with a marker missing only the read tool is offered" do
+      for markers <- [[{NoSuchModule, :gate, 1}], [{Enum, :map, 2}, {Enum, :nope, 9}]] do
+        assert ["ecommerce.get_prices"] ==
+                 markers |> PhoenixKitEcommerce.API.tools() |> Enum.map(& &1.name)
+      end
+    end
+
+    test "the default markers are core's key check and its enforcement gate" do
+      assert PhoenixKitEcommerce.API.markers() == [
+               {PhoenixKit.API.Keys, :active?, 1},
+               {PhoenixKit.API.Flow, :gate, 1}
+             ]
     end
   end
 
@@ -72,6 +107,13 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
 
   describe "with core's confirmation flow" do
     @describetag :core_confirm
+
+    test "with every marker present the write tools are offered" do
+      names = [{Enum, :map, 2}] |> PhoenixKitEcommerce.API.tools() |> Enum.map(& &1.name)
+
+      assert Enum.sort(names) ==
+               ~w(ecommerce.attach_images ecommerce.get_prices ecommerce.set_availability ecommerce.set_prices)
+    end
 
     test "all four tools are offered, with the documented scopes and permissions" do
       table =
@@ -102,6 +144,12 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
           ],
           reason <- ["database_error", "storage_error", "unexpected"] do
         assert tools()[name].description =~ reason, "#{name} does not mention #{reason}"
+      end
+    end
+
+    test "the read tool cannot answer with a transient reason, so its description does not mention one" do
+      for reason <- ["database_error", "storage_error", "unexpected"] do
+        refute tools()["ecommerce.get_prices"].description =~ reason
       end
     end
 

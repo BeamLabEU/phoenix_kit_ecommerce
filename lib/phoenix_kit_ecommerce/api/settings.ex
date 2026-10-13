@@ -29,10 +29,14 @@ defmodule PhoenixKitEcommerce.API.Settings do
   @spec max_price_change_pct() :: pos_integer()
   def max_price_change_pct, do: @max_pct
 
-  @doc "The confirmation threshold for price moves, in percent."
-  @spec price_change_pct() :: non_neg_integer()
-  def price_change_pct do
-    case Settings.get_integer_setting(@pct_key, @default_pct) do
+  @doc """
+  The confirmation threshold for price moves, in percent. `read` is the
+  function that reads an integer setting (`key, default`); a value that is not
+  a threshold, or a read that raises or exits, gives the default.
+  """
+  @spec price_change_pct((String.t(), integer() -> term())) :: non_neg_integer()
+  def price_change_pct(read \\ &Settings.get_integer_setting/2) do
+    case read.(@pct_key, @default_pct) do
       value when is_integer(value) and value >= 0 and value <= @max_pct -> value
       _ -> @default_pct
     end

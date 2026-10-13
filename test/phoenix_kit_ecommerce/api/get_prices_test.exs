@@ -67,6 +67,51 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
     assert summary == %{"found" => 2, "error" => 1}
   end
 
+  test "each product answers in its own currency; one with none stored answers in the base currency",
+       %{catalogue: catalogue, ctx: ctx} do
+    %{code: base} = PhoenixKitEcommerce.get_base_currency()
+    own = if base == "USD", do: "GBP", else: "USD"
+
+    ecommerce = fn extra ->
+      %{
+        "ecommerce" =>
+          Map.merge(%{"shop_status" => "active", "compare_at_price" => "9.00"}, extra)
+      }
+    end
+
+    foreign =
+      F.item!(catalogue, %{
+        data: Map.put(ecommerce.(%{"currency" => own}), "_primary_language", "en")
+      })
+
+    plain = F.item!(catalogue, %{data: Map.put(ecommerce.(%{}), "_primary_language", "en")})
+
+    assert {:ok, %{"results" => [one, two]}} =
+             run([%{"id" => foreign.uuid}, %{"id" => plain.uuid}], ctx)
+
+    assert one["currency"] == own
+    assert one["price"]["currency"] == own
+    assert one["compare_at"]["currency"] == own
+
+    assert two["currency"] == base
+    assert two["price"]["currency"] == base
+    assert two["compare_at"]["currency"] == base
+  end
+
+  test "a blank sku is that row's error and does not stop the others", %{
+    catalogue: catalogue,
+    ctx: ctx
+  } do
+    item = F.item!(catalogue, %{sku: "GP-BLANK"})
+
+    assert {:ok, %{"results" => [blank, found], "summary" => %{"found" => 1, "error" => 1}}} =
+             run([%{"sku" => " "}, %{"sku" => "GP-BLANK"}], ctx)
+
+    assert blank["error"]["code"] == "validation_failed"
+    assert blank["error"]["message"] == "sku must not be empty"
+    assert found["id"] == item.uuid
+  end
+
   test "a product with no price and no extras answers nils, not errors", %{
     catalogue: catalogue,
     ctx: ctx
