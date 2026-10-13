@@ -1,0 +1,263 @@
+defmodule PhoenixKitEcommerce.API.PricePlanTest do
+  @moduledoc """
+  Planning one `ecommerce.set_prices` row: what changes, whether it is
+  dangerous, what is written. Pure: items are plain maps.
+  """
+
+  use ExUnit.Case, async: true
+
+  alias PhoenixKitEcommerce.API.PricePlan
+
+  defp dec(value), do: Decimal.new(value)
+
+  defp item(overrides \\ %{}) do
+    Map.merge(
+      %{
+        uuid: "item-1",
+        base_price: dec("100.00"),
+        status: "active",
+        data: %{
+          "ecommerce" => %{
+            "compare_at_price" => "120.00",
+            "price_modifiers" => %{"liquid" => %{"black" => "32.00", "blue" => 5}},
+            "shopify" => %{"product_id" => "9001", "handle" => "mug"},
+            "tags" => ["a"]
+          }
+        }
+      },
+      overrides
+    )
+  end
+
+  defp sets do
+    [%{key: "catalogue_set_liquid", values: [%{key: "black"}, %{key: "blue"}, %{key: "red"}]}]
+  end
+
+  defp plan(row, item \\ item(), opts \\ []) do
+    PricePlan.plan(row, item, Keyword.merge([pct: 30, sets: sets()], opts))
+  end
+
+  defp plan!(row, item \\ item(), opts \\ []) do
+    assert {:ok, plan} = plan(row, item, opts)
+    plan
+  end
+
+  describe "a price" do
+    test "the same price changes nothing and writes nothing" do
+      plan = plan!(%{"price" => "100.00"})
+
+      refute plan.changed?
+      assert plan.changes == %{}
+      assert plan.attrs == %{}
+      assert plan.owned_paths == []
+    end
+
+    test "a new price is a base_price write, with no data path" do
+      plan = plan!(%{"price" => "110.00"})
+
+      assert plan.changed?
+      assert plan.changes == %{"price" => %{"from" => "100.00", "to" => "110.00"}}
+      assert plan.attrs == %{base_price: dec("110.00")}
+      assert plan.owned_paths == []
+    end
+
+    test "a first price is never held back, whatever the number" do
+      for current <- [nil, dec("0.00")] do
+        plan = plan!(%{"price" => "5000.00"}, item(%{base_price: current}))
+        refute plan.dangerous?
+      end
+    end
+
+    test "exactly the threshold is not 'more than', one cent past it is" do
+      refute plan!(%{"price" => "130.00"}).dangerous?
+      assert plan!(%{"price" => "130.01"}).dangerous?
+      refute plan!(%{"price" => "70.00"}).dangerous?
+      assert plan!(%{"price" => "69.99"}).dangerous?
+    end
+
+    test "a price that falls to zero is a 100 percent move" do
+      assert plan!(%{"price" => "0.00"}).dangerous?
+    end
+
+    test "the threshold is the one given" do
+      refute plan!(%{"price" => "190.00"}, item(), pct: 100).dangerous?
+      assert plan!(%{"price" => "100.01"}, item(), pct: 0).dangerous?
+    end
+
+    test "refuses prices that are rounded, misread or not strings" do
+      for bad <- ["12,5", "12.505", "-1", "1e3", " 5", 12.5, 12, nil] do
+        assert {:error, [%{path: "price"}]} = plan(%{"price" => bad})
+      end
+    end
+  end
+
+  describe "compare_at" do
+    test "sets it as a string at its own path" do
+      plan = plan!(%{"compare_at" => "150.00"})
+
+      assert plan.changes == %{"compare_at" => %{"from" => "120.00", "to" => "150.00"}}
+      assert plan.attrs == %{data: %{"ecommerce" => %{"compare_at_price" => "150.00"}}}
+      assert plan.owned_paths == [["ecommerce", "compare_at_price"]]
+    end
+
+    test "null clears it" do
+      plan = plan!(%{"compare_at" => nil})
+
+      assert plan.attrs == %{data: %{"ecommerce" => %{"compare_at_price" => nil}}}
+      assert plan.changes["compare_at"]["to"] == nil
+    end
+
+    test "warns when it is not above the price, and is not dangerous by itself" do
+      plan = plan!(%{"compare_at" => "90.00"})
+
+      assert "compare_at_not_above_price" in plan.warnings
+      refute plan.dangerous?
+    end
+  end
+
+  describe "price_modifiers" do
+    test "adds a value and owns only that leaf: the stored ones, a numeric leaf included, are not in the write" do
+      plan = plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "3.00"}}})
+
+      assert plan.changes == %{"price_modifiers.liquid.red" => %{"from" => nil, "to" => "3.00"}}
+
+      # Only the leaf the row writes, so a concurrent writer of any other
+      # option or value (the API, the Shopify sync) is never overwritten.
+      assert plan.attrs.data["ecommerce"]["price_modifiers"] == %{"liquid" => %{"red" => "3.00"}}
+      assert plan.owned_paths == [["ecommerce", "price_modifiers", "liquid", "red"]]
+      refute plan.dangerous?
+    end
+
+    test "null removes one value: an explicit nil at that leaf, the catalogue prunes what it empties" do
+      plan = plan!(%{"price_modifiers" => %{"liquid" => %{"black" => nil, "blue" => nil}}})
+
+      assert plan.attrs.data["ecommerce"]["price_modifiers"] ==
+               %{"liquid" => %{"black" => nil, "blue" => nil}}
+
+      assert plan.owned_paths == [
+               ["ecommerce", "price_modifiers", "liquid", "black"],
+               ["ecommerce", "price_modifiers", "liquid", "blue"]
+             ]
+
+      assert plan.changes["price_modifiers.liquid.black"] == %{"from" => "32.00", "to" => nil}
+      assert plan.changes["price_modifiers.liquid.blue"] == %{"from" => "5.00", "to" => nil}
+    end
+
+    test "removing a modifier that is not there changes nothing" do
+      plan = plan!(%{"price_modifiers" => %{"liquid" => %{"red" => nil}}})
+      refute plan.changed?
+    end
+
+    test "moving a non-zero modifier past the threshold is dangerous; adding one is not" do
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"black" => "50.00"}}}).dangerous?
+      assert plan!(%{"price_modifiers" => %{"liquid" => %{"black" => nil}}}).dangerous?
+      refute plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "999.00"}}}).dangerous?
+    end
+
+    test "refuses an unknown option and an unknown value, naming the allowed ones" do
+      assert {:error, [%{path: "price_modifiers.size", allowed: ["liquid"]}]} =
+               plan(%{"price_modifiers" => %{"size" => %{"l" => "3.00"}}})
+
+      assert {:error,
+              [%{path: "price_modifiers.liquid.green", allowed: ["black", "blue", "red"]}]} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"green" => "3.00"}}})
+    end
+
+    test "a value the item already stores may be edited even if its set no longer lists it" do
+      stale =
+        item(%{data: %{"ecommerce" => %{"price_modifiers" => %{"gone" => %{"x" => "1.00"}}}}})
+
+      assert {:ok, plan} = plan(%{"price_modifiers" => %{"gone" => %{"x" => "2.00"}}}, stale)
+      assert plan.changes["price_modifiers.gone.x"]["to"] == "2.00"
+    end
+
+    test "without sets the names are not checked" do
+      assert {:ok, _} =
+               plan(%{"price_modifiers" => %{"size" => %{"l" => "3.00"}}}, item(), sets: nil)
+    end
+
+    test "refuses a malformed amount, a non-object value and a non-object option" do
+      assert {:error, [%{path: "price_modifiers.liquid.red"}]} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"red" => "abc"}}})
+
+      assert {:error, [%{path: "price_modifiers.liquid"}]} =
+               plan(%{"price_modifiers" => %{"liquid" => "3.00"}})
+
+      assert {:error, [%{path: "price_modifiers"}]} = plan(%{"price_modifiers" => "x"})
+    end
+
+    test "refuses a modifier that would make the cheapest combination negative" do
+      assert {:error, [%{path: "price_modifiers", message: message}]} =
+               plan(%{"price_modifiers" => %{"liquid" => %{"red" => "-200.00"}}})
+
+      assert message =~ "less than zero"
+    end
+  end
+
+  describe "the row as a whole" do
+    test "a row that asks for nothing is refused" do
+      assert {:error, [%{path: "", message: message}]} = plan(%{})
+      assert message =~ "nothing to change"
+    end
+
+    test "reports every bad field at once" do
+      assert {:error, errors} = plan(%{"price" => "x", "compare_at" => "y"})
+      assert Enum.sort(Enum.map(errors, & &1.path)) == ["compare_at", "price"]
+    end
+
+    test "writes price, compare_at and modifiers together" do
+      plan =
+        plan!(%{
+          "price" => "110.00",
+          "compare_at" => "150.00",
+          "price_modifiers" => %{"liquid" => %{"red" => "3.00"}}
+        })
+
+      assert plan.attrs.base_price == dec("110.00")
+      assert plan.attrs.data["ecommerce"]["compare_at_price"] == "150.00"
+
+      assert plan.owned_paths == [
+               ["ecommerce", "compare_at_price"],
+               ["ecommerce", "price_modifiers", "liquid", "red"]
+             ]
+    end
+
+    test "an item with no data at all is planned like any other" do
+      assert {:ok, plan} = plan(%{"price" => "10.00"}, item(%{data: nil, base_price: nil}))
+      assert plan.changed?
+    end
+  end
+
+  describe "the Shopify warning" do
+    test "appears only while the sync is on and the item is linked to Shopify" do
+      assert "shopify_sync_may_overwrite" in plan!(%{"price" => "110.00"}, item(),
+               shopify_enabled?: true
+             ).warnings
+
+      refute "shopify_sync_may_overwrite" in plan!(%{"price" => "110.00"}).warnings
+
+      unlinked = item(%{data: %{"ecommerce" => %{}}})
+
+      refute "shopify_sync_may_overwrite" in plan!(%{"price" => "110.00"}, unlinked,
+               shopify_enabled?: true
+             ).warnings
+    end
+  end
+
+  describe "moved_over?/3 and change_pct/2" do
+    test "the boundary and the empty cases" do
+      refute PricePlan.moved_over?(dec("100"), dec("130"), 30)
+      assert PricePlan.moved_over?(dec("100"), dec("130.01"), 30)
+      refute PricePlan.moved_over?(nil, dec("5"), 30)
+      refute PricePlan.moved_over?(dec("0.00"), dec("5"), 30)
+      assert PricePlan.moved_over?(dec("10"), nil, 30)
+    end
+
+    test "the percentage is one decimal, signed, and nil from zero" do
+      assert PricePlan.change_pct(dec("100"), dec("130")) == "30.0"
+      assert PricePlan.change_pct(dec("80"), dec("60")) == "-25.0"
+      assert PricePlan.change_pct(dec("0"), dec("5")) == nil
+      assert PricePlan.change_pct(nil, dec("5")) == nil
+    end
+  end
+end
