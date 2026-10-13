@@ -25,7 +25,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     ]
 
   alias PhoenixKit.Users.Auth
-  alias PhoenixKit.Utils.Routes
 
   @impl true
   def mount(%{"uuid" => uuid}, session, socket) do
@@ -166,7 +165,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   defp redirect_with_error(socket, message) do
     socket
     |> put_flash(:error, message)
-    |> push_navigate(to: Routes.path("/shop"))
+    |> push_navigate(to: Helpers.page_path(socket.assigns, "/shop"))
   end
 
   # This page takes no events; one pushed at it anyway is ignored.
@@ -398,11 +397,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
         <%!-- Actions --%>
         <div class="flex justify-center gap-4">
-          <.link navigate={Routes.path("/shop")} class="btn btn-primary">
+          <.link navigate={Helpers.page_path(assigns, "/shop")} class="btn btn-primary">
             <.icon name="hero-shopping-bag" class="w-5 h-5 mr-2" /> {gettext("Continue Shopping")}
           </.link>
           <%= if @authenticated do %>
-            <.link navigate={Routes.path("/dashboard/orders")} class="btn btn-outline">
+            <.link navigate={Helpers.page_path(assigns, "/dashboard/orders")} class="btn btn-outline">
               <.icon name="hero-clipboard-document-list" class="w-5 h-5 mr-2" /> {gettext("My Orders")}
             </.link>
           <% end %>

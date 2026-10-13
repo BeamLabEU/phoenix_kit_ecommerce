@@ -4840,6 +4840,9 @@ defmodule PhoenixKitEcommerce do
     reference it from the order instead of a snapshot. Billing makes a user's
     first profile their default. Ignored for guests, without `billing_data`,
     and when `billing_profile_uuid` is given.
+  - `language: code` - The language the buyer is checking out in (the page's).
+    The confirmation notification links to the order page in it; without one
+    (a worker, a script) the link is in the site's primary language.
 
   ## Returns
 
@@ -4961,7 +4964,7 @@ defmodule PhoenixKitEcommerce do
         # that fact. Failure is logged inside `maybe_send_guest_confirmation/1`.
         _ = maybe_send_guest_confirmation(order.user_uuid)
         _ = log_order_converted(order)
-        _ = PhoenixKitEcommerce.Notifications.order_placed(order)
+        _ = PhoenixKitEcommerce.Notifications.order_placed(order, language: opts[:language])
         {:ok, order}
 
       {:error, reason} ->
@@ -8048,7 +8051,7 @@ defmodule PhoenixKitEcommerce do
   @spec product_url(Product.t(), String.t()) :: String.t()
   def product_url(%Product{} = product, language) do
     slug = SlugResolver.product_slug(product, language)
-    base = DialectMapper.extract_base(language)
+    base = url_locale(language)
     # Let Routes.path handle locale prefix - it adds prefix for non-default locales
     Routes.path("/shop/product/#{slug}", locale: base)
   end
@@ -8074,7 +8077,7 @@ defmodule PhoenixKitEcommerce do
   @spec category_url(Category.t(), String.t()) :: String.t()
   def category_url(%Category{} = category, language) do
     slug = SlugResolver.category_slug(category, language)
-    base = DialectMapper.extract_base(language)
+    base = url_locale(language)
     # Let Routes.path handle locale prefix - it adds prefix for non-default locales
     Routes.path("/shop/category/#{slug}", locale: base)
   end
@@ -8092,7 +8095,7 @@ defmodule PhoenixKitEcommerce do
   """
   @spec catalog_url(String.t()) :: String.t()
   def catalog_url(language) do
-    base = DialectMapper.extract_base(language)
+    base = url_locale(language)
     # Let Routes.path handle locale prefix - it adds prefix for non-default locales
     Routes.path("/shop", locale: base)
   end
@@ -8110,7 +8113,7 @@ defmodule PhoenixKitEcommerce do
   """
   @spec cart_url(String.t()) :: String.t()
   def cart_url(language) do
-    base = DialectMapper.extract_base(language)
+    base = url_locale(language)
     # Let Routes.path handle locale prefix - it adds prefix for non-default locales
     Routes.path("/cart", locale: base)
   end
@@ -8128,22 +8131,36 @@ defmodule PhoenixKitEcommerce do
   """
   @spec checkout_url(String.t()) :: String.t()
   def checkout_url(language) do
-    base = DialectMapper.extract_base(language)
+    base = url_locale(language)
     # Let Routes.path handle locale prefix - it adds prefix for non-default locales
     Routes.path("/checkout", locale: base)
   end
 
   @doc """
+  The `:locale` option every storefront link is built with.
+
+  A single-language site (multi-language support off) carries no locale
+  segment in any URL, so its links are built with `:none` — otherwise the
+  segment would come from whichever language the caller happened to hold (the
+  page's, a product slug's, a Gettext fallback) and one page could mix
+  `/en/shop` with `/uk/shop/product/...`. On a multilingual site it is the
+  base code of `language`, and `Routes.path/2` still drops the primary
+  language's segment when the site serves it prefixless.
+  """
+  @spec url_locale(String.t()) :: String.t() | :none
+  def url_locale(language) do
+    if Languages.enabled?(), do: DialectMapper.extract_base(language), else: :none
+  end
+
+  @doc """
   Gets the default language code (base code, e.g., "en").
 
-  Reads from Languages module configuration or falls back to "en".
+  The site's primary language (`Translations.default_language/0`), whether or
+  not multi-language support is on.
   """
   @spec get_default_language() :: String.t()
   def get_default_language do
-    case Languages.get_default_language() do
-      nil -> "en"
-      lang -> DialectMapper.extract_base(lang.code)
-    end
+    DialectMapper.extract_base(Translations.default_language())
   end
 
   @doc """

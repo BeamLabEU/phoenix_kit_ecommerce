@@ -21,6 +21,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Paths}
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitCatalogue.Paths, as: CataloguePaths
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Web.Helpers
@@ -67,7 +68,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
       {:ok, view, html} = live(conn, "/shop")
 
       assert html =~ "Manage Shop"
-      assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
+      assert view |> element(~s{a[href="#{Routes.path("/admin/shop")}"]}) |> has_element?()
     end
 
     test "an admin with base shop but not manage_catalog still gets it", %{conn: conn} do
@@ -80,7 +81,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
       {:ok, view, html} = live(conn, "/shop")
 
       assert html =~ "Manage Shop"
-      assert view |> element(~s{a[href="/en/admin/shop"]}) |> has_element?()
+      assert view |> element(~s{a[href="#{Routes.path("/admin/shop")}"]}) |> has_element?()
     end
   end
 
