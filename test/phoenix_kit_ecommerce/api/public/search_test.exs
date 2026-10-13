@@ -10,6 +10,8 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
 
   @moduletag :requires_core_api
 
+  @compile {:no_warn_undefined, PhoenixKit.API.Validator}
+
   import ExUnit.CaptureLog
   import PhoenixKitEcommerce.SearchFixtures
 

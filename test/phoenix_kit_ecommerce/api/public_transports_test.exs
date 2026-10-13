@@ -113,6 +113,37 @@ if Code.ensure_loaded?(PhoenixKit.API.MCP) do
       assert %{"code" => "not_found"} = mcp_problem(result)
     end
 
+    test "a problem the handler finds in the input crosses both transports the same way, tool by tool" do
+      # search_products: the handler refuses the whole call.
+      bad = %{"category_id" => "not-a-uuid"}
+
+      assert {422, %{"code" => "validation_failed", "context" => %{"errors" => [rest_error]}}} =
+               rest("shop.search_products", bad)
+
+      assert {200, result} = mcp_call("shop.search_products", bad)
+      assert result["isError"] == true
+
+      assert %{"code" => "validation_failed", "context" => %{"errors" => [mcp_error]}} =
+               mcp_problem(result)
+
+      assert rest_error["path"] == "category_id" and mcp_error["path"] == "category_id"
+
+      # The batch and get_products answer 200 with the problem inside the row.
+      for {tool, input, row_path, code} <- [
+            {"shop.search_products_batch", %{"queries" => [%{"q" => "vase"}, bad]},
+             ["results", Access.at(1), "error", "code"], "validation_failed"},
+            {"shop.get_products", %{"ids" => ["not-a-uuid"]},
+             ["results", Access.at(0), "error", "code"], "not_found"}
+          ] do
+        assert {200, rest_body} = rest(tool, input)
+        assert get_in(rest_body, row_path) == code
+
+        assert {200, result} = mcp_call(tool, input)
+        assert result["isError"] == false
+        assert result["structuredContent"] == rest_body
+      end
+    end
+
     test "tools/list on the public MCP endpoint offers the five tools under their MCP names" do
       assert {200, %{"tools" => tools}} = mcp("tools/list", %{})
       names = Enum.map(tools, & &1["name"])

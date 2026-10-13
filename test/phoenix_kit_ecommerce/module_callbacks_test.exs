@@ -13,6 +13,8 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
   """
   use ExUnit.Case, async: true
 
+  @compile {:no_warn_undefined, PhoenixKit.ObanCrons}
+
   alias PhoenixKit.Dashboard.Tab
 
   test "css_sources/0 contributes this app to the host Tailwind build" do

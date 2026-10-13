@@ -11,6 +11,8 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
 
   @moduletag :requires_core_api
 
+  @compile {:no_warn_undefined, PhoenixKit.API.Executor}
+
   import PhoenixKitEcommerce.SearchFixtures
 
   alias PhoenixKit.API.Executor
@@ -115,6 +117,25 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     # 10.00 EUR is 11.00 USD: the 10.00 and 5.00 products.
     assert {200, %{"count" => 2}, _} =
              call("shop.search_products", %{"currency" => "EUR", "price_max" => "10"})
+  end
+
+  test "a q over 200 characters is a 422 that names it, never a 500; 200 characters are searched" do
+    assert {422, body, _} =
+             call("shop.search_products", %{"q" => String.duplicate("vase ", 2_000)})
+
+    assert [%{"path" => "q"}] = body["context"]["errors"]
+
+    assert {422, body, _} =
+             call("shop.search_products_batch", %{
+               "queries" => [%{"q" => "vase"}, %{"q" => String.duplicate("v", 201)}]
+             })
+
+    assert [%{"path" => "queries[1].q"}] = body["context"]["errors"]
+
+    assert {200, %{"match_mode" => mode}, _} =
+             call("shop.search_products", %{"q" => String.duplicate("v", 200)})
+
+    assert mode in ["fulltext", "typo"]
   end
 
   test "a NUL byte in a vendor or an option is a 422 that names it, in a batch one error block" do
