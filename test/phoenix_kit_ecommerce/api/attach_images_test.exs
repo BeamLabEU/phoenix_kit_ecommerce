@@ -293,6 +293,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
   test "a dry run checks the URLs and fetches nothing", %{catalogue: catalogue, ctx: ctx} do
     serve(%{})
     item = F.item!(catalogue)
+    logged = length(list_activities())
 
     rows = [
       row(item, [image("/a.png")]),
@@ -305,6 +306,40 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert Enum.map(preview["rows"], & &1["action"]) == ["update", "error"]
     refute_received {:requested, _}
     assert F.reload!(item).data["media_order"] in [nil, []]
+    assert length(list_activities()) == logged
+  end
+
+  test "a picture attached to a product linked to Shopify carries the overwrite warning while the sync is on",
+       %{catalogue: catalogue, ctx: ctx, first: first, second: second} do
+    shopify = PhoenixKitEcommerce.shopify_enabled?()
+
+    on_exit(fn ->
+      Settings.update_boolean_setting_with_module("shop_shopify_enabled", shopify, "shop")
+    end)
+
+    linked =
+      F.item!(catalogue, %{
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{"shop_status" => "active", "shopify" => %{"handle" => "mug"}}
+        }
+      })
+
+    plain = F.item!(catalogue)
+    serve(%{"/a.png" => {"image/png", first}, "/b.png" => {"image/png", second}})
+
+    Settings.update_boolean_setting_with_module("shop_shopify_enabled", true, "shop")
+
+    assert {:ok, %{"results" => [a, b]}} =
+             attach([row(linked, [image("/a.png")]), row(plain, [image("/b.png")])], ctx)
+
+    assert a["warnings"] == ["shopify_sync_may_overwrite"]
+    assert b["warnings"] == []
+
+    Settings.update_boolean_setting_with_module("shop_shopify_enabled", false, "shop")
+
+    assert {:ok, %{"results" => [off]}} = attach([row(linked, [image("/b.png")])], ctx)
+    assert off["warnings"] == []
   end
 
   test "more than 20 pictures in a call are refused before anything happens", %{

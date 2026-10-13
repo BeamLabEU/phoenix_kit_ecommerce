@@ -77,8 +77,7 @@ defmodule PhoenixKitEcommerce.API do
       title: "Get product prices",
       description:
         "Reads the price, the compare-at price, the option prices (price_modifiers), the visibility and the made-to-order flag of products, by id, sku or external_id. " <>
-          "shop_status_visible says whether the product's own status and shop_status let the storefront show it; it does not look at the product's category (a product in a hidden category stays hidden). Prices are decimal strings in the product's currency." <>
-          @retry_note,
+          "shop_status_visible says whether the product's own status and shop_status let the storefront show it; it does not look at the product's category (a product in a hidden category stays hidden). Prices are decimal strings in the product's currency.",
       input_schema: Schemas.get_prices_input(),
       output_schema: Schemas.batch_output(),
       handler: {__MODULE__, :get_prices},
@@ -118,7 +117,7 @@ defmodule PhoenixKitEcommerce.API do
       description:
         "Sets whether products are shown in the shop (visibility: draft, active, archived) and whether they are made to order. " <>
           "A product without a price cannot be made active. A product that is not active in the catalogue stays hidden whatever its visibility." <>
-          @retry_note,
+          shopify_note() <> @retry_note,
       input_schema: Schemas.set_availability_input(),
       output_schema: Schemas.batch_output(),
       handler: {__MODULE__, :set_availability},
@@ -138,7 +137,7 @@ defmodule PhoenixKitEcommerce.API do
         description:
           "Downloads pictures from public http(s) URLs (at most 10 MB each) and attaches them to products after the pictures they already have. " <>
             "At most 20 pictures per call. Addresses on private networks are always refused. Mark one picture featured to make it the main one." <>
-            @retry_note,
+            shopify_note() <> @retry_note,
         input_schema: Schemas.attach_images_input(),
         output_schema: Schemas.batch_output(),
         handler: {__MODULE__, :attach_images},
@@ -163,7 +162,7 @@ defmodule PhoenixKitEcommerce.API do
   defp shopify_note do
     if PhoenixKitEcommerce.shopify_enabled?(),
       do:
-        " Products linked to Shopify can be overwritten by the next sync (the last write wins); the answer carries the warning shopify_sync_may_overwrite.",
+        " What is written to a product linked to Shopify can be overwritten by the next sync (the last write wins); the answer carries the warning shopify_sync_may_overwrite.",
       else: ""
   end
 end

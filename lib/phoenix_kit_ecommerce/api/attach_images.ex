@@ -77,7 +77,8 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   def run(input, ctx) do
     with {:ok, catalogue_uuid} <- Gate.check(input),
          :ok <- check_total(input) do
-      rows = input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row/1)
+      shopify? = PhoenixKitEcommerce.shopify_enabled?()
+      rows = input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row(&1, shopify?))
 
       if Map.get(ctx, :dry_run?, false) do
         {:preview, Batch.preview(rows), Batch.fingerprint(rows)}
@@ -109,7 +110,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
 
   # -- planning ---------------------------------------------------------------
 
-  defp plan_row(%{item: item, input: input}) do
+  defp plan_row(%{item: item, input: input}, shopify?) do
     images = Map.get(input, "images", [])
 
     errors =
@@ -125,12 +126,20 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
          changes: %{"images" => %{"add" => length(images)}},
          changed?: images != [],
          dangerous?: false,
-         warnings: [],
+         warnings: warnings(item, images, shopify?),
          images: images
        }}
     else
       {:error, Rows.invalid(errors)}
     end
+  end
+
+  # The Shopify media sync replaces a product's picture order and featured
+  # picture, so what this tool attaches to a linked product can be undone.
+  defp warnings(item, images, shopify?) do
+    if images != [] and PlanSupport.shopify_sync_may_overwrite?(item, shopify?),
+      do: ["shopify_sync_may_overwrite"],
+      else: []
   end
 
   defp featured_errors(images) do

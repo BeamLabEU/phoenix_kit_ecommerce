@@ -394,6 +394,14 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
                shopify_enabled?: true
              ).warnings
     end
+
+    test "an item linked by its handle alone gets it too, like the settings page's own rule" do
+      by_handle = item(%{data: %{"ecommerce" => %{"shopify" => %{"handle" => "mug"}}}})
+
+      assert "shopify_sync_may_overwrite" in plan!(%{"price" => "110.00"}, by_handle,
+               shopify_enabled?: true
+             ).warnings
+    end
   end
 
   describe "moved_over?/3 and change_pct/2" do

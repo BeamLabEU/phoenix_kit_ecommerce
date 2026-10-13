@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
   @moduletag :catalogue_api
   @moduletag :core_confirm
 
+  alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.StorefrontCache
@@ -159,6 +160,55 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
 
     assert row["warnings"] == ["item_not_active"]
     refute visible?(item, ctx)
+  end
+
+  test "a visibility change to a product linked to Shopify carries the overwrite warning while the sync is on",
+       %{catalogue: catalogue, ctx: ctx} do
+    shopify = PhoenixKitEcommerce.shopify_enabled?()
+
+    on_exit(fn ->
+      Settings.update_boolean_setting_with_module("shop_shopify_enabled", shopify, "shop")
+    end)
+
+    by_handle =
+      draft_item(catalogue, %{
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{"shop_status" => "draft", "shopify" => %{"handle" => "mug"}}
+        }
+      })
+
+    plain = draft_item(catalogue)
+
+    rows = [
+      %{"ref" => %{"id" => by_handle.uuid}, "visibility" => "active"},
+      %{"ref" => %{"id" => plain.uuid}, "visibility" => "active"}
+    ]
+
+    Settings.update_boolean_setting_with_module("shop_shopify_enabled", true, "shop")
+    assert {:ok, %{"results" => [linked, unlinked]}} = run(rows, ctx)
+    assert linked["warnings"] == ["shopify_sync_may_overwrite"]
+    assert unlinked["warnings"] == []
+
+    Settings.update_boolean_setting_with_module("shop_shopify_enabled", false, "shop")
+
+    assert {:ok, %{"results" => [off]}} =
+             run([%{"ref" => %{"id" => by_handle.uuid}, "visibility" => "archived"}], ctx)
+
+    assert off["warnings"] == []
+  end
+
+  test "a dry run logs nothing at all", %{catalogue: catalogue, ctx: ctx} do
+    item = draft_item(catalogue)
+    logged = length(list_activities())
+
+    assert {:preview, _preview, _fingerprint} =
+             run([%{"ref" => %{"id" => item.uuid}, "visibility" => "active"}], %{
+               ctx
+               | dry_run?: true
+             })
+
+    assert length(list_activities()) == logged
   end
 
   test "rows are independent and the dry run writes nothing", %{catalogue: catalogue, ctx: ctx} do

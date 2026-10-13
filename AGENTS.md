@@ -503,8 +503,12 @@ Rules that must hold:
   in `API.Batch.write/3`, once per product in `API.AttachImages`), like the
   Shopify sync does. A dry run and an unchanged row leave it alone.
 - **Shopify is optional.** Nothing in the tools needs a product to be linked
-  to it; the description of `set_prices` and a row warning mention the sync
-  only while it is on.
+  to it; the descriptions of the three write tools and the row warning
+  `shopify_sync_may_overwrite` mention the sync only while it is on. "Linked"
+  is one rule, `ItemCommerce.shopify_linked?/1` (a Shopify handle or product
+  id), shared with the settings of the product form. `set_availability`
+  warns on a visibility change and `attach_images` on a picture, because the
+  sync writes the shop status and replaces the picture order.
 - `api_confirm_price_change_pct` (default 30, `API.Settings`) is the one
   e-commerce setting of the API; it has no `shop_` prefix, it shares the
   `api_` prefix of core's other API settings (`api_confirm_batch_over`).

@@ -97,6 +97,38 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlanTest do
     assert plan.warnings == ["item_not_active"]
   end
 
+  describe "the Shopify warning" do
+    defp linked(overrides \\ %{}),
+      do:
+        item(Map.merge(%{"shop_status" => "draft", "shopify" => %{"handle" => "mug"}}, overrides))
+
+    defp warnings(row, item, opts) do
+      assert {:ok, plan} = AvailabilityPlan.plan(row, item, opts)
+      plan.warnings
+    end
+
+    test "a visibility change to a product linked to Shopify (by handle alone) carries it" do
+      assert warnings(%{"visibility" => "active"}, linked(), shopify_enabled?: true) ==
+               ["shopify_sync_may_overwrite"]
+
+      assert warnings(
+               %{"visibility" => "active"},
+               item(%{"shop_status" => "draft", "shopify" => %{"product_id" => "7"}}),
+               shopify_enabled?: true
+             ) == ["shopify_sync_may_overwrite"]
+    end
+
+    test "not while the sync is off, not for an unlinked product, not for a flag the sync does not write" do
+      assert warnings(%{"visibility" => "active"}, linked(), []) == []
+      assert warnings(%{"visibility" => "active"}, item(), shopify_enabled?: true) == []
+      assert warnings(%{"made_to_order" => true}, linked(), shopify_enabled?: true) == []
+    end
+
+    test "not for a row that changes nothing" do
+      assert warnings(%{"visibility" => "draft"}, linked(), shopify_enabled?: true) == []
+    end
+  end
+
   test "refuses an unknown visibility, a non-boolean flag and an empty row" do
     assert {:error, [%{path: "visibility", allowed: ["draft", "active", "archived"]}]} =
              AvailabilityPlan.plan(%{"visibility" => "hidden"}, item())

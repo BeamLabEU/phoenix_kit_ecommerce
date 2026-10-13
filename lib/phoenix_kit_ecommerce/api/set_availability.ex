@@ -30,12 +30,13 @@ defmodule PhoenixKitEcommerce.API.SetAvailability do
 
   defp plan_rows(input) do
     with {:ok, catalogue_uuid} <- Gate.check(input) do
-      {:ok, input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row/1)}
+      shopify? = PhoenixKitEcommerce.shopify_enabled?()
+      {:ok, input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row(&1, shopify?))}
     end
   end
 
-  defp plan_row(%{item: item, input: input}) do
-    case AvailabilityPlan.plan(input, item) do
+  defp plan_row(%{item: item, input: input}, shopify?) do
+    case AvailabilityPlan.plan(input, item, shopify_enabled?: shopify?) do
       {:ok, plan} -> {:ok, plan}
       {:error, errors} -> {:error, Rows.invalid(errors)}
     end

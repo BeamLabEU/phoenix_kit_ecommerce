@@ -309,6 +309,7 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
       ctx: ctx
     } do
       item = F.item!(catalogue, %{sku: "SP-DRY"})
+      logged = length(list_activities())
 
       rows = [
         %{"ref" => %{"sku" => "SP-DRY"}, "price" => "150.00"},
@@ -329,6 +330,7 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
 
       assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
       refute_activity_logged("item.updated", resource_uuid: item.uuid)
+      assert length(list_activities()) == logged
     end
 
     test "the fingerprint moves when a value the call reads changes in between", %{
@@ -451,21 +453,31 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
           }
         })
 
+      by_handle =
+        F.item!(catalogue, %{
+          data: %{
+            "_primary_language" => "en",
+            "ecommerce" => %{"shop_status" => "active", "shopify" => %{"handle" => "mug"}}
+          }
+        })
+
       plain = F.item!(catalogue)
 
       Settings.update_boolean_setting_with_module("shop_shopify_enabled", true, "shop")
 
-      assert {:ok, %{"results" => [a, b]}} =
+      assert {:ok, %{"results" => [a, b, h]}} =
                set_prices(
                  [
                    %{"ref" => %{"id" => linked.uuid}, "price" => "101.00"},
-                   %{"ref" => %{"id" => plain.uuid}, "price" => "101.00"}
+                   %{"ref" => %{"id" => plain.uuid}, "price" => "101.00"},
+                   %{"ref" => %{"id" => by_handle.uuid}, "price" => "101.00"}
                  ],
                  ctx
                )
 
       assert a["warnings"] == ["shopify_sync_may_overwrite"]
       assert b["warnings"] == []
+      assert h["warnings"] == ["shopify_sync_may_overwrite"]
 
       Settings.update_boolean_setting_with_module("shop_shopify_enabled", false, "shop")
 

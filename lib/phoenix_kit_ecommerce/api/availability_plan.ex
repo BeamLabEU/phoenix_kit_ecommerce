@@ -14,7 +14,8 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
   is not ready to be.
   """
 
-  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1, error: 3, put_if: 4]
+  import PhoenixKitEcommerce.API.PlanSupport,
+    only: [ecommerce: 1, error: 3, put_if: 4, shopify_sync_may_overwrite?: 2]
 
   alias PhoenixKitEcommerce.API.PricePlan
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
@@ -46,13 +47,17 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
     }
   end
 
-  @doc "Plans `row` (string keys) against `item`."
+  @doc """
+  Plans `row` (string keys) against `item`. With `shopify_enabled?: true` a
+  visibility change to a product linked to Shopify carries the
+  `shopify_sync_may_overwrite` warning: the sync writes the shop status too.
+  """
   @spec plan(map(), map(), keyword()) :: {:ok, map()} | {:error, [map()]}
-  def plan(row, item, _opts \\ []) when is_map(row) do
+  def plan(row, item, opts \\ []) when is_map(row) do
     cur = current(item)
 
     case validate(row, item, cur) do
-      [] -> row |> build(item, cur) |> validate_write()
+      [] -> row |> build(item, cur, opts) |> validate_write()
       errors -> {:error, errors}
     end
   end
@@ -101,7 +106,7 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
 
   defp publish_error(_visibility, _item, _cur), do: []
 
-  defp build(row, item, cur) do
+  defp build(row, item, cur, opts) do
     to = %{
       visibility: Map.get(row, "visibility", cur.visibility),
       made_to_order: Map.get(row, "made_to_order", cur.made_to_order),
@@ -119,7 +124,7 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
       changes: changes,
       changed?: changes != %{},
       dangerous?: false,
-      warnings: warnings(item),
+      warnings: warnings(item, changes, Keyword.get(opts, :shopify_enabled?, false)),
       attrs: attrs(changes, to),
       owned_paths: paths(changes)
     }
@@ -148,7 +153,17 @@ defmodule PhoenixKitEcommerce.API.AvailabilityPlan do
 
   # The catalogue's own status wins on the storefront: an item that is not
   # `active` in the catalogue stays hidden whatever the shop status says.
-  defp warnings(item), do: if(item.status == "active", do: [], else: ["item_not_active"])
+  defp warnings(item, changes, shopify_enabled?) do
+    []
+    |> maybe_warn(item.status != "active", "item_not_active")
+    |> maybe_warn(
+      Map.has_key?(changes, "visibility") and shopify_sync_may_overwrite?(item, shopify_enabled?),
+      "shopify_sync_may_overwrite"
+    )
+  end
+
+  defp maybe_warn(list, true, code), do: list ++ [code]
+  defp maybe_warn(list, false, _code), do: list
 
   # A stored price that is not a finite number (NaN, Infinity) is no price.
   defp unpriced?(item), do: is_nil(PricePlan.current(item).price)

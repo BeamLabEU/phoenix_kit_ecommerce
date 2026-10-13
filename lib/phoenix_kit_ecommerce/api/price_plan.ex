@@ -17,7 +17,8 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   stored numbers, and a rewrite would lose them).
   """
 
-  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1, error: 2, error: 3, put_if: 4]
+  import PhoenixKitEcommerce.API.PlanSupport,
+    only: [ecommerce: 1, error: 2, error: 3, put_if: 4, shopify_sync_may_overwrite?: 2]
 
   alias PhoenixKitEcommerce.API.Money
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
@@ -523,7 +524,7 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     []
     |> maybe_warn(compare_not_above?(to), "compare_at_not_above_price")
     |> maybe_warn(
-      Keyword.get(opts, :shopify_enabled?, false) and shopify_linked?(item),
+      shopify_sync_may_overwrite?(item, Keyword.get(opts, :shopify_enabled?, false)),
       "shopify_sync_may_overwrite"
     )
   end
@@ -532,13 +533,6 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
     do: not Decimal.gt?(compare_at, price)
 
   defp compare_not_above?(_to), do: false
-
-  defp shopify_linked?(item) do
-    case get_in(ecommerce(item), ["shopify", "product_id"]) do
-      id when is_binary(id) and id != "" -> true
-      _ -> false
-    end
-  end
 
   defp maybe_warn(list, true, code), do: list ++ [code]
   defp maybe_warn(list, false, _code), do: list
