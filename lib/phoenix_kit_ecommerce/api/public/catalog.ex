@@ -11,8 +11,11 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
 
   `shop.list_categories` answers an empty tree while the shop's catalogue is
   not active (archived, or not found), as every product of it is then not found.
-  Its counts come from the search index and can lag a changed product by the
-  re-index delay; the products themselves are always read live.
+  Its `count` is the number of categories in the answered tree, so it matches
+  what a caller can walk (a category inside a cycle of parents has no root and
+  is in neither). The per-category product counts come from the search index
+  and can lag a changed product by the re-index delay; the products themselves
+  are always read live.
   """
 
   alias PhoenixKitEcommerce, as: Shop
@@ -101,11 +104,16 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
 
       counts = Query.category_counts(context.language)
 
-      %{"categories" => tree(categories, counts, context), "count" => length(categories)}
+      tree = tree(categories, counts, context)
+
+      %{"categories" => tree, "count" => node_count(tree)}
     else
       %{"categories" => [], "count" => 0}
     end
   end
+
+  defp node_count(nodes),
+    do: Enum.reduce(nodes, 0, &(&2 + 1 + node_count(&1["children"])))
 
   defp tree(categories, counts, context) do
     by_parent = Enum.group_by(categories, & &1.parent_uuid)

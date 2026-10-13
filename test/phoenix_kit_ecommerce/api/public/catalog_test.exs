@@ -286,6 +286,24 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert Enum.find(out["categories"], &(&1["name"] == "Orphan"))["id"] == orphan.uuid
     end
 
+    test "a cycle of parents or a category that is its own parent is left out, and count matches the tree",
+         t do
+      loop_a = legacy_category!(%{"en" => "Loop A"})
+      loop_b = legacy_category!(%{"en" => "Loop B"}, %{parent_uuid: loop_a.uuid})
+      selfish = legacy_category!(%{"en" => "Selfish"})
+
+      for {uuid, parent} <- [{loop_a.uuid, loop_b.uuid}, {selfish.uuid, selfish.uuid}] do
+        {1, _} =
+          Repo.update_all(from(c in Category, where: c.uuid == ^uuid), set: [parent_uuid: parent])
+      end
+
+      out = list!()
+
+      assert [home] = out["categories"]
+      assert home["id"] == t.home
+      assert out["count"] == 3
+    end
+
     test "roots and children are ordered by position, then by name, whatever the creation order",
          t do
       # Created out of order, so neither creation order nor name order alone is the answer.
