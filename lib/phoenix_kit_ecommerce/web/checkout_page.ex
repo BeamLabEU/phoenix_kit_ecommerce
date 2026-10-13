@@ -1188,11 +1188,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   # A second click on "Confirm Order" lands here: the first one already made
-  # the order, so the shopper goes to it instead of reading an error.
-  defp handle_order_result({:error, :cart_not_active}, socket) do
+  # the order, so the shopper goes to it instead of reading an error. Two
+  # requests racing (two tabs) get `:cart_already_converting` when the loser
+  # waited on the winner's lock; the winner has committed by then.
+  defp handle_order_result({:error, reason}, socket)
+       when reason in [:cart_not_active, :cart_already_converting] do
     case Shop.converted_order_uuid(socket.assigns.cart.uuid) do
       nil ->
-        message = Errors.message(:cart_not_active)
+        message = Errors.message(reason)
 
         socket
         |> assign(:processing, false)

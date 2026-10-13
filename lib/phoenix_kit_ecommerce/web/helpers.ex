@@ -820,4 +820,33 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   def safe_return_to(_path), do: nil
+
+  @doc """
+  The valid UUIDs in a client-supplied selection, canonicalised.
+
+  A bulk action's `uuids` payload is client input that ends up in
+  `where x.uuid in ^ids`, where Ecto raises `Ecto.Query.CastError` on
+  anything that is not a UUID. Entries that are not UUIDs are dropped, and
+  anything that is not a list is an empty selection.
+  """
+  @spec cast_uuids(term()) :: [Ecto.UUID.t()]
+  def cast_uuids(uuids) when is_list(uuids) do
+    Enum.flat_map(uuids, fn uuid ->
+      case Ecto.UUID.cast(uuid) do
+        {:ok, uuid} -> [uuid]
+        :error -> []
+      end
+    end)
+  end
+
+  def cast_uuids(_other), do: []
+
+  @doc """
+  A client-supplied single UUID: `{:ok, nil}` for the empty string ("no
+  parent", "no category"), `{:ok, uuid}` for a valid one, `:error` otherwise.
+  """
+  @spec cast_optional_uuid(term()) :: {:ok, Ecto.UUID.t() | nil} | :error
+  def cast_optional_uuid(""), do: {:ok, nil}
+  def cast_optional_uuid(uuid) when is_binary(uuid), do: Ecto.UUID.cast(uuid)
+  def cast_optional_uuid(_other), do: :error
 end

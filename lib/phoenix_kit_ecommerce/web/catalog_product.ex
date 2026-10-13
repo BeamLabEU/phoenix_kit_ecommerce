@@ -1447,10 +1447,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   end
 
   # Format specification value for display
-  defp format_spec_value(true), do: "Yes"
-  defp format_spec_value(false), do: "No"
-  defp format_spec_value("true"), do: "Yes"
-  defp format_spec_value("false"), do: "No"
+  defp format_spec_value(true), do: gettext("Yes")
+  defp format_spec_value(false), do: gettext("No")
+  defp format_spec_value("true"), do: gettext("Yes")
+  defp format_spec_value("false"), do: gettext("No")
   defp format_spec_value(list) when is_list(list), do: Enum.join(list, ", ")
   defp format_spec_value(value) when is_binary(value), do: value
   defp format_spec_value(value) when is_number(value), do: to_string(value)
@@ -1719,13 +1719,20 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   defp refreshed_image(socket, product) do
     current = socket.assigns[:selected_image]
 
-    still_present? =
-      is_binary(current) and
-        Enum.any?(get_display_images(product), fn uuid ->
-          current == image_url(uuid) or current == uuid
-        end)
+    if is_binary(current) and current in selectable_image_urls(product) do
+      current
+    else
+      first_image(product)
+    end
+  end
 
-    if still_present?, do: current, else: first_image(product)
+  # The URLs `selected_image` can hold for this product: a storage image is
+  # selected by its signed "large" URL (never by its uuid), a legacy image by
+  # its own URL.
+  defp selectable_image_urls(product) do
+    storage = Enum.map(get_display_images(product), &get_storage_image_url(&1, "large"))
+    legacy = for image <- product.images || [], url = image_url(image), do: url
+    storage ++ legacy
   end
 
   defp storefront_cart_count(session_id, user_uuid) do

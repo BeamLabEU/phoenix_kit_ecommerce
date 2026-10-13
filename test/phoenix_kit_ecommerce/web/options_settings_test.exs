@@ -116,6 +116,20 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettingsTest do
   end
 
   describe "editing a page-fresh option" do
+    test "the key stays: a browser does not submit the disabled key input", %{conn: conn} do
+      {:ok, view, _html} = live(conn, @page)
+      render_click(view, "show_edit_modal", %{"key" => "color"})
+
+      # No "key" in the payload, and a label that slugifies onto another key.
+      render_submit(view, "save_option", %{
+        "option" => %{"label" => "Note", "type" => "select", "options" => %{"0" => "a"}}
+      })
+
+      assert stored("color")["label"] == "Note"
+      assert Enum.count(keys(), &(&1 == "note")) == 1
+      assert "color" in keys()
+    end
+
     test "a value the editor removed stays removed", %{conn: conn} do
       {:ok, view, _html} = live(conn, @page)
       render_click(view, "show_edit_modal", %{"key" => "color"})

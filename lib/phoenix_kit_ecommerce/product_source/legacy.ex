@@ -234,9 +234,6 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
 
   defp aggregate_single_filter(_filter, _category_uuid), do: []
 
-  # The products table as the `Product` schema itself targets it: its
-  # compile-time `@schema_prefix` (core's `PhoenixKit.SchemaPrefix`),
-  # quoted, or the bare source under the default `public` install.
   @impl PhoenixKitEcommerce.ProductSource
   def count_products(opts \\ []) do
     Product
@@ -266,6 +263,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
     Enum.map(rows, fn [key, count] -> %{key: key, count: count} end)
   end
 
+  # The products table as the `Product` schema itself targets it: its
+  # compile-time `@schema_prefix` (core's `PhoenixKit.SchemaPrefix`),
+  # quoted, or the bare source under the default `public` install.
   defp products_table do
     source = Product.__schema__(:source)
 

@@ -185,6 +185,13 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
     end
   end
 
+  # The key never changes on an edit: the form's key input is disabled, so a
+  # browser does not submit it and `build_option/1` would derive a new key
+  # from the label — renaming the option (possibly onto another option's
+  # key) while products keep their selections under the old one.
+  defp keep_editing_key(opt, %{"key" => key}), do: Map.put(opt, "key", key)
+  defp keep_editing_key(opt, _editing), do: opt
+
   defp save_option_change(nil, opt), do: Options.add_global_option(opt)
 
   # `base: editing` — the option as this page loaded it, so values added to
@@ -840,8 +847,8 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
 
   defp gated_event("save_option", %{"option" => params}, socket) do
     form_data = parse_form_params(params)
-    opt = build_option(form_data)
     editing = socket.assigns.editing_option
+    opt = form_data |> build_option() |> keep_editing_key(editing)
     action = if editing, do: "shop.global_option_updated", else: "shop.global_option_created"
 
     case save_option_change(editing, opt) do

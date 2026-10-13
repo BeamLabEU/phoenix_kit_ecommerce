@@ -114,7 +114,8 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
 
   # Redirects stay on here, unlike `AdminClient`: this request carries no
   # credential, and a `*.myshopify.com` storefront answers with a redirect
-  # to the store's primary domain whenever it has one.
+  # to the store's primary domain whenever it has one. The chain is short
+  # and a response that is not a product list is reported by shape only.
   defp do_fetch_products(shop_domain, opts) do
     # `retry: false` — this module owns 429 handling itself (the 429
     # clauses in `fetch_pages/6` below), because that requires resuming
@@ -125,7 +126,7 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
     # take 30+ real seconds to surface in tests before this module had
     # its own 429 handling.
     req =
-      [base_url: "https://#{shop_domain}", retry: false]
+      [base_url: "https://#{shop_domain}", retry: false, max_redirects: 3]
       |> Keyword.merge(Keyword.get(opts, :req_options, []))
       |> Req.new()
 
@@ -161,7 +162,7 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
         {:error, :rate_limited}
 
       {:ok, %{status: 200, body: body}} ->
-        {:error, {:unexpected_body, body}}
+        {:error, {:unexpected_body, body_summary(body)}}
 
       {:ok, %{status: status}} ->
         {:error, {:unexpected_status, status}}
@@ -170,6 +171,14 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClient do
         {:error, reason}
     end
   end
+
+  # What the error carries is shown to the operator, so it names the shape of
+  # the answer and never its content: a redirect to another host can make the
+  # body anything at all.
+  defp body_summary(body) when is_binary(body), do: {:text, byte_size(body)}
+  defp body_summary(body) when is_map(body), do: {:object, map_size(body)}
+  defp body_summary(body) when is_list(body), do: {:list, length(body)}
+  defp body_summary(_body), do: :other
 
   defp handle_page(_req, _page, acc, _page_delay_ms, [], _deadline), do: {:ok, Enum.reverse(acc)}
 

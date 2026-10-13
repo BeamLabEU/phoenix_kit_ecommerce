@@ -95,6 +95,31 @@ defmodule PhoenixKitEcommerce.Options do
   end
 
   @doc """
+  Changes the global option list under the writers' lock.
+
+  `fun` is handed the list as it is stored NOW and answers `{:ok, new_list,
+  result}`, `{:unchanged, result}` (nothing to write) or `{:error, reason}`;
+  the transaction yields `{:ok, result}`.
+  For a change that has to be derived from the whole list (re-pricing every
+  modifier), where `update_global_options/1` would write a copy read before
+  the lock and erase what another writer added in between.
+  """
+  @spec transform_global_options((list() ->
+                                    {:ok, list(), term()}
+                                    | {:unchanged, term()}
+                                    | {:error, term()})) ::
+          {:ok, term()} | {:error, term()}
+  def transform_global_options(fun) when is_function(fun, 1) do
+    change_global_options(fn current ->
+      case fun.(current) do
+        {:ok, _updated, _result} = changed -> changed
+        {:unchanged, _result} = unchanged -> unchanged
+        {:error, _reason} = error -> error
+      end
+    end)
+  end
+
+  @doc """
   Updates global option schema.
 
   Replaces the WHOLE list. A caller holding a list it read earlier erases
@@ -228,17 +253,30 @@ defmodule PhoenixKitEcommerce.Options do
   # changes it and writes it back. The advisory lock makes that sequence
   # exclusive, and `fun` is always handed the list as it is stored NOW, so a
   # writer can only ever apply its own change.
+  #
+  # `fun` answers `{:ok, list}` (the transaction then yields the written
+  # config row), `{:ok, list, result}` (it yields `result`) or
+  # `{:unchanged, result}` (nothing is written).
   defp change_global_options(fun) do
     repo().transaction(fn ->
       repo().query!("SELECT pg_advisory_xact_lock(hashtext($1))", [@global_options_lock])
-
-      with {:ok, updated} <- fun.(get_global_options()),
-           {:ok, config} <- write_global_options(updated) do
-        config
-      else
-        {:error, reason} -> repo().rollback(reason)
-      end
+      apply_global_change(fun.(get_global_options()))
     end)
+  end
+
+  defp apply_global_change({:ok, updated}), do: write_or_rollback(updated, & &1)
+
+  defp apply_global_change({:ok, updated, result}),
+    do: write_or_rollback(updated, fn _config -> result end)
+
+  defp apply_global_change({:unchanged, result}), do: result
+  defp apply_global_change({:error, reason}), do: repo().rollback(reason)
+
+  defp write_or_rollback(updated, finish) do
+    case write_global_options(updated) do
+      {:ok, config} -> finish.(config)
+      {:error, reason} -> repo().rollback(reason)
+    end
   end
 
   defp write_global_options(options) do
