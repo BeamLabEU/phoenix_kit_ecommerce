@@ -12,8 +12,8 @@ defmodule PhoenixKitEcommerce.API do
   | `ecommerce.attach_images` | `ecommerce.images:write` | `shop.manage_catalog` |
 
   The three write tools are offered only when core can hold a dangerous call
-  for confirmation (`confirmation_available?/0`): a core that cannot would run
-  a 90 % price cut on the first call.
+  for confirmation: a core that cannot would run a 90 % price cut on the
+  first call.
 
   The tools write the catalogue source only; on the legacy source they answer
   `unsupported_source`. Shopify is optional: nothing here needs a product to
@@ -35,7 +35,7 @@ defmodule PhoenixKitEcommerce.API do
   @doc """
   The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the
   tool registry. `markers` are the `{module, function, arity}` triples that
-  must exist for the write tools to be offered (see `confirmation_available?/1`).
+  must exist for the write tools to be offered; none at all means they are not.
   """
   @spec tools([{module(), atom(), arity()}]) :: [struct()]
   def tools(markers \\ @markers) do
@@ -46,14 +46,17 @@ defmodule PhoenixKitEcommerce.API do
     end
   end
 
-  @doc """
-  Whether core enforces the confirmation gate the write tools depend on:
-  every `{module, function, arity}` of `markers` is loaded and exported. The
-  default is the pair of functions core has only when it has both the
-  confirmation codes and the enforcement.
-  """
+  # Whether core enforces the confirmation gate the write tools depend on:
+  # every `{module, function, arity}` of `markers` is loaded and exported. The
+  # default is the pair of functions core has only when it has both the
+  # confirmation codes and the enforcement. No markers to judge by is "no":
+  # the write tools are offered only on positive evidence.
+  @doc false
   @spec confirmation_available?([{module(), atom(), arity()}]) :: boolean()
-  def confirmation_available?(markers \\ @markers) do
+  def confirmation_available?(markers \\ @markers)
+  def confirmation_available?([]), do: false
+
+  def confirmation_available?(markers) do
     Enum.all?(markers, fn {module, function, arity} ->
       Code.ensure_loaded?(module) and function_exported?(module, function, arity)
     end)
@@ -90,7 +93,8 @@ defmodule PhoenixKitEcommerce.API do
       title: "Get product prices",
       description:
         "Reads the price, the compare-at price, the option prices (price_modifiers), the visibility and the made-to-order flag of products, by id, sku or external_id. " <>
-          "shop_status_visible says whether the product's own status and shop_status let the storefront show it; it does not look at the product's category (a product in a hidden category stays hidden). Prices are decimal strings in the product's currency.",
+          "shop_status_visible says whether the product's own status and shop_status let the storefront show it; it does not look at the product's category (a product in a hidden category stays hidden). Prices are decimal strings in the product's currency." <>
+          @retry_note,
       input_schema: Schemas.get_prices_input(),
       output_schema: Schemas.batch_output(),
       handler: {__MODULE__, :get_prices},

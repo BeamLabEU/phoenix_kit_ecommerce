@@ -2,8 +2,8 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   @moduledoc """
   What the module hands to core's tool registry: the tools, their scopes and
   permissions, schemas that core's own validator accepts and that accept what
-  they should and refuse what they should, and the rule that the write tools exist only on a core that can hold a
-  dangerous call for confirmation.
+  they should and refuse what they should, and the rule that the write tools
+  exist only on a core that can hold a dangerous call for confirmation.
 
   Needs core's tool registry: tagged `:core_api`. The tests of the write tools
   are tagged `:core_confirm` (core also has the confirmation flow); the one
@@ -72,7 +72,6 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   describe "the confirmation markers" do
     test "a core that lacks any marker is not one that can hold a dangerous call" do
       assert PhoenixKitEcommerce.API.confirmation_available?([{Enum, :map, 2}])
-      assert PhoenixKitEcommerce.API.confirmation_available?([])
       refute PhoenixKitEcommerce.API.confirmation_available?([{Enum, :no_such_function, 1}])
       refute PhoenixKitEcommerce.API.confirmation_available?([{NoSuchModule, :gate, 1}])
 
@@ -82,8 +81,12 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
              ])
     end
 
+    test "no markers at all is not evidence that core can hold a dangerous call" do
+      refute PhoenixKitEcommerce.API.confirmation_available?([])
+    end
+
     test "with a marker missing only the read tool is offered" do
-      for markers <- [[{NoSuchModule, :gate, 1}], [{Enum, :map, 2}, {Enum, :nope, 9}]] do
+      for markers <- [[], [{NoSuchModule, :gate, 1}], [{Enum, :map, 2}, {Enum, :nope, 9}]] do
         assert ["ecommerce.get_prices"] ==
                  markers |> PhoenixKitEcommerce.API.tools() |> Enum.map(& &1.name)
       end
@@ -147,9 +150,9 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       end
     end
 
-    test "the read tool cannot answer with a transient reason, so its description does not mention one" do
+    test "the read tool can answer with unexpected (a ref lookup can fail), so it carries the retry note" do
       for reason <- ["database_error", "storage_error", "unexpected"] do
-        refute tools()["ecommerce.get_prices"].description =~ reason
+        assert tools()["ecommerce.get_prices"].description =~ reason
       end
     end
 
@@ -296,27 +299,20 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
                validate("ecommerce.attach_images", %{"items" => [Map.put(@row, "images", [])]})
     end
 
-    test "the set_prices description mentions the Shopify sync only while it is on" do
-      shopify = PhoenixKitEcommerce.shopify_enabled?()
+    test "the write descriptions mention the Shopify sync warning only while it is on" do
+      names = ["ecommerce.set_prices", "ecommerce.set_availability", "ecommerce.attach_images"]
 
-      on_exit(fn ->
-        PhoenixKit.Settings.update_boolean_setting_with_module(
-          "shop_shopify_enabled",
-          shopify,
-          "shop"
-        )
-      end)
+      for name <- names do
+        refute tools()[name].description =~ "shopify_sync_may_overwrite", "#{name} while off"
+      end
 
-      PhoenixKit.Settings.update_boolean_setting_with_module("shop_shopify_enabled", true, "shop")
-      assert tools()["ecommerce.set_prices"].description =~ "Shopify"
+      enable_shopify!()
 
-      PhoenixKit.Settings.update_boolean_setting_with_module(
-        "shop_shopify_enabled",
-        false,
-        "shop"
-      )
+      for name <- names do
+        assert tools()[name].description =~ "shopify_sync_may_overwrite", "#{name} while on"
+      end
 
-      refute tools()["ecommerce.set_prices"].description =~ "Shopify"
+      refute tools()["ecommerce.get_prices"].description =~ "shopify_sync_may_overwrite"
     end
   end
 end
