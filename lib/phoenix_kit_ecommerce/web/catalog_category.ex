@@ -150,10 +150,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
           |> Helpers.maybe_assign_admin_edit(
             Helpers.admin_edit_path(
               :category,
-              category.uuid,
+              category,
               Shop.category_url(category, current_language)
             ),
-            gettext("Edit Category")
+            gettext("Edit Category"),
+            permission: Helpers.admin_edit_permissions(category)
           )
 
         {:ok, socket}

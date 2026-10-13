@@ -190,7 +190,7 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
                               <span class="sm:hidden whitespace-nowrap">{gettext("View")}</span>
                             </.link>
                             <.link
-                              navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
+                              navigate={Helpers.admin_edit_path(:item, product, assigns[:url_path])}
                               class="btn btn-xs btn-outline btn-info tooltip tooltip-bottom"
                               data-tip={gettext("Edit")}
                             >
