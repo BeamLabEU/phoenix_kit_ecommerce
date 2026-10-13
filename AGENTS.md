@@ -49,7 +49,8 @@ pages.
   while `shop_shopify_enabled` is off) and Translations
   (`/admin/shop/translations`, hidden until `shop_translations_enabled`); a
   settings subtab at `/admin/shop/settings`; user-dashboard tabs Shop
-  (`/shop`) and My Cart (`/cart`). Public storefront routes: `/shop`,
+  (`/shop`) and My Cart (`/cart`, also in the avatar dropdown via the
+  `Tab` option `user_menu: true`). Public storefront routes: `/shop`,
   `/shop/category/:slug`, `/shop/product/:slug`, `/cart`, `/checkout`,
   `/checkout/complete/:uuid`.
 - **Module key** `"shop"`; settings prefix `shop_`.
@@ -767,11 +768,14 @@ Postgres connection settings come from `PGUSER` (default `postgres`),
 machine whose Postgres has no `postgres` role, export `PGUSER` or integration
 tests fail as pool timeouts that look like flakiness.
 
-Three tag families are excluded when their prerequisite is missing, and start
+Five tag families are excluded when their prerequisite is missing, and start
 running by themselves once the dep is upgraded: `:integration` (no database),
 `:requires_phoenix_kit_i18n_api` (core without
 `Dashboard.Tab.localized_label/1`), `:requires_core_transliteration` (core
-without `Utils.Slug` transliteration).
+without `Utils.Slug` transliteration), `:requires_core_user_menu` (core
+without `Dashboard.Tab.user_menu?/2`, the avatar-dropdown flag) and
+`:requires_billing_user_menu` (billing without `user_menu_with_shop?/1`, the
+gate on its own avatar-dropdown tabs).
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
