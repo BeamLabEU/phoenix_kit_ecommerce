@@ -128,17 +128,17 @@ defmodule PhoenixKitEcommerce.Web.Categories do
 
   @impl true
   def handle_event("open_status_modal", %{"uuids" => uuids}, socket) do
-    {:noreply, assign(socket, show_bulk_modal: "status", bulk_uuids: uuids)}
+    {:noreply, assign(socket, show_bulk_modal: "status", bulk_uuids: Helpers.cast_uuids(uuids))}
   end
 
   @impl true
   def handle_event("open_parent_modal", %{"uuids" => uuids}, socket) do
-    {:noreply, assign(socket, show_bulk_modal: "parent", bulk_uuids: uuids)}
+    {:noreply, assign(socket, show_bulk_modal: "parent", bulk_uuids: Helpers.cast_uuids(uuids))}
   end
 
   @impl true
   def handle_event("confirm_bulk_delete", %{"uuids" => uuids}, socket) do
-    {:noreply, assign(socket, show_bulk_modal: "delete", bulk_uuids: uuids)}
+    {:noreply, assign(socket, show_bulk_modal: "delete", bulk_uuids: Helpers.cast_uuids(uuids))}
   end
 
   @impl true
@@ -413,7 +413,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
           <:card_actions :let={category}>
             <.table_row_menu id={"card-menu-#{category.uuid}"}>
               <.table_row_menu_link
-                navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
+                navigate={Helpers.admin_edit_path(:category, category, assigns[:url_path])}
                 icon="hero-pencil"
                 label={gettext("Edit")}
               />
@@ -501,7 +501,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
                     <div class="flex justify-end">
                       <.table_row_menu id={"menu-#{category.uuid}"}>
                         <.table_row_menu_link
-                          navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
+                          navigate={Helpers.admin_edit_path(:category, category, assigns[:url_path])}
                           icon="hero-pencil"
                           label={gettext("Edit")}
                         />
@@ -711,29 +711,34 @@ defmodule PhoenixKitEcommerce.Web.Categories do
     end
   end
 
-  defp gated_event("bulk_change_parent", %{"parent_uuid" => parent_uuid}, socket) do
-    if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
-      uuids = socket.assigns.bulk_uuids
-      parent_uuid = if parent_uuid == "", do: nil, else: parent_uuid
-      count = Shop.bulk_update_category_parent(uuids, parent_uuid)
+  defp gated_event("bulk_change_parent", %{"parent_uuid" => raw_parent_uuid}, socket) do
+    case Helpers.cast_optional_uuid(raw_parent_uuid) do
+      {:ok, parent_uuid} ->
+        if Scope.has_module_access?(socket.assigns.phoenix_kit_current_scope, "shop") do
+          uuids = socket.assigns.bulk_uuids
+          count = Shop.bulk_update_category_parent(uuids, parent_uuid)
 
-      Activity.log("shop.categories_parent_changed",
-        actor_uuid: Activity.actor_uuid(socket),
-        actor_role: Activity.actor_role(socket),
-        resource_type: "category",
-        target_uuid: parent_uuid,
-        metadata: %{"count" => count}
-      )
+          Activity.log("shop.categories_parent_changed",
+            actor_uuid: Activity.actor_uuid(socket),
+            actor_role: Activity.actor_role(socket),
+            resource_type: "category",
+            target_uuid: parent_uuid,
+            metadata: %{"count" => count}
+          )
 
-      {:noreply,
-       socket
-       |> load_static_category_data()
-       |> load_filtered_categories()
-       |> assign(:bulk_uuids, [])
-       |> assign(:show_bulk_modal, nil)
-       |> put_flash(:info, gettext("%{count} categories updated", count: count))}
-    else
-      {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+          {:noreply,
+           socket
+           |> load_static_category_data()
+           |> load_filtered_categories()
+           |> assign(:bulk_uuids, [])
+           |> assign(:show_bulk_modal, nil)
+           |> put_flash(:info, gettext("%{count} categories updated", count: count))}
+        else
+          {:noreply, put_flash(socket, :error, gettext("Not authorized"))}
+        end
+
+      :error ->
+        Helpers.ignore_event("bulk_change_parent", socket)
     end
   end
 

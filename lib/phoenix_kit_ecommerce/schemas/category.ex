@@ -70,6 +70,11 @@ defmodule PhoenixKitEcommerce.Category do
     # migration.
     field :storefront_filters, :map, default: %{}, virtual: true
 
+    # Where this record comes from (see `Product`'s field of the same name):
+    # `:catalogue` only on the view-struct `Catalogue.View.category_view/2`
+    # builds, `:legacy` for every row of this table.
+    field :origin, Ecto.Enum, values: [:legacy, :catalogue], default: :legacy, virtual: true
+
     # Shipping box and weight for products that have none of their own. Not
     # columns: the changeset keeps them in `metadata["parcel_defaults"]`,
     # `with_parcel_defaults/1` fills them for forms.

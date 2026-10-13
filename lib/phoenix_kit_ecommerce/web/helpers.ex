@@ -23,6 +23,8 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling.Currency
+  alias PhoenixKitEcommerce.Category
+  alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.StorefrontCache
   alias PhoenixKitEcommerce.Translations
@@ -349,32 +351,66 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
-  Find the best enabled language that has a slug for this entity.
+  The entity's own language code (e.g. `"fr-FR"`) when it has a non-empty slug
+  for `language`, base-matched, else `nil` — i.e. whether it is genuinely
+  translated into the language a URL asked for.
 
-  Prefers the default language, then checks other enabled languages.
-  Returns nil if no valid language found.
+  The one definition of "translated" the storefront uses: the redirect
+  decision, the canonical language and the hreflang list all ask it, so a
+  blank slug (`""`, `nil`) counts as no translation everywhere.
   """
-  def best_redirect_language(slug_map) when slug_map == %{}, do: nil
+  @spec requested_translation_lang(map(), String.t()) :: String.t() | nil
+  def requested_translation_lang(entity, language) do
+    slug_language(entity.slug || %{}, language)
+  end
 
-  def best_redirect_language(slug_map) do
-    enabled = Languages.get_enabled_languages()
-    default_first = Enum.sort_by(enabled, fn l -> if l.is_default, do: 0, else: 1 end)
+  @doc "Whether `slug_map` holds a non-empty slug for `language` (base-matched)."
+  @spec slug_translated?(map() | nil, String.t()) :: boolean()
+  def slug_translated?(slug_map, language), do: slug_language(slug_map || %{}, language) != nil
 
-    Enum.find_value(default_first, fn lang ->
-      code = lang.code
-      base = DialectMapper.extract_base(code)
-      if Map.has_key?(slug_map, code) or Map.has_key?(slug_map, base), do: code
+  defp slug_language(slug_map, language) do
+    base = DialectMapper.extract_base(language)
+
+    Enum.find(Map.keys(slug_map), fn code ->
+      DialectMapper.extract_base(code) == base and Map.get(slug_map, code) not in [nil, ""]
     end)
   end
 
   @doc """
   Build a localized URL path, adding language prefix for non-default languages.
-  Delegates to Routes.path which handles default vs non-default consistently.
+  Delegates to Routes.path which handles default vs non-default consistently;
+  a single-language site gets no locale segment at all (`PhoenixKitEcommerce.url_locale/1`).
   """
   def build_lang_url(path, lang) do
-    base = DialectMapper.extract_base(lang)
-    Routes.path(path, locale: base)
+    Routes.path(path, locale: PhoenixKitEcommerce.url_locale(lang))
   end
+
+  @doc """
+  A storefront path for the page being rendered, in the page's own language.
+
+  `assigns` is the socket's (or a template's) assigns: the language comes from
+  `:current_locale`, falling back to the site's primary one. Every link a page
+  renders goes through this (or `PhoenixKitEcommerce.*_url/1`), so none of them
+  takes its locale segment from whatever Gettext happens to hold.
+
+  `query` (a map or keyword list) is appended as an encoded query string;
+  `Routes.path/2` reads only `:locale` and would drop it.
+  """
+  @spec page_path(map(), String.t(), Enumerable.t()) :: String.t()
+  def page_path(assigns, path, query \\ []) do
+    language = assigns[:current_locale] || Translations.default_language()
+    base = Routes.path(path, locale: PhoenixKitEcommerce.url_locale(language))
+
+    if Enum.empty?(query), do: base, else: base <> "?" <> URI.encode_query(query)
+  end
+
+  @doc """
+  Whether the storefront serves a single language: multi-language support is
+  off, so there is no other language to redirect a visitor to and no link
+  carries a locale segment.
+  """
+  @spec single_language?() :: boolean()
+  def single_language?, do: not Languages.enabled?()
 
   # ---------------------------------------------------------------------------
   # Pagination helpers
@@ -637,6 +673,13 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   `/admin/shop`, which asks for base `"shop"` — so that call site passes
   its own weaker permission rather than inheriting the catalog one.
 
+  `permission` may also be a list when the target needs several keys — a
+  catalogue item's editor belongs to the catalogue module, so it asks for
+  `"catalogue"` on top of the shop capability (see `admin_edit_permissions/1`).
+  Every key must pass `Scope.can?/2`; core's helper takes one key, so it is
+  handed the last of them, the one most specific to the editor. `nil` or an
+  empty list names no permission and yields no link.
+
   Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
   calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
   requirement, not an exact version, so a host running an older core that
@@ -645,11 +688,15 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   """
   def maybe_assign_admin_edit(socket, path, label, opts \\ []) do
     mod = @admin_edit_helper_mod
-    permission = Keyword.get(opts, :permission, "shop.manage_catalog")
+    permissions = opts |> Keyword.get(:permission, "shop.manage_catalog") |> List.wrap()
 
-    if Code.ensure_loaded?(mod) and function_exported?(mod, :assign_admin_edit, 3) and
-         can?(socket, permission) do
-      mod.assign_admin_edit(socket, path, label: label, permission: permission)
+    # `[]` is "no permission named", which `Enum.all?/2` would read as
+    # "every one held" — a link for anybody who can reach the admin area.
+    # An absent requirement must fail closed.
+    if permissions != [] and Code.ensure_loaded?(mod) and
+         function_exported?(mod, :assign_admin_edit, 3) and
+         Enum.all?(permissions, &can?(socket, &1)) do
+      mod.assign_admin_edit(socket, path, label: label, permission: List.last(permissions))
     else
       socket
     end
@@ -663,16 +710,40 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
-  Where the storefront's admin edit link should point for `kind` and `uuid`,
-  and where the editor should send the visitor back to.
+  The permissions the admin edit link for `record` (a product or a
+  category) needs, for `maybe_assign_admin_edit/4`.
 
-  The shop's products and categories live in `phoenix_kit_catalogue` once
-  the catalogue product source is on, so the link has to open the catalogue
-  editor rather than the legacy shop form, which no longer backs the page
-  being viewed. `return_to` is where the editor should send the visitor
-  back to — both catalogue forms validate it (`safe_return_to/1`) and use
-  it for their exit, so "edit, save, back to the page I was on" works
-  without reaching for the browser's back button. It is the page's
+  A legacy record opens the shop's own form: `"shop.manage_catalog"`. A
+  catalogue record opens `phoenix_kit_catalogue`'s editor, a different
+  module with its own gate, so the visitor also needs `"catalogue"` — without
+  it the button led an operator with shop rights only to a refusal.
+  """
+  @spec admin_edit_permissions(Product.t() | Category.t()) :: [String.t()]
+  def admin_edit_permissions(record) do
+    if catalogue_record?(record),
+      do: ["shop.manage_catalog", "catalogue"],
+      else: ["shop.manage_catalog"]
+  end
+
+  @doc """
+  Where the admin edit link for `record` should point, and where the editor
+  should send the visitor back to.
+
+  `kind` is `:item` for a product and `:category` for a category. The editor
+  is chosen by the record's own ORIGIN (`origin` on the struct): a record
+  built from a `phoenix_kit_catalogue` item or category opens the catalogue
+  editor, a row of the shop's own tables opens the shop form. It is
+  deliberately not decided by the global `shop_product_source` switch — that
+  says what the storefront lists, not what a given record is, and a store
+  holding both (legacy rows an import left behind next to catalogue items, a
+  source flipped after products existed) sent the operator to an editor
+  that has no such record.
+
+  `return_to` is where the editor should send the visitor
+  back to — the catalogue forms and the legacy shop forms all validate it
+  (the legacy ones with `safe_return_to/1`) and use it for their exit, so
+  "edit, save, back to the page I was on" works without reaching for the
+  browser's back button. It is the page's
   canonical URL rather than the exact one the visitor typed, and query
   state (a filter, a page number) is not carried back. Two reasons, and
   the second is the one that matters: these links are built in `mount/3`,
@@ -681,15 +752,35 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   query discarded, so building the link later would not carry the query
   either.
 
-  Falls back to the legacy shop path when the catalogue source is off or
-  the catalogue module isn't loaded at all (it is an optional dependency).
-  """
-  @spec admin_edit_path(:item | :category, String.t(), String.t() | nil) :: String.t()
-  def admin_edit_path(kind, uuid, return_to \\ nil)
+  A catalogue record falls back to the shop path when the catalogue module
+  isn't loaded at all (it is an optional dependency).
 
-  def admin_edit_path(kind, uuid, return_to) when kind in [:item, :category] do
+  **Deprecated:** a bare uuid in place of the record still works and keeps
+  the old behaviour — the editor is picked by the global product source,
+  since a uuid alone says nothing about where the record lives. Hosts that
+  built links with `admin_edit_path(:item, uuid, ...)` should pass the
+  record.
+  """
+  @spec admin_edit_path(
+          :item | :category,
+          Product.t() | Category.t() | Ecto.UUID.t(),
+          String.t() | nil
+        ) :: String.t()
+  def admin_edit_path(kind, record, return_to \\ nil)
+
+  def admin_edit_path(kind, uuid, return_to) when is_binary(uuid) do
+    origin = if catalogue_source?(), do: :catalogue, else: :legacy
+    edit_path(kind, uuid, origin, return_to)
+  end
+
+  def admin_edit_path(kind, record, return_to) when kind in [:item, :category] do
+    origin = if catalogue_record?(record), do: :catalogue, else: :legacy
+    edit_path(kind, record.uuid, origin, return_to)
+  end
+
+  defp edit_path(kind, uuid, origin, return_to) do
     path =
-      if catalogue_source?() and Code.ensure_loaded?(PhoenixKitCatalogue.Paths) do
+      if origin == :catalogue and Code.ensure_loaded?(PhoenixKitCatalogue.Paths) do
         catalogue_edit_path(kind, uuid)
       else
         legacy_edit_path(kind, uuid)
@@ -706,10 +797,61 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
 
   defp catalogue_source?, do: ProductSource.current() == ProductSource.Catalogue
 
+  defp catalogue_record?(%{origin: :catalogue}), do: true
+  defp catalogue_record?(_record), do: false
+
   defp append_return_to(path, return_to) when is_binary(return_to) and return_to != "" do
     separator = if String.contains?(path, "?"), do: "&", else: "?"
     path <> separator <> URI.encode_query(%{"return_to" => return_to})
   end
 
   defp append_return_to(path, _return_to), do: path
+
+  @doc """
+  The `return_to` query value if it is safe to navigate to, else `nil`.
+
+  The Edit links `admin_edit_path/3` builds append `?return_to=<page the
+  visitor came from>`, and the legacy product and category forms they can
+  open send the operator back there. The value is user input, so only a
+  path on this host is honoured: core's `Routes.local_path?/1` (a leading
+  `/`, but not `//` or `/\\`, no control characters) plus the two shapes
+  `push_navigate/2` itself refuses by raising, a backslash anywhere and
+  `/%09`. Anything else is ignored rather than followed, so the form behaves
+  as if no `return_to` was sent.
+  """
+  @spec safe_return_to(term()) :: String.t() | nil
+  def safe_return_to(path) when is_binary(path) do
+    if Routes.local_path?(path) and not String.contains?(path, ["\\", "/%09"]), do: path
+  end
+
+  def safe_return_to(_path), do: nil
+
+  @doc """
+  The valid UUIDs in a client-supplied selection, canonicalised.
+
+  A bulk action's `uuids` payload is client input that ends up in
+  `where x.uuid in ^ids`, where Ecto raises `Ecto.Query.CastError` on
+  anything that is not a UUID. Entries that are not UUIDs are dropped, and
+  anything that is not a list is an empty selection.
+  """
+  @spec cast_uuids(term()) :: [Ecto.UUID.t()]
+  def cast_uuids(uuids) when is_list(uuids) do
+    Enum.flat_map(uuids, fn uuid ->
+      case Ecto.UUID.cast(uuid) do
+        {:ok, uuid} -> [uuid]
+        :error -> []
+      end
+    end)
+  end
+
+  def cast_uuids(_other), do: []
+
+  @doc """
+  A client-supplied single UUID: `{:ok, nil}` for the empty string ("no
+  parent", "no category"), `{:ok, uuid}` for a valid one, `:error` otherwise.
+  """
+  @spec cast_optional_uuid(term()) :: {:ok, Ecto.UUID.t() | nil} | :error
+  def cast_optional_uuid(""), do: {:ok, nil}
+  def cast_optional_uuid(uuid) when is_binary(uuid), do: Ecto.UUID.cast(uuid)
+  def cast_optional_uuid(_other), do: :error
 end

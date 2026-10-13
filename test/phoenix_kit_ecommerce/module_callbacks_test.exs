@@ -13,6 +13,8 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
   """
   use ExUnit.Case, async: true
 
+  alias PhoenixKit.Dashboard.Tab
+
   test "css_sources/0 contributes this app to the host Tailwind build" do
     assert PhoenixKitEcommerce.css_sources() == [:phoenix_kit_ecommerce]
   end
@@ -94,5 +96,17 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
   test "version/0 is single-sourced from mix.exs" do
     assert PhoenixKitEcommerce.version() == Mix.Project.config()[:version]
+  end
+
+  # The avatar dropdown carries the shopper's own pages, not the catalogue:
+  # "My Cart" sits there beside billing's "My Orders", "Shop" stays in the nav.
+  @tag :requires_core_user_menu
+  test "user_dashboard_tabs/0 offers My Cart, and only My Cart, in the avatar dropdown" do
+    menu_ids =
+      for tab <- PhoenixKitEcommerce.user_dashboard_tabs(),
+          Tab.user_menu?(tab, nil),
+          do: tab.id
+
+    assert menu_ids == [:dashboard_cart]
   end
 end

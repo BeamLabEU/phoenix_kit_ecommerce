@@ -1818,6 +1818,16 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
     gettext("Shopify took too long to answer — try again shortly.")
   end
 
+  defp format_error({:redirect_refused, _reason}) do
+    gettext(
+      "Shopify's storefront redirected to an address that is not allowed — the sync was stopped."
+    )
+  end
+
+  defp format_error(:too_many_redirects) do
+    gettext("Shopify's storefront redirected too many times — the sync was stopped.")
+  end
+
   defp format_error(:unexpected_next_page_host) do
     gettext("Shopify's answer pointed at another host — the sync was stopped.")
   end

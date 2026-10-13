@@ -177,7 +177,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   def handle_event("open_status_modal", %{"uuids" => uuids}, socket) do
     {:noreply,
      socket
-     |> assign(:bulk_uuids, uuids)
+     |> assign(:bulk_uuids, Helpers.cast_uuids(uuids))
      |> assign(:show_bulk_modal, "status")}
   end
 
@@ -185,7 +185,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   def handle_event("open_category_modal", %{"uuids" => uuids}, socket) do
     {:noreply,
      socket
-     |> assign(:bulk_uuids, uuids)
+     |> assign(:bulk_uuids, Helpers.cast_uuids(uuids))
      |> assign(:show_bulk_modal, "category")}
   end
 
@@ -193,7 +193,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   def handle_event("confirm_bulk_delete", %{"uuids" => uuids}, socket) do
     {:noreply,
      socket
-     |> assign(:bulk_uuids, uuids)
+     |> assign(:bulk_uuids, Helpers.cast_uuids(uuids))
      |> assign(:show_bulk_modal, "delete")}
   end
 
@@ -475,7 +475,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                   label={gettext("View")}
                 />
                 <.table_row_menu_link
-                  navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
+                  navigate={Helpers.admin_edit_path(:item, product, assigns[:url_path])}
                   icon="hero-pencil"
                   label={gettext("Edit")}
                 />
@@ -603,7 +603,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                             label={gettext("View")}
                           />
                           <.table_row_menu_link
-                            navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
+                            navigate={Helpers.admin_edit_path(:item, product, assigns[:url_path])}
                             icon="hero-pencil"
                             label={gettext("Edit")}
                           />
@@ -992,26 +992,31 @@ defmodule PhoenixKitEcommerce.Web.Products do
      )}
   end
 
-  defp gated_event("bulk_change_category", %{"category_uuid" => category_uuid}, socket) do
-    uuids = socket.assigns.bulk_uuids
-    category_uuid = if category_uuid == "", do: nil, else: category_uuid
-    count = Shop.bulk_update_product_category(uuids, category_uuid)
+  defp gated_event("bulk_change_category", %{"category_uuid" => raw_category_uuid}, socket) do
+    case Helpers.cast_optional_uuid(raw_category_uuid) do
+      {:ok, category_uuid} ->
+        uuids = socket.assigns.bulk_uuids
+        count = Shop.bulk_update_product_category(uuids, category_uuid)
 
-    Activity.log("shop.products_category_changed",
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
-      resource_type: "product",
-      target_uuid: category_uuid,
-      metadata: %{"count" => count}
-    )
+        Activity.log("shop.products_category_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "product",
+          target_uuid: category_uuid,
+          metadata: %{"count" => count}
+        )
 
-    socket = load_products(socket)
+        socket = load_products(socket)
 
-    {:noreply,
-     socket
-     |> assign(:bulk_uuids, [])
-     |> assign(:show_bulk_modal, nil)
-     |> put_flash(:info, gettext("%{count} products moved", count: count))}
+        {:noreply,
+         socket
+         |> assign(:bulk_uuids, [])
+         |> assign(:show_bulk_modal, nil)
+         |> put_flash(:info, gettext("%{count} products moved", count: count))}
+
+      :error ->
+        Helpers.ignore_event("bulk_change_category", socket)
+    end
   end
 
   defp gated_event("bulk_delete", _params, socket) do

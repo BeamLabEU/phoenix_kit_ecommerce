@@ -29,6 +29,21 @@ defmodule PhoenixKitEcommerce.Web.ImportsMigrationProgressTest do
     refute render(view) =~ "Cancel Migration"
   end
 
+  test "a burst of per-product messages refreshes the stats once, after the interval", ctx do
+    {:ok, view, _html} = live(ctx.conn, @page)
+    message = {:product_migrated, %{product_uuid: Ecto.UUID.generate(), images_migrated: 1}}
+
+    for _ <- 1..5, do: send(view.pid, message)
+    _ = render(view)
+
+    assigns = fn -> :sys.get_state(view.pid).socket.assigns end
+    assert assigns.().migration_stats_refresh_pending
+
+    Process.sleep(1_200)
+    _ = render(view)
+    refute assigns.().migration_stats_refresh_pending
+  end
+
   test "the topics the pages subscribe to are the ones the workers publish on" do
     uuid = Ecto.UUID.generate()
 

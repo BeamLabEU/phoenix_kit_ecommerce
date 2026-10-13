@@ -49,7 +49,8 @@ pages.
   while `shop_shopify_enabled` is off) and Translations
   (`/admin/shop/translations`, hidden until `shop_translations_enabled`); a
   settings subtab at `/admin/shop/settings`; user-dashboard tabs Shop
-  (`/shop`) and My Cart (`/cart`). Public storefront routes: `/shop`,
+  (`/shop`) and My Cart (`/cart`, also in the avatar dropdown via the
+  `Tab` option `user_menu: true`). Public storefront routes: `/shop`,
   `/shop/category/:slug`, `/shop/product/:slug`, `/cart`, `/checkout`,
   `/checkout/complete/:uuid`.
 - **Module key** `"shop"`; settings prefix `shop_`.
@@ -241,6 +242,15 @@ Repo-local aliases:
 
 ### Landmines
 
+- **Code that builds a `Product` or `Category` view-struct must set
+  `origin`.** `origin` (virtual, `:legacy` by default) says where a record
+  comes from and so which editor its admin Edit link opens
+  (`Web.Helpers.admin_edit_path/3`): `ProductSource.Catalogue.View` sets
+  `:catalogue`, and a view-struct built anywhere else without it is sent to
+  the shop form, which has no such record. The link is NOT decided by the
+  global `shop_product_source` switch; a catalogue record also needs the
+  `"catalogue"` module key on top of `shop.manage_catalog`
+  (`Web.Helpers.admin_edit_permissions/1`).
 - **The test harness must apply billing's migration chain, not just core's.**
   This module reads and writes billing's schemas directly, and billing owns
   `phoenix_kit_currencies` from its own V2 on, so a test database built from
@@ -812,8 +822,12 @@ makes in production), then executes this module's own chain on top via
 `PhoenixKit.PubSub.Manager`, `PhoenixKit.ModuleRegistry` (registered with this
 module — without it every `Scope.can?/2` answers false and the authorization
 tests would pass for the wrong reason), `PhoenixKit.Users.RateLimiter.Backend`,
-and the test Endpoint. It forces core's URL prefix to `/`, so admin paths in
-tests carry the default-locale prefix (`/en/admin/shop`).
+and the test Endpoint. It forces core's URL prefix to `/`. Admin paths in
+tests carry the default-locale prefix (`/en/admin/shop`) on a core that always
+emits one; a core with the URL language policy drops the segment on a
+single-language site (`/admin/shop`). The test router serves BOTH shapes inside
+one `live_session`, because a `push_patch` may not cross sessions — so build an
+expected admin href with `Routes.path/1`, never as a literal.
 
 Support modules under `test/support/` are loaded with explicit
 `Code.require_file/2` — Elixir 1.19's `mix test` no longer auto-loads them at
@@ -833,11 +847,19 @@ Postgres connection settings come from `PGUSER` (default `postgres`),
 machine whose Postgres has no `postgres` role, export `PGUSER` or integration
 tests fail as pool timeouts that look like flakiness.
 
-Three tag families are excluded when their prerequisite is missing, and start
+Six tag families are excluded when their prerequisite is missing, and start
 running by themselves once the dep is upgraded: `:integration` (no database),
 `:requires_phoenix_kit_i18n_api` (core without
 `Dashboard.Tab.localized_label/1`), `:requires_core_transliteration` (core
-without `Utils.Slug` transliteration).
+without `Utils.Slug` transliteration), `:requires_core_user_menu` (core
+without `Dashboard.Tab.user_menu?/2`, the avatar-dropdown flag),
+`:requires_billing_user_menu` (billing without `user_menu_with_shop?/1`, the
+gate on its own avatar-dropdown tabs) and `:requires_core_single_language`
+(core without `Languages.set_primary_language/1`, i.e. before the URL
+language policy: a switched-off multi-language site's primary language is
+then `"en"`, not the stored default). The single-language link tests
+(`single_language_links_test.exs`) are written to pass on both kinds of core;
+run them against a core with the policy too (`PHOENIX_KIT_PATH=…`).
 
 The admin API's tests need a core with the tool registry, a catalogue with the
 admin API and `phoenix_kit_warehouse` with source kinds, none of which this

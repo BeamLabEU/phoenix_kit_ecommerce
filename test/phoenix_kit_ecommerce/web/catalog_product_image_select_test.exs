@@ -84,4 +84,34 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductImageSelectTest do
     refute render(view) =~ url
     assert render_click(view, "select_image", %{"url" => url}) =~ url
   end
+
+  test "a refresh keeps the thumbnail the visitor picked", %{conn: conn} do
+    user = fixture_user()
+    [first, second] = [store(user.uuid), store(user.uuid)]
+    n = System.unique_integer([:positive])
+
+    {:ok, product} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Gallery #{n}", lang() => "Gallery #{n}"},
+        "slug" => %{lang() => "gallery-#{n}"},
+        "price" => Decimal.new("40.00"),
+        "status" => "active",
+        "currency" => "USD",
+        "image_uuids" => [first, second]
+      })
+
+    {:ok, view, _html} = live(conn, "/shop/product/#{product.slug[lang()]}")
+    thumb = fn uuid -> view |> element(~s(button[phx-value-uuid="#{uuid}"])) |> render() end
+
+    assert thumb.(first) =~ "border-primary"
+    render_click(view, "select_storage_image", %{"uuid" => second})
+    assert thumb.(second) =~ "border-primary"
+
+    # Any product broadcast re-reads the product; the pick must survive it.
+    send(view.pid, {:product_updated, %{uuid: product.uuid}})
+    _ = render(view)
+
+    assert thumb.(second) =~ "border-primary"
+    refute thumb.(first) =~ "border-primary"
+  end
 end
