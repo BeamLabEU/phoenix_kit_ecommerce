@@ -680,19 +680,38 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   `opts[:active_uuids]`; `sync_images/3`'s result carries both, merged
   with whatever that product just downloaded, for the next product in
   the run.
+
+  With a list of query-stripped keys (`ImageDownloader.source_key/1`) only
+  the files that answer to one of those keys are read: those whose own
+  `source_url`, query stripped, is a key, and those that list a key in
+  `source_url_aliases`. The index is built by the same `source_url_index/1`,
+  and `active_uuids` then holds the uuids of those files only. The admin
+  API's `attach_images` uses this form, so one call does not read the whole
+  media library.
   """
-  @spec build_reuse_index() :: %{
+  @spec build_reuse_index(:all | [String.t()]) :: %{
           url_index: %{optional(String.t()) => String.t()},
           active_uuids: MapSet.t(String.t())
         }
-  def build_reuse_index do
-    files =
-      from(f in StorageFile,
-        where: f.status == "active" and fragment("?->>'source_url' IS NOT NULL", f.metadata)
-      )
-      |> RepoHelper.repo().all()
+  def build_reuse_index(keys \\ :all) do
+    files = keys |> reuse_files_query() |> RepoHelper.repo().all()
 
     %{url_index: source_url_index(files), active_uuids: MapSet.new(files, & &1.uuid)}
+  end
+
+  defp reuse_files_query(:all) do
+    from(f in StorageFile,
+      where: f.status == "active" and fragment("?->>'source_url' IS NOT NULL", f.metadata)
+    )
+  end
+
+  defp reuse_files_query(keys) when is_list(keys) do
+    from(f in StorageFile,
+      where:
+        f.status == "active" and
+          (fragment("split_part(?->>'source_url', chr(63), 1) = ANY(?)", f.metadata, ^keys) or
+             fragment("jsonb_exists_any(?->'source_url_aliases', ?)", f.metadata, ^keys))
+    )
   end
 
   # Indexes files by their (query-stripped) download source URL. When

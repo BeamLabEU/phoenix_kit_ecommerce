@@ -1,0 +1,352 @@
+defmodule PhoenixKitEcommerce.API.AttachImages do
+  @moduledoc """
+  `ecommerce.attach_images`: attaches pictures, given by URL, to products.
+  It uses the importer's downloader, with its size limit, its
+  content-type check and its near-duplicate reuse, and **always** with the
+  private-network guard on: an API caller is not the shop's own CSV import,
+  so `shop_image_import_allow_private_networks` does not apply to it.
+
+  A picture whose URL (query stripped) is already stored is reused without a
+  download. New pictures are appended after the ones the product has; a
+  picture marked `"featured": true` becomes the featured one, and a product
+  with no featured picture gets its first new one. At most 20 pictures per
+  call, each at most `max_image_bytes/0` (10 MB, a fifth of the importer's
+  own default). The call is synchronous. A signed URL's query string is a
+  credential: the downloader is told to redact it from its log lines and
+  from the `source_url` it stores, and no answer repeats it.
+
+  With `ctx.dry_run?` the URLs are checked (scheme, host, resolution into a
+  private range) and nothing is fetched or stored.
+
+  The catalogue logs the attachment as an ordinary item update by the key's
+  owner; the module adds its own entry, `shop.api_images_attached`, which
+  carries the API metadata (tool, key prefix, request id) and the counts.
+  """
+
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Attachments}
+
+  require Logger
+
+  alias PhoenixKitCatalogue.Attachments
+  alias PhoenixKitEcommerce.API.{Batch, Gate, Meta, PlanSupport, Rows}
+  alias PhoenixKitEcommerce.Catalogue.Writer
+  alias PhoenixKitEcommerce.Services.ImageDownloader
+  alias PhoenixKitEcommerce.StorefrontCache
+
+  @tool "ecommerce.attach_images"
+  @max_images 20
+  @max_image_bytes 10 * 1024 * 1024
+
+  @doc "The most pictures one call may attach."
+  @spec max_images() :: pos_integer()
+  def max_images, do: @max_images
+
+  @doc "The most bytes one downloaded picture may have."
+  @spec max_image_bytes() :: pos_integer()
+  def max_image_bytes, do: @max_image_bytes
+
+  @doc """
+  Rate-limit units of one call: one per picture asked for, at least one. It
+  is the tool's `cost` on a core that has the field: core's default rule
+  prices a write by rows (`max(1, ceil(rows / 50))`), which would make a call
+  that downloads up to 20 pictures cost one unit.
+
+  Called with the raw, unvalidated input (the limiter runs before the
+  validator), so it accepts anything.
+  """
+  @spec cost(term()) :: pos_integer()
+  def cost(%{"items" => rows}) when is_list(rows) do
+    rows
+    |> Enum.map(fn
+      %{"images" => images} when is_list(images) -> length(images)
+      _row -> 0
+    end)
+    |> Enum.sum()
+    |> max(1)
+  end
+
+  def cost(_input), do: 1
+
+  @doc "Handler of the tool."
+  @spec run(map(), map()) ::
+          {:ok, map()} | {:preview, map(), String.t()} | Gate.refusal()
+  def run(input, ctx) do
+    with {:ok, catalogue_uuid} <- Gate.check(input),
+         :ok <- check_total(input) do
+      rows = input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row/1)
+
+      if Map.get(ctx, :dry_run?, false) do
+        {:preview, Batch.preview(rows), Batch.fingerprint(rows)}
+      else
+        {:ok, rows |> attach(ctx) |> Batch.render()}
+      end
+    end
+  end
+
+  defp check_total(input) do
+    total = input["items"] |> Enum.map(&length(Map.get(&1, "images", []))) |> Enum.sum()
+
+    if total <= @max_images do
+      :ok
+    else
+      {:error, :validation_failed, "At most #{@max_images} images per call.",
+       %{
+         errors: [
+           %{
+             path: "items",
+             message: "has #{total} images in total",
+             limit: @max_images,
+             allowed: nil
+           }
+         ]
+       }}
+    end
+  end
+
+  # -- planning ---------------------------------------------------------------
+
+  defp plan_row(%{item: item, input: input}) do
+    images = Map.get(input, "images", [])
+
+    errors =
+      featured_errors(images) ++
+        (images |> Enum.with_index() |> Enum.flat_map(&url_errors/1))
+
+    if errors == [] do
+      existing = existing_order(item)
+
+      {:ok,
+       %{
+         from: %{media_order: existing},
+         changes: %{"images" => %{"add" => length(images)}},
+         changed?: images != [],
+         dangerous?: false,
+         warnings: [],
+         images: images
+       }}
+    else
+      {:error, Rows.invalid(errors)}
+    end
+  end
+
+  defp featured_errors(images) do
+    if Enum.count(images, &(&1["featured"] == true)) > 1,
+      do: [PlanSupport.error("images", "at most one image can be featured")],
+      else: []
+  end
+
+  defp url_errors({%{"url" => url}, index}) do
+    case ImageDownloader.check_url(url, private_networks: :forbid) do
+      :ok ->
+        []
+
+      {:error, reason} ->
+        [PlanSupport.error("images[#{index}].url", reason_text(reason))]
+    end
+  end
+
+  defp url_errors({_image, index}),
+    do: [PlanSupport.error("images[#{index}].url", "is required")]
+
+  # -- attaching --------------------------------------------------------------
+
+  defp attach(rows, ctx) do
+    index = reuse_index(rows)
+
+    Enum.map(rows, fn
+      %{plan: %{changed?: true}} = row -> attach_row(row, index, ctx)
+      row -> row
+    end)
+  end
+
+  # URL -> file uuid for the pictures of this call only (at most 20 keys).
+  defp reuse_index(rows) do
+    keys =
+      for %{plan: %{changed?: true, images: images}} <- rows,
+          %{"url" => url} <- images,
+          uniq: true,
+          do: ImageDownloader.source_key(url)
+
+    case keys do
+      [] -> %{}
+      keys -> Writer.build_reuse_index(keys).url_index
+    end
+  end
+
+  defp attach_row(%{item: item, plan: plan} = row, url_index, ctx) do
+    user_uuid = Meta.actor_uuid(ctx)
+    {resolved, failures} = resolve(plan.images, url_index, user_uuid)
+
+    existing = plan.from.media_order
+    new = resolved |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Kernel.--(existing)
+    featured = featured_uuid(plan.images, resolved, item, new)
+    reused = Enum.count(resolved, &(elem(&1, 2) == :reused))
+
+    extra = %{
+      "attached" => length(new),
+      "reused" => reused,
+      "downloaded" => length(resolved) - reused,
+      "failed" => failures
+    }
+
+    change? = new != [] or featured_changes?(featured, item)
+
+    cond do
+      change? ->
+        store(row, new, featured, user_uuid, extra, ctx)
+
+      failures != [] ->
+        Batch.fail(
+          row,
+          Rows.error(:validation_failed, "No picture could be fetched.", %{"images" => failures})
+        )
+
+      true ->
+        %{row | plan: %{plan | changed?: false}, extra: extra}
+    end
+  end
+
+  defp store(%{item: item, plan: plan} = row, new, featured, user_uuid, extra, ctx) do
+    opts = [featured: featured, order: plan.from.media_order ++ new, actor_uuid: user_uuid]
+
+    case Attachments.attach_files(item, new, opts) do
+      {:ok, updated} ->
+        StorefrontCache.clear()
+        log(updated, ctx, extra)
+        changes = %{"images" => %{"add" => length(new)}}
+
+        %{
+          row
+          | item: updated,
+            result: {:ok, updated},
+            plan: %{plan | changes: changes},
+            extra: extra
+        }
+
+      {:error, reason} ->
+        # The term can carry driver text or constraint names, so the log gets
+        # its shape only; the answer gets a fixed sentence.
+        Logger.error(
+          "[attach_images] request #{Map.get(ctx, :request_id)}: attach_files failed: " <>
+            Meta.term_class(reason)
+        )
+
+        Batch.fail(
+          row,
+          Rows.error(:validation_failed, "The pictures could not be attached.", %{
+            "reason" => "storage_error"
+          })
+        )
+    end
+  end
+
+  # `[{url, file_uuid, :reused | :downloaded}]` in the order given, and the
+  # failures as JSON-ready maps. A URL already stored (query stripped) is
+  # reused; the rest go through the downloader in one concurrent batch.
+  defp resolve(images, url_index, user_uuid) do
+    urls = Enum.map(images, & &1["url"])
+
+    downloaded =
+      urls
+      |> Enum.reject(&Map.has_key?(url_index, ImageDownloader.source_key(&1)))
+      |> Enum.uniq()
+      |> ImageDownloader.download_batch(user_uuid, download_opts())
+      |> Map.new()
+
+    {ok, failed} =
+      Enum.reduce(urls, {[], []}, fn url, {ok, failed} ->
+        case lookup(url, url_index, downloaded) do
+          {:ok, uuid, how} ->
+            {[{url, uuid, how} | ok], failed}
+
+          {:error, reason} ->
+            {ok, [%{"url" => strip_query(url), "reason" => reason_text(reason)} | failed]}
+        end
+      end)
+
+    {Enum.reverse(ok), Enum.reverse(failed)}
+  end
+
+  defp lookup(url, url_index, downloaded) do
+    case Map.fetch(url_index, ImageDownloader.source_key(url)) do
+      {:ok, uuid} ->
+        {:ok, uuid, :reused}
+
+      :error ->
+        case Map.get(downloaded, url) do
+          {:ok, uuid} -> {:ok, uuid, :downloaded}
+          {:error, reason} -> {:error, reason}
+          nil -> {:error, :unknown}
+        end
+    end
+  end
+
+  defp download_opts do
+    [
+      timeout: 15_000,
+      concurrency: 4,
+      max_bytes: @max_image_bytes,
+      private_networks: :forbid,
+      redact_query: true
+    ] ++ Application.get_env(:phoenix_kit_ecommerce, :api_image_download_opts, [])
+  end
+
+  # The picture marked featured, if its file is known; else, when the product
+  # has no featured picture yet, the first new one; else nothing changes.
+  defp featured_uuid(images, resolved, item, new) do
+    flagged_url =
+      Enum.find_value(images, fn image -> if image["featured"] == true, do: image["url"] end)
+
+    flagged =
+      flagged_url &&
+        Enum.find_value(resolved, fn {url, uuid, _how} -> if url == flagged_url, do: uuid end)
+
+    cond do
+      flagged -> flagged
+      is_nil(current_featured(item)) -> List.first(new)
+      true -> nil
+    end
+  end
+
+  defp featured_changes?(featured, item),
+    do: not is_nil(featured) and featured != current_featured(item)
+
+  defp current_featured(item), do: get_in(item.data || %{}, ["featured_image_uuid"])
+
+  defp existing_order(item) do
+    case get_in(item.data || %{}, ["media_order"]) do
+      list when is_list(list) -> list
+      _ -> []
+    end
+  end
+
+  defp log(item, ctx, extra) do
+    PhoenixKitEcommerce.Activity.log("shop.api_images_attached",
+      actor_uuid: Meta.actor_uuid(ctx),
+      resource_type: "product",
+      resource_uuid: item.uuid,
+      metadata:
+        Map.merge(Meta.log_metadata(ctx, @tool), %{
+          "attached" => extra["attached"],
+          "reused" => extra["reused"],
+          "downloaded" => extra["downloaded"],
+          "failed" => length(extra["failed"])
+        })
+    )
+  end
+
+  # The URL without its query string: a signed URL carries a credential, and
+  # an answer or a log line must not repeat it.
+  defp strip_query(url), do: url |> String.split("?", parts: 2) |> hd()
+
+  defp reason_text(:private_address_blocked), do: "the address is private or does not resolve"
+  defp reason_text(:invalid_scheme), do: "only http and https URLs are accepted"
+  defp reason_text(:invalid_host), do: "the URL has no host"
+  defp reason_text(:timeout), do: "the download timed out"
+  defp reason_text(:not_found), do: "the server answered 404"
+  defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp reason_text({:invalid_content_type, type}), do: "not an accepted image type: #{type}"
+  defp reason_text({:file_too_large, message}) when is_binary(message), do: message
+  defp reason_text(reason) when is_binary(reason), do: reason
+  defp reason_text(_reason), do: "the picture could not be fetched"
+end
