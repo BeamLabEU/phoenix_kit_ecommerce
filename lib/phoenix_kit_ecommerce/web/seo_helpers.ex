@@ -10,9 +10,10 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   the language is that domain's default.
 
   hreflang inclusion for slug-translated pages is decided on the RAW slug
-  map (`Map.has_key?(entity.slug, lang)`) — `SlugResolver` silently falls
-  back to the default-language slug, which must never produce an hreflang
-  entry mislabelling the fallback URL as a translation.
+  map (a non-empty slug for the language, `Helpers.slug_translated?/2`) —
+  `SlugResolver` silently falls back to the default-language slug, which
+  must never produce an hreflang entry mislabelling the fallback URL as a
+  translation.
 
   The share image (`og.image`, which core's root layout turns into
   `og:image`, `twitter:image` and a `summary_large_image` card) is the
@@ -43,8 +44,13 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
       Translations.get(product, :seo_description, language) |> presence() ||
         Translations.get(product, :description, language) |> presence()
 
+    canonical_lang = canonical_language(product, language)
+
     canonical =
-      canonical_absolute_url(language, PhoenixKitEcommerce.product_url(product, language))
+      canonical_absolute_url(
+        canonical_lang,
+        PhoenixKitEcommerce.product_url(product, canonical_lang)
+      )
 
     %{
       page_title: title,
@@ -70,8 +76,13 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
   def category_seo(category, language) do
     name = Translations.get_display(category, :name, language)
 
+    canonical_lang = canonical_language(category, language)
+
     canonical =
-      canonical_absolute_url(language, PhoenixKitEcommerce.category_url(category, language))
+      canonical_absolute_url(
+        canonical_lang,
+        PhoenixKitEcommerce.category_url(category, canonical_lang)
+      )
 
     %{
       canonical_url: canonical,
@@ -158,6 +169,38 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
     end
   end
 
+  # The language whose URL is the page's canonical.
+  #
+  # A page renders under the language the visitor asked for even when the
+  # product has no slug in it (it shows the primary slug there). That URL is
+  # a duplicate of the language the slug really belongs to, so its canonical
+  # points there: the primary language when it has a slug, otherwise the first
+  # enabled language that does. A page whose language has a slug of its own —
+  # and every page of a single-language site, which has one URL per page — is
+  # its own canonical.
+  defp canonical_language(entity, language) do
+    slug_map = Map.get(entity, :slug) || %{}
+
+    cond do
+      not Languages.enabled?() -> language
+      translated?(slug_map, language) -> language
+      true -> real_slug_language(slug_map, language)
+    end
+  end
+
+  defp real_slug_language(slug_map, language) do
+    primary = Translations.default_language()
+
+    if translated?(slug_map, primary) do
+      primary
+    else
+      case Enum.find(enabled_languages(), &translated?(slug_map, &1.code)) do
+        %{code: code} -> code
+        nil -> language
+      end
+    end
+  end
+
   defp slug_translated_hreflang(entity, url_fun) do
     slug_map = Map.get(entity, :slug) || %{}
 
@@ -169,12 +212,10 @@ defmodule PhoenixKitEcommerce.Web.SEOHelpers do
     |> dedup_or_empty()
   end
 
-  # A language counts as translated only when the raw slug map has a key
-  # for it (exact or base form) — never via SlugResolver's silent fallback.
-  defp translated?(slug_map, code) do
-    base = DialectMapper.extract_base(code)
-    Map.has_key?(slug_map, code) or Map.has_key?(slug_map, base)
-  end
+  # A language counts as translated only when the raw slug map has a
+  # NON-EMPTY slug for it (exact or base form) — never via SlugResolver's
+  # silent fallback, and never for a blank value.
+  defp translated?(slug_map, code), do: Helpers.slug_translated?(slug_map, code)
 
   defp dedup_or_empty(links) do
     links = Enum.uniq_by(links, & &1.code)
