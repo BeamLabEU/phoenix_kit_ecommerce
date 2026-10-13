@@ -7,6 +7,11 @@ defmodule PhoenixKitEcommerce.API.PublicToolsTest do
 
   @moduletag :requires_core_api
 
+  @compile {:no_warn_undefined,
+            [PhoenixKit.API.Registry, PhoenixKit.API.Tool, PhoenixKit.API.ToolLint]}
+
+  import ExUnit.CaptureLog
+
   alias PhoenixKit.API.Registry
   alias PhoenixKit.API.Tool
   alias PhoenixKit.API.ToolLint
@@ -53,6 +58,21 @@ defmodule PhoenixKitEcommerce.API.PublicToolsTest do
     assert length(tools()) == 5
     assert tools() |> Enum.map(& &1.name) |> Enum.sort() == @names
     assert Enum.all?(tools(), &match?({:ok, _}, Tool.validate(&1)))
+  end
+
+  test "a tool core refuses is left out and logged once, however often the tools are asked for" do
+    name = "shop.refused_#{System.unique_integer([:positive])}"
+    on_exit(fn -> :persistent_term.erase({PublicTools, :refused, name}) end)
+
+    # No handler, no schemas: core's Tool.new/1 refuses it.
+    refused = [name: name, audience: :public, title: "Refused tool", description: "Nothing."]
+
+    log =
+      capture_log(fn ->
+        for _ <- 1..5, do: assert(PublicTools.build_all([refused]) == [])
+      end)
+
+    assert length(String.split(log, "public tool #{name} is invalid")) == 2
   end
 
   test "core's module-author lint passes on the set" do

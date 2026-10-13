@@ -4,18 +4,20 @@ defmodule PhoenixKitEcommerce.API.PublicTools do
   categories and similar products. Declared to core through
   `PhoenixKitEcommerce.api_tools/0`; core's executor validates the input
   against the schemas below, rate-limits, calls the handler and shapes the
-  answer. The cart tools are appended to this list by their own module.
+  answer.
 
   No tool here needs a key, a scope or a permission (`audience: :public`); the
   API switch (`api_public_enabled`) and the website password gate are core's.
 
-  This is the only lib module that names a `PhoenixKit.API.*` module. It is
-  guarded the way the admin tools' `API.tools/0` is, so the package still
-  compiles with `--warnings-as-errors` against a released core that has no
-  shop API: there `tools/0` answers `[]` and `api_tools/0` is never called.
+  This is the only lib module that names a `PhoenixKit.API.*` module. It
+  checks with `Code.ensure_loaded?/1` that core has `PhoenixKit.API.Tool`, so
+  the package still compiles with `--warnings-as-errors` against a released
+  core that has no shop API: there `tools/0` answers `[]` and `api_tools/0` is
+  never called.
 
-  A tool that core refuses is left out and logged; it never takes the other
-  tools (or the module's other API tools) down with it.
+  A tool that core refuses is left out and logged once; it never takes the
+  other tools (or the module's other API tools) down with it. Core asks for the
+  tools on every request, so the log line must not depend on request traffic.
   """
 
   require Logger
@@ -30,8 +32,13 @@ defmodule PhoenixKitEcommerce.API.PublicTools do
 
   @spec tools() :: [struct()]
   def tools do
-    if Code.ensure_loaded?(Tool), do: Enum.flat_map(specs(), &build/1), else: []
+    if Code.ensure_loaded?(Tool), do: build_all(specs()), else: []
   end
+
+  @doc false
+  # Public for the test: builds the given specs, dropping (and logging once) the refused.
+  @spec build_all([keyword()]) :: [struct()]
+  def build_all(specs), do: Enum.flat_map(specs, &build/1)
 
   defp build(attrs) do
     case Tool.new(attrs) do
@@ -39,12 +46,20 @@ defmodule PhoenixKitEcommerce.API.PublicTools do
         [tool]
 
       {:error, messages} ->
-        Logger.warning(
-          "[PhoenixKitEcommerce] public tool #{attrs[:name]} is invalid: " <>
-            Enum.join(messages, "; ")
-        )
-
+        log_once(attrs[:name], messages)
         []
+    end
+  end
+
+  defp log_once(name, messages) do
+    key = {__MODULE__, :refused, name}
+
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "[PhoenixKitEcommerce] public tool #{name} is invalid: " <> Enum.join(messages, "; ")
+      )
     end
   end
 
