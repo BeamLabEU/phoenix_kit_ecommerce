@@ -12,11 +12,43 @@ defmodule PhoenixKitEcommerce.Search.Query do
     1. No query: `:browse`, ordered by the catalogue position, then the title.
     2. `websearch_to_tsquery(<language configuration>, q)` against `document`,
        ranked with `ts_rank_cd`: `:fulltext`. It accepts any text. Unbalanced
-       quotes, operators and stop words only loosen or empty the query.
-    3. Only when step 2 finds nothing and the `pg_trgm` extension is installed:
-       `title_trgm %> q` (word similarity of at least 0.45, set with
-       `set_config` for the transaction the typo path runs in), best first:
-       `:typo`.
+       quotes, operators and stop words only loosen or empty the query. A
+       leading `-` excludes a word or a quoted phrase.
+    3. Only when step 2 finds nothing, the query has no exclusion and the
+       `pg_trgm` extension is installed: `title_trgm %> q` (word similarity of
+       at least 0.45, set with `set_config` for the transaction the typo path
+       runs in), best first: `:typo`. A query with an exclusion never takes
+       the fallback: trigrams ignore the `-`, so the excluded words would
+       count as evidence for the very products the buyer ruled out.
+
+  Step 2 is probed inside the filters: `vase` with `price_max: 6` finds no
+  full-text match even when `vase` products exist above that price, so the
+  fallback (step 3) runs among the products the filters let through.
+
+  If Postgres refuses a text outright (a NUL byte, a `tsquery` stack overflow;
+  `clean_q/1` removes both) the answer is empty and `refused?` is `true`; any
+  other database error is raised, never turned into "no products".
+
+  ## Params and caller contract
+
+  `run/2` takes a map; absent keys use the defaults. The caller has already
+  validated every value (this module trusts it):
+
+    * `q` - any term; `clean_q/1` decides (see there). Default `nil`.
+    * `category_id` - a valid UUID string, or `nil`; an invalid one raises
+      `Ecto.Query.CastError`. Matches the category and its whole subtree.
+    * `price_min`, `price_max` - `Decimal` in the base currency, or `nil`.
+    * `options` - `%{option_key => [option_value]}`, both in their slug form
+      (`"size" => ["large"]`, not `"Large"`): OR within a key, AND across keys.
+    * `vendor` - a string compared case-insensitively, or `nil`.
+    * `on_sale`, `made_to_order` - `true`, `false` (the complement) or `nil`.
+    * `sort` - one of `:relevance` (default), `:price_asc`, `:price_desc`,
+      `:discount_desc`, `:newest`; anything else raises `FunctionClauseError`.
+    * `limit` - a positive integer, `offset` - a non-negative integer (a
+      negative offset raises `Postgrex.Error`).
+
+  `language` is the code exactly as it is indexed (`"de"` finds no `"de-DE"`
+  rows). It is not normalized here.
 
   ## Cursors
 
@@ -54,17 +86,30 @@ defmodule PhoenixKitEcommerce.Search.Query do
     offset: 0
   }
 
-  @type params :: map()
+  @type params :: %{
+          optional(:q) => term(),
+          optional(:category_id) => String.t() | nil,
+          optional(:price_min) => Decimal.t() | nil,
+          optional(:price_max) => Decimal.t() | nil,
+          optional(:options) => %{String.t() => [String.t()]},
+          optional(:vendor) => String.t() | nil,
+          optional(:on_sale) => boolean() | nil,
+          optional(:made_to_order) => boolean() | nil,
+          optional(:sort) => :relevance | :price_asc | :price_desc | :discount_desc | :newest,
+          optional(:limit) => pos_integer(),
+          optional(:offset) => non_neg_integer()
+        }
 
   @type result :: %{
           ids: [String.t()],
           count: non_neg_integer(),
           mode: :browse | :fulltext | :typo,
           facets: map(),
-          truncated?: boolean()
+          truncated?: boolean(),
+          refused?: boolean()
         }
 
-  @doc "Runs one search in `language`. See the moduledoc for `params`."
+  @doc "Runs one search in `language`. See the moduledoc for `params` and what the caller guarantees."
   @spec run(params(), String.t()) :: result()
   def run(params, language) when is_map(params) and is_binary(language) do
     params = @defaults |> Map.merge(params) |> Map.update!(:q, &clean_q/1)
@@ -88,7 +133,14 @@ defmodule PhoenixKitEcommerce.Search.Query do
 
     facets = facets(matched)
 
-    %{ids: ids, count: count, mode: mode, facets: facets, truncated?: count > @facet_cap}
+    %{
+      ids: ids,
+      count: count,
+      mode: if(mode == :refused, do: :fulltext, else: mode),
+      facets: facets,
+      truncated?: count > @facet_cap,
+      refused?: mode == :refused
+    }
   end
 
   # The `%>` operator reads the threshold from the session setting
@@ -112,20 +164,26 @@ defmodule PhoenixKitEcommerce.Search.Query do
   end
 
   @doc """
-  The query text as the index will see it: NUL bytes removed (Postgres refuses
-  them in text), a `-` that is not directly followed by a letter or digit
-  turned into a space (a run of 33 or more nested negations makes
-  `websearch_to_tsquery` raise `tsquery stack too small`; `-vase` and `co-op`
-  keep their meaning), trimmed, at most #{@max_q_length} characters; blank or
-  not a string is `nil` (no query).
+  The query text as the index will see it: bytes that are not valid UTF-8 and
+  NUL bytes removed (Postgres refuses both in text), at most #{@max_q_length}
+  code points (not graphemes: one base letter with a hundred thousand
+  combining marks is a single grapheme but a hundred thousand code points,
+  and the typo path pays per code point), a `-` that is not directly followed
+  by a letter, a digit or a double quote turned into a space (a run of 33 or
+  more nested negations makes `websearch_to_tsquery` raise `tsquery stack too
+  small`; `-vase`, `-"red ceramic"` and `co-op` keep their meaning), trimmed;
+  blank or not a string is `nil` (no query).
   """
   @spec clean_q(term()) :: String.t() | nil
   def clean_q(q) when is_binary(q) do
     cleaned =
       q
+      |> String.replace_invalid("")
       |> String.replace(<<0>>, "")
-      |> String.slice(0, @max_q_length)
-      |> then(&Regex.replace(~r/-(?![\p{L}\p{N}])/u, &1, " "))
+      |> String.codepoints()
+      |> Enum.take(@max_q_length)
+      |> Enum.join()
+      |> then(&Regex.replace(~r/-(?![\p{L}\p{N}"])/u, &1, " "))
       |> String.trim()
 
     if cleaned == "", do: nil, else: cleaned
@@ -222,7 +280,8 @@ defmodule PhoenixKitEcommerce.Search.Query do
 
   def decode_cursor(cursor) when is_binary(cursor) and byte_size(cursor) <= 64 do
     with {:ok, "o:" <> number} <- Base.url_decode64(cursor, padding: false),
-         {offset, ""} when offset >= 0 and offset <= @max_offset <- Integer.parse(number) do
+         {offset, ""} when offset >= 0 and offset <= @max_offset <- Integer.parse(number),
+         true <- Integer.to_string(offset) == number do
       {:ok, offset}
     else
       _other -> :error
@@ -309,12 +368,12 @@ defmodule PhoenixKitEcommerce.Search.Query do
       )
 
     case fulltext_probe(fulltext) do
-      :error ->
+      :refused ->
         # Defence in depth: `clean_q/1` already removes the inputs that make
         # websearch_to_tsquery raise. If Postgres still refuses a text, the
-        # answer is "no match" (mode :browse keeps the order clause free of
-        # the tsquery), never a 500.
-        {where(query, [e], false), :browse}
+        # answer is "no match", flagged `refused?` (the internal mode
+        # :refused keeps the order clause free of the tsquery), never a 500.
+        {where(query, [e], false), :refused}
 
       true ->
         {fulltext, :fulltext}
@@ -324,20 +383,41 @@ defmodule PhoenixKitEcommerce.Search.Query do
     end
   end
 
+  # Only the refusals of the text itself become an empty answer. A timeout, a
+  # dropped connection or a missing table must fail the request: "no
+  # products" during a database problem reads as "the shop has none". The log
+  # carries the SQLSTATE only (a Postgres message or detail can echo the text).
   defp fulltext_probe(fulltext) do
     RepoHelper.repo().exists?(fulltext)
   rescue
     error in Postgrex.Error ->
-      Logger.warning("[Search] full-text probe refused: #{Exception.message(error)}")
-      :error
+      if text_refusal?(error) do
+        Logger.warning("[Search] full-text probe refused (SQLSTATE #{sqlstate(error)})")
+        :refused
+      else
+        reraise error, __STACKTRACE__
+      end
   end
+
+  # 22021: a NUL byte or invalid UTF-8; XX000 with "stack too small": the
+  # tsquery parser ran out of stack on deeply nested operators.
+  defp text_refusal?(%Postgrex.Error{postgres: %{code: :character_not_in_repertoire}}), do: true
+
+  defp text_refusal?(%Postgrex.Error{postgres: %{code: :internal_error, message: message}})
+       when is_binary(message),
+       do: String.contains?(message, "stack too small")
+
+  defp text_refusal?(_error), do: false
+
+  defp sqlstate(%Postgrex.Error{postgres: %{pg_code: code}}) when is_binary(code), do: code
+  defp sqlstate(_error), do: "unknown"
 
   # `title_trgm %> q` is `word_similarity(q, title_trgm) >= threshold` written
   # as an operator, which is the form the `gin_trgm_ops` index of V4 can serve
   # (a plain `word_similarity(...) >= x` call cannot use it). The threshold is
   # set per transaction in `in_typo_transaction/1`.
   defp typo_or_empty(query, q, fulltext) do
-    if Trigram.available?() do
+    if Trigram.available?() and not negation?(q) do
       typo = where(query, [e], fragment("? %> ?::text", e.title_trgm, ^String.downcase(q)))
 
       {typo, :typo}
@@ -345,6 +425,10 @@ defmodule PhoenixKitEcommerce.Search.Query do
       {fulltext, :fulltext}
     end
   end
+
+  # A `-` that starts a term (not the hyphen inside `co-op`) directly before a
+  # word or a quote. `clean_q/1` has already removed every other `-`.
+  defp negation?(q), do: Regex.match?(~r/(?<![\p{L}\p{N}])-[\p{L}\p{N}"]/u, q)
 
   defp ordered(query, :fulltext, %{sort: :relevance, q: q}, language) do
     config = Dictionary.regconfig(language)

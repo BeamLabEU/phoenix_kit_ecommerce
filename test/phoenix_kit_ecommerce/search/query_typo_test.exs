@@ -62,6 +62,32 @@ defmodule PhoenixKitEcommerce.Search.QueryTypoTest do
     assert vase == t.vase
   end
 
+  @tag :requires_pg_trgm
+  test "the best match comes first, ahead of an alphabetically earlier weaker one", t do
+    # word_similarity('ceramik', ...): 'ceramic vase' 0.75, 'aaa cerumik' 0.4545
+    weaker = legacy_product!(%{"en" => "Aaa Cerumik"})
+    {:ok, _} = Indexer.reindex_items([weaker.uuid])
+
+    result = Query.run(%{q: "ceramik"}, "en")
+
+    assert result.mode == :typo
+    assert result.ids == [t.vase, weaker.uuid]
+  end
+
+  @tag :requires_pg_trgm
+  test "a query that excludes a word never takes the fallback", t do
+    # Without the exclusion rule the trigrams of "vase -ceramic" (which ignore
+    # the dash) match "Ceramic Vase", the very product the buyer ruled out.
+    for q <- ["vase -ceramic", "ceramic -ceramic", ~s|ceramik -"glass bowl"|, "-ceramic ceramik"] do
+      assert %{mode: :fulltext, ids: [], count: 0} = Query.run(%{q: q}, "en"), "q=#{q}"
+    end
+
+    # a hyphen inside a word is not an exclusion
+    assert %{mode: :typo} = Query.run(%{q: "ceramik-vase"}, "en")
+    assert %{mode: :typo, ids: [vase]} = Query.run(%{q: "ceramik"}, "en")
+    assert vase == t.vase
+  end
+
   test "without pg_trgm search still works and simply skips the typo fallback", t do
     Trigram.put_cache(false)
 

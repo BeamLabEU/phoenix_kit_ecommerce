@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
   """
   use PhoenixKitEcommerce.DataCase, async: true
 
+  import ExUnit.CaptureLog
   import PhoenixKitEcommerce.SearchFixtures
 
   alias PhoenixKitEcommerce.Search.Indexer
@@ -34,6 +35,23 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert result.count == 5
     assert result.ids == [t.b, t.c, t.e, t.a, t.d]
     refute result.truncated?
+    refute result.refused?
+  end
+
+  test "browse puts the catalogue position before the title", t do
+    # Blue Glass Bowl is first by title; position 5 sends it last, and a
+    # negative position goes before everything.
+    set_position!(t.b, 5)
+    set_position!(t.d, -1)
+
+    assert ids(%{}) == [t.d, t.c, t.e, t.a, t.b]
+  end
+
+  defp set_position!(item_uuid, position) do
+    Repo.query!(
+      "UPDATE phoenix_kit_shop_search_index SET sort_position = $2 WHERE item_uuid = $1",
+      [Ecto.UUID.dump!(item_uuid), position]
+    )
   end
 
   test "full text finds a title match, and ranks it above a description match", t do
@@ -97,7 +115,14 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
       # websearch_to_tsquery unless clean_q/1 neutralises the dashes
       String.duplicate("-", 40),
       String.duplicate("- ", 40) <> "a",
-      String.duplicate("-(", 20)
+      String.duplicate("-(", 20),
+      # a dash before a quote is a real negation and survives clean_q/1
+      String.duplicate(~s|-"|, 100),
+      String.duplicate(~s|-"vase |, 25),
+      String.duplicate(~s|-"vase -|, 25),
+      # invalid UTF-8 and one grapheme made of 100 000 code points
+      <<"va", 0xFF, "se">>,
+      "a" <> String.duplicate(<<0xCC, 0x81>>, 100_000)
     ]
 
     for q <- hostile do
@@ -110,11 +135,13 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
 
   test "the cleaning happens before Postgres sees the text, not by rescuing its refusal" do
     # Without clean_q/1 both texts make Postgres raise; the rescue in the probe
-    # would turn that into "no match" in :browse mode, which these assertions
-    # tell apart from the real answers.
-    assert %{mode: :browse, count: 5} = run(%{q: String.duplicate("-", 40)})
-    assert %{mode: :fulltext} = run(%{q: "va\0se"})
-    assert %{mode: :fulltext} = run(%{q: String.duplicate("- ", 40) <> "vase"})
+    # would turn that into an empty, `refused?` answer, which these assertions
+    # tell apart from the real ones.
+    assert %{mode: :browse, count: 5, refused?: false} = run(%{q: String.duplicate("-", 40)})
+    assert %{mode: :fulltext, count: 3, refused?: false} = run(%{q: "va\0se"})
+
+    assert %{mode: :fulltext, count: 3, refused?: false} =
+             run(%{q: String.duplicate("- ", 40) <> "vase"})
   end
 
   test "clean_q/1 removes NUL bytes, trims, caps the length and turns blank into no query" do
@@ -128,6 +155,30 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert String.length(Query.clean_q(String.duplicate("a", 300))) == 200
   end
 
+  test "clean_q/1 caps code points, not graphemes, and scrubs invalid UTF-8" do
+    # one base letter plus combining acute accents is ONE grapheme
+    zalgo = "a" <> String.duplicate("\u0301", 100_000)
+
+    assert String.length(zalgo) == 1
+    assert zalgo |> Query.clean_q() |> String.codepoints() |> length() == 200
+
+    assert Query.clean_q(<<"va", 0xFF, "se">>) == "vase"
+    assert Query.clean_q(<<0xFF, 0xFE>>) == nil
+  end
+
+  test "an exclusion of a quoted phrase is kept by clean_q/1 and excludes the phrase", t do
+    assert Query.clean_q(~s|vase -"red ceramic"|) == ~s|vase -"red ceramic"|
+    assert Query.clean_q(~s|-"|) == ~s|-"|
+
+    # `vase "red ceramic"` is the positive twin: it finds the product to exclude
+    assert ids(%{q: ~s|vase "red ceramic"|}) == [t.a]
+
+    result = run(%{q: ~s|vase -"red ceramic"|})
+    assert result.mode == :fulltext
+    assert Enum.sort(result.ids) == Enum.sort([t.c, t.e])
+    refute t.a in result.ids
+  end
+
   test "clean_q/1 keeps a dash that negates or joins a word and drops the others" do
     assert Query.clean_q("-vase") == "-vase"
     assert Query.clean_q("red -vase") == "red -vase"
@@ -137,6 +188,64 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert Query.clean_q("a - b") == "a   b"
     assert Query.clean_q("-(") == "("
     refute Query.clean_q(String.duplicate("-(", 20)) =~ "-"
+  end
+
+  describe "when Postgres refuses the text" do
+    # Nothing a caller can send reaches this branch (clean_q/1 sees to that),
+    # so the refusal is staged: a stand-in `websearch_to_tsquery` that raises,
+    # found before pg_catalog on the transaction's search path. All of it is
+    # rolled back with the test's sandbox transaction.
+    defp stage_refusal!(sqlstate, message) do
+      Repo.query!("CREATE SCHEMA search_refusal_stub")
+      Repo.query!("SET LOCAL search_path TO search_refusal_stub, pg_catalog, public")
+
+      Repo.query!("""
+      CREATE FUNCTION search_refusal_stub.websearch_to_tsquery(regconfig, text)
+      RETURNS tsquery LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION '#{message}' USING ERRCODE = '#{sqlstate}', DETAIL = 'secret detail';
+      END
+      $$
+      """)
+    end
+
+    test "a tsquery stack overflow answers empty and flagged, logging the SQLSTATE only" do
+      stage_refusal!("XX000", "tsquery stack too small")
+
+      log =
+        capture_log(fn ->
+          assert %{ids: [], count: 0, mode: :fulltext, refused?: true} = run(%{q: "vase"})
+        end)
+
+      assert log =~ "SQLSTATE XX000"
+      refute log =~ "secret detail"
+      refute log =~ "stack too small"
+
+      # the connection is still usable afterwards
+      assert %{count: 5, refused?: false} = run(%{})
+    end
+
+    test "invalid bytes (22021) are a refusal too" do
+      stage_refusal!("22021", "invalid byte sequence for encoding")
+
+      capture_log(fn -> assert %{count: 0, refused?: true} = run(%{q: "vase"}) end)
+    end
+
+    test "every other database error is raised, not turned into an empty answer" do
+      stage_refusal!("57014", "canceling statement due to statement timeout")
+      assert_raise Postgrex.Error, fn -> run(%{q: "vase"}) end
+
+      # XX000 alone is not enough: only the tsquery stack message is a refusal
+      Repo.query!("DROP FUNCTION search_refusal_stub.websearch_to_tsquery(regconfig, text)")
+      Repo.query!("DROP SCHEMA search_refusal_stub")
+      stage_refusal!("XX000", "something else broke")
+      assert_raise Postgrex.Error, fn -> run(%{q: "vase"}) end
+    end
+
+    test "a filter with no search text does not run the probe at all" do
+      stage_refusal!("57014", "never called")
+      assert %{count: 5, mode: :browse, refused?: false} = run(%{})
+    end
   end
 
   test "the category filter takes the whole branch", t do
@@ -243,6 +352,53 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
            ]
   end
 
+  test "option facets are ordered by key, then by count (highest first), then by value" do
+    cup =
+      legacy_product!(%{"en" => "Small Cup"}, %{
+        metadata: %{"_option_values" => %{"size" => ["Small"]}}
+      })
+
+    {:ok, _} = Indexer.reindex_items([cup.uuid])
+
+    # Two "small" against one "large": the more common value goes first, which
+    # is the opposite of the order the map of counts happens to iterate in.
+    assert run(%{}).facets.options |> Enum.map(&{&1.pair, &1.count}) == [
+             {"colour:red", 1},
+             {"size:small", 2},
+             {"size:large", 1}
+           ]
+  end
+
+  test "the facets read at most 5 000 rows and the result says when it cut them" do
+    insert_rows!(1, 5_000)
+
+    at_cap = run(%{limit: 1}, "xx")
+    assert at_cap.count == 5_000
+    refute at_cap.truncated?
+    assert at_cap.facets.on_sale == 5_000
+
+    insert_rows!(5_001, 5_001)
+
+    over = run(%{limit: 1}, "xx")
+    assert over.count == 5_001
+    assert over.truncated?
+    assert length(over.ids) == 1
+    # counted over the capped 5 000 rows, not over all 5 001
+    assert over.facets.on_sale == 5_000
+  end
+
+  defp insert_rows!(from, to) do
+    Repo.query!(
+      """
+      INSERT INTO phoenix_kit_shop_search_index
+        (item_uuid, language, title, title_trgm, document, on_sale)
+      SELECT gen_random_uuid(), 'xx', 'Row ' || n, 'row ' || n, to_tsvector('simple', 'row'), true
+      FROM generate_series($1::int, $2::int) AS n
+      """,
+      [from, to]
+    )
+  end
+
   test "facets follow the filters", t do
     facets = run(%{category_id: t.vases}).facets
 
@@ -271,6 +427,9 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
           Base.url_encode64("o:10001", padding: false),
           Base.url_encode64("x:5", padding: false),
           Base.url_encode64("o:5x", padding: false),
+          # the same number written another way is not a cursor we issued
+          Base.url_encode64("o:+5", padding: false),
+          Base.url_encode64("o:005", padding: false),
           String.duplicate("A", 5_000)
         ] do
       assert Query.decode_cursor(bad) == :error, "cursor #{inspect(bad, limit: 20)}"
@@ -304,5 +463,51 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
 
     # A product with nothing in common with anything has no similar products.
     assert Query.similar(Query.entry(t.b, "en"), 10) == []
+  end
+
+  describe "similar/2 ordering inside one category rank" do
+    # Each test creates its candidates in the order that would put the right
+    # answer LAST if the criterion under test were missing (the newest product
+    # wins the final tie-break), and keeps every other criterion equal.
+
+    test "more shared tags first" do
+      more = legacy_product!(%{"en" => "Two Shared"}, %{tags: ["sim-x", "sim-y"]})
+      fewer = legacy_product!(%{"en" => "One Shared"}, %{tags: ["sim-x"]})
+      base = legacy_product!(%{"en" => "Tag Base"}, %{tags: ["sim-x", "sim-y"]})
+      {:ok, _} = Indexer.reindex_items([more.uuid, fewer.uuid, base.uuid])
+
+      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [more.uuid, fewer.uuid]
+    end
+
+    test "more shared option values first" do
+      options = fn values -> %{metadata: %{"_option_values" => values}} end
+
+      more =
+        legacy_product!(
+          %{"en" => "Two Options"},
+          options.(%{"finish" => ["Matte"], "bulk" => ["Big"]})
+        )
+
+      fewer = legacy_product!(%{"en" => "One Option"}, options.(%{"finish" => ["Matte"]}))
+
+      base =
+        legacy_product!(
+          %{"en" => "Option Base"},
+          options.(%{"finish" => ["Matte"], "bulk" => ["Big"]})
+        )
+
+      {:ok, _} = Indexer.reindex_items([more.uuid, fewer.uuid, base.uuid])
+
+      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [more.uuid, fewer.uuid]
+    end
+
+    test "a price within 50 percent of the product's own comes before a distant one" do
+      near = legacy_product!(%{"en" => "Near Price"}, %{tags: ["sim-p"], price: "25.00"})
+      far = legacy_product!(%{"en" => "Far Price"}, %{tags: ["sim-p"], price: "100.00"})
+      base = legacy_product!(%{"en" => "Price Base"}, %{tags: ["sim-p"], price: "20.00"})
+      {:ok, _} = Indexer.reindex_items([near.uuid, far.uuid, base.uuid])
+
+      assert Query.similar(Query.entry(base.uuid, "en"), 10) == [near.uuid, far.uuid]
+    end
   end
 end
