@@ -5,7 +5,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiTest do
   Shopify, and the one e-commerce setting of the API, the confirmation
   threshold for price changes.
 
-  The card exists only on a core that ships the API (phase 1a): `:core_api`.
+  The card exists only on a core that ships the API: `:core_api`.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
@@ -27,7 +27,8 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiTest do
       Settings.update_boolean_setting_with_module("api_admin_enabled", api, "api")
     end)
 
-    # Everything the page needs, plus core's `api` permission, which changing the threshold takes (E19).
+    # Everything the page needs, plus core's `api` permission, which changing the
+    # threshold takes.
     {:ok, conn: put_test_scope(conn, fake_scope(permissions: shop_permissions() ++ ["api"]))}
   end
 

@@ -506,9 +506,10 @@ Rules that must hold:
   to it; the description of `set_prices` and a row warning mention the sync
   only while it is on.
 - `api_confirm_price_change_pct` (default 30, `API.Settings`) is the one
-  e-commerce setting of the API; it has no `shop_` prefix because the spec
-  names it so. Changing it takes `shop.manage_settings` **and** core's `api`
-  permission (`Web.Authz.can_manage_api?/1`).
+  e-commerce setting of the API; it has no `shop_` prefix, it shares the
+  `api_` prefix of core's other API settings (`api_confirm_batch_over`).
+  Changing it takes `shop.manage_settings` **and** core's `api` permission
+  (`Web.Authz.can_manage_api?/1`).
 - `PhoenixKitEcommerce.warehouse_source_kinds/0` offers the `shop_order` kind
   to Warehouse (`WarehouseSourceKind`); only orders placed by the storefront
   checkout count, and no label shows the customer.

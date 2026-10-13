@@ -1,11 +1,12 @@
 defmodule PhoenixKitEcommerce.Catalogue.WriterAttributionTest do
   @moduledoc """
-  Prerequisite P3 end to end, against a real catalogue that has the admin
-  API's write options: a Shopify sync write names itself in the item's change
-  log, and a sync that read an item before someone else wrote to it does not
-  overwrite that write (decision D4: last write wins per field).
+  End to end, against a real catalogue that has the admin API's write
+  options: a Shopify sync write names itself in the item's change log, and a
+  sync that read an item before someone else wrote to it does not overwrite
+  that write (the sync writes only the paths it changed, so the last write
+  wins per field).
 
-  Needs the catalogue's phase 2a: `:catalogue_api`.
+  Needs a catalogue that ships the admin API: `:catalogue_api`.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false

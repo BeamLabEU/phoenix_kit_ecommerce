@@ -231,7 +231,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   @impl true
   def handle_event("save_api_confirm_price_change_pct", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
-      # shop.manage_settings is not enough: see E19 (the `api` permission too)
+      # shop.manage_settings is not enough: the threshold decides what a key may do
+      # without confirmation, so changing it also takes core's `api` permission
       if Authz.can_manage_api?(socket),
         do: gated_event("save_api_confirm_price_change_pct", params, socket),
         else: {:noreply, Authz.deny(socket)}
@@ -962,7 +963,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
           </div>
         </div>
 
-        <%!-- Admin API (spec 6.2, 10). The card exists only on a core that ships the
+        <%!-- Admin API. The card exists only on a core that ships the
              API. It says where the API's keys and its on/off switch live, whether it is
              on, what it means for a shop with and without Shopify, and holds the one
              e-commerce setting of the API: the confirmation threshold for price moves. --%>

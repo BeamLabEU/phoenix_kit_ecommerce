@@ -1,9 +1,8 @@
 defmodule PhoenixKitEcommerce.API.ToolsTest do
   @moduledoc """
   What the module hands to core's tool registry: the tools, their scopes and
-  permissions from the spec's table, schemas that core's own validator
-  accepts and that accept what they should and refuse what they should, and
-  the rule that the write tools exist only on a core that can hold a
+  permissions, schemas that core's own validator accepts and that accept what
+  they should and refuse what they should, and the rule that the write tools exist only on a core that can hold a
   dangerous call for confirmation.
 
   Needs core's tool registry: tagged `:core_api`. The tests of the write tools
@@ -34,7 +33,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   end
 
   describe "the read tool" do
-    test "is registered with the spec's scope and permission, read-only, capped at 500 rows" do
+    test "is registered with the read scope and permission, read-only, capped at 500 rows" do
       tool = tools()["ecommerce.get_prices"]
 
       assert {tool.scope, tool.permission, tool.audience} ==
@@ -74,7 +73,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   describe "with core's confirmation flow" do
     @describetag :core_confirm
 
-    test "all four tools are offered, with the spec's scopes and permissions" do
+    test "all four tools are offered, with the documented scopes and permissions" do
       table =
         Map.new(tools(), fn {name, tool} ->
           {name, {tool.scope, tool.permission, tool.audience}}
@@ -141,7 +140,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       end
     end
 
-    test "batch caps are the spec's: 500 rows, 20 pictures" do
+    test "batch caps are 500 rows and 20 pictures" do
       tools = tools()
       assert tools["ecommerce.set_prices"].max_items == 500
       assert tools["ecommerce.set_availability"].max_items == 500
