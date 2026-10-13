@@ -39,6 +39,11 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     end
   end
 
+  test "warehouse_source_kinds/0 contributes the shop_order kind to Warehouse" do
+    assert [%{kind: "shop_order", search: {_, _, _}, resolve: {_, _, _}, build_lines: {_, _, _}}] =
+             PhoenixKitEcommerce.warehouse_source_kinds()
+  end
+
   test "module_key/0 matches what the permission and tabs declare" do
     # Every tab guards either the base key or one of THIS module's declared
     # sub-permissions. If a tab's key drifts outside that set, the sidebar

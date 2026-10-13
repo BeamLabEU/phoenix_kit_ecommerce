@@ -1160,6 +1160,14 @@ defmodule PhoenixKitEcommerce do
   """
   def api_tools, do: PhoenixKitEcommerce.API.tools()
 
+  @doc """
+  Warehouse source kinds this package contributes (duck-typed discovery by
+  `PhoenixKitWarehouse.SourceKinds`, which merges them with the host's own
+  list): the `shop_order` kind. A literal list, because Warehouse calls it for
+  every reference it renders. See `PhoenixKitEcommerce.WarehouseSourceKind`.
+  """
+  def warehouse_source_kinds, do: PhoenixKitEcommerce.WarehouseSourceKind.kinds()
+
   # ============================================
   # PRODUCTS
   # ============================================
