@@ -38,7 +38,8 @@ under review. What was left were seams the sweep did not reach.
    3 and an unexpected body is reported by shape (`{:object, n}`, `{:text,
    bytes}`) only. *Left open:* the redirect target is still not restricted to
    https/public hosts (a blind GET remains possible); that needs the image
-   importer's private-network guard moved to a shared module.
+   importer's private-network guard moved to a shared module. *Update:* fixed
+   after the Codex review; see `FOLLOW_UP.md`.
 2. **"Bulk uuids cast" skipped the products and categories pages.** The
    `uuids` of `open_status_modal`/`open_category_modal`/`open_parent_modal`/
    `confirm_bulk_delete` and the `category_uuid`/`parent_uuid` targets went
@@ -86,7 +87,8 @@ under review. What was left were seams the sweep did not reach.
    backfill (stamp orders with `source = shop_checkout` whose owner is an
    unconfirmed `guest_checkout` account with a matching billing email), or
    accept it and say so in the release notes. Not done here: it is a
-   migration that writes to orders.
+   migration that writes to orders. *Update:* the backfill is withdrawn — the
+   evidence it keys on is writable by the account holder (see `FOLLOW_UP.md`).
 10. **The media-sync "interrupted" re-check is unreachable from an open
     page.** The Run button is disabled from stale assigns and no message
     follows a killed job, so it stays disabled until reload. *Left open:*
@@ -98,7 +100,8 @@ under review. What was left were seams the sweep did not reach.
     Pre-existing; *left open*, to be fixed with the task's own review.
 12. **Category option edits are still whole-list writes from the socket's
     copy** (`CategoryForm` → `Options.update_category_options`); the lock
-    covers only the global list. *Left open.*
+    covers only the global list. *Update:* fixed after the Codex review
+    (`Options.transform_category_options/2`).
 13. **Catalogue counts include soft-deleted rows** (`count_categories/1`,
     `count_items/1`); matches what the admin list shows today. *Left open*
     pending a decision on what the dashboard should count.

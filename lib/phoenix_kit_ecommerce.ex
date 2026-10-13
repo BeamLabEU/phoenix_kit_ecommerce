@@ -6527,16 +6527,17 @@ defmodule PhoenixKitEcommerce do
     {:cont, {:ok, count}}
   end
 
-  defp reprice_one_category(
-         %Category{option_schema: options} = category,
-         count,
-         multiplier,
-         decimal_places
-       ) do
-    {new_options, changed} = reprice_option_definitions(options, multiplier, decimal_places)
+  # Re-priced from the list as it is stored under the category's lock, not
+  # from the copy `reprice_category_options_for_base_change/2` listed.
+  defp reprice_one_category(%Category{} = category, count, multiplier, decimal_places) do
+    result =
+      Options.transform_category_options(category, fn current ->
+        {new_options, changed} = reprice_option_definitions(current, multiplier, decimal_places)
+        {:ok, new_options, changed}
+      end)
 
-    case Options.update_category_options(category, new_options) do
-      {:ok, _} ->
+    case result do
+      {:ok, changed} ->
         {:cont, {:ok, count + changed}}
 
       {:error, reason} ->
