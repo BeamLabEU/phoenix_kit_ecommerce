@@ -202,6 +202,31 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     }
   end
 
+  @doc "Replaces the currency table with USD (base, rate 1) and EUR (rate 0.909091)."
+  def currencies! do
+    PhoenixKit.Cache.clear(:billing_currencies)
+    Repo.delete_all(PhoenixKitBilling.Currency)
+
+    {:ok, usd} =
+      PhoenixKitBilling.create_currency(%{
+        code: "USD",
+        name: "Dollar",
+        symbol: "$",
+        is_default: true,
+        exchange_rate: "1.0"
+      })
+
+    {:ok, eur} =
+      PhoenixKitBilling.create_currency(%{
+        code: "EUR",
+        name: "Euro",
+        symbol: "€",
+        exchange_rate: "0.909091"
+      })
+
+    %{usd: usd, eur: eur}
+  end
+
   @doc "The `data` map of an item or category with the given shop status."
   def shop_data(shop_status, extra \\ %{}) do
     %{"ecommerce" => Map.merge(%{"shop_status" => shop_status}, extra)}
