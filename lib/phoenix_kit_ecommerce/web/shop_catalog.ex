@@ -278,6 +278,10 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     {:noreply, push_patch(socket, to: path)}
   end
 
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
   @impl true
   def render(assigns) do
     # One settings read per render, threaded into every name shown on the

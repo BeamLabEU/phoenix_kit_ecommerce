@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @impl true
@@ -79,7 +80,7 @@ defmodule PhoenixKitEcommerce.Web.ImportShow do
                 _ -> "badge-ghost"
               end
             ]}>
-              {@import.status}
+              {StatusLabels.import(@import.status)}
             </span>
           </:actions>
         </.admin_page_header>

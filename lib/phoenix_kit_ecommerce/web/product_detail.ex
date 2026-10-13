@@ -17,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -525,7 +526,7 @@ defmodule PhoenixKitEcommerce.Web.ProductDetail do
                 <h2 class="card-title">{gettext("Status")}</h2>
                 <div class="flex items-center gap-2">
                   <span class={status_badge_class(@product.status)}>
-                    {String.capitalize(@product.status)}
+                    {StatusLabels.product(@product.status)}
                   </span>
                 </div>
               </div>

@@ -440,6 +440,24 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
     {:noreply, socket}
   end
 
+  @doc """
+  The `handle_event/3` catch-all of every public shop LiveView: an event
+  the page does not know, or a known one pushed with a payload its clause
+  does not take, is noted at `:debug` and dropped instead of crashing the
+  view. Anyone can push anything at a public page.
+
+  Only the event NAME is logged, bounded - never the params.
+  """
+  @spec ignore_event(term(), Phoenix.LiveView.Socket.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
+  def ignore_event(event, socket) do
+    Logger.debug(fn ->
+      "[Shop] #{inspect(socket.view)} ignored event #{event |> inspect() |> String.slice(0, 80)}"
+    end)
+
+    {:noreply, socket}
+  end
+
   @doc false
   def message_shape(message) when is_atom(message), do: inspect(message)
 

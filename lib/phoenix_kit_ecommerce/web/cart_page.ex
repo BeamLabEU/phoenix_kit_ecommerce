@@ -186,6 +186,10 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     end
   end
 
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
   # One choke point for "the cart changed": refresh available methods,
   # drop a selection the cart has outgrown (or stopped needing), and keep
   # the requires-shipping flag the template gates on. Without the clearing,
@@ -533,7 +537,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                               </div>
                             </td>
                             <td class="text-center">
-                              <form phx-change="update_quantity" class="inline">
+                              <form id={"cart-quantity-form-#{item.uuid}"} phx-change="update_quantity" class="inline">
                                 <input type="hidden" name="item_uuid" value={item.uuid} />
                                 <input
                                   type="number"

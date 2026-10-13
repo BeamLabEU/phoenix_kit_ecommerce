@@ -124,7 +124,7 @@ defmodule PhoenixKitEcommerce.Options do
 
   defp append_global_option(current, option) do
     if Enum.any?(current, &(&1["key"] == option["key"])) do
-      {:error, "Option with key '#{option["key"]}' already exists"}
+      {:error, {:option_key_exists, option["key"]}}
     else
       {:ok, current ++ [Map.put(option, "position", length(current))]}
     end
@@ -295,22 +295,16 @@ defmodule PhoenixKitEcommerce.Options do
       })
   """
   def add_value_to_global_option(key, value_or_map) when is_binary(key) do
-    result =
-      change_global_option(key, fn option ->
-        current_options = option["options"] || []
-        new_value = normalize_option_value(value_or_map, current_options)
+    change_global_option(key, fn option ->
+      current_options = option["options"] || []
+      new_value = normalize_option_value(value_or_map, current_options)
 
-        if value_exists?(current_options, new_value) do
-          option
-        else
-          Map.put(option, "options", current_options ++ [new_value])
-        end
-      end)
-
-    case result do
-      {:error, :option_not_found} -> {:error, "Global option '#{key}' not found"}
-      other -> other
-    end
+      if value_exists?(current_options, new_value) do
+        option
+      else
+        Map.put(option, "options", current_options ++ [new_value])
+      end
+    end)
   end
 
   # Normalize value to match existing format (string or map)
@@ -396,7 +390,7 @@ defmodule PhoenixKitEcommerce.Options do
       current = get_category_options(category)
 
       if Enum.any?(current, &(&1["key"] == validated["key"])) do
-        {:error, "Option with key '#{validated["key"]}' already exists in this category"}
+        {:error, {:option_key_exists_in_category, validated["key"]}}
       else
         update_category_options(category, current ++ [validated])
       end

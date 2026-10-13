@@ -791,6 +791,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     end
   end
 
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
   defp place_order(socket) do
     socket = assign(socket, :processing, true)
 

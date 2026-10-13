@@ -30,6 +30,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
   alias PhoenixKitEcommerce.Workers.CSVImportWorker
 
   require Logger
@@ -760,21 +761,23 @@ defmodule PhoenixKitEcommerce.Web.Imports do
 
     e ->
       Logger.error("CSV analysis failed: #{inspect(e)}")
-      {:error, "Failed to parse CSV file. Please check the file format."}
+      {:error, gettext("Failed to parse CSV file. Please check the file format.")}
   end
 
   defp parse_csv_error(message) do
     cond do
       String.contains?(message, "unexpected escape character") ->
-        "CSV format error: The file contains incorrectly escaped quotes. " <>
-          "Please export directly from Shopify using 'Export > CSV for Excel'."
+        gettext(
+          "CSV format error: The file contains incorrectly escaped quotes. Please export directly from Shopify using 'Export > CSV for Excel'."
+        )
 
       String.contains?(message, "reached the end of file") ->
-        "CSV format error: The file has unclosed quotes. " <>
-          "Please re-export from Shopify or check for corrupted data."
+        gettext(
+          "CSV format error: The file has unclosed quotes. Please re-export from Shopify or check for corrupted data."
+        )
 
       true ->
-        "CSV parse error: #{String.slice(message, 0, 100)}"
+        gettext("CSV parse error: %{details}", details: String.slice(message, 0, 100))
     end
   end
 
@@ -1608,7 +1611,7 @@ defmodule PhoenixKitEcommerce.Web.Imports do
         _ -> "badge-ghost"
       end
     ]}>
-      {@status}
+      {StatusLabels.import(@status)}
     </span>
     """
   end

@@ -132,6 +132,12 @@ Repo-local aliases:
   category/filter sidebar renders in the page templates for everyone. Admin
   LiveViews do not wrap themselves in a layout; core's admin shell supplies
   it.
+- **The storefront's `<head>` tags are the host's to render.** The catalog,
+  category and product pages assign `og`, `canonical_url` and
+  `hreflang_links`; core's root layout reads `og` only (its canonical link
+  comes from `og.url`), so `hreflang` alternates appear only when the host's
+  root layout renders `hreflang_links`. `Test.Layouts.root/1` renders all
+  three so a test can assert a page still supplies them.
 - **Gettext** is this module's own backend (`PhoenixKitEcommerce.Gettext`,
   catalogues under `priv/gettext/{en,et,ru,de,fr,uk}`). A `gettext("…")` added
   anywhere under `web/` lands in THIS catalogue, so it needs
@@ -145,6 +151,20 @@ Repo-local aliases:
   English beside translated siblings.
 - **Never wrap in `gettext`:** `push_event` names, URL paths, route segments,
   setting keys. Translating one breaks at runtime in every non-English locale.
+- **A stored status is rendered through `Web.StatusLabels`** (`order/1`,
+  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`),
+  never as its raw value: the value keys badge classes, filters and audit
+  metadata, the label is what a person reads. A new status value needs its
+  own `gettext` clause there.
+- **A context error is an atom or a tagged tuple with a clause in
+  `Errors.message/1`**, never an English sentence: the reason is matched on
+  and logged, the sentence is translated where it is shown. Each message is
+  pinned in `errors_test.exs`.
+- **Every public LiveView ends its `handle_event/3` clauses with the
+  `Helpers.ignore_event/2` catch-all.** Anyone can push any event at a public
+  page; an unknown name or a payload no clause takes must not crash the view.
+- **Text stored on an order line is resolved in the locale of the process
+  converting the cart** — the buyer's — and never re-translated on read.
 - **JS hooks:** none. If one is ever needed, ship it as a prebuilt bundle
   declared by `js_sources/0` under a namespaced global — never registered from
   an inline `<script>`, which morphdom does not execute on LiveView

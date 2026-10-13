@@ -32,6 +32,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @per_page 25
@@ -425,7 +426,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
             items={@products}
             card_fields={fn product ->
               [
-                %{label: gettext("Status"), value: product.status},
+                %{label: gettext("Status"), value: StatusLabels.product(product.status)},
                 %{label: gettext("Type"), value: product.product_type},
                 %{
                   label: gettext("Category"),
@@ -558,10 +559,10 @@ defmodule PhoenixKitEcommerce.Web.Products do
                               else: gettext("Click to publish")
                           }
                         >
-                          {product.status}
+                          {StatusLabels.product(product.status)}
                         </button>
                       <% else %>
-                        <span class={status_badge_class(product.status)}>{product.status}</span>
+                        <span class={status_badge_class(product.status)}>{StatusLabels.product(product.status)}</span>
                       <% end %>
                     </.table_default_cell>
                     <.table_default_cell
@@ -984,7 +985,10 @@ defmodule PhoenixKitEcommerce.Web.Products do
      |> assign(:show_bulk_modal, nil)
      |> put_flash(
        :info,
-       gettext("%{count} products updated to %{status}", count: count, status: status)
+       gettext("%{count} products updated to %{status}",
+         count: count,
+         status: StatusLabels.product(status)
+       )
      )}
   end
 

@@ -766,7 +766,10 @@ defmodule PhoenixKitEcommerce do
            Billing.get_currency_by_code(cart.currency),
          true <- Decimal.compare(rate, 0) == :gt,
          %Currency{} = base <- Billing.get_base_currency(),
-         false <- cart_base_stale?(cart, base) do
+         false <- cart_base_stale?(cart, base),
+         # The frozen rate is the divisor below and the column carries no
+         # positivity check: a hand-migrated zero means "no drift known".
+         true <- Decimal.compare(cart.exchange_rate, 0) == :gt do
       frozen = cart.exchange_rate
       current = Currency.effective_rate(target, base)
 
@@ -1163,6 +1166,10 @@ defmodule PhoenixKitEcommerce do
   - `:page` - Page number
   - `:per_page` - Items per page
   - `:preload` - Associations to preload
+
+  The default order depends on the active product source: newest first
+  (`inserted_at` descending) for the shop's own tables, `position` then
+  `name` for catalogue items.
   """
   def list_products(opts \\ []) do
     ProductSource.current().list_products(opts)
@@ -4900,6 +4907,11 @@ defmodule PhoenixKitEcommerce do
            # `metadata["session_id"]`, handing out access to an order they
            # did not place. Derived internally, it cannot be influenced.
            placing_session_id = cart.session_id,
+           # Likewise decided here, from the locked cart and never from a
+           # caller-chosen flag: the email this order is marked with when
+           # the GUEST branch resolves its account (see
+           # `guest_checkout_account?/1`), nil on every logged-in path.
+           guest_email = guest_checkout_email(cart, opts),
            {:ok, user_uuid, cart} <- resolve_checkout_user(cart, opts),
            :ok <- validate_billing_profile_owner(opts, user_uuid),
            # After the user is resolved and BEFORE the order is built: the
@@ -4911,7 +4923,14 @@ defmodule PhoenixKitEcommerce do
            {:ok, cart} <- validate_shipping_method_available(cart),
            :ok <- validate_shipping_quote(cart),
            line_items <- build_order_line_items(cart),
-           order_attrs <- build_order_attrs(cart, line_items, opts, placing_session_id),
+           order_attrs <-
+             build_order_attrs(
+               cart,
+               line_items,
+               opts,
+               placing_session_id,
+               user_uuid && guest_email
+             ),
            {:ok, order} <- do_create_order(user_uuid, order_attrs),
            {:ok, _cart} <- mark_cart_converted(cart, order.uuid) do
         {:ok, order}
@@ -5298,7 +5317,7 @@ defmodule PhoenixKitEcommerce do
   # The selected payment option must still exist, be active, and have its
   # billing-profile requirement satisfied. Until now the selection was
   # simply DISCARDED at conversion — never revalidated, never recorded on
-  # the order (`build_order_attrs/4` re-reads it into order metadata).
+  # the order (`build_order_attrs/5` re-reads it into order metadata).
   # A cart without a selection converts as before.
   defp validate_payment_option(%Cart{payment_option_uuid: nil}), do: :ok
 
@@ -5403,7 +5422,7 @@ defmodule PhoenixKitEcommerce do
   # the checkout country is on the cart, decide for real - `:always` skips
   # unconditionally, `:fallback` only when no method covers this country
   # (a covered country stays a hard requirement), and the decision is
-  # stamped onto the in-memory cart for `build_order_attrs/4` to read.
+  # stamped onto the in-memory cart for `build_order_attrs/5` to read.
   defp validate_shipping_method_available(%Cart{shipping_method_uuid: nil} = cart) do
     if items_require_shipping?(cart.items) do
       case shipping_skippable?(cart) do
@@ -5497,7 +5516,9 @@ defmodule PhoenixKitEcommerce do
 
         [
           %{
-            "name" => "Shipping: #{cart.shipping_method.name}",
+            # Stored line text is resolved in the locale of the process
+            # converting the cart - the buyer's - like the description below.
+            "name" => gettext("Shipping: %{method}", method: cart.shipping_method.name),
             "description" => shipping_line_description(cart.shipping_method, pay_on_delivery?),
             "quantity" => 1,
             "unit_price" => Decimal.to_string(cart.shipping_amount || Decimal.new(0)),
@@ -5593,7 +5614,7 @@ defmodule PhoenixKitEcommerce do
     }
   end
 
-  defp build_order_attrs(%Cart{} = cart, line_items, opts, placing_session_id) do
+  defp build_order_attrs(%Cart{} = cart, line_items, opts, placing_session_id, guest_email) do
     billing_profile_uuid = Keyword.get(opts, :billing_profile_uuid)
     billing_data = Keyword.get(opts, :billing_data)
 
@@ -5651,6 +5672,7 @@ defmodule PhoenixKitEcommerce do
           }
           |> Map.merge(payment_option_metadata(cart))
           |> Map.merge(shipping_order_metadata(cart))
+          |> Map.merge(guest_checkout_metadata(guest_email))
       }
       |> maybe_put_payment_option(cart)
 
@@ -5858,6 +5880,27 @@ defmodule PhoenixKitEcommerce do
 
   defp valid_billing_data?(data), do: is_map(data) and Map.has_key?(data, "email")
 
+  # The typed email, when this conversion will take the guest branch of
+  # `resolve_checkout_user/2`: a cart nobody owns and no logged-in user.
+  defp guest_checkout_email(%Cart{user_uuid: nil}, opts) do
+    billing_data = Keyword.get(opts, :billing_data)
+
+    if is_nil(Keyword.get(opts, :user_uuid)) and valid_billing_data?(billing_data),
+      do: normalize_email(billing_data["email"])
+  end
+
+  defp guest_checkout_email(%Cart{}, _opts), do: nil
+
+  defp guest_checkout_metadata(nil), do: %{}
+
+  defp guest_checkout_metadata(email),
+    do: %{"guest_checkout" => true, "guest_checkout_email" => email}
+
+  defp normalize_email(email) when is_binary(email),
+    do: email |> String.trim() |> String.downcase()
+
+  defp normalize_email(_email), do: nil
+
   defp create_guest_user_and_assign_cart(cart, billing_data) do
     if registered_account_email?(billing_data["email"]) do
       {:error, :email_already_registered}
@@ -5892,7 +5935,7 @@ defmodule PhoenixKitEcommerce do
   # knows, and the typed email proves nothing about who that is: attaching
   # the order to it hands the shopper's name, address and phone to whoever
   # signed up with their address first. Only an account guest checkout itself
-  # created (random password, core's `"source"` stamp) is reused. Asked before
+  # created (random password) is reused. Asked before
   # `Auth.create_guest_user/1` because that call writes the typed name onto
   # the unconfirmed row it finds.
   defp registered_account_email?(email) when is_binary(email) do
@@ -5904,13 +5947,36 @@ defmodule PhoenixKitEcommerce do
 
   defp registered_account_email?(_email), do: false
 
-  defp guest_checkout_account?(%{
-         confirmed_at: nil,
-         custom_fields: %{"source" => "guest_checkout"}
-       }),
-       do: true
+  # Core's `"source"` stamp alone is not proof: `custom_fields` is a column
+  # the account's own profile form writes, so whoever is signed in to an
+  # account can put the stamp there. The proof is an order the guest branch
+  # of this module placed for the account UNDER ITS CURRENT EMAIL - order
+  # metadata is written only by the conversion, and the email binding means
+  # an account that guest checkout did create stops qualifying once its
+  # address is changed to somebody else's.
+  defp guest_checkout_account?(
+         %{
+           confirmed_at: nil,
+           custom_fields: %{"source" => "guest_checkout"}
+         } = user
+       ),
+       do: guest_order_placed_for?(user)
 
   defp guest_checkout_account?(_user), do: false
+
+  defp guest_order_placed_for?(%{uuid: user_uuid, email: email})
+       when is_binary(user_uuid) and is_binary(email) do
+    Billing.Order
+    |> where([o], o.user_uuid == ^user_uuid)
+    |> where([o], fragment("?->>'guest_checkout' = 'true'", o.metadata))
+    |> where(
+      [o],
+      fragment("?->>'guest_checkout_email' = ?", o.metadata, ^normalize_email(email))
+    )
+    |> repo().exists?()
+  end
+
+  defp guest_order_placed_for?(_user), do: false
 
   defp assign_cart_and_return(cart, %{uuid: user_uuid} = user) do
     case assign_cart_to_user(cart, user) do

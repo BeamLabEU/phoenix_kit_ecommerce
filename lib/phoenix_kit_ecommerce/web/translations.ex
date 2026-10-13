@@ -131,6 +131,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
   alias PhoenixKitEcommerce.TranslationSweepSettings, as: SweepSettings
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
   alias PhoenixKitEcommerce.Workers.TranslationSweepWorker, as: SweepWorker
 
   # phoenix_kit_ai is an OPTIONAL dependency (see mix.exs) — this whole
@@ -2065,7 +2066,7 @@ defmodule PhoenixKitEcommerce.Web.Translations do
           <.empty_state :if={@diagnostics == []} title={gettext("No AI requests logged for shop resources yet")} variant="compact" />
           <div :for={entry <- @diagnostics} id={"diagnostic-#{entry.uuid}"} class="border border-base-300 rounded-lg p-3 mb-2">
             <div class="flex flex-wrap items-center gap-2 text-sm">
-              <span class={if(entry.status == "success", do: "badge badge-success badge-sm", else: "badge badge-error badge-sm")}>{entry.status}</span>
+              <span class={if(entry.status == "success", do: "badge badge-success badge-sm", else: "badge badge-error badge-sm")}>{StatusLabels.translation_entry(entry.status)}</span>
               <span class="font-mono text-xs">{entry.resource_type}:{entry.resource_uuid}</span>
               <.time_ago datetime={entry.inserted_at} />
             </div>

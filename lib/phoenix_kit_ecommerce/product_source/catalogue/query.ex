@@ -301,9 +301,8 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
 
   Options: `:category_uuid` (scope to one category), `:exclude_hidden_categories`
   (drop items whose category's `shop_status` is `"hidden"`), `:language`
-  (prefer `data[language]["_title"]` over the value's bare `title` —
-  the picker/sidebar's fuller per-language resolution is Block 5's
-  remaining work; this covers the plain value label), `:catalogue_uuid`
+  (the value's translated title, resolved with dialect and primary-language
+  fallback by `value_label/2`, before its bare `title`), `:catalogue_uuid`
   and `:sets` (pre-resolved by the caller — see `catalogue_uuid/0` and
   `list_sets/0`).
 

@@ -182,7 +182,7 @@ defmodule PhoenixKitEcommerce.Notifications do
     recipients = Enum.reject(recipients, &(&1 == order.user_uuid))
 
     # `metadata["shipping_skipped"]` is stamped by
-    # `PhoenixKitEcommerce.build_order_attrs/4` when the order converted
+    # `PhoenixKitEcommerce.build_order_attrs/5` when the order converted
     # without a shipping method under the `:always`/`:fallback` skip modes -
     # the operator still owes this buyer a delivery arrangement, and
     # nothing else in the admin fan-out flags that.

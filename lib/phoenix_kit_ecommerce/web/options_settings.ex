@@ -220,8 +220,8 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
       <div class="container flex-col mx-auto px-4 py-6 max-w-5xl">
         <.admin_page_header
           back={Routes.path("/admin/shop/settings")}
-          title="Product Options"
-          subtitle="Define global options that apply to all products"
+          title={gettext("Product Options")}
+          subtitle={gettext("Define global options that apply to all products")}
         />
 
         <%!-- Controls Bar --%>
@@ -230,11 +230,11 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
             <div class="flex items-center gap-2 text-sm text-base-content/70">
               <.icon name="hero-information-circle" class="w-4 h-4" />
               <span>
-                Global options apply to all products. Categories can override or add their own.
+                {gettext("Global options apply to all products. Categories can override or add their own.")}
               </span>
             </div>
             <button type="button" phx-click="show_add_modal" class="btn btn-primary btn-sm">
-              <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add Option
+              <.icon name="hero-plus" class="w-4 h-4 mr-1" /> {gettext("Add Option")}
             </button>
           </div>
         </div>
@@ -244,10 +244,10 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
           <div class="card-body">
             <div class="flex items-center justify-between mb-4">
               <h2 class="card-title text-lg">
-                <.icon name="hero-adjustments-horizontal" class="w-5 h-5" /> Global Options
+                <.icon name="hero-adjustments-horizontal" class="w-5 h-5" /> {gettext("Global Options")}
               </h2>
               <span class="text-sm text-base-content/60">
-                {length(@options)} {if length(@options) == 1, do: "option", else: "options"}
+                {ngettext("%{count} option", "%{count} options", length(@options))}
               </span>
             </div>
 
@@ -258,20 +258,20 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                   class="w-16 h-16 mx-auto text-base-content/30 mb-4"
                 />
                 <h3 class="text-lg font-medium text-base-content mb-2">
-                  No options defined yet
+                  {gettext("No options defined yet")}
                 </h3>
                 <p class="text-base-content/60 mb-4">
-                  Add your first global option to get started
+                  {gettext("Add your first global option to get started")}
                 </p>
                 <button type="button" phx-click="show_add_modal" class="btn btn-primary">
-                  <.icon name="hero-plus" class="w-4 h-4 mr-2" /> Create First Option
+                  <.icon name="hero-plus" class="w-4 h-4 mr-2" /> {gettext("Create First Option")}
                 </button>
               </div>
             <% else %>
               <%!-- Table Header --%>
               <div class="hidden sm:flex items-center px-4 py-2 text-xs font-semibold text-base-content/50 uppercase tracking-wider">
-                <div class="flex-1">Option</div>
-                <div class="w-52 text-right">Actions</div>
+                <div class="flex-1">{gettext("Option")}</div>
+                <div class="w-52 text-right">{gettext("Actions")}</div>
               </div>
 
               <div class="flex flex-col gap-2">
@@ -295,10 +295,10 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                         </span>
                         <span class="badge badge-ghost badge-sm font-mono">{opt["type"]}</span>
                         <%= if !enabled do %>
-                          <span class="badge badge-neutral badge-sm">Disabled</span>
+                          <span class="badge badge-neutral badge-sm">{gettext("Disabled")}</span>
                         <% end %>
                         <%= if opt["required"] do %>
-                          <span class="badge badge-warning badge-sm">Required</span>
+                          <span class="badge badge-warning badge-sm">{gettext("Required")}</span>
                         <% end %>
                         <%= if opt["unit"] do %>
                           <span class="badge badge-outline badge-sm">{opt["unit"]}</span>
@@ -308,7 +308,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                             {opt["modifier_type"] || "fixed"}
                           </span>
                           <%= if opt["allow_override"] do %>
-                            <span class="badge badge-info badge-sm">Override</span>
+                            <span class="badge badge-info badge-sm">{gettext("Override")}</span>
                           <% end %>
                         <% end %>
                       </div>
@@ -328,7 +328,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                     <div class="flex items-center gap-1 mt-3 sm:mt-0 sm:ml-4 shrink-0">
                       <label
                         class="swap swap-rotate btn btn-ghost btn-sm tooltip tooltip-bottom"
-                        data-tip={if enabled, do: "Disable", else: "Enable"}
+                        data-tip={if enabled, do: gettext("Disable"), else: gettext("Enable")}
                       >
                         <input
                           type="checkbox"
@@ -344,7 +344,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                         phx-click="show_edit_modal"
                         phx-value-key={opt["key"]}
                         class="btn btn-ghost btn-sm tooltip tooltip-bottom"
-                        data-tip="Edit"
+                        data-tip={gettext("Edit")}
                       >
                         <.icon name="hero-pencil" class="w-4 h-4" />
                       </button>
@@ -353,9 +353,9 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                         phx-click="delete_option"
                         phx-disable-with="…"
                         phx-value-key={opt["key"]}
-                        data-confirm="Delete this option? This cannot be undone."
+                        data-confirm={gettext("Delete this option? This cannot be undone.")}
                         class="btn btn-ghost btn-sm text-error tooltip tooltip-bottom"
-                        data-tip="Delete"
+                        data-tip={gettext("Delete")}
                       >
                         <.icon name="hero-trash" class="w-4 h-4" />
                       </button>
@@ -371,13 +371,13 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
         <div class="collapse collapse-arrow bg-base-200/50 mt-6">
           <input type="checkbox" />
           <div class="collapse-title font-medium text-sm flex items-center gap-2">
-            <.icon name="hero-book-open" class="w-4 h-4" /> Option Types Reference
+            <.icon name="hero-book-open" class="w-4 h-4" /> {gettext("Option Types Reference")}
           </div>
           <div class="collapse-content">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
                 <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">
-                  Input Types
+                  {gettext("Input Types")}
                 </h4>
                 <div class="flex flex-wrap gap-1.5">
                   <span class="badge badge-sm">text</span>
@@ -389,14 +389,14 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
               </div>
               <div>
                 <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">
-                  Price Modifiers
+                  {gettext("Price Modifiers")}
                 </h4>
                 <div class="flex flex-wrap gap-1.5">
                   <span class="badge badge-success badge-sm">fixed (+10)</span>
                   <span class="badge badge-info badge-sm">percent (+20%)</span>
                 </div>
                 <p class="text-xs text-base-content/50 mt-1.5">
-                  Enable "Allow Override" for per-product values
+                  {gettext("Enable \"Allow Override\" for per-product values")}
                 </p>
               </div>
             </div>
@@ -416,44 +416,44 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
               <.icon name="hero-x-mark" class="w-4 h-4" />
             </button>
             <h3 class="font-bold text-lg mb-4">
-              {if @editing_option, do: "Edit Option", else: "Add Option"}
+              {if @editing_option, do: gettext("Edit Option"), else: gettext("Add Option")}
             </h3>
 
             <.form for={%{}} phx-change="validate_form" phx-submit="save_option" class="space-y-4">
               <%!-- Label --%>
               <div class="fieldset">
-                <label class="label"><span class="fieldset-legend">Label *</span></label>
+                <label class="label"><span class="fieldset-legend">{gettext("Label")} *</span></label>
                 <input
                   type="text"
                   name="option[label]"
                   value={@form_data.label}
                   class="input"
-                  placeholder="e.g., Material"
+                  placeholder={gettext("e.g., Material")}
                   required
                 />
               </div>
 
               <%!-- Key --%>
               <div class="fieldset">
-                <label class="label"><span class="fieldset-legend">Key</span></label>
+                <label class="label"><span class="fieldset-legend">{gettext("Key")}</span></label>
                 <input
                   type="text"
                   name="option[key]"
                   value={@form_data.key}
                   class="input font-mono"
-                  placeholder="Auto-generated from label"
+                  placeholder={gettext("Auto-generated from label")}
                   disabled={@editing_option != nil}
                 />
                 <label class="label">
                   <span class="fieldset-label text-base-content/60">
-                    Lowercase with underscores, auto-generated from label
+                    {gettext("Lowercase with underscores, auto-generated from label")}
                   </span>
                 </label>
               </div>
 
               <%!-- Type --%>
               <div class="fieldset">
-                <label class="label"><span class="fieldset-legend">Type *</span></label>
+                <label class="label"><span class="fieldset-legend">{gettext("Type")} *</span></label>
                 <select name="option[type]" class="select">
                   <%= for type <- @supported_types do %>
                     <option value={type} selected={@form_data.type == type}>
@@ -467,13 +467,13 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
               <%= if @form_data.type in ["select", "multiselect"] do %>
                 <div class="fieldset">
                   <label class="label">
-                    <span class="fieldset-legend">Options *</span>
+                    <span class="fieldset-legend">{gettext("Options")} *</span>
                     <button
                       type="button"
                       phx-click="add_option"
                       class="btn btn-ghost btn-xs"
                     >
-                      <.icon name="hero-plus" class="w-4 h-4" /> Add
+                      <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add")}
                     </button>
                   </label>
                   <div class="space-y-2">
@@ -484,7 +484,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           name={"option[options][#{idx}]"}
                           value={opt}
                           class="input input-sm flex-1"
-                          placeholder="Option value"
+                          placeholder={gettext("Option value")}
                         />
                         <button
                           type="button"
@@ -497,7 +497,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                       </div>
                     <% end %>
                     <%= if @form_data.options == [] do %>
-                      <p class="text-sm text-warning">Add at least one option</p>
+                      <p class="text-sm text-warning">{gettext("Add at least one option")}</p>
                     <% end %>
                   </div>
                 </div>
@@ -513,11 +513,11 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                       phx-click="toggle_affects_price"
                       class="checkbox checkbox-primary"
                     />
-                    <span class="fieldset-legend">Affects Price</span>
+                    <span class="fieldset-legend">{gettext("Affects Price")}</span>
                   </label>
                   <label class="label pt-0">
                     <span class="fieldset-label text-base-content/60">
-                      Enable to add price modifiers for each option
+                      {gettext("Enable to add price modifiers for each option")}
                     </span>
                   </label>
                 </div>
@@ -527,7 +527,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                   <%!-- Modifier Type Selector --%>
                   <div class="fieldset">
                     <label class="label">
-                      <span class="fieldset-legend">Modifier Type</span>
+                      <span class="fieldset-legend">{gettext("Modifier Type")}</span>
                     </label>
                     <div class="flex flex-wrap gap-4">
                       <label class="label cursor-pointer gap-2">
@@ -540,7 +540,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           phx-value-type="fixed"
                           class="radio radio-primary"
                         />
-                        <span class="fieldset-legend">Fixed (+10)</span>
+                        <span class="fieldset-legend">{gettext("Fixed (+10)")}</span>
                       </label>
                       <label class="label cursor-pointer gap-2">
                         <input
@@ -552,7 +552,7 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                           phx-value-type="percent"
                           class="radio radio-primary"
                         />
-                        <span class="fieldset-legend">Percent (+20%)</span>
+                        <span class="fieldset-legend">{gettext("Percent (+20%)")}</span>
                       </label>
                     </div>
                   </div>
@@ -560,14 +560,14 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                   <%!-- Price Modifiers --%>
                   <div class="fieldset">
                     <label class="label">
-                      <span class="fieldset-legend">Price Modifiers (Default Values)</span>
+                      <span class="fieldset-legend">{gettext("Price Modifiers (Default Values)")}</span>
                     </label>
                     <div class="p-4 bg-base-200 rounded-lg space-y-3">
                       <p class="text-sm text-base-content/70 mb-3">
                         <%= if @form_data.modifier_type == "percent" do %>
-                          Set percentage adjustment for each option (use 0 for no change)
+                          {gettext("Set percentage adjustment for each option (use 0 for no change)")}
                         <% else %>
-                          Set price adjustment for each option (use 0 for no change)
+                          {gettext("Set price adjustment for each option (use 0 for no change)")}
                         <% end %>
                       </p>
                       <%= for opt <- @form_data.options do %>
@@ -606,9 +606,9 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                         class="checkbox checkbox-primary"
                       />
                       <div>
-                        <span class="fieldset-legend font-medium">Allow Override Per-Product</span>
+                        <span class="fieldset-legend font-medium">{gettext("Allow Override Per-Product")}</span>
                         <p class="text-xs text-base-content/60">
-                          Enable editing price modifiers for each individual product
+                          {gettext("Enable editing price modifiers for each individual product")}
                         </p>
                       </div>
                     </label>
@@ -620,19 +620,19 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
               <%= if @form_data.affects_price && @form_data.type not in ["select", "multiselect"] do %>
                 <div class="alert alert-warning">
                   <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                  <span>Price modifiers only work with Select or Multiselect types</span>
+                  <span>{gettext("Price modifiers only work with Select or Multiselect types")}</span>
                 </div>
               <% end %>
 
               <%!-- Unit --%>
               <div class="fieldset">
-                <label class="label"><span class="fieldset-legend">Unit (optional)</span></label>
+                <label class="label"><span class="fieldset-legend">{gettext("Unit (optional)")}</span></label>
                 <input
                   type="text"
                   name="option[unit]"
                   value={@form_data.unit}
                   class="input input-sm w-32"
-                  placeholder="e.g., cm, kg"
+                  placeholder={gettext("e.g., cm, kg")}
                 />
               </div>
 
@@ -646,17 +646,17 @@ defmodule PhoenixKitEcommerce.Web.OptionsSettings do
                     checked={@form_data.required}
                     class="checkbox checkbox-primary"
                   />
-                  <span class="fieldset-legend">Required field</span>
+                  <span class="fieldset-legend">{gettext("Required field")}</span>
                 </label>
               </div>
 
               <%!-- Actions --%>
               <div class="modal-action">
                 <button type="button" phx-click="close_modal" class="btn btn-ghost">
-                  Cancel
+                  {gettext("Cancel")}
                 </button>
                 <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary">
-                  {if @editing_option, do: "Update", else: "Create"}
+                  {if @editing_option, do: gettext("Update"), else: gettext("Create")}
                 </button>
               </div>
             </.form>

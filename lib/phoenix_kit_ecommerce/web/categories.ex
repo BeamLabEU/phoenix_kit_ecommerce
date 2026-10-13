@@ -33,6 +33,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @per_page 25
 
@@ -398,7 +399,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
           <%!-- Categories Table --%>
           <.table_default id="categories-table" variant="zebra" class="w-full" toggleable={true} items={@categories}
             card_fields={fn category -> [
-              %{label: gettext("Status"), value: category.status || "active"},
+              %{label: gettext("Status"), value: StatusLabels.category(category.status)},
               %{label: gettext("Position"), value: category.position}
             ] end}>
 
@@ -487,7 +488,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
                   </.table_default_cell>
                   <.table_default_cell>
                     <span class={status_badge_class(category.status)}>
-                      {category.status || "active"}
+                      {StatusLabels.category(category.status)}
                     </span>
                   </.table_default_cell>
                   <.table_default_cell>{category.position}</.table_default_cell>
@@ -700,7 +701,10 @@ defmodule PhoenixKitEcommerce.Web.Categories do
        |> assign(:show_bulk_modal, nil)
        |> put_flash(
          :info,
-         gettext("%{count} categories updated to %{status}", count: count, status: status)
+         gettext("%{count} categories updated to %{status}",
+           count: count,
+           status: StatusLabels.category(status)
+         )
        )}
     else
       {:noreply, put_flash(socket, :error, gettext("Not authorized"))}

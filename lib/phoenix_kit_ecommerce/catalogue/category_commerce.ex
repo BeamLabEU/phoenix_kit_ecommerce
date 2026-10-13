@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Catalogue.CategoryCommerce do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.OptionTypes
 
   @type t :: %__MODULE__{}
@@ -45,7 +46,7 @@ defmodule PhoenixKitEcommerce.Catalogue.CategoryCommerce do
     |> validate_change(:option_schema, fn :option_schema, value ->
       case OptionTypes.validate_options(value) do
         {:ok, _} -> []
-        {:error, reason} -> [option_schema: reason]
+        {:error, reason} -> [option_schema: Errors.message(reason)]
       end
     end)
     |> validate_parcel_defaults()

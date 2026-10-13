@@ -479,6 +479,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     do_add_to_cart(socket)
   end
 
+  # Last, so it shadows nothing: an event this page does not know, or a
+  # known one whose payload is not the shape its clause takes.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
   defp do_add_to_cart(socket) do
     %{
       selected_specs: selected_specs,
