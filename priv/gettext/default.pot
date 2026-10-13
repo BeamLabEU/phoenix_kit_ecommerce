@@ -7542,3 +7542,63 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "wall art, home decor stickers"
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Admin API"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Outside systems, scripts and AI agents can read and change prices, availability and images through the admin API. The on/off switch and the keys are on the API settings page."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "The admin API is switched on."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "The admin API is switched off."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Shopify sync is off. The admin API is how an outside system feeds products into this shop."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Shopify sync is on. A price written through the API can be overwritten by the next sync; the change log shows who wrote each value."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Confirmation threshold for price changes (%)"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "A price change larger than this percentage of the current price is held until it is confirmed. A first price is never held back."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Open API settings →"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Price change threshold updated"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter a whole number from 0 to 1000."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/warehouse_source_kind.ex
+#, elixir-autogen, elixir-format
+msgid "Shop order"
+msgstr ""

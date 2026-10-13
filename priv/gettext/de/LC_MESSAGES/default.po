@@ -7542,3 +7542,63 @@ msgstr "Regal, Maske, Vase, Pflanzgefäß, Halter, Ständer, Lampe"
 #, elixir-autogen, elixir-format
 msgid "wall art, home decor stickers"
 msgstr "Wandkunst, Deko-Aufkleber"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Admin API"
+msgstr "Admin-API"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Outside systems, scripts and AI agents can read and change prices, availability and images through the admin API. The on/off switch and the keys are on the API settings page."
+msgstr "Externe Systeme, Skripte und KI-Agenten können über die Admin-API Preise, Verfügbarkeit und Bilder lesen und ändern. Der Ein/Aus-Schalter und die Schlüssel befinden sich auf der API-Einstellungsseite."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "The admin API is switched on."
+msgstr "Die Admin-API ist eingeschaltet."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "The admin API is switched off."
+msgstr "Die Admin-API ist ausgeschaltet."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Shopify sync is off. The admin API is how an outside system feeds products into this shop."
+msgstr "Die Shopify-Synchronisierung ist aus. Über die Admin-API kann ein externes System Produkte in diesen Shop einspielen."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Shopify sync is on. A price written through the API can be overwritten by the next sync; the change log shows who wrote each value."
+msgstr "Die Shopify-Synchronisierung ist an. Ein über die API geschriebener Preis kann von der nächsten Synchronisierung überschrieben werden; das Änderungsprotokoll zeigt, wer welchen Wert geschrieben hat."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Confirmation threshold for price changes (%)"
+msgstr "Bestätigungsschwelle für Preisänderungen (%)"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "A price change larger than this percentage of the current price is held until it is confirmed. A first price is never held back."
+msgstr "Eine Preisänderung, die diesen Prozentsatz des aktuellen Preises überschreitet, wird bis zur Bestätigung zurückgehalten. Ein erster Preis wird nie zurückgehalten."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Open API settings →"
+msgstr "API-Einstellungen öffnen →"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Price change threshold updated"
+msgstr "Schwelle für Preisänderungen aktualisiert"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter a whole number from 0 to 1000."
+msgstr "Geben Sie eine ganze Zahl von 0 bis 1000 ein."
+
+#: lib/phoenix_kit_ecommerce/warehouse_source_kind.ex
+#, elixir-autogen, elixir-format
+msgid "Shop order"
+msgstr "Shop-Bestellung"
