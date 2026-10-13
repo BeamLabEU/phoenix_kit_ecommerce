@@ -6,6 +6,8 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
   """
   use PhoenixKitEcommerce.DataCase, async: false
 
+  @compile {:no_warn_undefined, PhoenixKit.API.Validator}
+
   import PhoenixKitEcommerce.SearchFixtures
 
   alias PhoenixKit.API.Validator
@@ -226,8 +228,11 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
     end
 
     @tag :requires_core_api
-    test "the schemas accept the answer and refuse too many ids or a stray field", t do
-      out = get!(%{"ids" => [t.a, Ecto.UUID.generate()]})
+    test "the schemas accept the answer, a stub and a not_found row included, and refuse too many ids or a stray field",
+         t do
+      old = legacy_product!(%{"en" => "Old Lamp"}, %{status: "archived"})
+      out = get!(%{"ids" => [t.a, old.uuid, Ecto.UUID.generate()]})
+      assert out["summary"] == %{"found" => 1, "discontinued" => 1, "not_found" => 1}
 
       assert {:ok, _} =
                Validator.validate(Catalog.get_products_output_schema(), out)

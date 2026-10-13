@@ -1,6 +1,8 @@
 defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
   use ExUnit.Case, async: true
 
+  @compile {:no_warn_undefined, PhoenixKit.API.Validator}
+
   alias PhoenixKit.API.Validator
   alias PhoenixKitEcommerce.API.Public.Schemas
 
@@ -12,7 +14,7 @@ defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
   end
 
   @tag :requires_core_api
-  test "money, list item, card and stub schemas accept what the cards build" do
+  test "money, list item and card schemas accept what the cards build" do
     money = %{"amount" => "12.50", "currency" => "EUR"}
 
     assert {:ok, _} = Validator.validate(Schemas.money(), money)
@@ -38,14 +40,15 @@ defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
     assert {:ok, _} =
              Validator.validate(Schemas.card(), Map.put(item, "tags", ["x"]))
 
+    # The stub of a discontinued product is a card with only the three required fields.
     assert {:ok, _} =
-             Validator.validate(Schemas.stub(), %{
+             Validator.validate(Schemas.card(), %{
                "id" => "a",
                "title" => "T",
                "status" => "discontinued"
              })
 
     assert {:error, [%{path: "id"}]} =
-             Validator.validate(Schemas.stub(), %{"title" => "T", "status" => "x"})
+             Validator.validate(Schemas.card(), %{"title" => "T", "status" => "x"})
   end
 end

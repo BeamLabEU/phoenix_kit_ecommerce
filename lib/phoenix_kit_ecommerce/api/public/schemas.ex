@@ -84,7 +84,11 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
     }
   end
 
-  @doc "The full card of `shop.get_products`: a list item plus description, tags, options and images."
+  @doc """
+  The full card of `shop.get_products`: a list item plus description, tags,
+  options and images. The stub of a discontinued product (`id`, `title` and
+  `status`, the three required fields) satisfies it too.
+  """
   @spec card() :: map()
   def card do
     base = list_item()
@@ -116,16 +120,6 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
     }
 
     %{base | "properties" => Map.merge(base["properties"], extra)}
-  end
-
-  @doc "What `shop.get_products` returns for a discontinued product."
-  @spec stub() :: map()
-  def stub do
-    %{
-      "type" => "object",
-      "required" => ["id", "title", "status"],
-      "properties" => %{"id" => @string, "title" => @string, "status" => @string}
-    }
   end
 
   @spec warnings() :: map()

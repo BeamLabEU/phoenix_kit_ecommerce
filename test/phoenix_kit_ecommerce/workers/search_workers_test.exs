@@ -60,7 +60,7 @@ defmodule PhoenixKitEcommerce.Workers.SearchWorkersTest do
     assert :ok = perform(SearchRebuildWorker, %{})
 
     assert paths() == [{"Red Vase", []}]
-    assert Indexer.status().rows == 1
+    assert Repo.aggregate(Entry, :count) == 1
   end
 
   test "a rebuild job for a catalogue that is not the shop's is skipped" do

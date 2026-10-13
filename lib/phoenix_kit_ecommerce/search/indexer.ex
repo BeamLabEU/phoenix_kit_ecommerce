@@ -50,7 +50,6 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
   alias PhoenixKitEcommerce.API.Record
   alias PhoenixKitEcommerce.Search.Document
   alias PhoenixKitEcommerce.Search.Entry
-  alias PhoenixKitEcommerce.Search.Trigram
   alias PhoenixKitEcommerce.Translations
 
   @chunk 100
@@ -119,25 +118,6 @@ defmodule PhoenixKitEcommerce.Search.Indexer do
 
         {:ok, %{products: length(ids), indexed: indexed, removed: removed}}
     end
-  end
-
-  @doc "Row counts per language, and whether the typo fallback is available."
-  @spec status() :: %{
-          rows: non_neg_integer(),
-          languages: %{String.t() => non_neg_integer()},
-          trigram: boolean()
-        }
-  def status do
-    languages =
-      from(e in Entry, group_by: e.language, select: {e.language, count(e.uuid)})
-      |> RepoHelper.repo().all()
-      |> Map.new()
-
-    %{
-      rows: languages |> Map.values() |> Enum.sum(),
-      languages: languages,
-      trigram: Trigram.available?()
-    }
   end
 
   @doc "True when the index has no row at all."

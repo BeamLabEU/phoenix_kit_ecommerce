@@ -470,19 +470,20 @@ defmodule PhoenixKitEcommerce.Search.IndexerTest do
     end
   end
 
-  describe "status/0 and empty?/0" do
-    test "count the rows per language" do
+  describe "empty?/0" do
+    test "is true until a row is written, which every enabled language gets" do
       enable_languages!(["en", "de"])
       assert Indexer.empty?()
-      assert %{rows: 0, languages: languages} = Indexer.status()
-      assert languages == %{}
 
       product = legacy_product!(%{"en" => "Red Vase"})
       {:ok, _} = Indexer.reindex_items([product.uuid])
 
       refute Indexer.empty?()
-      assert %{rows: 2, languages: %{"en" => 1, "de" => 1}, trigram: trigram} = Indexer.status()
-      assert is_boolean(trigram)
+
+      languages =
+        Repo.all(from(e in Entry, group_by: e.language, select: {e.language, count(e.uuid)}))
+
+      assert Map.new(languages) == %{"en" => 1, "de" => 1}
     end
   end
 end
