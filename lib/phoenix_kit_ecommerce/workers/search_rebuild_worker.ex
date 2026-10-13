@@ -11,8 +11,11 @@ defmodule PhoenixKitEcommerce.Workers.SearchRebuildWorker do
       an event about another catalogue of the same install is ignored.
 
   A rebuild that cannot resolve the shop's catalogue is cancelled, not retried,
-  and changes nothing (`PhoenixKitEcommerce.Search.Indexer.rebuild/0`). Two
-  rebuild requests with the same arguments inside two minutes are one job.
+  and changes nothing (`PhoenixKitEcommerce.Search.Indexer.rebuild/0`). While the
+  shop module is switched off the job does nothing: core writes the cron entry
+  into the host's config whether or not the module is enabled. Two rebuild
+  requests with the same arguments inside two minutes are one job, as long as
+  the first one is still waiting.
   """
 
   use Oban.Worker,
@@ -20,18 +23,23 @@ defmodule PhoenixKitEcommerce.Workers.SearchRebuildWorker do
     max_attempts: 2,
     unique: [period: 120, states: [:available, :scheduled]]
 
+  alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.Search.Indexer
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
-    if wanted?(args) do
-      case Indexer.rebuild() do
-        {:ok, _stats} -> :ok
-        {:error, :no_catalogue} -> {:cancel, "the shop catalogue cannot be resolved"}
-      end
+    if Shop.enabled?() and wanted?(args) do
+      rebuild()
     else
       :ok
+    end
+  end
+
+  defp rebuild do
+    case Indexer.rebuild() do
+      {:ok, _stats} -> :ok
+      {:error, :no_catalogue} -> {:cancel, "the shop catalogue cannot be resolved"}
     end
   end
 

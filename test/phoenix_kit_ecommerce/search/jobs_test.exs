@@ -74,6 +74,42 @@ defmodule PhoenixKitEcommerce.Search.JobsTest do
              Enum.sort([%{}, %{"catalogue_uuid" => catalogue}])
   end
 
+  test "a rebuild is scheduled about ten seconds ahead" do
+    {:ok, _} = Jobs.enqueue_rebuild(nil)
+
+    assert [%{scheduled_at: at}] = jobs(@rebuild)
+    assert DateTime.diff(at, DateTime.utc_now()) in 7..11
+  end
+
+  test "an item job that is already executing does not absorb the next write" do
+    uuid = Ecto.UUID.generate()
+    {:ok, first} = Jobs.enqueue_item(uuid)
+
+    Repo.update_all(from(j in Oban.Job, where: j.id == ^first.id), set: [state: "executing"])
+
+    assert {:ok, %Oban.Job{conflict?: false, id: id}} = Jobs.enqueue_item(uuid)
+    assert id != first.id
+    assert length(jobs(@reindex)) == 2
+  end
+
+  test "the same category enqueued twice inside the window is one job" do
+    uuid = Ecto.UUID.generate()
+
+    assert {:ok, %Oban.Job{conflict?: false}} = Jobs.enqueue_category(uuid)
+    assert {:ok, %Oban.Job{conflict?: true}} = Jobs.enqueue_category(uuid)
+
+    assert length(jobs(@reindex)) == 1
+  end
+
+  test "an item job and a category job with the same uuid are different jobs" do
+    uuid = Ecto.UUID.generate()
+
+    assert {:ok, %Oban.Job{conflict?: false}} = Jobs.enqueue_item(uuid)
+    assert {:ok, %Oban.Job{conflict?: false}} = Jobs.enqueue_category(uuid)
+
+    assert jobs(@reindex) |> Enum.map(& &1.args["kind"]) |> Enum.sort() == ["category", "item"]
+  end
+
   test "a second rebuild request with the same args is not a second job" do
     assert {:ok, %Oban.Job{conflict?: false}} = Jobs.enqueue_rebuild(nil)
     assert {:ok, %Oban.Job{conflict?: true}} = Jobs.enqueue_rebuild(nil)

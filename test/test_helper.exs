@@ -300,7 +300,7 @@ billing_user_menu_exclude =
     [:requires_billing_user_menu]
   end
 
-# Phase 3a registers tools and cron entries through callbacks that exist only in
+# The shop API registers tools and cron entries through callbacks that exist only in
 # a core with the shop API (`PhoenixKit.API.*`, `PhoenixKit.ObanCrons`). Tests of
 # those are tagged :requires_core_api and are EXCLUDED AT RUN TIME on a core
 # without the API. The tag does not stop a test file from being COMPILED, so

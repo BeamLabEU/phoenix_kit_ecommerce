@@ -6,9 +6,12 @@ defmodule PhoenixKitEcommerce.Search.Jobs do
   `(kind, uuid)` for a minute while they are still waiting, so the many writes
   of one edit (a sync writes a product field by field) become one reindex.
   Rebuild requests are made unique by `Workers.SearchRebuildWorker` itself.
+  Uniqueness covers waiting jobs only: a job that is already running does not
+  absorb the next write, which queues a new job, so the last write is never lost.
 
-  Nothing here raises: if Oban is not running (a host that has not started it)
-  the failure is logged and returned, and the nightly rebuild repairs the index.
+  An Oban or database failure does not raise: it is logged and returned, and
+  the nightly rebuild repairs the index. (The functions that take a uuid still
+  require a binary.)
   """
 
   require Logger
@@ -80,17 +83,17 @@ defmodule PhoenixKitEcommerce.Search.Jobs do
     ]
   end
 
-  # Only the exception module is logged: a changeset or connection error can
-  # embed the job arguments.
+  # Only the exception module is logged and returned: a changeset or connection
+  # error can embed the job arguments.
   defp insert(changeset) do
     Oban.insert(changeset)
   rescue
     error ->
       Logger.warning("[Search] could not enqueue a search job: #{inspect(error.__struct__)}")
-      {:error, error}
+      {:error, error.__struct__}
   catch
     :exit, _reason ->
-      Logger.warning("[Search] could not enqueue a search job: Oban is not running")
+      Logger.warning("[Search] could not enqueue a search job: the Oban call exited")
       {:error, :oban_unavailable}
   end
 end

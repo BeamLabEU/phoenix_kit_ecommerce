@@ -1116,9 +1116,9 @@ defmodule PhoenixKitEcommerce do
 
   # One entry per worker module, no args (core's contract for module crons).
   # `mix phoenix_kit.update` writes it into the host's Oban crontab.
-  # Defined WITHOUT `@impl`: `oban_crons/0` and `api_tools/0` are optional
-  # callbacks that only a core with the shop API declares, and an `@impl` for a
-  # callback the core does not declare is a compile warning.
+  # Defined WITHOUT `@impl`: `oban_crons/0` is an optional callback that only a
+  # core with the shop API declares, and an `@impl` for a callback the core does
+  # not declare is a compile warning.
   def oban_crons, do: [{"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker}]
 
   @doc """

@@ -71,6 +71,16 @@ defmodule PhoenixKitEcommerce.Workers.SearchWorkersTest do
     assert paths() == []
   end
 
+  test "a rebuild job does nothing while the shop module is switched off" do
+    _product = legacy_product!(%{"en" => "Red Vase"})
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+
+    assert :ok = perform(SearchRebuildWorker, %{})
+    assert :ok = perform(SearchRebuildWorker, %{"catalogue_uuid" => Ecto.UUID.generate()})
+
+    assert paths() == []
+  end
+
   test "both workers use the shop_search queue and a rebuild is unique" do
     assert to_string(SearchReindexWorker.new(%{}).changes.queue) == "shop_search"
     assert to_string(SearchRebuildWorker.new(%{}).changes.queue) == "shop_search"
