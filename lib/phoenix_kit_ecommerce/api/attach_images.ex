@@ -4,7 +4,10 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   It uses the importer's downloader, with its size limit, its
   content-type check and its near-duplicate reuse, and **always** with the
   private-network guard on: an API caller is not the shop's own CSV import,
-  so `shop_image_import_allow_private_networks` does not apply to it.
+  so `shop_image_import_allow_private_networks` does not apply to it. The
+  downloaded bytes must also be a raster picture of the declared type (PNG,
+  JPEG, GIF or WebP), so HTML served as `image/png` is refused, and an SVG is
+  refused whatever the shop's SVG setting says.
 
   A picture whose URL (query stripped) is already stored is reused without a
   download. New pictures are appended after the ones the product has; a
@@ -320,6 +323,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       concurrency: 4,
       max_bytes: @max_image_bytes,
       private_networks: :forbid,
+      require_raster: true,
       redact_query: true
     ] ++ Application.get_env(:phoenix_kit_ecommerce, :api_image_download_opts, [])
   end
@@ -373,6 +377,10 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   defp reason_text(:invalid_scheme), do: "only http and https URLs are accepted"
   defp reason_text(:invalid_host), do: "the URL has no host"
   defp reason_text(:invalid_url), do: "the URL contains characters that must be percent-encoded"
+
+  defp reason_text(:content_mismatch),
+    do: "the file is not a PNG, JPEG, GIF or WebP picture of the type the server declared"
+
   defp reason_text(:timeout), do: "the download timed out"
   defp reason_text(:not_found), do: "the server answered 404"
   defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)

@@ -317,6 +317,40 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert F.reload!(item).data["media_order"] in [nil, []]
   end
 
+  test "a body that is not the picture it claims to be is refused, an SVG whatever the shop setting says",
+       %{catalogue: catalogue, ctx: ctx, first: first} do
+    on_exit(fn ->
+      Settings.update_boolean_setting_with_module("shop_allow_svg_uploads", false, "shop")
+    end)
+
+    Settings.update_boolean_setting_with_module("shop_allow_svg_uploads", true, "shop")
+    item = F.item!(catalogue)
+
+    serve(%{
+      "/page.png" => {"image/png", "<html><script>alert(1)</script></html>"},
+      "/vector.svg" =>
+        {"image/svg+xml", ~s(<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>)},
+      "/fine.png" => {"image/png", first}
+    })
+
+    assert {:ok, %{"results" => [result]}} =
+             attach(
+               [row(item, [image("/page.png"), image("/vector.svg"), image("/fine.png")])],
+               ctx
+             )
+
+    assert result["attached"] == 1
+
+    assert [%{"url" => page, "reason" => reason}, %{"url" => vector, "reason" => reason_two}] =
+             result["failed"]
+
+    assert page == @host <> "/page.png"
+    assert vector == @host <> "/vector.svg"
+    assert reason =~ "not a PNG, JPEG, GIF or WebP"
+    assert reason_two == reason
+    assert [_one] = F.reload!(item).data["media_order"]
+  end
+
   test "a picture that fails does not hide the one that worked", %{
     catalogue: catalogue,
     ctx: ctx,

@@ -22,6 +22,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   require Logger
 
   alias PhoenixKit.Modules.Storage
+  alias PhoenixKit.Modules.Storage.Sniff
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.Services.ImageFingerprint
 
@@ -36,6 +37,10 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   # default; `shop_allow_svg_uploads` re-enables it for shops that need
   # vector assets and trust their import sources.
   @svg_content_type "image/svg+xml"
+
+  # The most of a remote-supplied value (a response header) that reaches a
+  # log line.
+  @max_logged_chars 80
 
   @doc """
   Downloads an image from a URL to a temporary file.
@@ -56,6 +61,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
       `:forbid` (loopback, private and link-local addresses are refused
       whatever the setting says, on the first URL and on every redirect;
       the admin API always passes it)
+    * `:require_raster` - `true` also reads the downloaded bytes
+      (`PhoenixKit.Modules.Storage.Sniff`) and refuses a body that is not a
+      raster image of the type the server declared, with
+      `{:error, :content_mismatch}`: HTML served as `image/png`, and an SVG
+      whatever the shop's SVG setting says (default: `false`; the admin API
+      passes `true`)
 
   ## Examples
 
@@ -87,9 +98,31 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
          :ok <- validate_content_type(content_type),
          :ok <- validate_size(response, max_bytes),
          body = IO.iodata_to_binary(response.body),
-         {:ok, temp_path} <- write_temp_file(body, content_type) do
+         {:ok, temp_path} <- write_temp_file(body, content_type),
+         :ok <- check_content(temp_path, content_type, opts) do
       {:ok, temp_path, content_type, byte_size(body)}
     end
+  end
+
+  # With `require_raster: true` the bytes must be a raster image, and the one
+  # the declared type says: a Content-Type is the remote server's claim.
+  defp check_content(temp_path, content_type, opts) do
+    if Keyword.get(opts, :require_raster, false) do
+      case Sniff.sniff(temp_path) do
+        {:ok, %{format: format, mime: ^content_type}} ->
+          if Sniff.raster?(format), do: :ok, else: reject_content(temp_path)
+
+        _other ->
+          reject_content(temp_path)
+      end
+    else
+      :ok
+    end
+  end
+
+  defp reject_content(temp_path) do
+    cleanup_temp_file(temp_path)
+    {:error, :content_mismatch}
   end
 
   @doc """
@@ -821,6 +854,16 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   defp private_address?({0, 0, 0, 0, 0, 0, g, h}) when g > 0 or h > 1,
     do: private_address?(unfold_v4(g, h))
 
+  # The other IPv6 forms that carry an IPv4 address reach it through a
+  # translator or a relay the host may have: SIIT (`::ffff:0:a.b.c.d`), NAT64
+  # (`64:ff9b::a.b.c.d`) and 6to4 (`2002:<IPv4>::`). The IPv4 rule below
+  # decides, on the embedded address. The local-use NAT64 prefix
+  # (`64:ff9b:1::/48`) is never a public destination.
+  defp private_address?({0, 0, 0, 0, 0xFFFF, 0, g, h}), do: private_address?(unfold_v4(g, h))
+  defp private_address?({0x64, 0xFF9B, 0, 0, 0, 0, g, h}), do: private_address?(unfold_v4(g, h))
+  defp private_address?({0x64, 0xFF9B, 1, _, _, _, _, _}), do: true
+  defp private_address?({0x2002, g, h, _, _, _, _, _}), do: private_address?(unfold_v4(g, h))
+
   # Loopback, RFC1918, link-local (incl. 169.254.169.254 metadata),
   # carrier-grade NAT, and the various reserved ranges.
   defp private_address?({127, _, _, _}), do: true
@@ -829,12 +872,15 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   defp private_address?({169, 254, _, _}), do: true
   defp private_address?({172, b, _, _}) when b >= 16 and b <= 31, do: true
   defp private_address?({100, b, _, _}) when b >= 64 and b <= 127, do: true
+  defp private_address?({192, 0, 0, _}), do: true
+  defp private_address?({198, b, _, _}) when b in 18..19, do: true
   defp private_address?({0, _, _, _}), do: true
   defp private_address?({a, _, _, _}) when a >= 224, do: true
   defp private_address?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
   defp private_address?({0, 0, 0, 0, 0, 0, 0, 0}), do: true
   defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFC00..0xFDFF, do: true
   defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFE80..0xFEBF, do: true
+  defp private_address?({a, _, _, _, _, _, _, _}) when a in 0xFEC0..0xFEFF, do: true
   defp private_address?(_), do: false
 
   defp unfold_v4(g, h), do: {div(g, 256), rem(g, 256), div(h, 256), rem(h, 256)}
@@ -1031,8 +1077,16 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
   end
 
   defp validate_content_type(content_type) do
-    Logger.warning("Invalid content type for image download: #{content_type}")
+    Logger.warning("Invalid content type for image download: #{loggable(content_type)}")
     {:error, {:invalid_content_type, content_type}}
+  end
+
+  # A remote-supplied value for a log line: printable ASCII only, cut short.
+  defp loggable(value) do
+    value
+    |> to_string()
+    |> String.slice(0, @max_logged_chars)
+    |> String.replace(~r/[^\x20-\x7E]/, "?")
   end
 
   # The streaming collector already halted an oversized body; this turns

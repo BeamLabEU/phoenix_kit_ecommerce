@@ -88,6 +88,71 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPrivateGuardTest do
     end
   end
 
+  describe "check_url/2 — addresses that embed an IPv4 address, and ranges that are never public" do
+    defp check(host),
+      do: ImageDownloader.check_url("https://#{host}/a.png", private_networks: :forbid)
+
+    test "NAT64, 6to4 and SIIT forms of a loopback, private or metadata address are refused" do
+      hosts = [
+        # NAT64 64:ff9b::/96 -> 127.0.0.1, 10.0.0.5, 169.254.169.254
+        "[64:ff9b::7f00:1]",
+        "[64:ff9b::a00:5]",
+        "[64:ff9b::a9fe:a9fe]",
+        # 6to4 2002::/16
+        "[2002:7f00:1::]",
+        "[2002:a00:5::]",
+        "[2002:a9fe:a9fe::]",
+        # SIIT ::ffff:0:0:0/96
+        "[::ffff:0:7f00:1]",
+        "[::ffff:0:a00:5]",
+        "[::ffff:0:a9fe:a9fe]"
+      ]
+
+      for host <- hosts do
+        assert {:error, :private_address_blocked} = check(host), "#{host} must be refused"
+      end
+    end
+
+    test "the same forms carrying a public IPv4 address are judged as that address" do
+      for host <- ["[64:ff9b::5db8:d822]", "[2002:5db8:d822::]", "[::ffff:0:5db8:d822]"] do
+        assert :ok = check(host), "#{host} carries 93.184.216.34"
+      end
+    end
+
+    test "site-local, local-use NAT64 and the reserved IPv4 ranges are refused" do
+      for host <- [
+            "[fec0::1]",
+            "[feff::1]",
+            "[64:ff9b:1::1]",
+            "192.0.0.1",
+            "192.0.0.192",
+            "198.18.0.1",
+            "198.19.255.255"
+          ] do
+        assert {:error, :private_address_blocked} = check(host), "#{host} must be refused"
+      end
+    end
+
+    test "the neighbours of those IPv4 ranges stay public" do
+      for host <- ["192.0.1.1", "198.17.255.255", "198.20.0.1"] do
+        assert :ok = check(host), "#{host} is public"
+      end
+    end
+
+    test "a download never reaches an embedded private address" do
+      test_pid = self()
+      Req.Test.stub(@stub, fn conn -> send(test_pid, :requested) && png(conn) end)
+
+      assert {:error, :private_address_blocked} =
+               ImageDownloader.download_image(
+                 "http://[64:ff9b::7f00:1]/a.png",
+                 opts(private_networks: :forbid)
+               )
+
+      refute_received :requested
+    end
+  end
+
   describe "download_image/2" do
     test "forbid never makes the request to a private address" do
       test_pid = self()

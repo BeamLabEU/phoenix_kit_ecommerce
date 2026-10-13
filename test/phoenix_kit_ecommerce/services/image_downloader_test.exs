@@ -205,5 +205,75 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
     end
   end
 
+  describe "a content type the server made up" do
+    import ExUnit.CaptureLog, only: [capture_log: 1]
+
+    test "reaches the log cut short and printable, and the answer keeps the type" do
+      type = "text/" <> String.duplicate("a", 3000) <> "\e[31m\t\x7f"
+
+      Req.Test.stub(@stub, fn conn ->
+        conn |> Plug.Conn.put_resp_header("content-type", type) |> Plug.Conn.send_resp(200, "x")
+      end)
+
+      log = capture_log(fn -> assert {:error, {:invalid_content_type, _}} = download() end)
+
+      assert log =~ "Invalid content type for image download: text/aaaa"
+      refute log =~ String.duplicate("a", 200)
+      refute log =~ "\e["
+      refute log =~ "\t"
+      refute log =~ <<0x7F>>
+    end
+
+    defp download, do: ImageDownloader.download_image(@url, opts())
+  end
+
+  describe "download_image/2 with require_raster" do
+    @png Base.decode64!(
+           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+         )
+    @jpeg <<0xFF, 0xD8, 0xFF, 0xE0, 0, 16, "JFIF", 0, 1, 1, 0, 0, 1, 0, 1, 0, 0>>
+
+    defp serve_as(type, body) do
+      Req.Test.stub(@stub, fn conn ->
+        conn |> Plug.Conn.put_resp_content_type(type) |> Plug.Conn.send_resp(200, body)
+      end)
+    end
+
+    defp raster(extra \\ []),
+      do: ImageDownloader.download_image(@url, opts([require_raster: true] ++ extra))
+
+    test "accepts the bytes of the declared raster type" do
+      serve_as("image/png", @png)
+      assert {:ok, path, "image/png", _size} = raster()
+      File.rm(path)
+
+      serve_as("image/jpeg", @jpeg)
+      assert {:ok, path, "image/jpeg", _size} = raster()
+      File.rm(path)
+    end
+
+    test "refuses HTML served as an image, and bytes of another image type" do
+      serve_as("image/png", "<html><script>alert(1)</script></html>")
+      assert {:error, :content_mismatch} = raster()
+
+      serve_as("image/png", @jpeg)
+      assert {:error, :content_mismatch} = raster()
+
+      serve_as("image/jpeg", @png)
+      assert {:error, :content_mismatch} = raster()
+    end
+
+    test "refuses an empty body" do
+      serve_as("image/png", "")
+      assert {:error, :content_mismatch} = raster()
+    end
+
+    test "without the option the declared type is trusted, as the importer always did" do
+      serve_as("image/png", "<html>")
+      assert {:ok, path, "image/png", 6} = ImageDownloader.download_image(@url, opts())
+      File.rm(path)
+    end
+  end
+
   defp conn_body_under_limit, do: "tiny"
 end

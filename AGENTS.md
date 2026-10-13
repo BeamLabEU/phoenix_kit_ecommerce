@@ -496,9 +496,12 @@ Rules that must hold:
 - **`attach_images` always passes `private_networks: :forbid`** to the
   downloader; `shop_image_import_allow_private_networks` is for the shop's
   own CSV import and does not apply to an API caller. It also passes
-  `redact_query: true` (a signed URL's query string is a credential and
-  reaches no log line and no stored `source_url`), a 10 MB limit per picture,
-  and, on a core with the field, a `cost` of one rate-limit unit per picture.
+  `require_raster: true` (the bytes must be a PNG, JPEG, GIF or WebP picture
+  of the declared type; an SVG is refused whatever `shop_allow_svg_uploads`
+  says) and `redact_query: true` (a signed URL's query string is a credential
+  and reaches no log line and no stored `source_url`), a 10 MB limit per
+  picture, and, on a core with the field, a `cost` of one rate-limit unit per
+  picture.
 - **A write that changed a product clears `StorefrontCache`** (once per call
   in `API.Batch.write/3`, once per product in `API.AttachImages`), like the
   Shopify sync does. A dry run and an unchanged row leave it alone.
