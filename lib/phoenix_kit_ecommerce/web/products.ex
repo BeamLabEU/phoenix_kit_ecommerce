@@ -475,7 +475,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                   label={gettext("View")}
                 />
                 <.table_row_menu_link
-                  navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
+                  navigate={Helpers.admin_edit_path(:item, product, assigns[:url_path])}
                   icon="hero-pencil"
                   label={gettext("Edit")}
                 />
@@ -603,7 +603,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                             label={gettext("View")}
                           />
                           <.table_row_menu_link
-                            navigate={Helpers.admin_edit_path(:item, product.uuid, assigns[:url_path])}
+                            navigate={Helpers.admin_edit_path(:item, product, assigns[:url_path])}
                             icon="hero-pencil"
                             label={gettext("Edit")}
                           />

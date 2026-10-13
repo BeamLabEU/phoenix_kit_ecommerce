@@ -413,7 +413,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
           <:card_actions :let={category}>
             <.table_row_menu id={"card-menu-#{category.uuid}"}>
               <.table_row_menu_link
-                navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
+                navigate={Helpers.admin_edit_path(:category, category, assigns[:url_path])}
                 icon="hero-pencil"
                 label={gettext("Edit")}
               />
@@ -501,7 +501,7 @@ defmodule PhoenixKitEcommerce.Web.Categories do
                     <div class="flex justify-end">
                       <.table_row_menu id={"menu-#{category.uuid}"}>
                         <.table_row_menu_link
-                          navigate={Helpers.admin_edit_path(:category, category.uuid, assigns[:url_path])}
+                          navigate={Helpers.admin_edit_path(:category, category, assigns[:url_path])}
                           icon="hero-pencil"
                           label={gettext("Edit")}
                         />

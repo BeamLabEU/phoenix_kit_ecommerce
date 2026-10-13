@@ -169,10 +169,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> Helpers.maybe_assign_admin_edit(
         Helpers.admin_edit_path(
           :item,
-          product.uuid,
+          product,
           Shop.product_url(product, current_language)
         ),
-        gettext("Edit Product")
+        gettext("Edit Product"),
+        permission: Helpers.admin_edit_permissions(product)
       )
 
     {:ok, socket}
@@ -380,10 +381,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> Helpers.maybe_assign_admin_edit(
         Helpers.admin_edit_path(
           :item,
-          product.uuid,
+          product,
           Shop.product_url(product, current_language)
         ),
-        gettext("Edit Product")
+        gettext("Edit Product"),
+        permission: Helpers.admin_edit_permissions(product)
       )
 
     {:ok, socket}

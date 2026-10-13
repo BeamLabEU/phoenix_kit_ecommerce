@@ -74,6 +74,14 @@ defmodule PhoenixKitEcommerce.Product do
     # `PhoenixKitEcommerce.Shopify.ProductDiff`.
     field :merchant_status, :string, virtual: true
 
+    # Where this record comes from, which decides whose editor it opens:
+    # `:legacy` for a row of this table, `:catalogue` for the view-struct
+    # `ProductSource.Catalogue.View.product_view/2` builds from a catalogue
+    # item. Not stored — a row read from this table is legacy by definition —
+    # and independent of the global `shop_product_source` switch, which says
+    # what the storefront LISTS, not what a given record is.
+    field :origin, Ecto.Enum, values: [:legacy, :catalogue], default: :legacy, virtual: true
+
     # Type
     field :product_type, :string, default: "physical"
     field :vendor, :string

@@ -241,6 +241,15 @@ Repo-local aliases:
 
 ### Landmines
 
+- **Code that builds a `Product` or `Category` view-struct must set
+  `origin`.** `origin` (virtual, `:legacy` by default) says where a record
+  comes from and so which editor its admin Edit link opens
+  (`Web.Helpers.admin_edit_path/3`): `ProductSource.Catalogue.View` sets
+  `:catalogue`, and a view-struct built anywhere else without it is sent to
+  the shop form, which has no such record. The link is NOT decided by the
+  global `shop_product_source` switch; a catalogue record also needs the
+  `"catalogue"` module key on top of `shop.manage_catalog`
+  (`Web.Helpers.admin_edit_permissions/1`).
 - **The test harness must apply billing's migration chain, not just core's.**
   This module reads and writes billing's schemas directly, and billing owns
   `phoenix_kit_currencies` from its own V2 on, so a test database built from
