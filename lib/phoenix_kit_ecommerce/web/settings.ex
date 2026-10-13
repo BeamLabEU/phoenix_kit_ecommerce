@@ -1053,7 +1053,6 @@ defmodule PhoenixKitEcommerce.Web.Settings do
           </div>
         </div>
 
-
         <%!-- Shopify Sync connection status. Design §4.7: hidden along with
              the existence card above once `shop_shopify_enabled` is off —
              "Connect" and "Open Sync" would otherwise dangle: Shopify has

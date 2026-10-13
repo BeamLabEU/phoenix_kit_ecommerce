@@ -14,8 +14,8 @@
   # `Catalogue.update_items/2`), which no released core or catalogue ships yet.
   # Dialyzer reports a missing module as `:unknown_function` and a missing
   # function of a loaded module (`Catalogue.update_items/2`) as `:call_to_missing`.
-  # Remove these entries when a released core and catalogue ship the API: they
-  # then become "unnecessary skips" and fail `mix precommit`.
+  # Remove these entries when a released core and catalogue ship the API;
+  # dialyzer then reports them as unnecessary skips.
   {"lib/phoenix_kit_ecommerce/api.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/api/refs.ex", :unknown_function},
   {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex", :call_to_missing},

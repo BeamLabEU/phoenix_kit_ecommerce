@@ -656,7 +656,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
   defp price_fit_base_offset(_offset), do: ""
 
   # A malformed/partial `price_fit` (never expected from
-  # `Writer.finalize_variant_sync/4`, but the note must not crash on one)
+  # `Writer.finalize_variant_sync/5`, but the note must not crash on one)
   # falls back the same way every field here does.
   defp fit_value(fit, key, default), do: fit[key] || default
 

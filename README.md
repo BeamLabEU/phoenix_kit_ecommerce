@@ -203,12 +203,13 @@ methods = Shop.get_available_shipping_methods(cart)
 # /admin/shop/imports/:uuid
 ```
 
-### Admin API tools (REST and MCP)
+### Admin API tools
 
 On a `phoenix_kit` core that ships the admin API (the tool registry), this
-module offers four admin tools over REST and MCP, for an accounting system, a
-script or an AI agent. Shopify is not needed: on a shop without it, the API is
-how an outside system feeds the product list.
+module offers four admin tools over REST, and over MCP where the core also
+provides it, for an accounting system, a script or an AI agent. Shopify is not
+needed: on a shop without it, the API is how an outside system feeds the
+product list.
 
 | Tool | Does | Scope |
 |---|---|---|
@@ -231,7 +232,8 @@ A `validation_failed` answer with `context.reason` `database_error`,
 retrying; any other `validation_failed` should be fixed first.
 
 The module also offers the `shop_order` kind to Warehouse, so a shop order can
-be the basis of a goods issue.
+be the basis of a goods issue. This needs the Warehouse module 0.5.3 or later,
+the first release where modules can declare source kinds.
 
 ### Shopify Sync
 

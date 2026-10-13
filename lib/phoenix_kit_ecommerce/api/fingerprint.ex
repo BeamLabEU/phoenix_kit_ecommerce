@@ -7,8 +7,12 @@ defmodule PhoenixKitEcommerce.API.Fingerprint do
   preview, the hashes differ and the code is refused.
 
   The hash is taken over a plain, sorted list of strings, never over a map
-  or a struct: the same values must give the same hash on every node and
-  every Erlang release, and `updated_at` is deliberately not part of it.
+  or a struct, so the same values give the same hash on every node, and
+  `updated_at` is deliberately not part of it. It is only ever compared with
+  one taken minutes earlier by the same system: it is not a stored format,
+  and `:erlang.term_to_binary/1` does not promise the same bytes across
+  Erlang releases. A confirmation that crosses a release change would be
+  refused, never wrongly accepted.
   """
 
   alias PhoenixKitEcommerce.API.Money
