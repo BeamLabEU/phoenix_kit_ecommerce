@@ -706,9 +706,10 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   that has no such record.
 
   `return_to` is where the editor should send the visitor
-  back to — both catalogue forms validate it (`safe_return_to/1`) and use
-  it for their exit, so "edit, save, back to the page I was on" works
-  without reaching for the browser's back button. It is the page's
+  back to — the catalogue forms and the legacy shop forms all validate it
+  (the legacy ones with `safe_return_to/1`) and use it for their exit, so
+  "edit, save, back to the page I was on" works without reaching for the
+  browser's back button. It is the page's
   canonical URL rather than the exact one the visitor typed, and query
   state (a filter, a page number) is not carried back. Two reasons, and
   the second is the one that matters: these links are built in `mount/3`,
@@ -771,4 +772,23 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   defp append_return_to(path, _return_to), do: path
+
+  @doc """
+  The `return_to` query value if it is safe to navigate to, else `nil`.
+
+  The Edit links `admin_edit_path/3` builds append `?return_to=<page the
+  visitor came from>`, and the legacy product and category forms they can
+  open send the operator back there. The value is user input, so only a
+  path on this host is honoured: core's `Routes.local_path?/1` (a leading
+  `/`, but not `//` or `/\\`, no control characters) plus the two shapes
+  `push_navigate/2` itself refuses by raising, a backslash anywhere and
+  `/%09`. Anything else is ignored rather than followed, so the form behaves
+  as if no `return_to` was sent.
+  """
+  @spec safe_return_to(term()) :: String.t() | nil
+  def safe_return_to(path) when is_binary(path) do
+    if Routes.local_path?(path) and not String.contains?(path, ["\\", "/%09"]), do: path
+  end
+
+  def safe_return_to(_path), do: nil
 end
