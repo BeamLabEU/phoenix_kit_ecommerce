@@ -41,6 +41,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   @max_images 20
   @max_image_bytes 10 * 1024 * 1024
   @max_reason_chars 80
+  @url_check_concurrency 5
 
   @doc "The most pictures one call may attach."
   @spec max_images() :: pos_integer()
@@ -116,9 +117,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   defp plan_row(%{item: item, input: input}, shopify?) do
     images = Map.get(input, "images", [])
 
-    errors =
-      featured_errors(images) ++
-        (images |> Enum.with_index() |> Enum.flat_map(&url_errors/1))
+    errors = featured_errors(images) ++ url_errors(images)
 
     if errors == [] do
       existing = existing_order(item)
@@ -151,7 +150,21 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       else: []
   end
 
-  defp url_errors({%{"url" => url}, index}) do
+  # Each URL's name lookup has a deadline of its own (`ImageDownloader`), and
+  # they run side by side: one slow resolver holds the call for one deadline,
+  # not for one per picture.
+  defp url_errors(images) do
+    images
+    |> Enum.with_index()
+    |> Task.async_stream(&url_error/1,
+      max_concurrency: @url_check_concurrency,
+      timeout: :infinity,
+      ordered: true
+    )
+    |> Enum.flat_map(fn {:ok, errors} -> errors end)
+  end
+
+  defp url_error({%{"url" => url}, index}) do
     path = "images[#{index}].url"
 
     if is_binary(url) and URI.parse(url).userinfo != nil do
@@ -164,7 +177,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     end
   end
 
-  defp url_errors({_image, index}),
+  defp url_error({_image, index}),
     do: [PlanSupport.error("images[#{index}].url", "is required")]
 
   # -- attaching --------------------------------------------------------------

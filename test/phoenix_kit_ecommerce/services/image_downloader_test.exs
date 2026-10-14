@@ -65,8 +65,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
                )
 
       assert url == "https://93.184.216.34/a.jpg?w=1"
-      assert opts[:connect_options] == [hostname: "cdn.example.com"]
+      assert opts[:adapter] == PhoenixKitEcommerce.Services.PinnedAdapter
       assert opts[:headers] == [{"host", "cdn.example.com"}]
+      refute Keyword.has_key?(opts, :connect_options)
     end
 
     test "a non-default port stays in the Host header" do
@@ -96,7 +97,7 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderTest do
                  {0x2606, 0x4700, 0, 0, 0, 0, 0, 1}
                )
 
-      assert opts[:connect_options] == [hostname: "cdn.example.com"]
+      assert opts[:headers] == [{"host", "cdn.example.com"}]
     end
   end
 

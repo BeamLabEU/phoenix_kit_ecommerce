@@ -134,7 +134,43 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPrivateGuardTest do
     end
 
     test "the neighbours of those IPv4 ranges stay public" do
-      for host <- ["192.0.1.1", "198.17.255.255", "198.20.0.1"] do
+      for host <- ["192.0.1.1", "198.17.255.255", "198.20.0.1", "203.0.112.1", "203.0.114.1"] do
+        assert :ok = check(host), "#{host} is public"
+      end
+    end
+
+    test "multicast, Teredo, benchmarking, discard and documentation ranges are refused" do
+      for host <- [
+            # ff00::/8
+            "[ff02::1]",
+            "[ff0e::1]",
+            "[ffff::1]",
+            # 2001::/32 Teredo, 2001:2::/48 benchmarking, 2001:db8::/32 and 3fff::/20 documentation
+            "[2001::1]",
+            "[2001:0:4136:e378:8000:63bf:3fff:fdd2]",
+            "[2001:2::1]",
+            "[2001:db8::1]",
+            "[3fff::1]",
+            "[3fff:fff::1]",
+            # 100::/64 discard-only
+            "[100::1]",
+            # IPv4 documentation ranges
+            "192.0.2.1",
+            "198.51.100.7",
+            "203.0.113.200"
+          ] do
+        assert {:error, :private_address_blocked} = check(host), "#{host} must be refused"
+      end
+    end
+
+    test "the neighbours of those IPv6 ranges stay public" do
+      for host <- [
+            "[2001:1::1]",
+            "[2001:3::1]",
+            "[2001:db9::1]",
+            "[3fff:1000::1]",
+            "[100:0:0:1::1]"
+          ] do
         assert :ok = check(host), "#{host} is public"
       end
     end

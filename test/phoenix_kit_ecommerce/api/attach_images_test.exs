@@ -479,6 +479,43 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     refute inspect(entry) =~ "sig=abc"
   end
 
+  describe "the name lookups of the planning" do
+    setup do
+      previous = Application.get_env(:phoenix_kit_ecommerce, :image_resolver)
+
+      Application.put_env(
+        :phoenix_kit_ecommerce,
+        :image_resolver,
+        PhoenixKitEcommerce.Test.StubResolver
+      )
+
+      Application.put_env(:phoenix_kit_ecommerce, :image_dns_timeout, 300)
+
+      on_exit(fn ->
+        Application.delete_env(:phoenix_kit_ecommerce, :image_dns_timeout)
+
+        if previous,
+          do: Application.put_env(:phoenix_kit_ecommerce, :image_resolver, previous),
+          else: Application.delete_env(:phoenix_kit_ecommerce, :image_resolver)
+      end)
+    end
+
+    test "a resolver that never answers holds a dry run for one deadline, not one per URL",
+         %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      urls = for n <- 1..10, do: %{"url" => "https://slow-#{n}.example.test/a.png"}
+
+      {microseconds, answer} =
+        :timer.tc(fn -> attach([row(item, urls)], %{ctx | dry_run?: true}) end)
+
+      assert {:preview, %{"rows" => [%{"action" => "error", "error" => error}]}, _fingerprint} =
+               answer
+
+      assert length(error["context"]["errors"]) == 10
+      assert microseconds < 2_000_000
+    end
+  end
+
   test "a signed URL's query string reaches no log line, no stored file metadata, no activity entry and no answer",
        %{catalogue: catalogue, user: user, ctx: ctx, first: first} do
     # The test environment logs from :warning up; the downloader's lines that
@@ -508,8 +545,10 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert [%{"url" => failed_url}] = result["failed"]
     assert failed_url == @host <> "/doc.pdf"
 
-    # The lines were emitted (the picture's path is in them) and carry no query.
-    assert log =~ "signed.png"
+    # The lines were emitted (they name the host) and carry neither the query
+    # nor the path, which can hold a signed token too.
+    assert log =~ "Storing new file from URL #{@host}/..."
+    refute log =~ "signed.png"
     refute log =~ "sekrit"
     refute log =~ "X-Amz-Signature"
     refute inspect(result) =~ "sekrit"
