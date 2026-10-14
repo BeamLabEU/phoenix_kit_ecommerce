@@ -45,6 +45,9 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
     Shop.get_cart(cart.uuid)
   end
 
+  defp line_snapshot(product_id, options, quantity),
+    do: %{"product_id" => product_id, "options" => options, "quantity" => quantity}
+
   defp method!(attrs) do
     {:ok, method} =
       Shop.create_shipping_method(
@@ -59,6 +62,20 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
       )
 
     method
+  end
+
+  describe "build/1" do
+    test "refuses a cart whose items or shipping method are not loaded" do
+      cart = Shop.get_cart(new_cart().uuid)
+
+      assert_raise ArgumentError, fn ->
+        CartView.build(%{cart | items: %Ecto.Association.NotLoaded{}})
+      end
+
+      assert_raise ArgumentError, fn ->
+        CartView.build(%{cart | shipping_method: %Ecto.Association.NotLoaded{}})
+      end
+    end
   end
 
   describe "an empty cart" do
@@ -204,6 +221,68 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
     end
   end
 
+  describe "lines that were added in the same second" do
+    test "are ordered by their uuid, whatever order the cart hands them over in" do
+      cart = new_cart() |> add!(product!(), 1) |> add!(product!(), 1) |> add!(product!(), 1)
+      stamp = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      Repo.update_all(from(i in CartItem, where: i.cart_uuid == ^cart.uuid),
+        set: [inserted_at: stamp]
+      )
+
+      cart = Shop.get_cart(cart.uuid)
+      expected = cart.items |> Enum.sort_by(& &1.uuid) |> Enum.map(&CartView.line_product_id/1)
+
+      for items <- [cart.items, Enum.reverse(cart.items)] do
+        lines = CartView.build(%{cart | items: items}).lines
+        assert Enum.map(lines, & &1.product_id) == expected
+      end
+    end
+  end
+
+  describe "a line whose price is on request" do
+    setup do
+      %{
+        quoted: product!(%{"price" => Decimal.new("10.00")}),
+        on_request:
+          product!(%{
+            "price" => Decimal.new("0.00"),
+            "metadata" => %{"_price_display" => %{"on_request" => true}}
+          })
+      }
+    end
+
+    test "says so, shows no price, and marks the totals as incomplete", t do
+      cart = new_cart() |> add!(t.quoted, 1) |> add!(t.on_request, 1)
+
+      view = CartView.build(cart)
+      lines = Map.new(view.lines, &{&1.product_id, &1})
+
+      assert lines[t.on_request.uuid].price_on_request == true
+      assert lines[t.on_request.uuid].unit_price == nil
+      assert lines[t.on_request.uuid].line_total == nil
+      assert lines[t.on_request.uuid].status == "ok"
+
+      assert lines[t.quoted.uuid].price_on_request == false
+      assert lines[t.quoted.uuid].unit_price == %{amount: "10.00", currency: "USD"}
+
+      assert view.totals_incomplete == true
+      assert view.totals.subtotal == %{amount: "10.00", currency: "USD"}
+    end
+
+    test "is absent from a cart of priced lines, and the compacted view carries no null", t do
+      priced = new_cart() |> add!(t.quoted, 1) |> CartView.build()
+      assert priced.totals_incomplete == false
+      assert [%{price_on_request: false}] = priced.lines
+
+      view = new_cart() |> add!(t.on_request, 1) |> CartView.build() |> CartView.compact()
+      assert [line] = view.lines
+      assert line.price_on_request == true
+      refute Map.has_key?(line, :unit_price)
+      refute Map.has_key?(line, :line_total)
+    end
+  end
+
   describe "lines of a catalogue-backed cart" do
     @describetag :catalogue
 
@@ -277,6 +356,14 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
       assert CartView.revision(repriced) == CartView.revision(cart)
     end
 
+    test "tells two carts apart that differ only by an option" do
+      product = product_with_options!(%{"color" => ["Red", "Blue"]})
+      red = new_cart() |> add!(product, 1, selected_specs: %{"color" => "Red"})
+      blue = new_cart() |> add!(product, 1, selected_specs: %{"color" => "Blue"})
+
+      assert CartView.revision(red) != CartView.revision(blue)
+    end
+
     test "is 16 lowercase hex characters" do
       assert CartView.revision(nil) =~ ~r/\A[0-9a-f]{16}\z/
     end
@@ -329,6 +416,8 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
 
       assert [%{product_id: id, from: 1, to: nil}] = changes.removed
       assert id == a.uuid
+      assert changes.added == []
+      assert changes.changed == []
 
       assert changes.shipping == %{
                from: %{method: nil, country: nil},
@@ -366,6 +455,51 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
       assert changes.removed == []
     end
 
+    # A map of more than 32 keys iterates in hash order, so only a cart this size
+    # shows whether the lists come back in a stable order.
+    test "list added, removed and changed lines in the order of product id and options" do
+      ids = for n <- 1..40, do: "p" <> String.pad_leading(Integer.to_string(n), 2, "0")
+      lines = fn ids, quantity -> Enum.map(ids, &line_snapshot(&1, [["size", "m"]], quantity)) end
+      other_options = [line_snapshot("p20", [["size", "l"]], 1)]
+
+      snapshot = fn lines ->
+        %{"lines" => lines, "shipping" => %{"method" => nil, "country" => nil}}
+      end
+
+      scrambled = Enum.shuffle(ids)
+
+      added = CartView.changes(snapshot.([]), snapshot.(lines.(scrambled, 1) ++ other_options))
+      removed = CartView.changes(snapshot.(lines.(scrambled, 1) ++ other_options), snapshot.([]))
+      changed = CartView.changes(snapshot.(lines.(scrambled, 1)), snapshot.(lines.(scrambled, 2)))
+
+      expected = Enum.sort(ids ++ ["p20"])
+
+      assert Enum.map(added.added, & &1.product_id) == expected
+      assert Enum.map(removed.removed, & &1.product_id) == expected
+      assert Enum.map(changed.changed, & &1.product_id) == ids
+
+      # The same product: the options decide ("l" before "m").
+      assert added.added |> Enum.slice(19, 2) |> Enum.map(&hd(&1.options).value_key) == ["l", "m"]
+      assert added.removed == [] and added.changed == []
+    end
+
+    # Lines of deleted products have no product id; two of them with equal
+    # options are still two lines.
+    test "keep apart the lines of deleted products that have the same options" do
+      a = product!()
+      b = product!()
+      cart = new_cart() |> add!(a, 1) |> add!(b, 2)
+      old = CartView.snapshot(nil)
+
+      {:ok, _} = Shop.delete_product(a)
+      {:ok, _} = Shop.delete_product(b)
+      cart = Shop.get_cart(cart.uuid)
+
+      assert Enum.all?(cart.items, &is_nil(CartView.line_product_id(&1)))
+      assert %{added: added} = CartView.changes(old, CartView.snapshot(cart))
+      assert added |> Enum.map(& &1.to) |> Enum.sort() == [1, 2]
+    end
+
     test "stamp/1 adds the revision and a timestamp and keeps the lines" do
       snapshot = CartView.snapshot(nil)
       stamped = CartView.stamp(snapshot)
@@ -389,6 +523,18 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
       assert totals.subtotal == %{amount: "10.00", currency: "USD"}
       assert totals.discount == %{amount: "1.50", currency: "USD"}
       assert totals.tax == %{amount: "2.25", currency: "USD"}
+    end
+
+    test "total is the cart's own total: the subtotal plus the shipping" do
+      cart = new_cart() |> add!(physical_product!(%{"price" => Decimal.new("10.00")}), 2)
+      method = method!(%{"price" => Decimal.new("7.50")})
+      {:ok, _} = Shop.set_cart_shipping(cart, method, "DE")
+
+      totals = CartView.build(Shop.get_cart(cart.uuid)).totals
+
+      assert totals.subtotal == %{amount: "20.00", currency: "USD"}
+      assert totals.shipping == %{amount: "7.50", currency: "USD"}
+      assert totals.total == %{amount: "27.50", currency: "USD"}
     end
   end
 
@@ -415,6 +561,35 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
 
       assert id == method.uuid
       assert view.totals.shipping == %{amount: "7.50", currency: "USD"}
+    end
+
+    test "flag a method whose free-shipping limit the subtotal has reached" do
+      cart = new_cart() |> add!(physical_product!(%{"price" => Decimal.new("10.00")}), 1)
+
+      method =
+        method!(%{"price" => Decimal.new("7.50"), "free_above_amount" => Decimal.new("5.00")})
+
+      {:ok, _} = Shop.set_cart_shipping(cart, method, "DE")
+
+      view = CartView.build(Shop.get_cart(cart.uuid))
+
+      assert view.shipping.method.free == true
+      assert view.totals.shipping == %{amount: "0.00", currency: "USD"}
+      assert view.totals.total == view.totals.subtotal
+      assert [%{type: "free_shipping", remaining: %{amount: "0.00"}}] = view.thresholds
+    end
+
+    test "flag a pay-on-delivery method, which is not free and costs the shop's side nothing" do
+      cart = new_cart() |> add!(physical_product!(%{"price" => Decimal.new("10.00")}), 1)
+      method = method!(%{"price" => Decimal.new("7.50"), "pay_on_delivery" => true})
+      {:ok, _} = Shop.set_cart_shipping(cart, method, "DE")
+
+      view = CartView.build(Shop.get_cart(cart.uuid))
+
+      assert view.shipping.method.pay_on_delivery == true
+      assert view.shipping.method.free == false
+      assert view.shipping.method.price == %{amount: "0.00", currency: "USD"}
+      assert view.totals.shipping == %{amount: "0.00", currency: "USD"}
     end
 
     test "report each limit of the chosen method, in base, current and remaining" do
@@ -465,6 +640,25 @@ defmodule PhoenixKitEcommerce.API.CartViewTest do
       # limit is in the base currency and the rest is converted back.
       assert threshold.current == %{amount: "9.09", currency: "EUR"}
       assert threshold.remaining == %{amount: "9.09", currency: "EUR"}
+    end
+
+    # `current` is the cart's own subtotal and `remaining` is a difference, not a
+    # price: neither may go through the currency's rounding rule.
+    test "on a currency with a charm rule, current is the subtotal and remaining is not charm-rounded" do
+      eur = Repo.get_by!(PhoenixKitBilling.Currency, code: "EUR")
+      {:ok, _} = PhoenixKitBilling.update_currency(eur, %{rounding_rule: "charm_99"})
+      PhoenixKit.Cache.clear(:billing_currencies)
+
+      cart = new_cart("EUR") |> add!(physical_product!(%{"price" => Decimal.new("10.00")}), 2)
+      method = method!(%{"free_above_amount" => Decimal.new("100.00")})
+      {:ok, _} = Shop.set_cart_shipping(cart, method, "DE")
+
+      view = CartView.build(Shop.get_cart(cart.uuid))
+
+      assert view.totals.subtotal == %{amount: "17.98", currency: "EUR"}
+      assert [threshold] = view.thresholds
+      assert threshold.current == view.totals.subtotal
+      assert threshold.remaining == %{amount: "72.93", currency: "EUR"}
     end
 
     # A carrier prices its method once the buyer has chosen a destination on the

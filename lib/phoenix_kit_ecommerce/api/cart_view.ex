@@ -6,6 +6,10 @@ defmodule PhoenixKitEcommerce.API.CartView do
   `build/1` needs a cart with its lines and shipping method preloaded (every
   cart `API.CartStore` hands out is). Nothing here writes.
 
+  A line agreed as "price on request" carries `price_on_request: true` and no
+  prices, and the view says `totals_incomplete: true`: the totals are what
+  billing will charge, and they leave such a line out.
+
   The **revision** is a hash of the lines (product id, neutral options,
   quantity) and the shipping choice, not of prices: a price move
   must not make an agent's `expected_revision` stale. A **snapshot** is the
@@ -20,11 +24,13 @@ defmodule PhoenixKitEcommerce.API.CartView do
   alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.ShippingMethod
 
   @doc "The view of an active cart."
   @spec build(Cart.t()) :: map()
   def build(%Cart{} = cart) do
+    ensure_loaded!(cart)
     items = sorted_items(cart)
     records = records_by_id(items)
 
@@ -35,9 +41,20 @@ defmodule PhoenixKitEcommerce.API.CartView do
       currency: cart.currency,
       lines: Enum.map(items, &line(&1, cart, records)),
       totals: totals(cart),
+      totals_incomplete: PriceDisplay.any_line_on_request?(cart.items),
       shipping: shipping(cart),
       thresholds: thresholds(cart)
     }
+  end
+
+  # An unloaded shipping method would read as "no method chosen" and an unloaded
+  # item list as an empty cart; a view must never invent that.
+  defp ensure_loaded!(%Cart{items: items, shipping_method: method}) do
+    unless Ecto.assoc_loaded?(items) and Ecto.assoc_loaded?(method) do
+      raise ArgumentError, "CartView needs a cart with its items and shipping method preloaded"
+    end
+
+    :ok
   end
 
   @doc "The view of a token that has not written yet: an empty open cart."
@@ -52,6 +69,7 @@ defmodule PhoenixKitEcommerce.API.CartView do
       read_at: now_iso(),
       currency: currency,
       lines: [],
+      totals_incomplete: false,
       totals: %{subtotal: money, discount: money, shipping: money, tax: money, total: money},
       shipping: %{country: nil, method: nil},
       thresholds: []
@@ -121,16 +139,24 @@ defmodule PhoenixKitEcommerce.API.CartView do
   def snapshot(%Cart{} = cart) do
     lines =
       cart.items
-      |> Enum.map(fn item ->
-        %{
-          "product_id" => line_product_id(item),
-          "options" => item |> CartOptions.from_item(nil) |> CartOptions.canonical(),
-          "quantity" => item.quantity
-        }
-      end)
-      |> Enum.sort_by(&{&1["product_id"] || "", &1["options"]})
+      |> Enum.map(&snapshot_line/1)
+      |> Enum.sort_by(&{&1["product_id"] || "", &1["options"], &1["item"] || ""})
 
     raw_snapshot(lines, cart.shipping_method_uuid, cart.shipping_country)
+  end
+
+  # A line whose product is gone has no product id to tell it from another such
+  # line with the same options, so it carries its own item uuid.
+  defp snapshot_line(item) do
+    product_id = line_product_id(item)
+
+    line = %{
+      "product_id" => product_id,
+      "options" => item |> CartOptions.from_item(nil) |> CartOptions.canonical(),
+      "quantity" => item.quantity
+    }
+
+    if product_id, do: line, else: Map.put(line, "item", item.uuid)
   end
 
   defp raw_snapshot(lines, method, country) do
@@ -191,7 +217,7 @@ defmodule PhoenixKitEcommerce.API.CartView do
   defp changed_line(%{"quantity" => same}, %{"quantity" => same}), do: []
   defp changed_line(line, old_line), do: [change(line, old_line["quantity"], line["quantity"])]
 
-  defp index(lines), do: Map.new(lines, &{{&1["product_id"], &1["options"]}, &1})
+  defp index(lines), do: Map.new(lines, &{{&1["product_id"], &1["options"], &1["item"]}, &1})
 
   defp change(line, from, to) do
     %{
@@ -231,17 +257,24 @@ defmodule PhoenixKitEcommerce.API.CartView do
     product_id = line_product_id(item)
     record = Map.get(records, Loader.canonical_uuid(product_id))
     product = record && record.product
+    on_request? = PriceDisplay.line_on_request?(item)
 
     %{
       product_id: product_id,
       title: item.product_title,
       options: CartOptions.from_item(item, product),
       quantity: item.quantity,
-      unit_price: CartMoney.new(item.unit_price, cart.currency),
-      line_total: CartMoney.new(item.line_total, cart.currency),
+      price_on_request: on_request?,
+      unit_price: line_money(on_request?, item.unit_price, cart.currency),
+      line_total: line_money(on_request?, item.line_total, cart.currency),
       status: if(record && record.state == :listed, do: "ok", else: "unavailable")
     }
   end
+
+  # A line agreed as "price on request" snapshots a price of 0, which is not a
+  # price: it is left out, so it can never read as a free line.
+  defp line_money(true, _amount, _currency), do: nil
+  defp line_money(false, amount, currency), do: CartMoney.new(amount, currency)
 
   # --- shipping and thresholds ------------------------------------------------
 
@@ -300,7 +333,8 @@ defmodule PhoenixKitEcommerce.API.CartView do
 
   defp threshold_rows(%Cart{} = cart, %ShippingMethod{} = method) do
     base_code = cart.base_currency || cart.currency
-    current_base = Shop.cart_amount_to_base(cart, cart.subtotal || Decimal.new(0))
+    current = cart.subtotal || Decimal.new(0)
+    current_base = Shop.cart_amount_to_base(cart, current)
 
     [
       {"min_order", method.min_order_amount},
@@ -315,7 +349,7 @@ defmodule PhoenixKitEcommerce.API.CartView do
         type: type,
         method: method.uuid,
         base: CartMoney.new(base, base_code),
-        current: CartMoney.new(Shop.cart_amount_from_base(current_base, cart), cart.currency),
+        current: CartMoney.new(current, cart.currency),
         remaining: CartMoney.new(Shop.cart_amount_from_base(remaining_base, cart), cart.currency)
       }
     end)
