@@ -242,4 +242,14 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
       _ -> body
     end
   end
+
+  @doc """
+  Clears the assistant-signal counters. Hammer's `set/3` takes a positive count,
+  so a counter cannot be zeroed one by one: the whole table of the rate limiter is
+  emptied instead.
+  """
+  def reset_signal_counters! do
+    :ets.delete_all_objects(PhoenixKit.Users.RateLimiter.Backend)
+    :ok
+  end
 end

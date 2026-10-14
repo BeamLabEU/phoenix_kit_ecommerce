@@ -11,6 +11,11 @@ defmodule PhoenixKitEcommerce.API.CartStore do
 
   `for_write/3` and `lock_active!/2` must run inside a transaction (they raise
   otherwise: the locks they take would protect nothing).
+
+  Every `hash` argument trusts its caller: it must be the digest that
+  `CartToken.verify/1` returned. Never pass `ctx.actor.cart_token_hash` -
+  core's executor fills that from the raw token string without checking its
+  signature, so any string would then create `api:` rows and read counters.
   """
 
   import Ecto.Query, warn: false
@@ -198,6 +203,9 @@ defmodule PhoenixKitEcommerce.API.CartStore do
     end
   end
 
+  # The row limits are charged before the insert, so an insert that then fails
+  # still spends its slot: the limits count attempts, and a rate-limiter counter
+  # cannot be given back.
   defp create(session_id, ctx, count_row?) do
     with :ok <- charge_row(ctx, count_row?),
          {:ok, cart} <-
@@ -221,7 +229,9 @@ defmodule PhoenixKitEcommerce.API.CartStore do
 
   # `create_cart/1` freezes the request's display currency into the cart. The
   # request currency is process-scoped, so it is set for this call only and the
-  # previous value is restored.
+  # previous value is restored. This covers callers outside the API handlers
+  # (which run inside `API.Context.with_request_currency/2`) and the call's own
+  # currency override.
   defp with_request_currency(code, fun) do
     previous = Currency.get_request_currency()
     Currency.put_request_currency(code)

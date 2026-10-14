@@ -32,6 +32,8 @@ defmodule PhoenixKitEcommerce.API.CartMoneyTest do
       })
 
     PhoenixKit.Cache.clear(:billing_currencies)
+    # The row is rolled back with the sandbox; the cached list must not outlive it.
+    on_exit(fn -> PhoenixKit.Cache.clear(:billing_currencies) end)
 
     assert CartMoney.new(Decimal.new("1234.5"), "JPY") == %{amount: "1235", currency: "JPY"}
   end

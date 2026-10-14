@@ -13,5 +13,10 @@
   # simply not offered there. `@compile {:no_warn_undefined, ...}` silences the
   # compiler's xref but not dialyzer. Drop this line once the minimum core
   # requirement in mix.exs carries `PhoenixKit.API.Tool`.
-  {"lib/phoenix_kit_ecommerce/api/public_tools.ex", :unknown_function}
+  {"lib/phoenix_kit_ecommerce/api/public_tools.ex", :unknown_function},
+  # The cart store names `PhoenixKit.API.RateLimit` too (same reason).
+  {"lib/phoenix_kit_ecommerce/api/cart_store.ex", :unknown_function},
+  # `PhoenixKitWebAnalytics.Config` is an optional dependency: the claim-path
+  # exclusion step of the migration reads its default list when it is loaded.
+  {"lib/phoenix_kit_ecommerce/migrations.ex", :unknown_function}
 ]

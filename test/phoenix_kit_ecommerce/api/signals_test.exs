@@ -20,7 +20,7 @@ defmodule PhoenixKitEcommerce.API.SignalsTest do
   setup do
     ensure_currencies!()
     owner = fixture_user()
-    Signals.reset_counters!()
+    reset_signal_counters!()
     %{owner: owner}
   end
 
@@ -134,6 +134,13 @@ defmodule PhoenixKitEcommerce.API.SignalsTest do
     for n <- 1..4, do: Signals.cart_changed(cart, lines(["Write #{n}"]))
 
     assert count_notifications(@every) == 2
+
+    # The two writes the cap dropped are not "more assistant carts".
+    Signals.cart_changed(cart!(owner), lines(["Another cart"]))
+
+    texts = notification_texts_for_action(@every)
+    assert length(texts) == 3
+    refute Enum.any?(texts, &(&1 =~ "more assistant carts"))
   end
 
   test "a cap of zero silences assistant messages", %{owner: owner} do
@@ -164,6 +171,28 @@ defmodule PhoenixKitEcommerce.API.SignalsTest do
     texts = notification_texts_for_action(@first)
     assert Enum.any?(texts, &(&1 =~ "(+1 more assistant carts)"))
     assert Enum.count(texts, &(&1 =~ "more assistant carts")) == 1
+
+    # A drop is named once: the message after that one does not repeat it.
+    Signals.cart_changed(cart!(owner), lines(["D"]))
+
+    assert count_notifications(@first) == 3
+    texts = notification_texts_for_action(@first)
+    assert Enum.count(texts, &(&1 =~ "more assistant carts")) == 1
+  end
+
+  test "a global cap of zero silences messages and is not counted as dropped", %{owner: owner} do
+    toggles(true, true)
+    put_setting!("api_signal_global_per_hour", 0)
+
+    for n <- 1..3, do: Signals.cart_changed(cart!(owner), lines(["Off #{n}"]))
+    assert count_notifications(@first) + count_notifications(@every) == 0
+
+    put_setting!("api_signal_global_per_hour", 10)
+    Signals.cart_changed(cart!(owner), lines(["On"]))
+
+    texts = notification_texts_for_action(@first)
+    assert length(texts) == 1
+    refute Enum.any?(texts, &(&1 =~ "more assistant carts"))
   end
 
   test "a cart that cannot even be keyed never fails the write", %{owner: _owner} do
