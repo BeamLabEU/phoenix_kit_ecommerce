@@ -971,7 +971,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       raw = url |> String.split("/") |> List.last()
 
       assert {:ok, %{mode: :moved}} =
-               Claims.redeem(
+               redeem_shown(
                  raw,
                  %{session_id: "browser-#{System.unique_integer([:positive])}", user_uuid: nil},
                  %{
@@ -1002,7 +1002,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       raw = url |> String.split("/") |> List.last()
 
       assert {:ok, %{mode: :moved}} =
-               Claims.redeem(
+               redeem_shown(
                  raw,
                  %{session_id: "browser-#{System.unique_integer([:positive])}"},
                  %{
@@ -1035,7 +1035,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
         {:ok, _} = Shop.add_to_cart(mine, p2, 1)
 
         assert {:ok, %{mode: mode}} =
-                 Claims.redeem(raw, %{session_id: session, user_uuid: nil}, %{
+                 redeem_shown(raw, %{session_id: session, user_uuid: nil}, %{
                    offer: mine.uuid,
                    choice: unquote(choice)
                  })
@@ -1190,7 +1190,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       raw = url |> String.split("/") |> List.last()
 
       {:ok, _} =
-        Claims.redeem(
+        redeem_shown(
           raw,
           %{session_id: "browser-#{System.unique_integer([:positive])}", user_uuid: nil},
           %{offer: "none"}

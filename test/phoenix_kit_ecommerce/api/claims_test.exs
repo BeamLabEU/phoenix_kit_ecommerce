@@ -176,7 +176,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
     do: Repo.all(from c in Cart, where: c.status == "active" and c.session_id == ^session_id)
 
   defp redeem(raw, browser, offer, choice \\ nil),
-    do: Claims.redeem(raw, browser, %{offer: offer, choice: choice})
+    do: redeem_shown(raw, browser, %{offer: offer, choice: choice})
 
   defp quantities(cart), do: cart.items |> Enum.map(& &1.quantity) |> Enum.sort()
 
@@ -476,6 +476,25 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
 
       assert {:ok, %{mode: :moved}} =
                Claims.redeem(raw, browser, %{offer: "none", revision: CartView.revision(current)})
+    end
+
+    test "a decision without a revision is a choice again and claims nothing", ctx do
+      api = api_cart!([{ctx.p1, 1}])
+      {raw, claim} = issue!(api)
+      browser = browser()
+
+      for decision <- [
+            %{offer: "none"},
+            %{offer: "none", revision: nil},
+            %{offer: "none", revision: ""},
+            %{offer: "none", revision: ["x"]}
+          ] do
+        assert {:error, :reshow} = Claims.redeem(raw, browser, decision), inspect(decision)
+      end
+
+      assert Repo.get!(CartClaim, claim.uuid).used_at == nil
+      assert Repo.get!(Cart, api.cart.uuid).session_id == "api:" <> api.hash
+      assert active_carts(browser.session_id) == []
     end
 
     test "a shipping choice made after the page was shown counts as a change too", ctx do

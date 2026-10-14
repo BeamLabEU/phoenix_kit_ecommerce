@@ -52,7 +52,7 @@ defmodule PhoenixKitEcommerce.API.Claims do
   @type decision :: %{
           required(:offer) => String.t(),
           optional(:choice) => String.t() | nil,
-          optional(:revision) => String.t()
+          required(:revision) => String.t()
         }
   @type outcome :: %{
           language: String.t(),
@@ -183,7 +183,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
   between the page and the click, and the buyer must not confirm lines they
   were not shown. Any difference, or a missing choice when the browser has a
   cart, is `{:error, :reshow}` and nothing changes. A decision without a
-  `revision` is not bound to a shown cart (callers other than the claim page). A Postgres `deadlock_detected` (a merge holds the browser's
+  `revision` cannot match the cart and is answered `{:error, :reshow}` too, so
+  a caller that forgets it can never claim a cart the buyer was not shown.
+
+  A Postgres `deadlock_detected` (a merge holds the browser's
   cart and then locks product rows inside `add_to_cart`, while a storefront add
   in another tab of the same browser holds the product row and waits for that
   cart) is `{:error, :busy}`: nothing was claimed, the buyer can try again.
@@ -342,11 +345,12 @@ defmodule PhoenixKitEcommerce.API.Claims do
     end
   end
 
-  defp bound_to_shown_cart!(api_cart, %{revision: shown}) do
-    if shown == CartView.revision(api_cart), do: :ok, else: repo().rollback(:reshow)
+  # A decision without a revision binds to no cart: it takes the reshow path.
+  defp bound_to_shown_cart!(api_cart, decision) do
+    if Map.get(decision, :revision) == CartView.revision(api_cart),
+      do: :ok,
+      else: repo().rollback(:reshow)
   end
-
-  defp bound_to_shown_cart!(_api_cart, _decision), do: :ok
 
   defp offered(nil), do: "none"
   defp offered(%Cart{items: []}), do: "none"

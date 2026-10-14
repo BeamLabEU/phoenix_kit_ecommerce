@@ -17,7 +17,9 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query, only: [from: 2]
-  import PhoenixKitEcommerce.CartApiFixtures, only: [put_secret!: 0, new_token!: 0]
+
+  import PhoenixKitEcommerce.CartApiFixtures,
+    only: [put_secret!: 0, new_token!: 0, redeem_shown: 3]
 
   alias Ecto.Adapters.SQL.Sandbox
   alias PhoenixKitEcommerce, as: Shop
@@ -191,7 +193,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
     assert {:ok, _} = Task.await(task, 10_000)
   end
 
-  defp redeem(raw, browser), do: Claims.redeem(raw, browser, %{offer: "none", choice: nil})
+  defp redeem(raw, browser), do: redeem_shown(raw, browser, %{offer: "none", choice: nil})
 
   # A committed, empty API cart and an unused claim for it; both are removed on
   # exit with the cart (the claim goes with it).

@@ -76,9 +76,13 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   end
 
   defp redeem(conn, token, browser, params) do
-    decision =
-      %{offer: text(params["offer"]), choice: choice(params["choice"])}
-      |> put_shown_revision(params["revision"])
+    # A browser always sends the revision (the page carries it); a missing or
+    # malformed one becomes "", which matches no cart and shows the page again.
+    decision = %{
+      offer: text(params["offer"]),
+      choice: choice(params["choice"]),
+      revision: text(params["revision"])
+    }
 
     redeem_reply(conn, token, Claims.redeem(token, browser, decision))
   end
@@ -221,11 +225,6 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   defp text(value) when is_binary(value), do: value
   defp text(_other), do: ""
-
-  # The cart revision the page showed. A browser always sends it (the page
-  # carries it); a malformed value cannot match any cart and shows the page again.
-  defp put_shown_revision(decision, nil), do: decision
-  defp put_shown_revision(decision, revision), do: Map.put(decision, :revision, text(revision))
 
   defp choice(value) when value in ["replace", "add"], do: value
   defp choice(_other), do: nil

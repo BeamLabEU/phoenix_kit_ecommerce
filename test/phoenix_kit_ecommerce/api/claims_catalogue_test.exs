@@ -110,7 +110,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
     {browser, mine} = browser_cart!([{french(ctx.vase), 1, %{"color" => "Rouge"}}])
 
     assert {:ok, %{mode: :merged, skipped: []}} =
-             Claims.redeem(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
+             redeem_shown(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
 
     assert [{_product, specs}] = Map.keys(lines(mine))
     assert specs == %{"color" => "Rouge"}
@@ -121,7 +121,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
     {browser, mine} = browser_cart!([{french(ctx.plain), 1, %{}}])
 
     assert {:ok, %{mode: :merged, skipped: []}} =
-             Claims.redeem(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
+             redeem_shown(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
 
     by_specs = Map.new(lines(mine), fn {{_product, specs}, quantity} -> {specs, quantity} end)
     assert by_specs == %{%{} => 1, %{"color" => "Rouge"} => 2}

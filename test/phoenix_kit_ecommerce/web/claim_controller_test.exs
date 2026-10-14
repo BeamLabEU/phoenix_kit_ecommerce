@@ -205,12 +205,12 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert html =~ ~s(name="offer" value="none")
 
       stale =
-        post(conn, Claims.path(ctx.raw), %{"offer" => guest.uuid, "choice" => "replace"})
+        post_claim(conn, ctx.raw, %{"offer" => guest.uuid, "choice" => "replace"})
 
       assert redirected_to(stale) == Claims.path(ctx.raw)
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
 
-      done = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      done = post_claim(conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(done) == Shop.checkout_url("en")
       assert [only] = active_carts_of(user)
@@ -232,11 +232,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert html =~ ~s(name="offer" value="#{mine.uuid}")
       refute html =~ ~s(id="claim-continue")
 
-      skipped = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      skipped = post_claim(conn, ctx.raw, %{"offer" => "none"})
       assert redirected_to(skipped) == Claims.path(ctx.raw)
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
 
-      done = post(conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "replace"})
+      done = post_claim(conn, ctx.raw, %{"offer" => mine.uuid, "choice" => "replace"})
 
       assert redirected_to(done) == Shop.checkout_url("en")
       assert [only] = active_carts_of(user)
@@ -438,6 +438,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     end
   end
 
+  # A POST the way the page makes it: the form carries the revision of the cart
+  # it showed, which `Claims.redeem/3` requires.
+  defp post_claim(conn, raw, params),
+    do: post(conn, Claims.path(raw), Map.put_new(params, "revision", claim_revision(raw)))
+
   describe "POST and the cart the page showed" do
     defp shown_revision(html) do
       [input] = Regex.run(~r/<input[^>]*name="revision"[^>]*>/, html)
@@ -480,6 +485,16 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert Enum.any?(items, &(&1.quantity == 5))
     end
 
+    test "a POST without a revision shows the page again and leaves the claim unused", ctx do
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+
+      assert redirected_to(conn) == Claims.path(ctx.raw)
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Please choose again"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+      assert active_carts(ctx.session) == []
+      assert Repo.get!(Cart, ctx.api_cart.uuid).session_id == "api:" <> ctx.hash
+    end
+
     test "a malformed revision cannot match any cart", ctx do
       for bad <- ["", "0000", ["x"], %{"a" => "b"}] do
         conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none", "revision" => bad})
@@ -493,7 +508,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
   describe "POST" do
     test "continue moves the cart to the browser and goes to checkout", ctx do
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(conn) == Shop.checkout_url("en")
       assert [cart] = active_carts(ctx.session)
@@ -503,11 +518,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     end
 
     test "a second POST claims nothing again and shows the cart page", ctx do
-      first = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      first = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
       assert redirected_to(first) == Shop.checkout_url("en")
       used_at = Repo.get!(CartClaim, ctx.claim.uuid).used_at
 
-      second = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      second = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(second) == Shop.cart_url("en")
       assert Phoenix.Flash.get(second.assigns.flash, :info) =~ "already been used or has expired"
@@ -520,7 +535,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(conn) == Claims.path(ctx.raw)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Please choose again"
@@ -534,7 +549,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
 
       replace =
-        post(ctx.conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "replace"})
+        post_claim(ctx.conn, ctx.raw, %{"offer" => mine.uuid, "choice" => "replace"})
 
       assert redirected_to(replace) == Shop.checkout_url("en")
       assert [only] = active_carts(ctx.session)
@@ -547,7 +562,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
       {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(conn) == Shop.checkout_url("en")
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "no longer available"
@@ -567,7 +582,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(conn) == Shop.checkout_url("en")
       notice = Phoenix.Flash.get(conn.assigns.flash, :error)
@@ -585,7 +600,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       notice = Phoenix.Flash.get(conn.assigns.flash, :error)
       refute notice =~ long
@@ -601,7 +616,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       notice = Phoenix.Flash.get(conn.assigns.flash, :error)
       assert notice =~ "Costume Mask"
@@ -610,11 +625,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
     test "a used German claim goes to the German cart page with a German notice", ctx do
       german = german_claim!(ctx)
-      first = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+      first = post_claim(ctx.conn, german, %{"offer" => "none"})
       assert redirected_to(first) == Shop.checkout_url("de")
       reset_locale()
 
-      second = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+      second = post_claim(ctx.conn, german, %{"offer" => "none"})
 
       assert redirected_to(second) == Shop.cart_url("de")
       assert Phoenix.Flash.get(second.assigns.flash, :info) =~ "bereits verwendet"
@@ -626,7 +641,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
       {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
 
-      conn = post(ctx.conn, Claims.path(german), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, german, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(conn) == Shop.checkout_url("de")
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "nicht mehr verfügbar"
@@ -637,7 +652,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, german, %{"offer" => "none"})
 
       assert redirected_to(conn) == Claims.path(german)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "hat sich geändert"
@@ -649,7 +664,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
       assert redirected_to(conn) == Claims.path(ctx.raw)
       html = conn |> follow() |> html_response(200)
 
@@ -661,7 +676,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
       shown = conn |> follow()
       assert texts(html_response(shown, 200), "#claim-notice-info") =~ "Please choose again"
 
@@ -705,7 +720,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     test "a dialect claim ends at the checkout of its language", ctx do
       {:ok, %{token: dialect}} = Claims.issue(ctx.api_cart, ctx.hash, "de-DE")
 
-      conn = post(ctx.conn, Claims.path(dialect), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, dialect, %{"offer" => "none"})
 
       assert redirected_to(conn) == Shop.checkout_url("de-DE")
       assert [cart] = active_carts(ctx.session)
@@ -717,7 +732,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
         set: [status: "abandoned"]
       )
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(conn) == Shop.cart_url("en")
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "already been used or has expired"
@@ -735,7 +750,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
             %{"offer" => mine.uuid, "choice" => ["add"]},
             %{"offer" => mine.uuid, "choice" => "steal"}
           ] do
-        conn = post(ctx.conn, Claims.path(ctx.raw), params)
+        conn = post_claim(ctx.conn, ctx.raw, params)
         assert redirected_to(conn) == Claims.path(ctx.raw), inspect(params)
       end
 
@@ -751,14 +766,18 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
         |> recycle()
         |> put_private(:plug_skip_csrf_protection, false)
 
-      assert_error_sent 403, fn -> post(refused, Claims.path(ctx.raw), %{"offer" => "none"}) end
+      assert_error_sent 403, fn -> post_claim(refused, ctx.raw, %{"offer" => "none"}) end
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
 
       accepted =
         page_conn
         |> recycle()
         |> put_private(:plug_skip_csrf_protection, false)
-        |> post(Claims.path(ctx.raw), %{"offer" => "none", "_csrf_token" => token})
+        |> post(Claims.path(ctx.raw), %{
+          "offer" => "none",
+          "revision" => claim_revision(ctx.raw),
+          "_csrf_token" => token
+        })
 
       assert redirected_to(accepted) == Shop.checkout_url("en")
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at != nil
@@ -772,7 +791,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
         first
         |> recycle()
         |> put_private(:plug_skip_csrf_protection, false)
-        |> post(Claims.path(ctx.raw), %{"offer" => "none", "_csrf_token" => token})
+        |> post(Claims.path(ctx.raw), %{
+          "offer" => "none",
+          "revision" => claim_revision(ctx.raw),
+          "_csrf_token" => token
+        })
 
       assert redirected_to(conn) == Shop.checkout_url("en")
       moved = Repo.get!(Cart, ctx.api_cart.uuid)
@@ -785,7 +808,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       user = PhoenixKitEcommerce.DataCase.fixture_user()
 
       response =
-        ctx.conn |> signed_in(user) |> post(Claims.path(ctx.raw), %{"offer" => "none"})
+        ctx.conn |> signed_in(user) |> post_claim(ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(response) == Shop.checkout_url("en")
       assert [found] = active_carts_of(user)
@@ -801,7 +824,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       conn = signed_in(ctx.conn, user)
 
       replaced =
-        post(conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "replace"})
+        post_claim(conn, ctx.raw, %{"offer" => mine.uuid, "choice" => "replace"})
 
       assert redirected_to(replaced) == Shop.checkout_url("en")
       assert [only] = active_carts_of(user)
@@ -817,7 +840,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       added =
         ctx.conn
         |> signed_in(user)
-        |> post(Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
+        |> post_claim(ctx.raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(added) == Shop.checkout_url("en")
       assert [only] = active_carts_of(user)
@@ -830,7 +853,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert ctx.conn |> page(german) |> html_response(200) =~ "Weiter zur Kasse"
 
       {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert Phoenix.Flash.get(conn.assigns.flash, :error) == "The shop is currently unavailable"
     end
@@ -838,7 +861,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     test "a shop that is switched off consumes nothing", ctx do
       {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => "none"})
 
       assert redirected_to(conn) == "/"
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "currently unavailable"
@@ -853,7 +876,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
       raise_deadlock_on_cart_item_insert!()
 
-      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, ctx.raw, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(conn) == Claims.path(ctx.raw)
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Your cart was not changed"
@@ -870,7 +893,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
       raise_deadlock_on_cart_item_insert!()
 
-      conn = post(ctx.conn, Claims.path(german), %{"offer" => mine.uuid, "choice" => "add"})
+      conn = post_claim(ctx.conn, german, %{"offer" => mine.uuid, "choice" => "add"})
 
       assert redirected_to(conn) == Claims.path(german)
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Warenkorb wurde nicht geändert"

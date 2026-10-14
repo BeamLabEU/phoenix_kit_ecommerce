@@ -11,6 +11,10 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartToken
+  alias PhoenixKitEcommerce.API.CartView
+  alias PhoenixKitEcommerce.API.Claims
+  alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.SearchFixtures
 
   # This module is loaded by `test_helper.exs` on every run, also against a core
@@ -27,6 +31,35 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
             ]}
 
   @secret String.duplicate("s", 64)
+
+  @doc """
+  The revision of the cart a claim link is about, as the claim page would carry
+  it (`""` for a link nobody issued). `Claims.redeem/3` requires it.
+  """
+  def claim_revision(raw) do
+    repo = PhoenixKit.RepoHelper.repo()
+    digest = CartToken.digest(raw)
+
+    with %CartClaim{cart_uuid: cart_uuid} <-
+           repo.get_by(CartClaim, token_hash: digest),
+         %Cart{} = cart <- Shop.get_cart(cart_uuid) do
+      CartView.revision(cart)
+    else
+      _no_such_claim_or_cart -> ""
+    end
+  end
+
+  @doc """
+  `Claims.redeem/3` for a decision that was made on the page as it stands: the
+  decision gets the cart's current revision unless it names one.
+  """
+  def redeem_shown(raw, browser, decision) do
+    Claims.redeem(
+      raw,
+      browser,
+      Map.put_new(decision, :revision, claim_revision(raw))
+    )
+  end
 
   @doc "Gives `CartToken` a signing secret for the current test."
   def put_secret! do
