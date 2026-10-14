@@ -409,12 +409,10 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   defp claim_base_url(ctx) do
     hosts = Enum.map(ctx[:hosts] || [], &String.downcase/1)
     canonical = canonical_site()
-    served = hosts ++ List.wrap(canonical && canonical.host)
     uri = URI.parse(ctx[:base_url] || "")
-    served? = is_binary(uri.host) and String.downcase(uri.host) in served
 
     cond do
-      served? and uri.scheme in ["http", "https"] ->
+      served?(uri, hosts, canonical) ->
         {:ok, ctx.base_url}
 
       hosts != [] ->
@@ -427,6 +425,11 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
       true ->
         {:error, :internal_error, "The checkout link could not be created.", %{}}
     end
+  end
+
+  defp served?(%URI{scheme: scheme, host: host}, hosts, canonical) do
+    served = hosts ++ List.wrap(canonical && canonical.host)
+    scheme in ["http", "https"] and is_binary(host) and String.downcase(host) in served
   end
 
   # The install's own address (`site_url` setting), when it is set and usable;

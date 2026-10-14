@@ -88,25 +88,27 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneRaceTest do
   defp hold_cart_row(cart, set) do
     test = self()
 
-    task =
-      Task.async(fn ->
-        unboxed(fn ->
-          Repo.transaction(fn ->
-            Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
-            send(test, :holding)
-
-            receive do
-              :release ->
-                if set != [],
-                  do: Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: set)
-            end
-          end)
-        end)
-      end)
+    task = Task.async(fn -> unboxed(fn -> Repo.transaction(hold(cart, set, test)) end) end)
 
     assert_receive :holding, 5_000
     task
   end
+
+  defp hold(cart, set, test) do
+    fn ->
+      Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
+      send(test, :holding)
+
+      receive do
+        :release -> change(cart, set)
+      end
+    end
+  end
+
+  defp change(_cart, []), do: :ok
+
+  defp change(cart, set),
+    do: Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: set)
 
   defp release(%Task{pid: pid} = task) do
     send(pid, :release)
