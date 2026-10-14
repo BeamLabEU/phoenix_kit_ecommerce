@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
   @moduledoc """
   The cron jobs of the public cart API: they act on `api:`
-  carts only, and on those only when idle (sweep), abandoned and empty
+  carts only, and on those only when idle (sweep), abandoned for long
   (prune), or when a claim is long dead (claim prune).
   """
 
@@ -13,6 +13,7 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartClaim
+  alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Workers.ApiCartPruneWorker
   alias PhoenixKitEcommerce.Workers.ApiCartSweepWorker
   alias PhoenixKitEcommerce.Workers.ApiClaimPruneWorker
@@ -128,18 +129,40 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       refute exists?(CartClaim, claim.uuid)
     end
 
-    test "keeps younger carts, carts with lines, active carts and carts that are not api carts" do
-      young = cart!(api_id(), status: "abandoned", updated_at: days_ago(29))
-      active = cart!(api_id(), status: "active", updated_at: days_ago(100))
-      browser = cart!("browser-9", status: "abandoned", updated_at: days_ago(100))
-
+    test "deletes an abandoned api cart that has lines, with its lines" do
       with_lines = cart!(api_id(), updated_at: days_ago(100))
       {:ok, _} = Shop.add_to_cart(with_lines, product!(), 1)
       with_lines = set!(with_lines, status: "abandoned", updated_at: days_ago(100))
 
+      assert Repo.aggregate(from(i in CartItem, where: i.cart_uuid == ^with_lines.uuid), :count) ==
+               1
+
+      assert {:ok, 1} = ApiCartPruneWorker.prune()
+
+      refute exists?(Cart, with_lines.uuid)
+
+      assert Repo.aggregate(from(i in CartItem, where: i.cart_uuid == ^with_lines.uuid), :count) ==
+               0
+    end
+
+    test "keeps younger carts, active carts and carts that are not api carts, with or without lines" do
+      young = cart!(api_id(), status: "abandoned", updated_at: days_ago(29))
+      active = cart!(api_id(), status: "active", updated_at: days_ago(100))
+      browser = cart!("browser-9", status: "abandoned", updated_at: days_ago(100))
+      converted = cart!(api_id(), status: "converted", updated_at: days_ago(100))
+
+      young_lines = cart!(api_id(), updated_at: days_ago(29))
+      {:ok, _} = Shop.add_to_cart(young_lines, product!(), 1)
+      young_lines = set!(young_lines, status: "abandoned", updated_at: days_ago(29))
+
+      browser_lines = cart!("browser-10", updated_at: days_ago(100))
+      {:ok, _} = Shop.add_to_cart(browser_lines, product!(), 1)
+      browser_lines = set!(browser_lines, status: "abandoned", updated_at: days_ago(100))
+
       assert {:ok, 0} = ApiCartPruneWorker.prune()
 
-      for cart <- [young, active, browser, with_lines], do: assert(exists?(Cart, cart.uuid))
+      for cart <- [young, active, browser, converted, young_lines, browser_lines],
+          do: assert(exists?(Cart, cart.uuid))
     end
 
     test "perform/1 does nothing while the shop is off" do

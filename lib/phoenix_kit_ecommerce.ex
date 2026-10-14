@@ -1127,7 +1127,7 @@ defmodule PhoenixKitEcommerce do
   def oban_crons do
     [
       {"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker},
-      # The hourly sweep of idle `api:` carts, the daily deletion of empty
+      # The hourly sweep of idle `api:` carts, the daily deletion of
       # abandoned `api:` carts and the daily claim prune. The workers run on the
       # `default` queue and do nothing while the shop is off.
       {"17 * * * *", PhoenixKitEcommerce.Workers.ApiCartSweepWorker},

@@ -32,7 +32,7 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepWorker do
 
   @doc """
   Abandons the idle `api:` carts and stamps `updated_at` with `now`, so the 30
-  days before `ApiCartPruneWorker` deletes an empty one count from here.
+  days before `ApiCartPruneWorker` deletes it count from here.
   """
   @spec sweep(DateTime.t()) :: {:ok, non_neg_integer()}
   def sweep(now \\ UtilsDate.utc_now()) do
