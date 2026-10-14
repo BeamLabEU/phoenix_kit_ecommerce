@@ -9,7 +9,9 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepWorker do
   ids are base64url without a colon). A cart with a live checkout link (an
   unused, unsuperseded, unexpired claim) is left alone until the link dies, so
   the buyer who opens it does not find the cart abandoned. General cart expiry
-  stays as it is.
+  stays as it is. A link issued in the same instant as a sweep can still find
+  its cart abandoned (the sweep decides on the claims it saw); the buyer who
+  opens it is answered with the friendly "used or expired" page.
   Does nothing while the shop module is disabled.
   """
 
