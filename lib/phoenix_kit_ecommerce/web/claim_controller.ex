@@ -4,12 +4,20 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   GET shows the interstitial and consumes nothing (link-preview bots only ever
   GET); POST, through the browser pipeline's CSRF check, consumes the claim
-  once. Every dead end (unknown, used, superseded or expired link, a cart that
-  is gone, a choice that is stale) is a redirect with a notice, never an error
-  page. See `PhoenixKitEcommerce.API.Claims` for what a POST does to the carts.
+  once. Every dead end of the claim itself (unknown, used, superseded or expired
+  link, a cart that is gone, a choice that is stale, an unexpected refusal) is a
+  redirect with a notice, never an error page. The notice of a stale choice is
+  shown on the claim page, the others on the cart page. One failure is outside
+  this controller: a POST whose CSRF token no longer matches (the session
+  expired between the page and the click) is refused by the host's browser
+  pipeline before the action runs, with the host's own error page; the claim is
+  not consumed and opening the link again works. See
+  `PhoenixKitEcommerce.API.Claims` for what a POST does to the carts.
   """
 
   use PhoenixKitEcommerce.Web, :controller
+
+  require Logger
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Claims
@@ -48,6 +56,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
         |> assign(:content_language, claim.language)
         |> render(:interstitial,
           cart: cart,
+          flash: conn.assigns.flash,
           existing: existing_cart(browser),
           action: Claims.path(token),
           page_title: gettext("An assistant prepared this cart for you")
@@ -61,7 +70,14 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   defp redeem(conn, token, browser, params) do
     decision = %{offer: text(params["offer"]), choice: choice(params["choice"])}
 
-    case Claims.redeem(token, browser, decision) do
+    redeem_reply(conn, token, Claims.redeem(token, browser, decision))
+  end
+
+  # The answer to a POST for every result `Claims.redeem/3` can give, the
+  # unexpected ones included.
+  @doc false
+  def redeem_reply(conn, token, result) do
+    case result do
       {:ok, %{language: language, skipped: skipped}} ->
         put_locale(language)
 
@@ -92,8 +108,26 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
       {:error, reason} when reason in @dead_ends ->
         unavailable(conn, Claims.language_of(token))
+
+      # Not a refusal the claim flow is known to make: fail closed. Only the
+      # atom is logged, never the token or any other term.
+      {:error, reason} ->
+        Logger.warning("[PhoenixKitEcommerce] claim redeem refused: #{log_reason(reason)}")
+        failed(conn, Claims.language_of(token))
     end
   end
+
+  defp failed(conn, language) do
+    language = language || Shop.get_default_language()
+    put_locale(language)
+
+    conn
+    |> put_flash(:error, gettext("Something went wrong. Your cart was not changed."))
+    |> redirect(to: Shop.cart_url(language))
+  end
+
+  defp log_reason(reason) when is_atom(reason), do: inspect(reason)
+  defp log_reason(_other), do: "not an atom"
 
   # The browser's identity: the shop session the shop-session plug put into the
   # Phoenix session, and the logged-in user core's auto-setup pipeline assigned.

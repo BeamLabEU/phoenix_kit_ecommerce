@@ -179,11 +179,19 @@ defmodule PhoenixKitEcommerce.API.Claims do
   cart and then locks product rows inside `add_to_cart`, while a storefront add
   in another tab of the same browser holds the product row and waits for that
   cart) is `{:error, :busy}`: nothing was claimed, the buyer can try again.
+  Any other atom is a refusal this module does not know; a caller fails closed.
   """
   @spec redeem(String.t(), browser(), decision()) ::
           {:ok, outcome()}
           | {:error,
-             :reshow | :busy | :invalid | :used | :superseded | :expired | :cart_unavailable}
+             :reshow
+             | :busy
+             | :invalid
+             | :used
+             | :superseded
+             | :expired
+             | :cart_unavailable
+             | atom()}
   def redeem(raw, %{session_id: session_id} = browser, %{offer: offer} = decision)
       when is_binary(raw) and byte_size(raw) in 16..256 and is_binary(session_id) and
              is_binary(offer) do

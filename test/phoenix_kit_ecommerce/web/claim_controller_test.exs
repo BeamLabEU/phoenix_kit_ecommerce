@@ -20,6 +20,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.Test.Repo
+  alias PhoenixKitEcommerce.Web.ClaimController
+  alias PhoenixKitEcommerce.Web.Helpers
 
   setup %{conn: conn} do
     put_secret!()
@@ -71,6 +73,40 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     {:ok, cart} = CartStore.resolve(hash)
     {:ok, %{token: raw}} = Claims.issue(cart, hash, "en")
     {raw, cart}
+  end
+
+  # A trigger raises what Postgres raises for the aborted side of a deadlock
+  # (SQLSTATE 40P01); the DDL rolls back with the test's transaction.
+  defp raise_deadlock_on_cart_item_insert! do
+    Repo.query!("""
+    CREATE FUNCTION pk_test_raise_deadlock() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01'; END
+    $$
+    """)
+
+    Repo.query!("""
+    CREATE TRIGGER pk_test_raise_deadlock BEFORE INSERT ON phoenix_kit_shop_cart_items
+    FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
+    """)
+  end
+
+  # The page the redirect points at, with the cookie (and so the flash) carried over.
+  defp follow(conn), do: conn |> recycle() |> get(redirected_to(conn))
+
+  defp texts(html, selector) do
+    html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> LazyHTML.text()
+  end
+
+  # The gettext locale belongs to the test process: put it back to English so that a
+  # German assertion proves the controller set it, not an earlier call of the test.
+  defp reset_locale, do: Helpers.put_content_locale("en")
+
+  # A German claim on a site with English and German switched on, so that the cart and
+  # checkout URLs of the two languages differ.
+  defp german_claim!(ctx) do
+    :ok = PhoenixKitEcommerce.SearchFixtures.enable_languages!(["en", "de"])
+    {:ok, %{token: german}} = Claims.issue(ctx.api_cart, ctx.hash, "de")
+    german
   end
 
   defp csrf_token(html) do
@@ -250,6 +286,35 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       end
     end
 
+    test "a dead link of a German claim goes to the German cart page with a German notice", ctx do
+      german = german_claim!(ctx)
+      {:ok, %{token: _newer}} = Claims.issue(ctx.api_cart, ctx.hash, "de")
+      refute Shop.cart_url("de") == Shop.cart_url("en")
+
+      conn = page(ctx.conn, german)
+
+      assert redirected_to(conn) == Shop.cart_url("de")
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "bereits verwendet"
+    end
+
+    test "lists the lines in uuid order, whatever order the database returns them in", ctx do
+      [later, earlier] = ctx.api_cart.items |> Enum.map(& &1.uuid) |> Enum.sort(:desc)
+      # The update moves the row to the end of the table: this line is read last, and
+      # its new uuid sorts first.
+      smallest = "00000000-0000-7000-8000-000000000000"
+
+      Repo.update_all(
+        from(i in PhoenixKitEcommerce.CartItem, where: i.uuid == ^later),
+        set: [uuid: smallest]
+      )
+
+      html = ctx.conn |> page(ctx.raw) |> html_response(200)
+
+      ids = ~r/id="claim-line-([0-9a-f-]+)"/ |> Regex.scan(html) |> Enum.map(&List.last/1)
+
+      assert ids == [smallest, earlier]
+    end
+
     test "speaks the language of a dialect claim", ctx do
       {:ok, %{token: dialect}} = Claims.issue(ctx.api_cart, ctx.hash, "de-DE")
 
@@ -414,6 +479,100 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       refute String.ends_with?(notice, ", \u2026")
     end
 
+    test "a used German claim goes to the German cart page with a German notice", ctx do
+      german = german_claim!(ctx)
+      first = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+      assert redirected_to(first) == Shop.checkout_url("de")
+      reset_locale()
+
+      second = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+
+      assert redirected_to(second) == Shop.cart_url("de")
+      assert Phoenix.Flash.get(second.assigns.flash, :info) =~ "bereits verwendet"
+    end
+
+    test "skipped lines of a German claim are named in German", ctx do
+      german = german_claim!(ctx)
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+
+      conn = post(ctx.conn, Claims.path(german), %{"offer" => mine.uuid, "choice" => "add"})
+
+      assert redirected_to(conn) == Shop.checkout_url("de")
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "nicht mehr verfügbar"
+    end
+
+    test "a stale choice on a German claim is explained in German on the claim page", ctx do
+      german = german_claim!(ctx)
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(german), %{"offer" => "none"})
+
+      assert redirected_to(conn) == Claims.path(german)
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "hat sich geändert"
+      reset_locale()
+      assert conn |> follow() |> html_response(200) |> texts("#claim-notice-info") =~ "hat sich"
+    end
+
+    test "the claim page shows the notice of a stale choice", ctx do
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      assert redirected_to(conn) == Claims.path(ctx.raw)
+      html = conn |> follow() |> html_response(200)
+
+      assert texts(html, "#claim-notice-info") =~ "Please choose again"
+      assert texts(html, "#claim-add") =~ "Add these items"
+    end
+
+    test "a notice is shown once", ctx do
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, _mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      shown = conn |> follow()
+      assert texts(html_response(shown, 200), "#claim-notice-info") =~ "Please choose again"
+
+      again = shown |> recycle() |> get(Claims.path(ctx.raw)) |> html_response(200)
+      assert texts(again, "#claim-notice-info") == ""
+    end
+
+    test "an unexpected refusal goes to the cart page with the generic notice, logging the atom only",
+         ctx do
+      german = german_claim!(ctx)
+      conn = ctx.conn |> Phoenix.Controller.fetch_flash([])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          conn = ClaimController.redeem_reply(conn, german, {:error, :surprise})
+
+          assert redirected_to(conn) == Shop.cart_url("de")
+          assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Etwas ist schiefgelaufen"
+        end)
+
+      assert log =~ "surprise"
+      refute log =~ german
+    end
+
+    test "an unexpected refusal that is not an atom is not logged", ctx do
+      conn = ctx.conn |> Phoenix.Controller.fetch_flash([])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          conn =
+            ClaimController.redeem_reply(conn, ctx.raw, {:error, %{secret: "do-not-log-me"}})
+
+          assert redirected_to(conn) == Shop.cart_url("en")
+          assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Something went wrong"
+        end)
+
+      refute log =~ "do-not-log-me"
+      refute log =~ ctx.raw
+    end
+
     test "a dialect claim ends at the checkout of its language", ctx do
       {:ok, %{token: dialect}} = Claims.issue(ctx.api_cart, ctx.hash, "de-DE")
 
@@ -542,22 +701,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert Repo.get!(Cart, ctx.api_cart.uuid).session_id == "api:" <> ctx.hash
     end
 
-    # A trigger raises what Postgres raises for the aborted side of a deadlock
-    # (SQLSTATE 40P01); the DDL rolls back with the test's transaction.
     test "a deadlock victim goes back to the choice, with nothing claimed", ctx do
       {:ok, mine} = Shop.create_cart(session_id: ctx.session)
       {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
 
-      Repo.query!("""
-      CREATE FUNCTION pk_test_raise_deadlock() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01'; END
-      $$
-      """)
-
-      Repo.query!("""
-      CREATE TRIGGER pk_test_raise_deadlock BEFORE INSERT ON phoenix_kit_shop_cart_items
-      FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
-      """)
+      raise_deadlock_on_cart_item_insert!()
 
       conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
 
@@ -565,6 +713,21 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Your cart was not changed"
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
       assert Repo.get!(Cart, ctx.api_cart.uuid).status == "active"
+
+      html = conn |> follow() |> html_response(200)
+      assert texts(html, "#claim-notice-error") =~ "Your cart was not changed"
+    end
+
+    test "a deadlock victim on a German claim is told in German", ctx do
+      german = german_claim!(ctx)
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+      raise_deadlock_on_cart_item_insert!()
+
+      conn = post(ctx.conn, Claims.path(german), %{"offer" => mine.uuid, "choice" => "add"})
+
+      assert redirected_to(conn) == Claims.path(german)
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Warenkorb wurde nicht geändert"
     end
   end
 end

@@ -13,13 +13,32 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
   attr :cart, :map, required: true
   attr :existing, :map, default: nil
   attr :action, :string, required: true
+  attr :flash, :map, default: %{}
 
+  @doc "The claim card: the lines, the subtotal, a notice when there is one, and the choice."
   def interstitial(assigns) do
     ~H"""
     <div id="claim-page" class="min-h-screen flex items-center justify-center bg-base-200 p-4">
       <div class="card bg-base-100 shadow-xl w-full max-w-lg">
         <div class="card-body gap-4">
           <h1 class="card-title text-xl">{gettext("An assistant prepared this cart for you")}</h1>
+
+          <div
+            :if={Phoenix.Flash.get(@flash, :info)}
+            id="claim-notice-info"
+            role="alert"
+            class="alert alert-info text-sm"
+          >
+            {Phoenix.Flash.get(@flash, :info)}
+          </div>
+          <div
+            :if={Phoenix.Flash.get(@flash, :error)}
+            id="claim-notice-error"
+            role="alert"
+            class="alert alert-error text-sm"
+          >
+            {Phoenix.Flash.get(@flash, :error)}
+          </div>
 
           <ul id="claim-lines" class="divide-y divide-base-200">
             <li
