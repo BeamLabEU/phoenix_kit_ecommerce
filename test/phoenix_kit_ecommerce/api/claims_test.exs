@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartStore
   alias PhoenixKitEcommerce.API.CartToken
+  alias PhoenixKitEcommerce.API.CartView
   alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.Cart
@@ -446,6 +447,48 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
       assert [_, _] = Shop.get_cart(mine.uuid).items
       refute Enum.any?(Shop.get_cart(mine.uuid).items, &(&1.product_uuid == foreign.uuid))
       assert Repo.get!(Cart, api.cart.uuid).status == "merged"
+    end
+  end
+
+  describe "redeem/3 and the cart the page showed" do
+    test "a cart that changed after the page was shown is a choice again; the shown one is claimed",
+         ctx do
+      api = api_cart!([{ctx.p1, 1}])
+      {raw, claim} = issue!(api)
+      browser = browser()
+      shown = CartView.revision(api.cart)
+
+      {:ok, _} =
+        CartWriter.set_items(
+          api.hash,
+          %{"items" => [%{"product_id" => ctx.p1.uuid, "quantity" => 4}]},
+          ctx_for(api.token)
+        )
+
+      assert {:error, :reshow} =
+               Claims.redeem(raw, browser, %{offer: "none", revision: shown})
+
+      assert Repo.get!(CartClaim, claim.uuid).used_at == nil
+      assert Repo.get!(Cart, api.cart.uuid).session_id == "api:" <> api.hash
+      assert active_carts(browser.session_id) == []
+
+      {:ok, current} = CartStore.resolve(api.hash)
+
+      assert {:ok, %{mode: :moved}} =
+               Claims.redeem(raw, browser, %{offer: "none", revision: CartView.revision(current)})
+    end
+
+    test "a shipping choice made after the page was shown counts as a change too", ctx do
+      api = api_cart!([{ctx.p1, 1}])
+      {raw, _} = issue!(api)
+      shown = CartView.revision(api.cart)
+
+      Repo.update_all(from(c in Cart, where: c.uuid == ^api.cart.uuid),
+        set: [shipping_country: "DE"]
+      )
+
+      assert {:error, :reshow} =
+               Claims.redeem(raw, browser(), %{offer: "none", revision: shown})
     end
   end
 

@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartStore
   alias PhoenixKitEcommerce.API.CartToken
+  alias PhoenixKitEcommerce.API.CartView
   alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.Cart
@@ -53,6 +54,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
     %{
       conn: conn,
       session: session,
+      token: token,
       raw: raw,
       claim: claim,
       api_cart: cart,
@@ -414,6 +416,59 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
       assert redirected_to(conn) == "/"
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "currently unavailable"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+    end
+  end
+
+  describe "POST and the cart the page showed" do
+    defp shown_revision(html) do
+      [input] = Regex.run(~r/<input[^>]*name="revision"[^>]*>/, html)
+      [_, revision] = Regex.run(~r/value="([^"]+)"/, input)
+      revision
+    end
+
+    # The agent writes to its cart after the buyer's page was rendered.
+    defp agent_changes_cart!(ctx) do
+      input = %{"items" => [%{"product_id" => ctx.p1.uuid, "quantity" => 5}]}
+      {:ok, _} = CartWriter.set_items(ctx.hash, input, ctx_for(ctx.token))
+    end
+
+    test "the page carries the revision of the cart it shows", ctx do
+      html = ctx.conn |> page(ctx.raw) |> html_response(200)
+
+      assert shown_revision(html) == CartView.revision(Shop.get_cart(ctx.api_cart.uuid))
+    end
+
+    test "a cart the agent changed after the page was shown is shown again, not moved", ctx do
+      shown = ctx.conn |> page(ctx.raw) |> html_response(200) |> shown_revision()
+      agent_changes_cart!(ctx)
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none", "revision" => shown})
+
+      assert redirected_to(conn) == Claims.path(ctx.raw)
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Please choose again"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+      assert active_carts(ctx.session) == []
+      assert Repo.get!(Cart, ctx.api_cart.uuid).session_id == "api:" <> ctx.hash
+
+      # The page shows the cart as it is now; confirming that one claims it.
+      fresh = ctx.conn |> page(ctx.raw) |> html_response(200) |> shown_revision()
+      refute fresh == shown
+
+      done = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none", "revision" => fresh})
+
+      assert redirected_to(done) == Shop.checkout_url("en")
+      assert [%{items: items}] = ctx.session |> active_carts() |> Repo.preload(:items)
+      assert Enum.any?(items, &(&1.quantity == 5))
+    end
+
+    test "a malformed revision cannot match any cart", ctx do
+      for bad <- ["", "0000", ["x"], %{"a" => "b"}] do
+        conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none", "revision" => bad})
+
+        assert redirected_to(conn) == Claims.path(ctx.raw)
+      end
+
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
     end
   end

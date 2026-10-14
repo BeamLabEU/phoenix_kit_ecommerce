@@ -49,7 +49,11 @@ defmodule PhoenixKitEcommerce.API.Claims do
           required(:session_id) => String.t(),
           optional(:user_uuid) => String.t() | nil
         }
-  @type decision :: %{required(:offer) => String.t(), optional(:choice) => String.t() | nil}
+  @type decision :: %{
+          required(:offer) => String.t(),
+          optional(:choice) => String.t() | nil,
+          optional(:revision) => String.t()
+        }
   @type outcome :: %{
           language: String.t(),
           skipped: [String.t()],
@@ -173,9 +177,13 @@ defmodule PhoenixKitEcommerce.API.Claims do
   (`"none"`, or the uuid of the browser's non-empty cart); `decision.choice` is
   `"replace"` or `"add"` when the browser has a cart.
 
-  What the page offered must still be what the browser has; any difference, or
-  a missing choice when the browser has a cart, is `{:error, :reshow}` and
-  nothing changes. A Postgres `deadlock_detected` (a merge holds the browser's
+  What the page offered must still be what the browser has, and the cart the
+  page showed (`decision.revision`, the `CartView.revision/1` of the cart at
+  the time of the GET) must still be the cart now: the agent can change it
+  between the page and the click, and the buyer must not confirm lines they
+  were not shown. Any difference, or a missing choice when the browser has a
+  cart, is `{:error, :reshow}` and nothing changes. A decision without a
+  `revision` is not bound to a shown cart (callers other than the claim page). A Postgres `deadlock_detected` (a merge holds the browser's
   cart and then locks product rows inside `add_to_cart`, while a storefront add
   in another tab of the same browser holds the product row and waits for that
   cart) is `{:error, :busy}`: nothing was claimed, the buyer can try again.
@@ -316,6 +324,8 @@ defmodule PhoenixKitEcommerce.API.Claims do
   # while it has no cart with lines, the uuid of its cart while it has one. Any
   # other pair, or a missing choice, shows the page again.
   defp decide!(claim, api_cart, browser_cart, browser, decision) do
+    :ok = bound_to_shown_cart!(api_cart, decision)
+
     case {offered(browser_cart), decision.offer, Map.get(decision, :choice)} do
       {"none", "none", _choice} ->
         move!(claim, api_cart, browser_cart, browser, :moved)
@@ -331,6 +341,12 @@ defmodule PhoenixKitEcommerce.API.Claims do
         repo().rollback(:reshow)
     end
   end
+
+  defp bound_to_shown_cart!(api_cart, %{revision: shown}) do
+    if shown == CartView.revision(api_cart), do: :ok, else: repo().rollback(:reshow)
+  end
+
+  defp bound_to_shown_cart!(_api_cart, _decision), do: :ok
 
   defp offered(nil), do: "none"
   defp offered(%Cart{items: []}), do: "none"

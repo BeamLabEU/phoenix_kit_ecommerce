@@ -640,7 +640,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert cart.session_id == "api:" <> CartToken.digest(token)
     end
 
-    test "the cart can still be changed until the link is opened, and a second link replaces the first",
+    test "the cart can still be changed until the buyer confirms the link, and a second link replaces the first",
          %{p1: p1} do
       token = new_cart_token()
       {200, _, _} = write(token, [{p1, 1}])

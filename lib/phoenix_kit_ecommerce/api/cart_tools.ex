@@ -50,7 +50,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
     "properties" => %{
       "status" => %{
         "type" => "string",
-        "description" => "open, or checking_out once the checkout link was opened."
+        "description" => "open, or checking_out once the buyer confirmed the checkout link."
       },
       "revision" => %{
         "type" => "string",
@@ -152,7 +152,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       title: "Read a cart",
       description:
         "Lines, totals, the chosen shipping, shipping thresholds (how much more to reach free shipping or a minimum) and a revision. " <>
-          "A token that has not written yet reads as an empty open cart. Once the checkout link was opened the status is checking_out and there are no lines.",
+          "A token that has not written yet reads as an empty open cart. Once the buyer has confirmed the checkout link the status is checking_out and there are no lines.",
       input_schema: object(["cart_token"], %{"cart_token" => @token}),
       output_schema: @cart,
       handler: {@handlers, :get_cart},
@@ -302,7 +302,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       title: "Checkout link",
       description:
         "Returns a one-time link where the buyer reviews the cart and continues to checkout on the site. Payment and personal details never pass through this API. " <>
-          "The link expires (see expires_in_seconds); asking again replaces the earlier link. The cart is locked once the buyer opens it.",
+          "The link expires (see expires_in_seconds); asking again replaces the earlier link. Opening the link changes nothing; the cart is locked when the buyer confirms on the page, and a change made to the cart after the page was shown makes the page ask the buyer again.",
       input_schema: object(["cart_token"], %{"cart_token" => @token}),
       output_schema: %{
         "type" => "object",

@@ -3,7 +3,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
   The checkout claim page: a bare card inside the host's root layout, in the
   language of the claim. One form posts back to the claim URL (`<.form>` adds
   the CSRF token); `offer` tells the server what the page showed (`none`, or the
-  uuid of the buyer's own cart) so a change in between is noticed.
+  uuid of the buyer's own cart) and `revision` tells it which lines were shown,
+  so a change in between, of either cart, is noticed.
   """
 
   use PhoenixKitEcommerce.Web, :html
@@ -15,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
   attr :cart, :map, required: true
   attr :existing, :map, default: nil
   attr :action, :string, required: true
+  attr :revision, :string, required: true
   attr :flash, :map, default: %{}
 
   @doc "The claim card: the lines, the subtotal, a notice when there is one, and the choice."
@@ -86,6 +88,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
 
           <.form for={%{}} id="claim-form" action={@action} method="post" class="flex flex-col gap-3">
             <input type="hidden" name="offer" value={if @existing, do: @existing.uuid, else: "none"} />
+            <input type="hidden" name="revision" value={@revision} />
 
             <button
               :if={is_nil(@existing)}
