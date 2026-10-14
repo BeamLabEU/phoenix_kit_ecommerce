@@ -39,10 +39,16 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   @max_lines 50
 
   # Refusals of `add_to_cart` that are decided before it writes anything and that
-  # a retry cannot change: the shop is off, or the cart's frozen currency cannot
-  # be rebased onto the current base currency. (A currency mismatch has its own
-  # message.)
-  @line_refusals [:shop_disabled, :cart_base_unavailable, :currency_unavailable]
+  # a retry cannot change: the product's currency does not fit the cart, the shop
+  # is off, or the cart's frozen currency cannot be rebased onto the current base
+  # currency. (A currency mismatch has its own message.) The checkout claim's merge
+  # reads the same list through `refused_before_write?/1`.
+  @line_refusals [
+    :currency_mismatch,
+    :shop_disabled,
+    :cart_base_unavailable,
+    :currency_unavailable
+  ]
 
   @type error :: {:error, atom(), String.t(), map()}
 
@@ -76,8 +82,14 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   end
 
   # Matched by shape so the module needs no compile-time dependency on Postgrex.
-  defp deadlock?(%{__struct__: Postgrex.Error, postgres: %{code: :deadlock_detected}}), do: true
-  defp deadlock?(_other), do: false
+  @doc false
+  @spec deadlock?(term()) :: boolean()
+  def deadlock?(%{__struct__: Postgrex.Error, postgres: %{code: :deadlock_detected}}), do: true
+  def deadlock?(_other), do: false
+
+  @doc false
+  @spec max_quantity() :: pos_integer()
+  def max_quantity, do: @max_quantity
 
   # --- the transaction ----------------------------------------------------------
 
@@ -569,7 +581,6 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # transaction and that a retry cannot change; the checkout claim's merge skips
   # such a line, and anything else it treats as a failure.
   @spec refused_before_write?(atom()) :: boolean()
-  def refused_before_write?(:currency_mismatch), do: true
   def refused_before_write?(reason), do: reason in @line_refusals
 
   # What `add_to_cart` answered when it did not add the line. Only the refusals

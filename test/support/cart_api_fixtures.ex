@@ -128,6 +128,66 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
     xmax != 0
   end
 
+  @doc """
+  Runs `fun` once, after the first `verb` (`"INSERT"`, `"SELECT"`) statement on
+  `table`, inside the process that ran it: a way to change the world between two
+  steps of the code under test.
+  """
+  def after_first_query(verb, table, fun) do
+    id = {__MODULE__, make_ref()}
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, meta, _config ->
+        if meta.source == table and String.starts_with?(meta.query, verb) do
+          :telemetry.detach(id)
+          fun.()
+        end
+      end,
+      nil
+    )
+
+    ExUnit.Callbacks.on_exit(fn -> :telemetry.detach(id) end)
+  end
+
+  @doc "The product ids of the cart-item INSERTs `fun` runs, in statement order."
+  def inserted_item_products(products, fun) do
+    id = {__MODULE__, make_ref()}
+    test = self()
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, meta, _config ->
+        if meta.source == "phoenix_kit_shop_cart_items" and
+             String.starts_with?(meta.query, "INSERT"),
+           do: send(test, {:item_insert, meta.params})
+      end,
+      nil
+    )
+
+    try do
+      fun.()
+    after
+      :telemetry.detach(id)
+    end
+
+    known = Map.new(products, &{Ecto.UUID.dump!(&1.uuid), &1.uuid})
+    known = Map.merge(known, Map.new(products, &{&1.uuid, &1.uuid}))
+    drain_item_inserts(known, [])
+  end
+
+  defp drain_item_inserts(known, acc) do
+    receive do
+      {:item_insert, params} ->
+        found = Enum.find_value(params, &Map.get(known, &1))
+        drain_item_inserts(known, [found | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   @doc "A client address that no other test uses (one bucket per test)."
   def unique_ip do
     n = System.unique_integer([:positive])

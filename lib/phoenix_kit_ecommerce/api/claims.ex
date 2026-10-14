@@ -42,7 +42,6 @@ defmodule PhoenixKitEcommerce.API.Claims do
   alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.Events
 
-  @quantity_cap 99
   @preloads [:items, :shipping_method]
 
   @type browser :: %{
@@ -62,7 +61,9 @@ defmodule PhoenixKitEcommerce.API.Claims do
   Issues a claim for an active cart and returns the raw token (shown once; only
   its digest is stored). Every earlier unused claim of the cart is superseded,
   and a claim that was superseded before is deleted, so a cart never holds more
-  than two unused claims however often a link is asked for.
+  than two unused claims however often a link is asked for. A cart that is no
+  longer active, or no longer carries the session id of `cart_token_hash` (it
+  was handed over), is `{:error, :cart_unavailable}`.
   """
   @spec issue(Cart.t(), String.t(), String.t()) ::
           {:ok, %{token: String.t(), claim: CartClaim.t()}} | {:error, term()}
@@ -72,12 +73,11 @@ defmodule PhoenixKitEcommerce.API.Claims do
     now = UtilsDate.utc_now()
     expires_at = DateTime.add(now, CartSettings.claim_ttl_minutes() * 60, :second)
 
+    expected = CartToken.session_id(cart_token_hash)
+
     result =
       repo().transaction(fn ->
-        _locked =
-          repo().one(
-            from(c in Cart, where: c.uuid == ^cart_uuid, lock: "FOR UPDATE", select: c.uuid)
-          )
+        lock_still_api_cart!(cart_uuid, expected)
 
         # Bounded table: a link superseded earlier can be redeemed by nobody, so
         # it goes (it reads as `:invalid`, the same notice for the buyer); the
@@ -110,6 +110,21 @@ defmodule PhoenixKitEcommerce.API.Claims do
     end
   end
 
+  # The cart row, locked, and still the cart of the token: active and not handed
+  # over (a handed-over cart carries the buyer's session id).
+  defp lock_still_api_cart!(cart_uuid, expected_session_id) do
+    case repo().one(
+           from(c in Cart,
+             where: c.uuid == ^cart_uuid,
+             lock: "FOR UPDATE",
+             select: {c.status, c.session_id}
+           )
+         ) do
+      {"active", ^expected_session_id} -> :ok
+      _handed_over_or_gone -> repo().rollback(:cart_unavailable)
+    end
+  end
+
   @doc "The URL path of a claim: outside the locale prefix, so one analytics pattern covers it."
   @spec path(String.t()) :: String.t()
   def path(raw), do: Routes.path("/checkout/claim/" <> raw, locale: :none)
@@ -133,14 +148,22 @@ defmodule PhoenixKitEcommerce.API.Claims do
   def peek(raw) do
     with %CartClaim{} = claim <- get_by_raw(raw),
          :ok <- usable(claim),
-         %Cart{status: "active"} = cart <- Shop.get_cart(claim.cart_uuid) do
+         %Cart{} = cart <- Shop.get_cart(claim.cart_uuid),
+         true <- still_api_cart?(cart, claim) do
       {:ok, %{claim: claim, cart: cart}}
     else
       nil -> {:error, :invalid}
       {:error, _reason} = error -> error
-      %Cart{} -> {:error, :cart_unavailable}
+      _unavailable -> {:error, :cart_unavailable}
     end
   end
+
+  # The claim's cart is the one the token still stands for: active, and not yet
+  # handed over (a handed-over cart carries the buyer's session id).
+  defp still_api_cart?(%Cart{status: "active", session_id: session_id}, claim),
+    do: session_id == CartToken.session_id(claim.cart_token_hash)
+
+  defp still_api_cart?(_cart, _claim), do: false
 
   # --- redeem -----------------------------------------------------------------------
 
@@ -159,16 +182,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
   @spec redeem(String.t(), browser(), decision()) ::
           {:ok, outcome()}
           | {:error,
-             :reshow
-             | :busy
-             | :invalid
-             | :used
-             | :superseded
-             | :expired
-             | :cart_unavailable
-             | term()}
+             :reshow | :busy | :invalid | :used | :superseded | :expired | :cart_unavailable}
   def redeem(raw, %{session_id: session_id} = browser, %{offer: offer} = decision)
-      when is_binary(raw) and is_binary(session_id) and is_binary(offer) do
+      when is_binary(raw) and byte_size(raw) in 16..256 and is_binary(session_id) and
+             is_binary(offer) do
     result =
       repo().transaction(fn ->
         Shop.lock_cart_identity!(Map.get(browser, :user_uuid), session_id)
@@ -190,14 +207,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
     end
   rescue
     error ->
-      if deadlock?(error), do: {:error, :busy}, else: reraise(error, __STACKTRACE__)
+      if CartWriter.deadlock?(error), do: {:error, :busy}, else: reraise(error, __STACKTRACE__)
   end
 
   def redeem(_raw, _browser, _decision), do: {:error, :invalid}
-
-  # Matched by shape so the module needs no compile-time dependency on Postgrex.
-  defp deadlock?(%{__struct__: Postgrex.Error, postgres: %{code: :deadlock_detected}}), do: true
-  defp deadlock?(_other), do: false
 
   # The claim, read WITHOUT a lock (see the lock order in the moduledoc).
   defp find_claim!(raw) do
@@ -303,8 +316,12 @@ defmodule PhoenixKitEcommerce.API.Claims do
   defp merge!(claim, api_cart, browser_cart) do
     records = load_records(api_cart.items, claim.language)
 
+    # Product-uuid order, like the writer: two merges (or a merge and a write)
+    # that share two products must not lock their rows crosswise.
     {merged, skipped} =
-      Enum.reduce(api_cart.items, {browser_cart, []}, fn item, {cart, skipped} ->
+      api_cart.items
+      |> Enum.sort_by(&(CartView.line_product_id(&1) || ""))
+      |> Enum.reduce({browser_cart, []}, fn item, {cart, skipped} ->
         add_line(cart, item, records, claim.language, skipped)
       end)
 
@@ -322,9 +339,15 @@ defmodule PhoenixKitEcommerce.API.Claims do
 
   defp abandon!(cart), do: cart |> Cart.status_changeset("abandoned") |> repo().update!()
 
+  # A cart that becomes a logged-in buyer's has no expiry (guest carts do), the
+  # way `Shop.merge_guest_cart/2` leaves it.
   defp relocate!(api_cart, browser) do
+    user_uuid = Map.get(browser, :user_uuid)
+    attrs = %{session_id: browser.session_id, user_uuid: user_uuid}
+    attrs = if user_uuid, do: Map.put(attrs, :expires_at, nil), else: attrs
+
     api_cart
-    |> Cart.changeset(%{session_id: browser.session_id, user_uuid: Map.get(browser, :user_uuid)})
+    |> Cart.changeset(attrs)
     |> repo().update!()
     |> repo().preload(@preloads, force: true)
   end
@@ -333,16 +356,8 @@ defmodule PhoenixKitEcommerce.API.Claims do
 
   # One loader call for every product of the API cart: the records carry the
   # visibility state of the public API (the same rule the writer applies).
-  defp load_records(items, language) do
-    ids =
-      items
-      |> Enum.map(&CartView.line_product_id/1)
-      |> Enum.map(&Loader.canonical_uuid/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-
-    if ids == [], do: %{}, else: Loader.load(ids, language: language)
-  end
+  defp load_records(items, language),
+    do: Loader.load(Enum.map(items, &CartView.line_product_id/1), language: language)
 
   # One API line into the browser's cart through the normal add_to_cart path
   # (re-priced in that cart's currency, re-validated). The line is validated
@@ -404,7 +419,7 @@ defmodule PhoenixKitEcommerce.API.Claims do
         CartView.line_product_id(line) == product.uuid and (line.selected_specs || %{}) == specs
       end)
 
-    max(0, min(wanted, @quantity_cap - ((existing && existing.quantity) || 0)))
+    max(0, min(wanted, CartWriter.max_quantity() - ((existing && existing.quantity) || 0)))
   end
 
   # --- shared ---------------------------------------------------------------------------
