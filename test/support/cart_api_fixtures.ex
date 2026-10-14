@@ -188,6 +188,12 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
     end
   end
 
+  @doc """
+  A host app's `:api_request_context` hook (`{CartApiFixtures, :pinned_hosts}`)
+  that names the one domain the install serves.
+  """
+  def pinned_hosts(_conn), do: %{hosts: ["shop.test"]}
+
   @doc "A client address that no other test uses (one bucket per test)."
   def unique_ip do
     n = System.unique_integer([:positive])

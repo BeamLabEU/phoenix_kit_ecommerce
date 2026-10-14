@@ -652,6 +652,70 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert {:ok, _} = Claims.peek(List.last(String.split(second, "/")))
     end
 
+    # The link carries a credential: it must point at a host the install serves,
+    # whatever Host header the request came with.
+    test "the link goes to a host the install serves, never the one the request named", %{p1: p1} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      link = fn overrides ->
+        CartHandlers.get_checkout_link(%{"cart_token" => token}, ctx_for(token, overrides))
+      end
+
+      assert {:ok, %{url: "https://shop.test/checkout/claim/" <> _}} = link.(%{})
+
+      assert {:ok, %{url: "https://SHOP.test/checkout/claim/" <> _}} =
+               link.(%{base_url: "https://SHOP.test"})
+
+      assert {:ok, %{url: "https://shop.test/checkout/claim/" <> _}} =
+               link.(%{base_url: "https://evil.example"})
+
+      assert {:ok, %{url: "http://shop.test/checkout/claim/" <> _}} =
+               link.(%{base_url: "http://evil.example:8080"})
+
+      assert {:ok, %{url: "https://shop.test/checkout/claim/" <> _}} =
+               link.(%{base_url: "evil.example"})
+
+      assert {:ok, %{url: "https://second.test/checkout/claim/" <> _}} =
+               link.(%{base_url: "https://evil.example", hosts: ["second.test", "shop.test"]})
+
+      assert {:ok, %{url: "https://shop.test:8443/checkout/claim/" <> _}} =
+               link.(%{base_url: "https://shop.test:8443"})
+    end
+
+    test "a call that names no host is refused before any claim exists", %{p1: p1} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      for hosts <- [[], nil] do
+        assert {:error, :internal_error, _message, %{}} =
+                 CartHandlers.get_checkout_link(
+                   %{"cart_token" => token},
+                   ctx_for(token, %{hosts: hosts, base_url: "https://evil.example"})
+                 )
+      end
+
+      assert Repo.aggregate(CartClaim, :count) == 0
+    end
+
+    test "through the executor, a host hook that pins the domain wins over the Host header", %{
+      p1: p1
+    } do
+      Application.put_env(
+        :phoenix_kit,
+        :api_request_context,
+        {PhoenixKitEcommerce.CartApiFixtures, :pinned_hosts}
+      )
+
+      on_exit(fn -> Application.delete_env(:phoenix_kit, :api_request_context) end)
+
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      assert {200, %{"url" => url}, _} = call("shop.get_checkout_link", %{"cart_token" => token})
+      assert url =~ ~r|\Ahttps?://shop\.test/checkout/claim/|
+    end
+
     test "an empty cart, or none, has nothing to hand over", _ctx do
       token = new_cart_token()
 

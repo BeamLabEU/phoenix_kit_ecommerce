@@ -384,7 +384,12 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   Issues a one-time claim URL for the cart. The URL is `ctx.base_url` plus the
   claim path, which has no locale prefix; the claim remembers the call's
   language for the page. The response carries a credential, so core's
-  idempotency layer never stores it for replay.
+  idempotency layer never stores it for replay, and the URL must point at a
+  host this install serves: when the host of `ctx.base_url` is not in
+  `ctx.hosts` the first of `ctx.hosts` is used instead, and a call with no
+  hosts at all is refused (before a claim exists). Core fills `ctx.hosts` with
+  the request host unless the host app's `:api_request_context` hook names the
+  domains, so a multi-domain install should name them there.
   """
   @spec get_checkout_link(map(), map()) :: result()
   def get_checkout_link(input, ctx), do: in_context(input, ctx, &do_get_checkout_link/2)
@@ -395,8 +400,20 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
       if ctx[:dry_run?] == true do
         {:preview, %{would_issue_link: true, lines: length(cart.items)}, CartView.revision(cart)}
       else
-        issue_link(cart, hash, ctx)
+        with {:ok, base_url} <- claim_base_url(ctx), do: issue_link(cart, hash, base_url, ctx)
       end
+    end
+  end
+
+  defp claim_base_url(ctx) do
+    hosts = Enum.map(ctx[:hosts] || [], &String.downcase/1)
+    uri = URI.parse(ctx[:base_url] || "")
+    served? = is_binary(uri.host) and String.downcase(uri.host) in hosts
+
+    cond do
+      served? and uri.scheme in ["http", "https"] -> {:ok, ctx.base_url}
+      hosts == [] -> {:error, :internal_error, "The checkout link could not be created.", %{}}
+      true -> {:ok, "#{if uri.scheme == "http", do: "http", else: "https"}://#{hd(hosts)}"}
     end
   end
 
@@ -410,14 +427,14 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
     end
   end
 
-  defp issue_link(cart, hash, ctx) do
+  defp issue_link(cart, hash, base_url, ctx) do
     language = ctx[:language] || Shop.get_default_language()
 
     case Claims.issue(cart, hash, language) do
       {:ok, %{token: raw, claim: claim}} ->
         {:ok,
          %{
-           url: ctx.base_url <> Claims.path(raw),
+           url: base_url <> Claims.path(raw),
            expires_at: DateTime.to_iso8601(claim.expires_at),
            expires_in_seconds: max(0, DateTime.diff(claim.expires_at, DateTime.utc_now()))
          }}
