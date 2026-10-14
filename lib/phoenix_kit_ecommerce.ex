@@ -2616,13 +2616,15 @@ defmodule PhoenixKitEcommerce do
   end
 
   # The create path of `get_or_create_cart/1` was find-then-insert with
-  # nothing in between, so two tabs of one browser (or a tab and a checkout
-  # claim, see `API.Claims`) could each find nothing and each insert an
+  # nothing in between, so two tabs of one browser (or a tab and the checkout
+  # hand-off of an API cart) could each find nothing and each insert an
   # active cart for the same identity. It now takes the identity lock and
   # looks again inside it. Only the create path pays for the transaction: a
   # visitor who already has a cart goes through the plain read above.
   # Result shapes are unchanged: `{:ok, cart}` or `{:error, reason}` (the
-  # changeset `create_cart/1` returned before).
+  # changeset `create_cart/1` returned before). A failed insert rolls the
+  # transaction back, so do not call this inside another transaction that has
+  # to go on after an `{:error, _}`.
   defp create_cart_serialized(user_uuid, session_id) do
     repo().transaction(fn ->
       lock_cart_identity!(user_uuid, session_id)
@@ -2646,10 +2648,16 @@ defmodule PhoenixKitEcommerce do
   # identity": a transaction-scoped advisory lock (released at commit or
   # rollback, so it is safe behind a transaction-pooling PgBouncer) on the
   # user key and then the session key, always in that order so two callers
-  # can never lock them crosswise. Must be called inside a transaction; the
-  # lock is re-entrant for the same transaction.
+  # can never lock them crosswise. Must be called inside a transaction (it
+  # raises otherwise: outside one the lock would be released at the end of its
+  # own statement and protect nothing); the lock is re-entrant for the same
+  # transaction.
   @spec lock_cart_identity!(String.t() | nil, String.t() | nil) :: :ok
   def lock_cart_identity!(user_uuid, session_id) do
+    if not repo().in_transaction?() do
+      raise ArgumentError, "lock_cart_identity!/2 must be called inside a transaction"
+    end
+
     for key <- cart_identity_keys(user_uuid, session_id) do
       repo().query!("SELECT pg_advisory_xact_lock(hashtext($1))", [key])
     end

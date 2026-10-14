@@ -92,6 +92,42 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
     product!(Map.merge(%{"metadata" => %{"_option_values" => options}}, overrides))
   end
 
+  @doc """
+  Whether the current transaction holds the advisory lock that
+  `Shop.lock_cart_identity!/2` takes for `key` (`"shop_cart_session:" <> id` or
+  `"shop_cart_user:" <> uuid`). The SQL sandbox runs a test in one transaction, so
+  this is how a test sees a lock that a production transaction would hold until
+  its commit.
+  """
+  def advisory_lock_held?(key) do
+    %{rows: [[count]]} =
+      PhoenixKit.RepoHelper.repo().query!(
+        """
+        SELECT count(*) FROM pg_locks
+        WHERE locktype = 'advisory' AND granted AND pid = pg_backend_pid()
+          AND objsubid = 1 AND objid::text::bigint = (hashtext($1)::bigint & 4294967295)
+        """,
+        [key]
+      )
+
+    count > 0
+  end
+
+  @doc """
+  Whether the current transaction holds a row lock on the cart (`FOR UPDATE`
+  stamps the locking transaction into the row's `xmax`; a row nobody has locked
+  or deleted has 0 there).
+  """
+  def cart_row_locked?(cart_uuid) do
+    %{rows: [[xmax]]} =
+      PhoenixKit.RepoHelper.repo().query!(
+        "SELECT xmax::text::bigint FROM phoenix_kit_shop_carts WHERE uuid = $1",
+        [Ecto.UUID.dump!(cart_uuid)]
+      )
+
+    xmax != 0
+  end
+
   @doc "A client address that no other test uses (one bucket per test)."
   def unique_ip do
     n = System.unique_integer([:positive])

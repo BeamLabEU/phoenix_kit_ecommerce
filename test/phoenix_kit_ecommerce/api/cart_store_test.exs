@@ -1,9 +1,10 @@
 defmodule PhoenixKitEcommerce.API.CartStoreTest do
   @moduledoc """
   Token -> cart rows: resolution, the lazy first write, the row limit, the
-  revision snapshots. The advisory-lock race itself cannot be reproduced under
-  the SQL sandbox (a test runs in one transaction); the sequential re-check
-  inside the lock is what is pinned here.
+  revision snapshots. A test runs in one sandbox transaction, so the locks a
+  write takes are asserted directly (`pg_locks` and the row's `xmax`) and the
+  re-check after the lock is pinned in sequence; the race itself, with parallel
+  callers on real connections, is in `CartStoreRaceTest`.
   """
 
   # async: false - settings and the Hammer counters are shared.
@@ -69,6 +70,24 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
       assert {:ok, found} = CartStore.resolve(hash)
       assert found.uuid == cart.uuid
       assert found.items == []
+      assert found.shipping_method == nil
+    end
+
+    test "the newest cart of the session wins over an older abandoned one", %{hash: hash} do
+      {:ok, old} = Shop.create_cart(session_id: CartToken.session_id(hash))
+      old |> Cart.status_changeset("abandoned") |> Repo.update!()
+
+      an_hour_ago =
+        DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+
+      Repo.update_all(from(c in Cart, where: c.uuid == ^old.uuid),
+        set: [inserted_at: an_hour_ago]
+      )
+
+      {:ok, current} = Shop.create_cart(session_id: CartToken.session_id(hash))
+
+      assert {:ok, %Cart{uuid: uuid}} = CartStore.resolve(hash)
+      assert uuid == current.uuid
     end
 
     test "a cart of another token, or a lookalike session id, is not found", %{hash: hash} do
@@ -120,6 +139,25 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
 
       assert {:ok, _} = CartStore.resolve(hash)
     end
+
+    # A link that was issued and not opened yet is not a hand-off: it must not
+    # turn a swept cart into "checking out", nor an unwritten token either.
+    test "an unused claim does not turn a swept cart into a locked one", %{hash: hash} do
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+      cart |> Cart.status_changeset("abandoned") |> Repo.update!()
+      claim!(cart, hash, %{used_at: nil})
+
+      assert CartStore.resolve(hash) == :not_found
+    end
+
+    test "an unused claim does not turn a token without a row into a locked one", %{hash: hash} do
+      {:ok, browser} =
+        Shop.create_cart(session_id: "browser-#{System.unique_integer([:positive])}")
+
+      claim!(browser, hash, %{used_at: nil})
+
+      assert CartStore.resolve(hash) == :empty
+    end
   end
 
   describe "for_write/3" do
@@ -151,7 +189,54 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
 
       assert {:ok, second, :existing} = write(hash, ctx())
       assert second.uuid == first.uuid
+      assert second.items == []
+      assert second.shipping_method == nil
       assert count_carts("api:" <> hash) == 1
+    end
+
+    test "the write path holds the token's session lock, for a new token and an existing cart",
+         %{hash: hash} do
+      key = "shop_cart_session:" <> CartToken.session_id(hash)
+      refute advisory_lock_held?(key)
+
+      assert {:ok, {:ok, _cart, :created}} =
+               Repo.transaction(fn ->
+                 result = CartStore.for_write(hash, ctx())
+                 assert advisory_lock_held?(key)
+                 result
+               end)
+
+      existing = new_token!()
+      {:ok, existing_hash} = CartToken.verify(existing)
+      existing_key = "shop_cart_session:" <> CartToken.session_id(existing_hash)
+      {:ok, _} = Shop.create_cart(session_id: CartToken.session_id(existing_hash))
+      refute advisory_lock_held?(existing_key)
+
+      assert {:ok, {:ok, _cart, :existing}} =
+               Repo.transaction(fn ->
+                 result = CartStore.for_write(existing_hash, ctx())
+                 assert advisory_lock_held?(existing_key)
+                 result
+               end)
+    end
+
+    test "an existing cart is row-locked for the rest of the transaction", %{hash: hash} do
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+      refute cart_row_locked?(cart.uuid)
+
+      assert {:ok, {:ok, %Cart{}, :existing}} =
+               Repo.transaction(fn ->
+                 result = CartStore.for_write(hash, ctx())
+                 assert cart_row_locked?(cart.uuid)
+                 result
+               end)
+    end
+
+    test "the locks are only meaningful inside a transaction, so outside one it raises",
+         %{hash: hash} do
+      assert_raise ArgumentError, ~r/inside a transaction/, fn ->
+        CartStore.for_write(hash, ctx())
+      end
     end
 
     test "a locked token is refused, an abandoned one is not found", %{hash: hash} do
@@ -222,6 +307,26 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
       assert {:ok, locked} = Repo.transaction(fn -> CartStore.lock_active!(cart.uuid, hash) end)
       assert locked.uuid == cart.uuid
       assert locked.items == []
+      assert locked.shipping_method == nil
+    end
+
+    test "holds the row lock for the rest of the transaction", %{hash: hash} do
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+      refute cart_row_locked?(cart.uuid)
+
+      assert {:ok, true} =
+               Repo.transaction(fn ->
+                 CartStore.lock_active!(cart.uuid, hash)
+                 cart_row_locked?(cart.uuid)
+               end)
+    end
+
+    test "raises outside a transaction", %{hash: hash} do
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+
+      assert_raise ArgumentError, ~r/inside a transaction/, fn ->
+        CartStore.lock_active!(cart.uuid, hash)
+      end
     end
 
     test "rolls the transaction back with :not_found for a swept cart, or none", %{hash: hash} do
@@ -320,8 +425,8 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
       :ok = CartStore.put_snapshot!(cart, %{"revision" => "r5", "lines" => []})
       cart = Repo.get!(Cart, cart.uuid)
 
-      assert hd(cart.metadata["api_revisions"])["revision"] == "r5"
-      assert length(cart.metadata["api_revisions"]) == 10
+      assert Enum.map(cart.metadata["api_revisions"], & &1["revision"]) ==
+               ~w(r5 r12 r11 r10 r9 r8 r7 r6 r4 r3)
     end
   end
 end

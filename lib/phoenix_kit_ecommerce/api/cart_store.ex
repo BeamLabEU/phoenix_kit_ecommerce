@@ -9,7 +9,8 @@ defmodule PhoenixKitEcommerce.API.CartStore do
   that cart, the token is answered from `phoenix_kit_shop_cart_claims`
   (`resolve/1`), which is how `cart_locked` stays reachable.
 
-  `for_write/3` and `lock_active!/2` must run inside a transaction.
+  `for_write/3` and `lock_active!/2` must run inside a transaction (they raise
+  otherwise: the locks they take would protect nothing).
   """
 
   import Ecto.Query, warn: false
@@ -38,8 +39,10 @@ defmodule PhoenixKitEcommerce.API.CartStore do
   or a swept one (`:not_found`).
   """
   @spec resolve(String.t()) :: resolved()
-  def resolve(hash) when is_binary(hash) do
-    case latest_cart(CartToken.session_id(hash)) do
+  def resolve(hash) when is_binary(hash), do: resolve(hash, @preloads)
+
+  defp resolve(hash, preloads) do
+    case latest_cart(CartToken.session_id(hash), preloads) do
       %Cart{status: "active"} = cart -> {:ok, cart}
       %Cart{} -> locked_or(hash, :not_found)
       nil -> locked_or(hash, :empty)
@@ -65,7 +68,7 @@ defmodule PhoenixKitEcommerce.API.CartStore do
     session_id = CartToken.session_id(hash)
     Shop.lock_cart_identity!(nil, session_id)
 
-    case resolve(hash) do
+    case resolve(hash, []) do
       {:ok, cart} -> lock_existing(cart, hash)
       :empty -> create(session_id, ctx, Keyword.get(opts, :count_row, true))
       {:locked, claim} -> {:locked, claim}
@@ -82,6 +85,10 @@ defmodule PhoenixKitEcommerce.API.CartStore do
   """
   @spec lock_active!(String.t(), String.t()) :: Cart.t()
   def lock_active!(cart_uuid, hash) when is_binary(cart_uuid) and is_binary(hash) do
+    if not repo().in_transaction?() do
+      raise ArgumentError, "lock_active!/2 must be called inside a transaction"
+    end
+
     case lock_row(cart_uuid, hash) do
       {:ok, cart} -> cart
       {:gone, outcome} -> repo().rollback(outcome)
@@ -143,9 +150,7 @@ defmodule PhoenixKitEcommerce.API.CartStore do
 
   # --- internals ------------------------------------------------------------
 
-  defp latest_cart(session_id) do
-    preloads = @preloads
-
+  defp latest_cart(session_id, preloads) do
     from(c in Cart,
       where: c.session_id == ^session_id,
       order_by: [desc: c.inserted_at, desc: c.uuid],
@@ -186,7 +191,7 @@ defmodule PhoenixKitEcommerce.API.CartStore do
 
     case repo().one(from(c in Cart, where: c.uuid == ^cart_uuid, lock: "FOR UPDATE")) do
       %Cart{status: "active", session_id: ^expected} = cart ->
-        {:ok, repo().preload(cart, @preloads, force: true)}
+        {:ok, repo().preload(cart, @preloads)}
 
       _swept_merged_or_moved ->
         {:gone, gone(hash)}
@@ -200,9 +205,6 @@ defmodule PhoenixKitEcommerce.API.CartStore do
              Shop.create_cart(session_id: session_id)
            end) do
       {:ok, cart, :created}
-    else
-      {:error, :rate_limited, _retry} = limited -> limited
-      {:error, reason} -> {:error, reason}
     end
   end
 
