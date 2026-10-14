@@ -198,6 +198,37 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
           do: assert(exists?(Cart, cart.uuid))
     end
 
+    test "deletes every expired cart when there are more than one batch of them" do
+      stamp = days_ago(40)
+
+      rows =
+        for _ <- 1..1003 do
+          %{
+            uuid: UUIDv7.generate(),
+            session_id: api_id(),
+            status: "abandoned",
+            subtotal: Decimal.new(0),
+            shipping_amount: Decimal.new(0),
+            tax_amount: Decimal.new(0),
+            discount_amount: Decimal.new(0),
+            total: Decimal.new(0),
+            total_weight_grams: 0,
+            items_count: 0,
+            metadata: %{},
+            inserted_at: stamp,
+            updated_at: stamp
+          }
+        end
+
+      rows |> Enum.chunk_every(300) |> Enum.each(&Repo.insert_all(Cart, &1))
+      young = cart!(api_id(), status: "abandoned", updated_at: days_ago(2))
+
+      assert {:ok, 1003} = ApiCartPruneWorker.prune()
+
+      assert Repo.aggregate(from(c in Cart, where: c.status == "abandoned"), :count) == 1
+      assert exists?(Cart, young.uuid)
+    end
+
     test "perform/1 does nothing while the shop is off" do
       old = cart!(api_id(), status: "abandoned", updated_at: days_ago(31))
 

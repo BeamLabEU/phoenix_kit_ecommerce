@@ -34,25 +34,30 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneWorker do
   @spec prune(DateTime.t()) :: {:ok, non_neg_integer()}
   def prune(now \\ UtilsDate.utc_now()) do
     cutoff = DateTime.add(now, -@retention_days * 86_400, :second)
+    {:ok, delete_expired(cutoff, 0)}
+  end
 
-    uuids =
-      from(c in Cart,
-        where: c.status == "abandoned",
-        where: like(c.session_id, "api:%"),
-        where: c.updated_at < ^cutoff,
-        select: c.uuid
-      )
-      |> RepoHelper.repo().all()
+  # One statement per batch of at most @batch carts. The conditions are in the
+  # subquery that picks the batch and again on the DELETE itself: a cart that
+  # an assistant wrote to (or the buyer took over) after it was picked is
+  # checked once more on its new row version before it is deleted, so a cart
+  # that stopped being expired is kept.
+  defp delete_expired(cutoff, deleted_so_far) do
+    batch = from(c in Cart, select: c.uuid, limit: ^@batch) |> expired(cutoff)
+    query = from(c in Cart, where: c.uuid in subquery(batch)) |> expired(cutoff)
 
-    count =
-      uuids
-      |> Enum.chunk_every(@batch)
-      |> Enum.map(fn batch ->
-        {deleted, _} = from(c in Cart, where: c.uuid in ^batch) |> RepoHelper.repo().delete_all()
-        deleted
-      end)
-      |> Enum.sum()
+    {deleted, _} = RepoHelper.repo().delete_all(query)
 
-    {:ok, count}
+    if deleted < @batch,
+      do: deleted_so_far + deleted,
+      else: delete_expired(cutoff, deleted_so_far + deleted)
+  end
+
+  defp expired(query, cutoff) do
+    where(
+      query,
+      [c],
+      c.status == "abandoned" and like(c.session_id, "api:%") and c.updated_at < ^cutoff
+    )
   end
 end
