@@ -59,6 +59,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKit.Utils.UUID, as: UUIDUtils
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.Currency
+  alias PhoenixKitEcommerce.API.CartTools
   alias PhoenixKitEcommerce.API.PublicTools
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
@@ -1125,10 +1126,12 @@ defmodule PhoenixKitEcommerce do
   # not declare is a compile warning.
   def oban_crons, do: [{"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker}]
 
-  # The API tools this module offers: the public read tools. Core collects them
-  # while the module is enabled. No `@impl`: same convention as `oban_crons/0`
-  # (an optional callback a core without the shop API does not declare).
-  def api_tools, do: PublicTools.tools()
+  # The API tools this module offers: the public read tools and the cart tools.
+  # Core collects them while the module is enabled. No `@impl`: same convention
+  # as `oban_crons/0` (an optional callback a core without the shop API does not
+  # declare).
+  def api_tools,
+    do: PublicTools.tools() ++ CartTools.tools()
 
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see

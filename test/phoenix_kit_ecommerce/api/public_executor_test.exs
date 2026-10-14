@@ -359,7 +359,7 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     assert {429, %{"code" => "rate_limited"}, _} = call("shop.search_products_batch", twenty, ip)
   end
 
-  test "GET discovery lists the five tools with their schemas" do
+  test "GET discovery lists the read tools with their schemas" do
     conn =
       :get
       |> Plug.Test.conn("/api/shop/v1/")
@@ -370,8 +370,9 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
     body = JSON.decode!(conn.resp_body)
     names = body["tools"] |> Enum.map(& &1["name"])
 
-    assert Enum.filter(names, &String.starts_with?(&1, "shop.")) |> Enum.sort() ==
-             ~w(shop.get_products shop.list_categories shop.search_products shop.search_products_batch shop.similar_products)
+    # The cart tools of the same module are listed beside the five read tools.
+    assert ~w(shop.get_products shop.list_categories shop.search_products shop.search_products_batch shop.similar_products) --
+             names == []
 
     search = Enum.find(body["tools"], &(&1["name"] == "shop.search_products"))
     assert search["input_schema"]["additionalProperties"] == false
