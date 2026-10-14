@@ -280,15 +280,16 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
   Runs a public tool through core's `Auth` and `Executor` on a `Plug.Test`
   connection and returns `{status, decoded_body, conn}`. Every call gets its own
   client address unless `ip:` is given; `headers:` adds request headers (for
-  example an idempotency key).
+  example an idempotency key); `host:` is the Host the request names.
   """
   def call_tool(name, input, opts \\ []) do
     enable_public_api!()
     ip = Keyword.get(opts, :ip, unique_ip())
+    origin = if host = Keyword.get(opts, :host), do: "http://#{host}", else: ""
 
     conn =
       :post
-      |> Plug.Test.conn("/api/shop/v1/#{name}", "")
+      |> Plug.Test.conn(origin <> "/api/shop/v1/#{name}", "")
       |> Plug.Conn.put_req_header("x-forwarded-for", ip)
       |> Plug.Conn.put_req_header("content-type", "application/json")
 

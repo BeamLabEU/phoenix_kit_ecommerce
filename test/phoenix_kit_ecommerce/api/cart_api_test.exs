@@ -813,8 +813,9 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert {:ok, _} = Claims.peek(List.last(String.split(second, "/")))
     end
 
-    # The link carries a credential: it must point at a host the install serves,
-    # whatever Host header the request came with.
+    # The link carries a credential: when a request-context hook names the
+    # domains, it must point at a host the install serves, whatever Host header
+    # the request came with.
     test "the link goes to a host the install serves, never the one the request named", %{p1: p1} do
       token = new_cart_token()
       {200, _, _} = write(token, [{p1, 1}])
@@ -909,6 +910,20 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
 
       assert {200, %{"url" => url}, _} = call("shop.get_checkout_link", %{"cart_token" => token})
       assert url =~ ~r|\Ahttps?://shop\.test/checkout/claim/|
+    end
+
+    # Pins the documented default: core fills `hosts` with the request host, so
+    # without a hook the link follows the Host header of the request.
+    test "without a request-context hook the link goes to the host the request named", %{p1: p1} do
+      Application.delete_env(:phoenix_kit, :api_request_context)
+
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      assert {200, %{"url" => url}, _} =
+               call("shop.get_checkout_link", %{"cart_token" => token}, host: "asked-for.test")
+
+      assert url =~ ~r|\Ahttps?://asked-for\.test/checkout/claim/|
     end
 
     test "an empty cart, or none, has nothing to hand over", _ctx do
