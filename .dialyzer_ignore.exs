@@ -12,12 +12,18 @@
   # (`PhoenixKit.API.Tool`, `PhoenixKit.API.Config`, used by settings.ex) and the
   # catalogue's admin API (`PhoenixKitCatalogue.API.resolve_refs/2`,
   # `Catalogue.update_items/2`), which no released core or catalogue ships yet.
-  # Dialyzer reports a missing module as `:unknown_function` and a missing
-  # function of a loaded module (`Catalogue.update_items/2`) as `:call_to_missing`.
-  # Remove these entries when a released core and catalogue ship the API;
-  # dialyzer then reports them as unnecessary skips.
-  {"lib/phoenix_kit_ecommerce/api.ex", :unknown_function},
-  {"lib/phoenix_kit_ecommerce/api/refs.ex", :unknown_function},
-  {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex", :call_to_missing},
-  {"lib/phoenix_kit_ecommerce/api/settings.ex", :unknown_function}
+  # Dialyzer reports a missing module as `unknown_function` and a missing
+  # function of a loaded module (`Catalogue.update_items/2`) as `call_to_missing`.
+  # Each entry names the one missing function, so a new unknown call in the same
+  # file is still reported. Remove these entries when a released core and
+  # catalogue ship the API; dialyzer then reports them as unnecessary skips.
+  {"lib/phoenix_kit_ecommerce/api.ex", "Function PhoenixKit.API.Tool.new!/1 does not exist."},
+  {"lib/phoenix_kit_ecommerce/api.ex",
+   "Function PhoenixKit.API.Tool.__struct__/0 does not exist."},
+  {"lib/phoenix_kit_ecommerce/api/refs.ex",
+   "Function PhoenixKitCatalogue.API.resolve_refs/2 does not exist."},
+  {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex",
+   "Call to missing or private function PhoenixKitCatalogue.Catalogue.update_items/2."},
+  {"lib/phoenix_kit_ecommerce/api/settings.ex",
+   "Function PhoenixKit.API.Config.admin_enabled?/0 does not exist."}
 ]
