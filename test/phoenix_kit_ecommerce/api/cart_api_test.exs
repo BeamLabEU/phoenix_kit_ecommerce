@@ -160,6 +160,34 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert Repo.aggregate(Cart, :count) == carts_before
     end
 
+    # The signature is checked before the language and currency are resolved, so a
+    # forged token costs no lookups: its answer does not depend on them. With a
+    # real token the same input is refused for its language (the control).
+    test "is cart_not_found before the language or currency is looked at", %{p1: p1} do
+      inputs = %{
+        "shop.get_cart" => %{},
+        "shop.set_cart_items" => %{"items" => items([{p1, 1}])},
+        "shop.clear_cart" => %{},
+        "shop.get_shipping_options" => %{"country" => "DE"},
+        "shop.set_shipping" => %{"country" => "DE", "method_id" => Ecto.UUID.generate()},
+        "shop.get_checkout_link" => %{}
+      }
+
+      real = new_cart_token()
+
+      for {tool, input} <- inputs, controls <- [%{"language" => "xx"}, %{"currency" => "XYZ"}] do
+        input = Map.merge(input, controls)
+
+        assert {404, %{"code" => "cart_not_found"}, _} =
+                 call(tool, Map.put(input, "cart_token", "forged")),
+               "#{tool} #{inspect(controls)}"
+
+        assert {422, %{"code" => "validation_failed"}, _} =
+                 call(tool, Map.put(input, "cart_token", real)),
+               "#{tool} #{inspect(controls)} control"
+      end
+    end
+
     test "guessing tokens from one address is rate limited" do
       put_setting!("api_public_ip_rate_per_min", 3)
       ip = unique_ip()

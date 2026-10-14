@@ -9,7 +9,8 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   `{:error, code, message, context}`.
 
   `language` and `currency` (control fields every public tool accepts, declared
-  from `API.Public.Schemas.control_fields/0`) are resolved first by `in_context/3`.
+  from `API.Public.Schemas.control_fields/0`) are resolved first by `in_context/3`,
+  after the signature of the cart token has been checked (`in_cart_context/3`).
 
   A cart token that is not one this server signed is `cart_not_found`; a
   signed token with no row yet reads as an empty open cart; a token whose cart
@@ -63,16 +64,14 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
 
   @doc "The cart behind a token."
   @spec get_cart(map(), map()) :: result()
-  def get_cart(input, ctx), do: in_context(input, ctx, &do_get_cart/2)
+  def get_cart(input, ctx), do: in_cart_context(input, ctx, &do_get_cart/3)
 
-  defp do_get_cart(input, ctx) do
-    with {:ok, hash} <- token_hash(input) do
-      case CartStore.resolve(hash) do
-        {:ok, cart} -> ok(CartView.build(cart))
-        :empty -> ok(CartView.empty(CartStore.display_currency(ctx)))
-        {:locked, claim} -> ok(CartView.locked(claimed_currency(claim, ctx)))
-        :not_found -> cart_not_found()
-      end
+  defp do_get_cart(hash, _input, ctx) do
+    case CartStore.resolve(hash) do
+      {:ok, cart} -> ok(CartView.build(cart))
+      :empty -> ok(CartView.empty(CartStore.display_currency(ctx)))
+      {:locked, claim} -> ok(CartView.locked(claimed_currency(claim, ctx)))
+      :not_found -> cart_not_found()
     end
   end
 
@@ -80,15 +79,13 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
 
   @doc "Sets the named lines to their final quantities."
   @spec set_cart_items(map(), map()) :: result()
-  def set_cart_items(input, ctx), do: in_context(input, ctx, &do_set_cart_items/2)
+  def set_cart_items(input, ctx), do: in_cart_context(input, ctx, &do_set_cart_items/3)
 
-  defp do_set_cart_items(input, ctx) do
-    with {:ok, hash} <- token_hash(input) do
-      case CartWriter.set_items(hash, input, ctx) do
-        {:ok, result} -> ok(result)
-        {:preview, result, fingerprint} -> preview(result, fingerprint)
-        {:error, _code, _message, _context} = error -> error
-      end
+  defp do_set_cart_items(hash, input, ctx) do
+    case CartWriter.set_items(hash, input, ctx) do
+      {:ok, result} -> ok(result)
+      {:preview, result, fingerprint} -> preview(result, fingerprint)
+      {:error, _code, _message, _context} = error -> error
     end
   end
 
@@ -132,11 +129,10 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   fingerprint is the cart's revision.
   """
   @spec clear_cart(map(), map()) :: result()
-  def clear_cart(input, ctx), do: in_context(input, ctx, &do_clear_cart/2)
+  def clear_cart(input, ctx), do: in_cart_context(input, ctx, &do_clear_cart/3)
 
-  defp do_clear_cart(input, ctx) do
-    with {:ok, hash} <- token_hash(input),
-         {:ok, cart} <- writable_cart(hash) do
+  defp do_clear_cart(hash, _input, ctx) do
+    with {:ok, cart} <- writable_cart(hash) do
       case cart do
         :empty -> clear_nothing(ctx)
         %Cart{} -> clear(cart, hash, ctx)
@@ -193,11 +189,11 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
 
   @doc "Every active shipping method for the cart and a country, with availability and the reason."
   @spec get_shipping_options(map(), map()) :: result()
-  def get_shipping_options(input, ctx), do: in_context(input, ctx, &do_get_shipping_options/2)
+  def get_shipping_options(input, ctx),
+    do: in_cart_context(input, ctx, &do_get_shipping_options/3)
 
-  defp do_get_shipping_options(input, ctx) do
-    with {:ok, hash} <- token_hash(input),
-         {:ok, country} <- country(input),
+  defp do_get_shipping_options(hash, input, ctx) do
+    with {:ok, country} <- country(input),
          {:ok, cart} <- shipping_cart(hash, ctx) do
       ok(%{country: country, methods: shipping_options(cart, country)})
     end
@@ -294,11 +290,10 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
 
   @doc "Chooses a shipping method and country for a cart with lines."
   @spec set_shipping(map(), map()) :: result()
-  def set_shipping(input, ctx), do: in_context(input, ctx, &do_set_shipping/2)
+  def set_shipping(input, ctx), do: in_cart_context(input, ctx, &do_set_shipping/3)
 
-  defp do_set_shipping(input, ctx) do
-    with {:ok, hash} <- token_hash(input),
-         {:ok, country} <- country(input),
+  defp do_set_shipping(hash, input, ctx) do
+    with {:ok, country} <- country(input),
          {:ok, cart} <- existing_cart(hash),
          {:ok, method} <- find_method(input["method_id"]) do
       choose_shipping(hash, cart, method, country, ctx)
@@ -392,11 +387,10 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   domains, so a multi-domain install should name them there.
   """
   @spec get_checkout_link(map(), map()) :: result()
-  def get_checkout_link(input, ctx), do: in_context(input, ctx, &do_get_checkout_link/2)
+  def get_checkout_link(input, ctx), do: in_cart_context(input, ctx, &do_get_checkout_link/3)
 
-  defp do_get_checkout_link(input, ctx) do
-    with {:ok, hash} <- token_hash(input),
-         {:ok, cart} <- linkable_cart(hash) do
+  defp do_get_checkout_link(hash, _input, ctx) do
+    with {:ok, cart} <- linkable_cart(hash) do
       if ctx[:dry_run?] == true do
         {:preview, %{would_issue_link: true, lines: length(cart.items)}, CartView.revision(cart)}
       else
@@ -466,6 +460,16 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
     with {:ok, context} <- Context.build(input, ctx) do
       ctx = Map.merge(ctx, %{language: context.language, currency: context.currency.code})
       Context.with_request_currency(context, fn -> fun.(input, ctx) end)
+    end
+  end
+
+  # The tools that take a cart token check its signature before anything else
+  # is looked up: a token this server did not sign (anyone can send one) costs
+  # no language or currency lookup, and the hash the handler goes on with is
+  # always the one `CartToken.verify/1` returned.
+  defp in_cart_context(input, ctx, fun) do
+    with {:ok, hash} <- token_hash(input) do
+      in_context(input, ctx, fn input, ctx -> fun.(hash, input, ctx) end)
     end
   end
 
