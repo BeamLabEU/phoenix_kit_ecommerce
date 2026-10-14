@@ -8,6 +8,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
 
   use PhoenixKitEcommerce.Web, :html
 
+  alias PhoenixKitEcommerce.NamePrefix
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Helpers
 
   attr :cart, :map, required: true
@@ -47,7 +49,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
               class="flex justify-between gap-4 py-2 text-sm"
             >
               <span>
-                {item.product_title}
+                {NamePrefix.strip(item.product_title)}
                 <span class="text-base-content/60">×{item.quantity}</span>
                 <span
                   :if={item.selected_specs not in [nil, %{}]}
@@ -59,7 +61,13 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
                   </span>
                 </span>
               </span>
-              <span class="font-medium">{Helpers.format_price(item.line_total, @cart.currency)}</span>
+              <span class="font-medium">
+                {PriceDisplay.render(nil, @cart.currency, :cart,
+                  amount: item.line_total,
+                  unit: nil,
+                  on_request: PriceDisplay.line_on_request?(item)
+                )}
+              </span>
             </li>
           </ul>
 
@@ -67,6 +75,14 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
             <span>{gettext("Subtotal")}</span>
             <span id="claim-subtotal">{Helpers.format_price(@cart.subtotal, @cart.currency)}</span>
           </div>
+
+          <p
+            :if={PriceDisplay.any_line_on_request?(@cart.items)}
+            id="claim-on-request-note"
+            class="text-xs text-base-content/60"
+          >
+            {gettext("Items priced on request are not included in this total.")}
+          </p>
 
           <.form for={%{}} id="claim-form" action={@action} method="post" class="flex flex-col gap-3">
             <input type="hidden" name="offer" value={if @existing, do: @existing.uuid, else: "none"} />

@@ -4,14 +4,15 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   GET shows the interstitial and consumes nothing (link-preview bots only ever
   GET); POST, through the browser pipeline's CSRF check, consumes the claim
-  once. Every dead end of the claim itself (unknown, used, superseded or expired
-  link, a cart that is gone, a choice that is stale, an unexpected refusal) is a
-  redirect with a notice, never an error page. The notice of a stale choice is
-  shown on the claim page, the others on the cart page. One failure is outside
-  this controller: a POST whose CSRF token no longer matches (the session
-  expired between the page and the click) is refused by the host's browser
-  pipeline before the action runs, with the host's own error page; the claim is
-  not consumed and opening the link again works. See
+  once. A POST has three destinations. Success goes to checkout. A choice that
+  has gone stale (the browser's cart changed since the page was shown, or a
+  deadlock victim) goes back to the claim page with a notice, to choose again.
+  Every other dead end (unknown, used, superseded or expired link, a cart that
+  is gone, an unexpected refusal) goes to the cart page with a notice, never an
+  error page; a shop that is switched off goes to the host's root. One failure is outside this controller: a POST whose CSRF token no
+  longer matches (the session expired between the page and the click) is refused
+  by the host's browser pipeline before the action runs, with the host's own
+  error page; the claim is not consumed and opening the link again works. See
   `PhoenixKitEcommerce.API.Claims` for what a POST does to the carts.
   """
 
@@ -21,6 +22,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Claims
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Web.ClaimHTML
   alias PhoenixKitEcommerce.Web.Helpers
 
@@ -56,7 +58,6 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
         |> assign(:content_language, claim.language)
         |> render(:interstitial,
           cart: cart,
-          flash: conn.assigns.flash,
           existing: existing_cart(browser),
           action: Claims.path(token),
           page_title: gettext("An assistant prepared this cart for you")
@@ -181,6 +182,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   defp skipped_notice(conn, []), do: conn
 
   defp skipped_notice(conn, titles) do
+    titles = Enum.map(titles, &NamePrefix.strip/1)
+
     put_flash(
       conn,
       :error,

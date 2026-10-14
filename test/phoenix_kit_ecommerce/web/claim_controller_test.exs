@@ -366,6 +366,47 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert html =~ "Red"
     end
 
+    test "a line priced on request says so, shows no price, and the subtotal says what it leaves out",
+         ctx do
+      quote_me =
+        product!(%{
+          "title" => %{"en" => "Quote me"},
+          "price" => Decimal.new("0.00"),
+          "metadata" => %{"_price_display" => %{"on_request" => true}}
+        })
+
+      {raw, cart} = claim_for!([quote_me, product!(%{"price" => Decimal.new("10.00")})])
+      line = Enum.find(cart.items, &(&1.product_uuid == quote_me.uuid))
+
+      html = ctx.conn |> page(raw) |> html_response(200)
+      row = texts(html, "#claim-line-#{line.uuid}")
+
+      assert row =~ "Quote me"
+      assert row =~ "Price on request"
+      refute row =~ "0.00"
+      assert texts(html, "#claim-subtotal") =~ "10.00"
+      assert texts(html, "#claim-on-request-note") =~ "Items priced on request are not included"
+    end
+
+    test "a cart of priced lines carries no on-request note", ctx do
+      html = ctx.conn |> page(ctx.raw) |> html_response(200)
+
+      refute html =~ ~s(id="claim-on-request-note")
+      refute html =~ "Price on request"
+    end
+
+    test "shows product titles without the configured name prefix", ctx do
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_name_prefixes", "3D Printed")
+      mask = product!(%{"title" => %{"en" => "3D Printed Costume Mask"}})
+      {raw, cart} = claim_for!([mask])
+      [line] = cart.items
+
+      html = ctx.conn |> page(raw) |> html_response(200)
+
+      assert texts(html, "#claim-line-#{line.uuid}") =~ "Costume Mask"
+      refute html =~ "3D Printed"
+    end
+
     test "a shop that is switched off is not touched", ctx do
       {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
 
@@ -477,6 +518,21 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       refute notice =~ long
       assert notice =~ String.duplicate("w", 59) <> "\u2026"
       refute String.ends_with?(notice, ", \u2026")
+    end
+
+    test "skipped lines are named without the configured name prefix", ctx do
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_name_prefixes", "3D Printed")
+      mask = product!(%{"title" => %{"en" => "3D Printed Costume Mask"}})
+      {raw, _cart} = claim_for!([mask])
+      {:ok, _} = Shop.update_product(mask, %{"status" => "archived"})
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+
+      notice = Phoenix.Flash.get(conn.assigns.flash, :error)
+      assert notice =~ "Costume Mask"
+      refute notice =~ "3D Printed"
     end
 
     test "a used German claim goes to the German cart page with a German notice", ctx do
@@ -632,6 +688,23 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
         |> post(Claims.path(ctx.raw), %{"offer" => "none", "_csrf_token" => token})
 
       assert redirected_to(accepted) == Shop.checkout_url("en")
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at != nil
+    end
+
+    test "a browser the shop has not seen before can open the page and post it", ctx do
+      first = page(build_conn(), ctx.raw)
+      token = csrf_token(html_response(first, 200))
+
+      conn =
+        first
+        |> recycle()
+        |> put_private(:plug_skip_csrf_protection, false)
+        |> post(Claims.path(ctx.raw), %{"offer" => "none", "_csrf_token" => token})
+
+      assert redirected_to(conn) == Shop.checkout_url("en")
+      moved = Repo.get!(Cart, ctx.api_cart.uuid)
+      assert moved.status == "active"
+      refute String.starts_with?(moved.session_id, "api:")
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at != nil
     end
 
