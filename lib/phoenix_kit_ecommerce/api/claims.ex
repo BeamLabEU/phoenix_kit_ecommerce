@@ -181,6 +181,8 @@ defmodule PhoenixKitEcommerce.API.Claims do
   cart) is `{:error, :busy}`: nothing was claimed, the buyer can try again.
   Any other atom is a refusal this module does not know; a caller fails closed.
   """
+  # The trailing `atom()` is deliberate: without it dialyzer proves the caller's
+  # fail-closed clause (any refusal not listed here) unreachable and warns.
   @spec redeem(String.t(), browser(), decision()) ::
           {:ok, outcome()}
           | {:error,
