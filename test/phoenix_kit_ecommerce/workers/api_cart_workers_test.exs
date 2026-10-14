@@ -1,0 +1,237 @@
+defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
+  @moduledoc """
+  The cron jobs of the public cart API: they act on `api:`
+  carts only, and on those only when idle (sweep), abandoned and empty
+  (prune), or when a claim is long dead (claim prune).
+  """
+
+  # async: false - settings are shared.
+  use PhoenixKitEcommerce.DataCase, async: false
+
+  import PhoenixKitEcommerce.CartApiFixtures
+
+  alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartClaim
+  alias PhoenixKitEcommerce.Workers.ApiCartPruneWorker
+  alias PhoenixKitEcommerce.Workers.ApiCartSweepWorker
+  alias PhoenixKitEcommerce.Workers.ApiClaimPruneWorker
+
+  setup do
+    ensure_currencies!()
+    :ok
+  end
+
+  defp days_ago(days),
+    do: DateTime.utc_now() |> DateTime.add(-days * 86_400, :second) |> DateTime.truncate(:second)
+
+  defp cart!(session_id, opts \\ []) do
+    {:ok, cart} =
+      Shop.create_cart(Keyword.merge([session_id: session_id], Keyword.take(opts, [:user_uuid])))
+
+    set!(cart, opts)
+  end
+
+  # Backdates and re-statuses a cart without going through the changeset
+  # (which would stamp updated_at).
+  defp set!(cart, opts) do
+    updates =
+      [
+        updated_at:
+          Keyword.get(opts, :updated_at, DateTime.utc_now() |> DateTime.truncate(:second)),
+        status: Keyword.get(opts, :status, "active")
+      ]
+
+    Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: updates)
+    Repo.get!(Cart, cart.uuid)
+  end
+
+  defp api_id, do: "api:" <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+  defp status(cart), do: Repo.get!(Cart, cart.uuid).status
+  defp exists?(schema, uuid), do: Repo.get(schema, uuid) != nil
+
+  describe "ApiCartSweepWorker.sweep/1" do
+    test "abandons idle api carts and stamps the abandonment" do
+      idle = cart!(api_id(), updated_at: days_ago(8))
+
+      assert {:ok, 1} = ApiCartSweepWorker.sweep()
+
+      assert status(idle) == "abandoned"
+      assert DateTime.diff(DateTime.utc_now(), Repo.get!(Cart, idle.uuid).updated_at) < 60
+    end
+
+    test "leaves a recently used api cart alone" do
+      fresh = cart!(api_id(), updated_at: days_ago(6))
+
+      assert {:ok, 0} = ApiCartSweepWorker.sweep()
+      assert status(fresh) == "active"
+    end
+
+    test "follows api_cart_idle_days, and falls back to 7 for junk" do
+      cart = cart!(api_id(), updated_at: days_ago(4))
+
+      put_setting!("api_cart_idle_days", 3)
+      assert {:ok, 1} = ApiCartSweepWorker.sweep()
+      assert status(cart) == "abandoned"
+
+      other = cart!(api_id(), updated_at: days_ago(4))
+      put_setting!("api_cart_idle_days", "never")
+      assert {:ok, 0} = ApiCartSweepWorker.sweep()
+      assert status(other) == "active"
+    end
+
+    test "never touches carts that are not idle api carts" do
+      user = fixture_user()
+      old = days_ago(400)
+
+      lookalikes =
+        for session <- ["apiary-1", "api", "xapi:foo", "API:foo", "api-foo", "browser-1"] do
+          cart!(session, updated_at: old)
+        end
+
+      user_cart = cart!(nil, user_uuid: user.uuid, updated_at: old)
+      converted = cart!(api_id(), updated_at: old, status: "converted")
+      merged = cart!(api_id(), updated_at: old, status: "merged")
+      expired = cart!(api_id(), updated_at: old, status: "expired")
+
+      assert {:ok, 0} = ApiCartSweepWorker.sweep()
+
+      for cart <- lookalikes ++ [user_cart],
+          do: assert(status(cart) == "active", inspect(cart.session_id))
+
+      assert status(converted) == "converted"
+      assert status(merged) == "merged"
+      assert status(expired) == "expired"
+    end
+
+    test "perform/1 sweeps while the shop is on and does nothing while it is off" do
+      idle = cart!(api_id(), updated_at: days_ago(8))
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+      assert :ok = ApiCartSweepWorker.perform(%Oban.Job{})
+      assert status(idle) == "active"
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "true")
+      assert :ok = ApiCartSweepWorker.perform(%Oban.Job{})
+      assert status(idle) == "abandoned"
+    end
+  end
+
+  describe "ApiCartPruneWorker.prune/1" do
+    test "deletes empty abandoned api carts older than 30 days, with their claims" do
+      old = cart!(api_id(), status: "abandoned", updated_at: days_ago(31))
+      claim = claim!(old)
+
+      assert {:ok, 1} = ApiCartPruneWorker.prune()
+
+      refute exists?(Cart, old.uuid)
+      refute exists?(CartClaim, claim.uuid)
+    end
+
+    test "keeps younger carts, carts with lines, active carts and carts that are not api carts" do
+      young = cart!(api_id(), status: "abandoned", updated_at: days_ago(29))
+      active = cart!(api_id(), status: "active", updated_at: days_ago(100))
+      browser = cart!("browser-9", status: "abandoned", updated_at: days_ago(100))
+
+      with_lines = cart!(api_id(), updated_at: days_ago(100))
+      {:ok, _} = Shop.add_to_cart(with_lines, product!(), 1)
+      with_lines = set!(with_lines, status: "abandoned", updated_at: days_ago(100))
+
+      assert {:ok, 0} = ApiCartPruneWorker.prune()
+
+      for cart <- [young, active, browser, with_lines], do: assert(exists?(Cart, cart.uuid))
+    end
+
+    test "perform/1 does nothing while the shop is off" do
+      old = cart!(api_id(), status: "abandoned", updated_at: days_ago(31))
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+      assert :ok = ApiCartPruneWorker.perform(%Oban.Job{})
+      assert exists?(Cart, old.uuid)
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "true")
+      assert :ok = ApiCartPruneWorker.perform(%Oban.Job{})
+      refute exists?(Cart, old.uuid)
+    end
+  end
+
+  describe "ApiClaimPruneWorker.prune/1" do
+    test "deletes claims used or expired more than 7 days ago and keeps the rest" do
+      cart = cart!(api_id())
+      # Used long ago but not expired by its own clock: only `used_at` can delete it.
+      long_used =
+        claim!(cart,
+          used_at: days_ago(8),
+          expires_at: DateTime.add(DateTime.utc_now(), 600, :second) |> DateTime.truncate(:second)
+        )
+
+      long_expired = claim!(cart, expires_at: days_ago(8))
+      recently_used = claim!(cart, used_at: days_ago(1), expires_at: days_ago(0))
+      recently_expired = claim!(cart, expires_at: days_ago(1))
+
+      live =
+        claim!(cart,
+          expires_at: DateTime.add(DateTime.utc_now(), 600, :second) |> DateTime.truncate(:second)
+        )
+
+      assert {:ok, 2} = ApiClaimPruneWorker.prune()
+
+      refute exists?(CartClaim, long_used.uuid)
+      refute exists?(CartClaim, long_expired.uuid)
+
+      for claim <- [recently_used, recently_expired, live],
+          do: assert(exists?(CartClaim, claim.uuid))
+    end
+
+    test "perform/1 does nothing while the shop is off" do
+      cart = cart!(api_id())
+      old = claim!(cart, expires_at: days_ago(30))
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+      assert :ok = ApiClaimPruneWorker.perform(%Oban.Job{})
+      assert exists?(CartClaim, old.uuid)
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "true")
+      assert :ok = ApiClaimPruneWorker.perform(%Oban.Job{})
+      refute exists?(CartClaim, old.uuid)
+    end
+  end
+
+  describe "oban_crons/0" do
+    test "declares the three workers next to the search rebuild, each with a schedule Oban accepts and a worker that runs" do
+      crons = Shop.oban_crons()
+
+      for entry <- [
+            {"17 * * * *", ApiCartSweepWorker},
+            {"40 4 * * *", ApiCartPruneWorker},
+            {"50 4 * * *", ApiClaimPruneWorker}
+          ] do
+        assert entry in crons, inspect(entry)
+      end
+
+      assert crons == Enum.uniq(crons)
+      assert Enum.uniq_by(crons, &elem(&1, 1)) == crons
+
+      for {cron, worker} <- crons do
+        assert {:ok, _expression} = Oban.Cron.parse(cron)
+        assert Code.ensure_loaded?(worker) and function_exported?(worker, :perform, 1)
+      end
+    end
+  end
+
+  defp claim!(cart, opts \\ []) do
+    {:ok, claim} =
+      %CartClaim{}
+      |> CartClaim.changeset(%{
+        token_hash: "th-#{System.unique_integer([:positive])}",
+        cart_uuid: cart.uuid,
+        cart_token_hash: "ch-#{System.unique_integer([:positive])}",
+        language: "en",
+        expires_at: Keyword.get(opts, :expires_at, days_ago(0)),
+        used_at: Keyword.get(opts, :used_at)
+      })
+      |> Repo.insert()
+
+    claim
+  end
+end

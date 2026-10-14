@@ -92,10 +92,13 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
   end
 
   @tag :requires_core_api
-  test "oban_crons/0 declares the nightly search rebuild once, without conflicts" do
+  test "oban_crons/0 declares the nightly search rebuild and the three cart jobs, without conflicts" do
     assert {entries, []} = PhoenixKit.ObanCrons.declared([PhoenixKitEcommerce])
 
     assert {"40 3 * * *", PhoenixKitEcommerce.Workers.SearchRebuildWorker} in entries
+    assert {"17 * * * *", PhoenixKitEcommerce.Workers.ApiCartSweepWorker} in entries
+    assert {"40 4 * * *", PhoenixKitEcommerce.Workers.ApiCartPruneWorker} in entries
+    assert {"50 4 * * *", PhoenixKitEcommerce.Workers.ApiClaimPruneWorker} in entries
   end
 
   test "children/0 contributes the search subscriber" do
