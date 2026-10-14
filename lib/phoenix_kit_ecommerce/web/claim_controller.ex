@@ -18,6 +18,10 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   use PhoenixKitEcommerce.Web, :controller
 
+  # The web analytics module is optional: the claim page marks itself as
+  # not-to-be-tracked only when the installed version has the API for it.
+  @compile {:no_warn_undefined, PhoenixKitWebAnalytics.Plug}
+
   require Logger
 
   alias PhoenixKitEcommerce, as: Shop
@@ -29,6 +33,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   plug :put_view, html: ClaimHTML
   plug :privacy_headers
+  plug :skip_analytics
 
   @dead_ends [:invalid, :used, :superseded, :expired, :cart_unavailable]
   @notice_titles 5
@@ -227,6 +232,17 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   defp put_locale(language),
     do: Helpers.put_content_locale(language || Shop.get_default_language())
+
+  # The claim token is a credential: the page must not be recorded as a page
+  # view whatever `web_analytics_exclude_paths` holds (the V5 migration step
+  # adds the claim path to it, but only when the analytics tables existed at
+  # that moment).
+  defp skip_analytics(conn, _opts) do
+    if Code.ensure_loaded?(PhoenixKitWebAnalytics.Plug) and
+         function_exported?(PhoenixKitWebAnalytics.Plug, :skip, 1),
+       do: PhoenixKitWebAnalytics.Plug.skip(conn),
+       else: conn
+  end
 
   defp privacy_headers(conn, _opts) do
     conn

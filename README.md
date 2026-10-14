@@ -244,7 +244,12 @@ on the site's own checkout.
 - **Hand-off.** The link opens `/checkout/claim/:token` (no locale prefix). A GET shows the cart and
   consumes nothing; the buyer's confirmation (a CSRF `POST`) consumes it once and moves the cart to
   the buyer's browser session, replaces the cart already there, or merges into it. The old token then
-  answers `cart_locked`. The route is excluded from web analytics when that module is installed.
+  answers `cart_locked`. The claim page marks itself as not to be tracked by the web analytics module
+  (`PhoenixKitWebAnalytics.Plug.skip/1`, when the installed version has it), and the V5 migration step
+  also adds `/checkout/claim/*` to `web_analytics_exclude_paths` if the analytics tables existed when
+  it ran; if analytics was installed later, add that pattern yourself. The claim token is part of the
+  request path, so a request logger in the host (`Plug.Telemetry`, `Plug.Logger`) writes it to the log:
+  filter `/checkout/claim/` paths there.
 - **Notifications.** An API write sends at most one message ("via assistant") through the two
   existing cart notification actions and toggles, capped per cart and globally per hour.
 - **Settings** (E-Commerce settings page, "Assistant carts" card): `api_cart_idle_days` (7),

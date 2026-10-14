@@ -28,9 +28,11 @@ pages.
   `phoenix_kit_warehouse` `~> 0.5` (optional — only the Stock tracking
   switch uses it, through `StockTracking`, which calls `enabled?/0` and
   `StockLedger.default_location_uuid/0`),
-  `phoenix_kit_web_analytics` (optional — only the V5 migration step reads
+  `phoenix_kit_web_analytics` (optional — the V5 migration step reads
   `PhoenixKitWebAnalytics.Config.default_exclusions/0`, to add the claim path
-  to the analytics exclusion list; the dialyzer ignore file names it).
+  to the analytics exclusion list, and `Web.ClaimController` calls
+  `PhoenixKitWebAnalytics.Plug.skip/1` when it is loaded; the dialyzer ignore
+  file names both).
   Also `phoenix`, `phoenix_live_view ~> 1.1`, `ecto_sql ~> 3.12`,
   `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `mdex`,
   `gettext ~> 1.0`. There is deliberately **no** dep on
@@ -58,6 +60,19 @@ pages.
   `/checkout/complete/:uuid`, and the assistant checkout hand-off
   `/checkout/claim/:token` (GET and POST, no locale prefix; a controller route
   emitted by `Web.Routes.generate/1`, not a LiveView).
+- **The claim token is in the request path** (`GET /checkout/claim/<token>`).
+  The host's request logger (`Plug.Telemetry` / `Plug.Logger`) writes the path
+  to its log before any controller runs, and this module cannot keep it out: a
+  host log filter for `/checkout/claim/` paths is needed. The module's own
+  guards: a claim is single-use, short-lived (`api_checkout_claim_ttl_minutes`)
+  and only its digest is stored; the page sends `referrer-policy: no-referrer`,
+  `cache-control: no-store` and `x-robots-tag: noindex, nofollow`, logs no
+  token, and keeps itself out of web analytics twice over: the controller marks
+  the request with `PhoenixKitWebAnalytics.Plug.skip/1` (an analytics version
+  without it is simply not marked), and the V5 migration step appends
+  `/checkout/claim/*` to `web_analytics_exclude_paths` when the analytics
+  tables already existed at that moment (analytics installed later: add the
+  pattern by hand).
 - **Module key** `"shop"`; settings prefix `shop_`.
 
 ## What this module does NOT do

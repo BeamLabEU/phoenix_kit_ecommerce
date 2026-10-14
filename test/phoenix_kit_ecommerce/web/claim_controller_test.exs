@@ -24,6 +24,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
   alias PhoenixKitEcommerce.Web.ClaimController
   alias PhoenixKitEcommerce.Web.Helpers
 
+  @compile {:no_warn_undefined, PhoenixKitWebAnalytics.Plug}
+
   setup %{conn: conn} do
     put_secret!()
     ensure_currencies!()
@@ -417,6 +419,22 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert redirected_to(conn) == "/"
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "currently unavailable"
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+    end
+  end
+
+  describe "web analytics" do
+    # Needs the optional analytics module (`test_helper.exs` excludes `:analytics`
+    # when it is not loaded, so a missing dependency shows up in the `excluded`
+    # count instead of the test passing without asserting anything).
+    @tag :analytics
+    test "the claim page marks itself as not to be tracked, whatever the exclusion setting holds",
+         ctx do
+      {:ok, _} = PhoenixKit.Settings.update_setting("web_analytics_exclude_paths", "/admin*")
+
+      conn = page(ctx.conn, ctx.raw)
+
+      assert html_response(conn, 200) =~ ~s(id="claim-page")
+      assert PhoenixKitWebAnalytics.Plug.skipped?(conn)
     end
   end
 

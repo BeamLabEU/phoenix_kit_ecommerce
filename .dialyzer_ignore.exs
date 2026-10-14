@@ -18,5 +18,8 @@
   {"lib/phoenix_kit_ecommerce/api/cart_store.ex", :unknown_function},
   # `PhoenixKitWebAnalytics.Config` is an optional dependency: the claim-path
   # exclusion step of the migration reads its default list when it is loaded.
-  {"lib/phoenix_kit_ecommerce/migrations.ex", :unknown_function}
+  {"lib/phoenix_kit_ecommerce/migrations.ex", :unknown_function},
+  # The claim page marks itself with `PhoenixKitWebAnalytics.Plug.skip/1` when
+  # that optional dependency is loaded.
+  {"lib/phoenix_kit_ecommerce/web/claim_controller.ex", :unknown_function}
 ]
