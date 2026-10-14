@@ -275,6 +275,38 @@ on the site's own checkout.
 # /admin/shop/imports/:uuid
 ```
 
+### Admin API tools
+
+On a `phoenix_kit` core that ships the admin API (the tool registry), this
+module offers four admin tools over REST, and over MCP where the core also
+provides it, for an accounting system, a script or an AI agent. Shopify is not
+needed: on a shop without it, the API is how an outside system feeds the
+product list.
+
+| Tool | Does | Scope |
+|---|---|---|
+| `ecommerce.get_prices` | prices, option prices, visibility | `ecommerce.prices:read` |
+| `ecommerce.set_prices` | price, compare-at price, option prices | `ecommerce.prices:write` |
+| `ecommerce.set_availability` | visibility, made to order | `ecommerce.availability:write` |
+| `ecommerce.attach_images` | pictures by URL, at most 20 per call | `ecommerce.images:write` |
+
+They work on the catalogue product source only; on the legacy source (or with
+a `phoenix_kit_catalogue` that predates the admin API) they answer
+`unsupported_source`. A price move of more than `api_confirm_price_change_pct`
+percent (an option price is measured against the product's current price;
+default 30, set on the E-Commerce settings page by a user who also
+holds core's `api` permission) is held for confirmation first, and so is any
+batch larger than core's `api_confirm_batch_over`. Keys, scopes and the switch
+are on core's Settings → API page.
+
+A `validation_failed` answer with `context.reason` `database_error`,
+`storage_error` or `unexpected` is not a problem with the request and is worth
+retrying; any other `validation_failed` should be fixed first.
+
+The module also offers the `shop_order` kind to Warehouse, so a shop order can
+be the basis of a goods issue. This needs the Warehouse module 0.5.3 or later,
+the first release where modules can declare source kinds.
+
 ### Shopify Sync
 
 One-way, human-confirmed sync that keeps existing products current
@@ -377,7 +409,7 @@ end
 
 ### Settings
 
-Keys are `shop_`-prefixed. (Earlier revisions of this table listed
+Keys are `shop_`-prefixed, except `api_confirm_price_change_pct`. (Earlier revisions of this table listed
 unprefixed names that the code never read.)
 
 | Key | Type | Default | Description |
@@ -390,6 +422,7 @@ unprefixed names that the code never read.)
 | `shop_sidebar_show_categories` | boolean | `true` | Show the category sidebar |
 | `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
 | `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+| `api_confirm_price_change_pct` | integer | `30` | Admin API: a price move above this percent needs a confirmation. Not `shop_`-prefixed |
 
 `shop_catalog_vocabulary` exists because a shop selling colour grading reads
 badly under "No products match your filters". Each option is a separately

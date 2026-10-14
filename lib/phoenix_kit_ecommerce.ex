@@ -1136,12 +1136,17 @@ defmodule PhoenixKitEcommerce do
     ]
   end
 
-  # The API tools this module offers: the public read tools and the cart tools.
-  # Core collects them while the module is enabled. No `@impl`: same convention
-  # as `oban_crons/0` (an optional callback a core without the shop API does not
-  # declare).
+  @doc """
+  The tools of the shop API this module offers, for core's tool registry: the
+  e-commerce tools of the admin API (`PhoenixKitEcommerce.API`), the public read
+  tools and the cart tools. Core collects them while the module is enabled.
+  Defined without `@impl`, like `oban_crons/0`, `notification_types/0` and
+  `ai_translatables/0`: the callback is optional, and this package compiles
+  against cores that predate it. A core without the tool registry gets `[]`
+  from each group.
+  """
   def api_tools,
-    do: PublicTools.tools() ++ CartTools.tools()
+    do: PhoenixKitEcommerce.API.tools() ++ PublicTools.tools() ++ CartTools.tools()
 
   @doc """
   PhoenixKitAI translation adapters (duck-typed discovery — see
@@ -1190,6 +1195,14 @@ defmodule PhoenixKitEcommerce do
   def catalogue_extensions do
     [PhoenixKitEcommerce.Catalogue.Extension]
   end
+
+  @doc """
+  Warehouse source kinds this package contributes (duck-typed discovery by
+  `PhoenixKitWarehouse.SourceKinds`, which merges them with the host's own
+  list): the `shop_order` kind. A literal list, because Warehouse calls it for
+  every reference it renders. See `PhoenixKitEcommerce.WarehouseSourceKind`.
+  """
+  def warehouse_source_kinds, do: PhoenixKitEcommerce.WarehouseSourceKind.kinds()
 
   # ============================================
   # PRODUCTS

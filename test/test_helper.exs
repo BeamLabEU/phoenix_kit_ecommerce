@@ -36,7 +36,9 @@ support_dir = Path.expand("support", __DIR__)
   "search_fixtures.ex",
   "data_case.ex",
   "live_case.ex",
-  "cart_api_fixtures.ex"
+  "cart_api_fixtures.ex",
+  "api_fixtures.ex",
+  "api_case.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -287,6 +289,35 @@ catalogue_exclude =
     [:catalogue]
   end
 
+# The admin API's tests need three things this repo does not declare as
+# dependencies, so each family runs only against a build that has what it
+# needs. Run the suite once per build and read the excluded count.
+#
+#   :catalogue_api     a catalogue with the API (resolve_refs/2, update_items/2)
+#   :old_catalogue     a catalogue WITHOUT it
+#   :no_catalogue      no phoenix_kit_catalogue at all
+#   :core_api          a core with the tool registry (PhoenixKit.API.Tool)
+#   :core_confirm      ... and the confirmation gate (Keys.active?/1 and Flow.gate/1)
+#   :core_no_confirm   ... and not the confirmation flow
+#   :warehouse         phoenix_kit_warehouse with SourceKinds
+catalogue_loaded? = Code.ensure_loaded?(PhoenixKitCatalogue)
+catalogue_api? = PhoenixKitEcommerce.API.Gate.catalogue_api_ready?()
+core_api? = Code.ensure_loaded?(PhoenixKit.API.Tool)
+core_confirm? = PhoenixKitEcommerce.API.confirmation_available?()
+
+admin_api_exclude =
+  [
+    if(catalogue_api?, do: nil, else: :catalogue_api),
+    if(catalogue_loaded? and not catalogue_api?, do: nil, else: :old_catalogue),
+    if(catalogue_loaded?, do: :no_catalogue, else: nil),
+    if(core_api?, do: nil, else: :core_api),
+    if(core_confirm?, do: :core_no_confirm, else: :core_confirm),
+    if(Code.ensure_loaded?(PhoenixKitWarehouse.SourceKinds), do: nil, else: :warehouse)
+  ]
+  |> Enum.reject(&is_nil/1)
+
+IO.puts("[test_helper] admin API test families excluded: #{inspect(admin_api_exclude)}")
+
 # The avatar-dropdown flag (`Tab` option `:user_menu`, read by
 # `Tab.user_menu?/2`). An older core ignores the option, so the tests about
 # it run once the dep resolves to a release that ships it.
@@ -389,6 +420,7 @@ ExUnit.start(
       transliteration_exclude ++
       single_language_exclude ++
       catalogue_exclude ++
+      admin_api_exclude ++
       user_menu_exclude ++
       billing_user_menu_exclude ++
       api_exclude ++ trigram_exclude ++ analytics_exclude ++ mcp_exclude

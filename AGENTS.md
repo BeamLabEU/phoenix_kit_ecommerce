@@ -414,7 +414,10 @@ lib/phoenix_kit_ecommerce/
 ├── catalogue/        # duck-typed phoenix_kit_catalogue extension slot:
 │                     # Extension, ItemCommerce, CategoryCommerce, ShopSections,
 │                     # ShopStatusColumn, Writer (Shopify -> catalogue),
-│                     # ValueResolver, SetSlug
+│                     # ShopifyAttribution, ValueResolver, SetSlug
+├── api.ex            # the admin API tools offered to core (api_tools/0)
+├── api/              # the tools' handlers, plans and adapters to core/catalogue
+├── warehouse_source_kind.ex # the shop_order kind offered to Warehouse
 ├── compat/           # transitional PhoenixKit.Modules.Shop.* delegate shims
 ├── services/         # image download + batch image migration
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
@@ -531,6 +534,97 @@ different server) and turns events into Oban jobs; it never indexes inline.
   RECOGNISES an existing signed one — the order-confirmation page is
   deliberately reachable while the shop is disabled, because it is a receipt.
 
+### Admin API tools
+
+`PhoenixKitEcommerce.api_tools/0` (no `@impl`, like `notification_types/0`)
+returns `PhoenixKitEcommerce.API.tools/0`: `ecommerce.get_prices`,
+`ecommerce.set_prices`, `ecommerce.set_availability`, `ecommerce.attach_images`
+Rules that must hold:
+
+- **The write tools are offered only when core enforces the confirmation
+  gate** (`Keys.active?/1` and `Flow.gate/1`, see
+  `API.confirmation_available?/0`). A core that cannot hold a dangerous call
+  for confirmation would run a large price cut on the first call.
+- **The batch reads and writes go through three adapters:** `API.Gate` (the
+  product source is the catalogue and the catalogue is new enough, judged by
+  what it exports, not by its version), `API.Refs`
+  (`PhoenixKitCatalogue.API.resolve_refs/2`) and `API.CatalogueWrites`
+  (`Catalogue.update_items/2`). Three call sites reach the catalogue
+  directly: `AttachImages` (`Attachments.attach_files/3` and
+  `Catalogue.get_item/1`) and `SetPrices` (`AttributeSets.resolve_for_items/2`);
+  `Gate.catalogue_api_ready?/0` does not probe them. Anything the gate refuses
+  answers `unsupported_source` and writes nothing.
+- **Writes are limited to the `data` sub-paths a row changes**
+  (`data_owned_paths`; an option price is one path per leaf), so a concurrent
+  writer of any other field, the Shopify sync included, is never overwritten.
+  The Shopify writer does the same (`Catalogue.ShopifyAttribution`), and a
+  write that changes no `data` path sends `data_owned_paths: []`, never no
+  option. A default that `ItemCommerce.cast/2` fills in for a field the sync
+  did not touch is therefore not stored by the sync.
+- **A product's own status is read with the storefront's rule**
+  (`View.merchant_status/1`, `View.product_status/2`, made public for this):
+  a product with no `shop_status` counts as `active`. Never a second copy.
+  `get_prices` calls the result `shop_status_visible`: it does not look at
+  the product's category, which the storefront also checks.
+- **Only `set_prices` has a `danger` function** (the price rule). The size of
+  a batch is core's rule (`api_confirm_batch_over`, applied to every admin
+  write tool by the executor). The danger check, the plan of the call and the
+  write each read the prices, so the handler closes the gaps: a call without a
+  confirmation code (`ctx.confirmation_uuid` is `nil`) whose own plan has
+  become dangerous is refused, and `API.Batch.write_if_unchanged/4` locks the
+  items, plans them again and writes only the rows whose current values are the
+  ones they were planned from (the others fail alone, `changed_since_planned`).
+- **Prices are decimal strings with at most 2 decimals** (`API.Money`). A
+  third decimal is refused, never rounded.
+- **`attach_images` always passes `private_networks: :forbid`** to the
+  downloader; `shop_image_import_allow_private_networks` is for the shop's
+  own CSV import and does not apply to an API caller. It also passes
+  `require_raster: true` (the bytes must be a PNG, JPEG, GIF or WebP picture
+  of the declared type; an SVG is refused whatever `shop_allow_svg_uploads`
+  says) and `redact_query: true` (a signed URL's query string is a credential
+  and reaches no log line and no stored `source_url`; the path of the URL
+  reaches no log line either, it can carry a signed token), a 10 MB limit per
+  picture, and, on a core with the field, a `cost` of one rate-limit unit per
+  picture. The downloads can take a minute and a half, so each product is read
+  again with its row locked when its pictures are attached; one trashed or
+  moved out of the shop catalogue meanwhile answers `not_found` and gets
+  nothing.
+- **A pinned download makes no pool.** The importer, the admin API and the
+  Shopify storefront connect to the one address the private-network guard
+  checked (`ImageDownloader.pinned_request/2`) through `Services.PinnedAdapter`,
+  a Mint connection per request, with the `Host` header's name as SNI and
+  certificate name. Never `connect_options: [hostname: ...]`: `Req` starts a
+  `Finch` pool with a new atom per distinct value and never stops it, so every
+  hostname a caller names would stay in the node. Every name lookup of the
+  guard has a deadline (`:image_dns_timeout`, 3 s) and fails closed.
+- **A write that changed a product clears `StorefrontCache`** (once per call,
+  after the rows are committed, in `API.Batch.write/3`,
+  `API.Batch.write_if_unchanged/4` and `API.AttachImages`), like the Shopify
+  sync does. A dry run and an unchanged row leave it alone.
+- **Shopify is optional.** Nothing in the tools needs a product to be linked
+  to it; the descriptions of the three write tools and the row warning
+  `shopify_sync_may_overwrite` mention the sync only while it is on. "Linked"
+  is one rule, `ItemCommerce.shopify_linked?/1` (a Shopify handle or product
+  id), shared with the settings of the product form. `set_availability`
+  warns on a visibility change and `attach_images` on a picture, because the
+  sync writes the shop status and replaces the picture order.
+- `api_confirm_price_change_pct` (default 30, `API.Settings`) is the one
+  e-commerce setting of the API; it has no `shop_` prefix, it shares the
+  `api_` prefix of core's other API settings (`api_confirm_batch_over`).
+  Changing it takes `shop.manage_settings` **and** core's `api` permission
+  (`Web.Authz.can_manage_api?/1`).
+- `PhoenixKitEcommerce.warehouse_source_kinds/0` offers the `shop_order` kind
+  to Warehouse (`WarehouseSourceKind`); only orders placed by the storefront
+  checkout count, and no label shows the customer.
+- A `validation_failed` answer with `context.reason` `database_error`,
+  `storage_error` or `unexpected` is not the caller's fault and is worth
+  retrying; any other `validation_failed` should be fixed first.
+
+Tests: the API's tests are tagged by what they need (`:catalogue_api`,
+`:old_catalogue`, `:no_catalogue`, `:core_api`, `:core_confirm`,
+`:core_no_confirm`, `:warehouse`; see `test/test_helper.exs`). Run the suite
+once per build and read the excluded count each time.
+
 ### Permissions
 
 The `"shop"` key is admin-area READ access. Four sub-permissions carry the
@@ -568,7 +662,7 @@ primary operator of a default install.
 
 ### Settings keys
 
-All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
+All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api_confirm_price_change_pct`.
 
 **Behaviour**
 
@@ -586,6 +680,13 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
   `enforce_product_currency?/0`.
+
+**Admin API**
+
+- `api_confirm_price_change_pct` — percent; a price above zero that moves by
+  more than this needs a confirmation, and so does an option price added,
+  changed or removed by more than this percent of the product's current price (default: `30`; it has no `shop_` prefix). Read through `API.Settings.price_change_pct/0`, which
+  reads any invalid value as the default.
 
 **Storefront display**
 
@@ -893,6 +994,15 @@ gates every test of the public read and cart tools, a few hundred of them),
 and `:requires_pg_trgm` (a database without the `pg_trgm` extension). To run the
 API tests, point `PHOENIX_KIT_PATH` at a core checkout that carries the shop API;
 against a released core without it they show up in the `excluded` count.
+
+The admin API's tests need a core with the tool registry, a catalogue with the
+admin API and `phoenix_kit_warehouse` with source kinds, none of which this
+package declares as a requirement. Their families (`:core_api`, `:core_confirm`,
+`:core_no_confirm`, `:catalogue_api`, `:old_catalogue`, `:no_catalogue`,
+`:warehouse`) are excluded or included by what the build has (see
+`test/test_helper.exs`, which prints the excluded set): run the suite once per
+build and read the excluded count. `test/support/api_case.ex` and
+`api_fixtures.ex` are the shared case and fixtures.
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
