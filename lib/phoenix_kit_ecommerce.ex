@@ -7014,6 +7014,17 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  @doc false
+  # Public wrappers over the private `to_base/2` / `from_base/2` for the public
+  # cart API, which reports shipping thresholds in the cart's currency next to
+  # the base-currency amount the shop compares against.
+  @spec cart_amount_to_base(Cart.t(), Decimal.t()) :: Decimal.t()
+  def cart_amount_to_base(%Cart{} = cart, amount), do: to_base(cart, amount)
+
+  @doc false
+  @spec cart_amount_from_base(Decimal.t(), Cart.t()) :: Decimal.t()
+  def cart_amount_from_base(amount, %Cart{} = cart), do: from_base(amount, cart)
+
   @doc """
   What a shopper sees for a shipping method on THIS cart: the method's
   price in the cart's currency, and whether the cart's subtotal already
