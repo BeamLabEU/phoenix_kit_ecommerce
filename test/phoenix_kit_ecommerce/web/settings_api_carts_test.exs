@@ -7,8 +7,11 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiCartsTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.API.CartSettings
+  alias PhoenixKitEcommerce.Test.Repo
 
   setup %{conn: conn} do
     {:ok, conn: put_test_scope(conn, fake_scope())}
@@ -37,6 +40,58 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiCartsTest do
     assert html =~ ~s(name="settings[idle_days]")
     assert html =~ ~s(value="7")
     assert html =~ ~s(name="settings[signal_global_per_hour]")
+  end
+
+  test "the numbers are core inputs, and the browser does not judge the ranges first", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+    for {id, name} <- [
+          {"api-cart-idle-days", "idle_days"},
+          {"api-cart-claim-ttl-minutes", "claim_ttl_minutes"},
+          {"api-cart-signal-per-cart", "signal_per_cart_per_hour"},
+          {"api-cart-signal-global", "signal_global_per_hour"}
+        ] do
+      assert has_element?(
+               view,
+               "#shop-api-carts-form input##{id}[type=number][name='settings[#{name}]']"
+             )
+    end
+
+    assert has_element?(view, "#shop-api-carts-form[novalidate]")
+  end
+
+  defp stored(key),
+    do: Repo.one(from s in "phoenix_kit_settings", where: s.key == ^key, select: s.value)
+
+  test "saving writes only the values that changed", %{conn: conn} do
+    keys = Map.values(CartSettings.keys())
+    Repo.delete_all(from s in "phoenix_kit_settings", where: s.key in ^keys)
+    {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+    # Nothing differs from what is in effect: nothing is stored, nothing is logged.
+    html = view |> element("#shop-api-carts-form") |> render_submit(form(%{}))
+
+    assert html =~ "Assistant cart settings updated"
+    assert Enum.all?(keys, &is_nil(stored(&1)))
+    refute_activity_logged("shop.api_cart_setting_updated")
+
+    # One value differs: only its key is written (and logged), not the other three.
+    view |> element("#shop-api-carts-form") |> render_submit(form(%{"idle_days" => "14"}))
+
+    assert stored("api_cart_idle_days") == "14"
+
+    for key <- keys -- ["api_cart_idle_days"],
+        do: assert(is_nil(stored(key)), "#{key} was written although it did not change")
+
+    assert_activity_logged("shop.api_cart_setting_updated",
+      metadata_has: %{"setting" => "api_cart_idle_days", "value" => 14}
+    )
+
+    refute_activity_logged("shop.api_cart_setting_updated",
+      metadata_has: %{"setting" => "api_checkout_claim_ttl_minutes"}
+    )
   end
 
   test "saving stores what changed and logs each change", %{conn: conn} do

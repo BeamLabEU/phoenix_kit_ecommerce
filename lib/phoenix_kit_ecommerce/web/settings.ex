@@ -94,7 +94,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:translations_supported, Shop.translations_supported?())
       |> assign(:shop_shopify_enabled, Shop.shopify_enabled?())
       |> assign_stock_tracking()
-      |> assign(:api_cart_settings, api_cart_settings())
+      |> assign_api_cart_form()
       |> assign_policy()
 
     {:ok, socket}
@@ -1185,69 +1185,55 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
                 )}
               </p>
-              <form
+              <%!-- `novalidate`: the browser must not stop an out-of-range number before
+                   the server can say which ranges apply (min/max still steer the spinner). --%>
+              <.form
+                for={@api_cart_form}
                 id="shop-api-carts-form"
                 phx-submit="save_api_cart_settings"
+                novalidate
                 class="grid gap-3 sm:grid-cols-2 max-w-2xl"
               >
-                <label class="flex flex-col gap-1">
-                  <span class="text-sm">
-                    {gettext("Days before an idle assistant cart is abandoned")}
-                  </span>
-                  <input
-                    type="number"
-                    name="settings[idle_days]"
-                    value={@api_cart_settings.idle_days}
-                    min="1"
-                    max="365"
-                    step="1"
-                    class="input input-bordered w-full"
-                  />
-                </label>
-                <label class="flex flex-col gap-1">
-                  <span class="text-sm">{gettext("Minutes a checkout link works")}</span>
-                  <input
-                    type="number"
-                    name="settings[claim_ttl_minutes]"
-                    value={@api_cart_settings.claim_ttl_minutes}
-                    min="1"
-                    max="1440"
-                    step="1"
-                    class="input input-bordered w-full"
-                  />
-                </label>
-                <label class="flex flex-col gap-1">
-                  <span class="text-sm">
-                    {gettext("Assistant notifications per cart per hour")}
-                  </span>
-                  <input
-                    type="number"
-                    name="settings[signal_per_cart_per_hour]"
-                    value={@api_cart_settings.signal_per_cart_per_hour}
-                    min="0"
-                    max="1000"
-                    step="1"
-                    class="input input-bordered w-full"
-                  />
-                </label>
-                <label class="flex flex-col gap-1">
-                  <span class="text-sm">
-                    {gettext("Assistant notifications per hour, all carts")}
-                  </span>
-                  <input
-                    type="number"
-                    name="settings[signal_global_per_hour]"
-                    value={@api_cart_settings.signal_global_per_hour}
-                    min="0"
-                    max="100000"
-                    step="1"
-                    class="input input-bordered w-full"
-                  />
-                </label>
+                <.input
+                  field={@api_cart_form[:idle_days]}
+                  id="api-cart-idle-days"
+                  type="number"
+                  min="1"
+                  max="365"
+                  step="1"
+                  label={gettext("Days before an idle assistant cart is abandoned")}
+                />
+                <.input
+                  field={@api_cart_form[:claim_ttl_minutes]}
+                  id="api-cart-claim-ttl-minutes"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  step="1"
+                  label={gettext("Minutes a checkout link works")}
+                />
+                <.input
+                  field={@api_cart_form[:signal_per_cart_per_hour]}
+                  id="api-cart-signal-per-cart"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="1"
+                  label={gettext("Assistant notifications per cart per hour")}
+                />
+                <.input
+                  field={@api_cart_form[:signal_global_per_hour]}
+                  id="api-cart-signal-global"
+                  type="number"
+                  min="0"
+                  max="100000"
+                  step="1"
+                  label={gettext("Assistant notifications per hour, all carts")}
+                />
                 <div class="sm:col-span-2">
                   <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
                 </div>
-              </form>
+              </.form>
             </div>
 
             <div class="divider"></div>
@@ -2193,6 +2179,15 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   # All four whole numbers, each inside its range, or nothing: a form with one
   # bad field must not store the other three.
+  defp assign_api_cart_form(socket) do
+    values =
+      Map.new(api_cart_settings(), fn {name, number} ->
+        {Atom.to_string(name), Integer.to_string(number)}
+      end)
+
+    assign(socket, :api_cart_form, to_form(values, as: :settings))
+  end
+
   defp parse_api_cart_settings(raw) do
     Enum.reduce_while(CartSettings.bounds(), {:ok, %{}}, fn {name, range}, {:ok, acc} ->
       with value when is_binary(value) <- Map.get(raw, Atom.to_string(name)),
@@ -2227,7 +2222,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:noreply,
        socket
-       |> assign(:api_cart_settings, api_cart_settings())
+       |> assign_api_cart_form()
        |> put_flash(:info, gettext("Assistant cart settings updated"))}
     else
       {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
