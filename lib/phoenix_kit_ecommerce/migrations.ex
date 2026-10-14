@@ -72,6 +72,18 @@ defmodule PhoenixKitEcommerce.Migrations do
   create it) gets a notice, search works, and only the typo fallback is
   skipped. See `search_index_statements/1`.
 
+  ## V5 — checkout claims for the public cart API
+
+  `phoenix_kit_shop_cart_claims` holds the one-time claims behind
+  `shop.get_checkout_link`: a unique `token_hash`, the claimed `cart_uuid`
+  (ON DELETE CASCADE), the hash of the cart token the claim was issued for,
+  the claim's language, and `expires_at` / `used_at` / `superseded_at`. The
+  same step appends `<url_prefix>/checkout/claim/*` to the web-analytics
+  exclusion list when the analytics module is installed
+  (`claim_analytics_statements/1`; the trailing `*` matters, analytics only
+  treats a pattern ending in `*` as a prefix). `down/1` keeps the table, like
+  every table of this chain.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker and restores the V2 column
@@ -96,9 +108,15 @@ defmodule PhoenixKitEcommerce.Migrations do
 
   use Ecto.Migration
 
-  @current_version 4
+  # Read only to copy analytics' own default exclusion list when its setting
+  # has no row yet; the module is optional (see `claim_analytics_statements/1`).
+  @compile {:no_warn_undefined, PhoenixKitWebAnalytics.Config}
+
+  @current_version 5
   @marker_prefix "pke_schema:"
   @version_table "phoenix_kit_shop_config"
+
+  alias PhoenixKit.Utils.Routes
 
   @spec current_version() :: pos_integer()
   def current_version, do: @current_version
@@ -184,6 +202,8 @@ defmodule PhoenixKitEcommerce.Migrations do
       v2_drop_currency_defaults(p) ++
       shopify_upgrade_statements(prefix) ++
       search_index_statements(prefix) ++
+      claims_statements(prefix) ++
+      claim_analytics_statements(prefix) ++
       [marker_statement(p, @current_version)]
   end
 
@@ -360,6 +380,146 @@ defmodule PhoenixKitEcommerce.Migrations do
       $$
       """
     ]
+  end
+
+  @doc """
+  The V5 table as data: the claims behind `shop.get_checkout_link`. The key
+  and the foreign key are inline in `CREATE TABLE IF NOT EXISTS`, so the step
+  is idempotent without the `DO $$` guards `ADD CONSTRAINT` needs.
+  """
+  @spec claims_statements(String.t()) :: [String.t()]
+  def claims_statements(prefix \\ "public") do
+    prefix = validated_prefix(prefix: prefix)
+    p = "#{prefix}."
+
+    [
+      """
+      CREATE TABLE IF NOT EXISTS #{p}phoenix_kit_shop_cart_claims (
+        "uuid" uuid DEFAULT #{p}uuid_generate_v7() NOT NULL,
+        "token_hash" character varying(64) NOT NULL,
+        "cart_uuid" uuid NOT NULL,
+        "cart_token_hash" character varying(64) NOT NULL,
+        "language" character varying(16) NOT NULL,
+        "expires_at" timestamp with time zone NOT NULL,
+        "used_at" timestamp with time zone,
+        "superseded_at" timestamp with time zone,
+        "inserted_at" timestamp with time zone DEFAULT now() NOT NULL,
+        "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+        CONSTRAINT phoenix_kit_shop_cart_claims_pkey PRIMARY KEY ("uuid"),
+        CONSTRAINT fk_shop_cart_claims_cart_uuid FOREIGN KEY ("cart_uuid")
+          REFERENCES #{p}phoenix_kit_shop_carts("uuid") ON DELETE CASCADE
+      )
+      """,
+      unique_idx(
+        p,
+        "idx_shop_cart_claims_token_hash",
+        "phoenix_kit_shop_cart_claims",
+        "btree (token_hash)"
+      ),
+      idx(
+        p,
+        "idx_shop_cart_claims_cart_token_hash",
+        "phoenix_kit_shop_cart_claims",
+        "btree (cart_token_hash)"
+      ),
+      idx(
+        p,
+        "idx_shop_cart_claims_cart_uuid",
+        "phoenix_kit_shop_cart_claims",
+        "btree (cart_uuid)"
+      )
+    ]
+  end
+
+  @claim_path "/checkout/claim/"
+  @analytics_key "web_analytics_exclude_paths"
+  @analytics_fallback_default "/admin*\n/dev*\n/phoenix*\n/live*"
+
+  @doc """
+  The V5 analytics step as data: append `<url_prefix>/checkout/claim/*` to
+  `web_analytics_exclude_paths` when the analytics module is installed (its
+  events table exists). One statement, idempotent:
+
+    * setting missing: insert analytics' default list plus the pattern (the
+      default is read from `PhoenixKitWebAnalytics.Config.default_exclusions/0`
+      when that module is loaded, else the 0.6.0 literal);
+    * setting present and the pattern absent: append it on a new line;
+    * pattern already there: nothing.
+
+  The pattern ends in `*` on purpose: analytics matches a pattern as a prefix
+  only then (`PhoenixKitWebAnalytics.Config.excluded?/2`). It is built with
+  `Routes.path/2` (`locale: :none`) so a non-root url prefix is honoured, and
+  the step is dropped (returns `[]`) if the result is not a plain path, so
+  nothing unexpected is ever interpolated into the SQL. Cached readers see the
+  new list after the restart that follows `mix phoenix_kit.update`.
+  """
+  @spec claim_analytics_statements(String.t()) :: [String.t()]
+  def claim_analytics_statements(prefix \\ "public") do
+    prefix = validated_prefix(prefix: prefix)
+    p = "#{prefix}."
+    pattern = claim_exclusion_pattern()
+    defaults = analytics_default_lines()
+
+    if safe_path?(pattern) and defaults != [] do
+      default_sql = defaults |> Enum.map_join(" || chr(10) || ", &"'#{&1}'")
+
+      [
+        """
+        DO $$
+        DECLARE
+          claim_pattern text := '#{pattern}';
+          current_value text;
+        BEGIN
+          IF to_regclass('#{p}phoenix_kit_web_analytics_events') IS NULL THEN
+            RETURN;
+          END IF;
+
+          SELECT value INTO current_value FROM #{p}phoenix_kit_settings
+          WHERE key = '#{@analytics_key}';
+
+          IF NOT FOUND THEN
+            INSERT INTO #{p}phoenix_kit_settings (key, value, module)
+            VALUES ('#{@analytics_key}', #{default_sql} || chr(10) || claim_pattern, 'web_analytics')
+            ON CONFLICT (key) DO NOTHING;
+          ELSIF position(claim_pattern in coalesce(current_value, '')) = 0 THEN
+            UPDATE #{p}phoenix_kit_settings
+            SET value = rtrim(coalesce(current_value, ''), chr(10) || chr(13) || chr(9) || ' ')
+                        || chr(10) || claim_pattern
+            WHERE key = '#{@analytics_key}';
+          END IF;
+        END
+        $$
+        """
+      ]
+    else
+      []
+    end
+  end
+
+  # A plain path or path pattern: nothing that could end a SQL string literal.
+  # (A regex literal inside a function, not a module attribute: OTP 28 does not
+  # allow compiled regexes to be stored in attributes.)
+  defp safe_path?(value), do: value =~ ~r/\A[A-Za-z0-9\/_\-\.\*]+\z/
+
+  defp claim_exclusion_pattern do
+    (@claim_path <> "x")
+    |> Routes.path(locale: :none)
+    |> String.replace_suffix("x", "*")
+  end
+
+  defp analytics_default_lines do
+    raw =
+      if Code.ensure_loaded?(PhoenixKitWebAnalytics.Config) and
+           function_exported?(PhoenixKitWebAnalytics.Config, :default_exclusions, 0) do
+        PhoenixKitWebAnalytics.Config.default_exclusions()
+      else
+        @analytics_fallback_default
+      end
+
+    lines = raw |> String.split(["\n", "\r", ","], trim: true) |> Enum.map(&String.trim/1)
+    lines = Enum.reject(lines, &(&1 == ""))
+
+    if Enum.all?(lines, &safe_path?/1), do: lines, else: []
   end
 
   defp marker_statement(p, version),

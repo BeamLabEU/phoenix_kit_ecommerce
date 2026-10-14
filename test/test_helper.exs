@@ -359,6 +359,19 @@ trigram_exclude =
     []
   end
 
+# The claim-path exclusion test (`:analytics`) needs the optional analytics module.
+analytics_exclude =
+  if Code.ensure_loaded?(PhoenixKitWebAnalytics.Config) do
+    []
+  else
+    Logger.info(
+      "[test_helper] phoenix_kit_web_analytics not loaded - the claim-path exclusion " <>
+        "test (:analytics) excluded."
+    )
+
+    [:analytics]
+  end
+
 ExUnit.start(
   exclude:
     i18n_exclude ++
@@ -366,5 +379,7 @@ ExUnit.start(
       transliteration_exclude ++
       single_language_exclude ++
       catalogue_exclude ++
-      user_menu_exclude ++ billing_user_menu_exclude ++ api_exclude ++ trigram_exclude
+      user_menu_exclude ++
+      billing_user_menu_exclude ++
+      api_exclude ++ trigram_exclude ++ analytics_exclude
 )
