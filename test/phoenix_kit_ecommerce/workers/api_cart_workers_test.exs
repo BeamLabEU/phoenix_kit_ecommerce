@@ -87,6 +87,50 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
     )
   end
 
+  # Carts the sweep would take, whatever else the shared database holds.
+  defp idle_api_count do
+    threshold = days_ago(7)
+
+    Repo.aggregate(
+      from(c in Cart,
+        where: c.status == "active" and like(c.session_id, "api:%") and c.updated_at < ^threshold
+      ),
+      :count
+    )
+  end
+
+  # How many UPDATE statements on the carts table `fun` makes.
+  defp count_updates(fun) do
+    test = self()
+    id = "count-updates-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, %{query: query}, _config ->
+        if String.starts_with?(query, ~s(UPDATE "phoenix_kit_shop_carts")),
+          do: send(test, :update)
+      end,
+      nil
+    )
+
+    try do
+      fun.()
+    after
+      :telemetry.detach(id)
+    end
+
+    drain_updates(0)
+  end
+
+  defp drain_updates(count) do
+    receive do
+      :update -> drain_updates(count + 1)
+    after
+      0 -> count
+    end
+  end
+
   defp api_id, do: "api:" <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
   defp status(cart), do: Repo.get!(Cart, cart.uuid).status
   defp exists?(schema, uuid), do: Repo.get(schema, uuid) != nil
@@ -176,6 +220,52 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       # The link expires: the next sweep takes the cart.
       assert {:ok, 1} = ApiCartSweepWorker.sweep(DateTime.add(live_until, 60, :second))
       assert status(linked) == "abandoned"
+    end
+
+    test "abandons every idle cart when there are more than one batch of them, one statement per batch" do
+      idle = insert_carts!(1003, %{status: "active", updated_at: days_ago(10)})
+      young = cart!(api_id(), updated_at: days_ago(2))
+      before = idle_api_count()
+      assert before >= 1003
+
+      updates = count_updates(fn -> assert {:ok, ^before} = ApiCartSweepWorker.sweep() end)
+
+      assert idle_api_count() == 0
+
+      assert Repo.aggregate(
+               from(c in Cart, where: c.uuid in ^idle and c.status == "abandoned"),
+               :count
+             ) == 1003
+
+      assert status(young) == "active"
+      assert updates == div(before, 500) + 1
+    end
+
+    # The subquery that picks a batch must itself select idle carts only: a
+    # batch of the first 500 rows would be all young or converted carts here, the
+    # UPDATE would skip every one of them and the run would stop at once.
+    test "finds the idle carts behind more than one batch of carts that are not idle" do
+      young = insert_carts!(300, %{status: "active", updated_at: days_ago(2)})
+      converted = insert_carts!(300, %{status: "converted", updated_at: days_ago(100)})
+      idle = insert_carts!(3, %{status: "active", updated_at: days_ago(10)})
+
+      assert {:ok, swept} = ApiCartSweepWorker.sweep()
+      assert swept >= 3
+
+      assert Repo.aggregate(
+               from(c in Cart, where: c.uuid in ^idle and c.status == "abandoned"),
+               :count
+             ) == 3
+
+      assert Repo.aggregate(
+               from(c in Cart, where: c.uuid in ^young and c.status == "active"),
+               :count
+             ) == 300
+
+      assert Repo.aggregate(
+               from(c in Cart, where: c.uuid in ^converted and c.status == "converted"),
+               :count
+             ) == 300
     end
 
     test "perform/1 sweeps while the shop is on and does nothing while it is off" do
