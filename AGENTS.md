@@ -27,7 +27,10 @@ pages.
   `opts[:source_fields]`, `test/ai_pin_conformance_test.exs` guards it),
   `phoenix_kit_warehouse` `~> 0.5` (optional — only the Stock tracking
   switch uses it, through `StockTracking`, which calls `enabled?/0` and
-  `StockLedger.default_location_uuid/0`).
+  `StockLedger.default_location_uuid/0`),
+  `phoenix_kit_web_analytics` (optional — only the V5 migration step reads
+  `PhoenixKitWebAnalytics.Config.default_exclusions/0`, to add the claim path
+  to the analytics exclusion list; the dialyzer ignore file names it).
   Also `phoenix`, `phoenix_live_view ~> 1.1`, `ecto_sql ~> 3.12`,
   `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `mdex`,
   `gettext ~> 1.0`. There is deliberately **no** dep on
@@ -69,10 +72,14 @@ pages.
   call them from their own controllers, workers and scripts, and the library
   cannot know whose authority those run under. Sub-permissions are checked in
   the bundled admin UI instead.
+- **No order, payment or address through the API.** The public cart tools
+  only fill a cart and hand the buyer to the site's own checkout.
 - **No JavaScript.** There is no `js_sources/0` and no hook of its own.
-- **No table creation of its own beyond adoption.** All ten shop tables are
-  core baseline tables; this module's chain adopts and then owns their
-  evolution.
+- **No table creation of its own beyond adoption and the API tables.** All
+  ten shop tables are core baseline tables; this module's chain adopts and
+  then owns their evolution. The only tables it creates itself are
+  `phoenix_kit_shop_search_index` (V4) and `phoenix_kit_shop_cart_claims`
+  (V5).
 - **No catalogue version floor.** No released `phoenix_kit_catalogue` ships
   the extension slot the integration targets, so a `~>` floor could only be
   inaccurate.
@@ -118,7 +125,8 @@ Repo-local aliases:
   which emits quoted `live` declarations: `public_live_routes/0` and
   `public_live_locale_routes/0` for the storefront (spliced into core's
   unified `:phoenix_kit_public` live_session), `admin_routes/0` and
-  `admin_locale_routes/0` for the admin pages. Admin tabs supply the
+  `admin_locale_routes/0` for the admin pages; `generate/1` emits the one
+  controller route pair, the checkout claim page. Admin tabs supply the
   navigation; never hand-register these routes in a host router.
 - **LiveView macro** is this module's own: `use PhoenixKitEcommerce.Web,
   :live_view` (and `:live_component`), defined in `web/shop_web.ex`. It wraps
@@ -131,7 +139,10 @@ Repo-local aliases:
   cart, checkout, confirmation — renders through core's
   `LayoutWrapper.app_layout`, i.e. the HOST application's configured
   `layouts_module`, for guests and logged-in visitors alike.
-  `ShopLayouts.shop_layout/1` is the single wrapper. The in-page
+  `ShopLayouts.shop_layout/1` is the single wrapper. The one exception is
+  the checkout claim page (`Web.ClaimController`, `Web.ClaimHTML`): a bare
+  card in the host's root layout, on purpose, because it is a hand-off page
+  for a link and carries no storefront chrome. The in-page
   category/filter sidebar renders in the page templates for everyone. Admin
   LiveViews do not wrap themselves in a layout; core's admin shell supplies
   it.
@@ -208,10 +219,13 @@ Repo-local aliases:
   media/variants/collections sync run as workers, all on the single
   `shop_imports` queue — a host that configures no such queue leaves
   every job `available` forever while the UI reports "queued"; never
-  spawn a bare `Task`. The one exception is `TranslationSweepWorker`, on
-  `default` beside the `PhoenixKitAI.TranslateWorker` jobs it enqueues:
-  its batch and in-flight ceiling are sized against that queue, and a long
-  CSV import must not hold up a tick.
+  spawn a bare `Task`. The exceptions: `TranslationSweepWorker`, on
+  `default` beside the `PhoenixKitAI.TranslateWorker` jobs it enqueues
+  (its batch and in-flight ceiling are sized against that queue, and a long
+  CSV import must not hold up a tick); the search workers, on `shop_search`;
+  and the three public cart API cron workers (`ApiCartSweepWorker`,
+  `ApiCartPruneWorker`, `ApiClaimPruneWorker`), on `default`: they are
+  short, scheduled through `oban_crons/0`, and must not wait behind an import.
 - **Schemas:** UUIDv7 primary keys (`@primary_key {:uuid, UUIDv7,
   autogenerate: true}`, `uuid_generate_v7()` in DDL — never
   `gen_random_uuid()`), and every table-backed schema declares
@@ -399,7 +413,8 @@ lib/phoenix_kit_ecommerce/
 ├── mix_tasks/        # install, deduplicate_products,
 │                     # backfill_translation_fingerprints (one-shot),
 │                     # backfill_image_fingerprints (after upgrading)
-├── web/              # LiveViews, components, plugs, routes, helpers, authz
+├── web/              # LiveViews, components, plugs, routes, helpers, authz,
+│                     # ClaimController + ClaimHTML (the checkout claim page)
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
 ├── policy.ex         # secure-by-default admin policy settings
 ├── vocabulary.ex     # "products" / "services" / "mixed" storefront wording
@@ -839,7 +854,7 @@ Postgres connection settings come from `PGUSER` (default `postgres`),
 machine whose Postgres has no `postgres` role, export `PGUSER` or integration
 tests fail as pool timeouts that look like flakiness.
 
-Six tag families are excluded when their prerequisite is missing, and start
+These tag families are excluded when their prerequisite is missing, and start
 running by themselves once the dep is upgraded: `:integration` (no database),
 `:requires_phoenix_kit_i18n_api` (core without
 `Dashboard.Tab.localized_label/1`), `:requires_core_transliteration` (core
@@ -853,8 +868,13 @@ then `"en"`, not the stored default). The single-language link tests
 (`single_language_links_test.exs`) are written to pass on both kinds of core;
 run them against a core with the policy too (`PHOENIX_KIT_PATH=…`).
 
-`:mcp` (core without the MCP plug) and `:analytics` (no
-`phoenix_kit_web_analytics`) are excluded the same way.
+Four more are excluded the same way: `:requires_core_api` (core without
+`PhoenixKit.API.Tool` or `PhoenixKit.ObanCrons`, i.e. without the shop API; it
+gates every test of the public read and cart tools, a few hundred of them),
+`:mcp` (core without the MCP plug), `:analytics` (no `phoenix_kit_web_analytics`)
+and `:requires_pg_trgm` (a database without the `pg_trgm` extension). To run the
+API tests, point `PHOENIX_KIT_PATH` at a core checkout that carries the shop API;
+against a released core without it they show up in the `excluded` count.
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
@@ -872,7 +892,7 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 | AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source. The sweep's chain, gates and budget are `PhoenixKitAI.TranslationSweep`'s — the worker supplies only the shop's gates, settings, candidates and prompts, and answers `:ai_unavailable` when the installed `phoenix_kit_ai` has no engine | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
 | Shipping destination picker | `Web.Components.ShippingDestinationPicker` (the one LiveComponent, justified in its moduledoc) is embedded by `CartPage` and `CheckoutPage` under the selected calculated method. Shipping is worked out ONCE per cart change by the parent (`Shop.shipping_quote_snapshot/2`: status, entry, presented, `blocks?`, service) and passed down — never recompute it in `render/1` or per component (packing, hashing, the service list and the provider's destination check are not free). The picker keeps no cart of its own: it saves, the shipping broadcast reaches the parent, the parent passes the new cart down; `:shipping_recheck` asks the parent to recompute when only the answer changed. Anything that calls the carrier on behalf of an anonymous shopper is bounded (one lookup in flight, `:shipping_lookup_interval`, capped texts, `Web.ShippingRequote` for automatic quotes: once per cart state, at most 3 in a row). A transient service failure is a retry, never "not available for this order". The shared display lines (ETA, COD fee, estimate note, reasons) are `Web.Components.ShippingDisplay`; DOM ids inside the picker derive from its `id` | `Web.Components.ShippingDestinationPicker`, `Web.ShippingRequote`, `PhoenixKitEcommerce.shipping_quote_snapshot/2` |
 | Public read API and search index | Visibility is decided only by `API.Visibility` and every public tool loads products through `API.Loader`; the index holds listed products and base-currency prices only; `Indexer` upserts first and deletes stale rows last, so a rebuild never empties the index, and does nothing when the shop catalogue cannot be resolved; a hidden product, a malformed id and an unknown id answer alike; products and cards are always read live while the `count`, the facets and the category counts come from the index and lag a change by the reindex delay, so every write path of a product source must enqueue its reindex (`Search.Jobs`; the Legacy bulk category change and bulk delete do it themselves, the rest reaches `Search.Subscriber` as events, and the events of other catalogues are dropped there); a UUID from a caller is accepted only through `API.Loader.canonical_uuid/1`; money is converted only by `API.Context.money/2`; no value in a public answer is a `Decimal`, a `DateTime` or a struct | `API.Visibility`, `Search.Indexer`, `Search.Query`, `API.Public.*` moduledocs |
-| Public cart API | The cart token is a signed bearer value and is never stored, logged or put in a notification; the cart row is created only by the first write, under core's cart-row limits; option keys are the ones `Search.OptionKeys` announces and `CartOptions` only maps them back; a line is addable only when `API.Visibility` says `:listed`, and a UUID from a caller goes through `API.Loader.canonical_uuid/1`; a refusal of `add_to_cart` is that line's error, never a batch retry; `shop.clear_cart` asks for confirmation only when the cart has lines; a carrier-priced method has no price until the buyer picks a destination; the claim route has no locale prefix and a GET never consumes a claim | `API.CartTools`, `API.Claims`, `API.CartStore` moduledocs |
+| Public cart API | The cart token is a signed bearer value and is never stored, logged or put in a notification; the cart row is created only by the first write, under core's cart-row limits; option keys are the ones `Search.OptionKeys` announces and `CartOptions` only maps them back; a line is addable only when `API.Visibility` says `:listed`, and a UUID from a caller goes through `API.Loader.canonical_uuid/1`; only the refusals `add_to_cart` makes before it opens its own transaction and that a retry cannot change (`CartWriter` `@line_refusals`) are that line's error, any other answer rolls the whole batch back for a retryable `state_changed`, because a refusal inside the writer's transaction dooms it; `shop.clear_cart` asks for confirmation only when the cart has lines; a carrier-priced method has no price until the buyer picks a destination; the claim route has no locale prefix and a GET never consumes a claim | `API.CartTools`, `API.Claims`, `API.CartStore` moduledocs |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |
 
 ## Versioning & releases

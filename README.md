@@ -19,6 +19,7 @@ E-commerce module for [PhoenixKit](https://github.com/BeamLabEU/phoenix_kit). Pr
 - **Admin dashboard** — LiveViews for managing products, categories, shipping, carts, imports, and settings
 - **User pages** — catalog, product detail, cart, checkout, order history, and order details
 - **Public read API** — full-text product search (PostgreSQL, per language, typo-tolerant with `pg_trgm`), product cards, category tree and similar products for AI agents and scripts, as REST and MCP tools of PhoenixKit core (needs a core with the shop API; off until `api_public_enabled` is on)
+- **Public cart API** — seven anonymous *write* tools that let a buyer's AI agent fill a cart and hand it to the site's checkout through a one-time link; no order, payment or address passes through the API (same switch, `api_public_enabled`)
 - **Auto-discovery** — implements `PhoenixKit.Module` behaviour; PhoenixKit finds it at startup with zero config
 
 ## Installation
@@ -192,7 +193,7 @@ methods = Shop.get_available_shipping_methods(cart)
 ### Public API: search and product tools
 
 With PhoenixKit core's shop API switched on (`api_public_enabled`), this module offers five read-only
-tools to anonymous callers, over REST (`POST /api/shop/v1/<tool>`) and MCP (`/mcp/shop`):
+search and product tools to anonymous callers (the cart tools, which write, are described below), over REST (`POST /api/shop/v1/<tool>`) and MCP (`/mcp/shop`):
 
 | Tool | What it does |
 |---|---|
@@ -219,6 +220,40 @@ Search reads `phoenix_kit_shop_search_index`, kept fresh by `PhoenixKitEcommerce
 (catalogue and shop PubSub events, through Oban jobs on the `shop_search` queue) and rebuilt every
 night (`oban_crons/0`; `mix phoenix_kit.update` adds the queue and the cron entry to the host's
 Oban config). Without the `pg_trgm` extension search still works and only skips the typo fallback.
+
+### Public API: cart tools
+
+The same switch (`api_public_enabled`) also turns on seven anonymous **write** tools. They create
+cart rows, can send the owner a notification and mint checkout links, so decide on purpose whether
+to switch the public API on. They never take an order, a payment or an address: the buyer finishes
+on the site's own checkout.
+
+| Tool | What it does |
+|---|---|
+| `shop.create_cart` | Returns a cart token; writes nothing |
+| `shop.get_cart` | The cart: lines, totals, shipping choice and a `revision` |
+| `shop.set_cart_items` | Sets lines to final quantities in one transaction, per-line errors, `expected_revision`, `dry_run` |
+| `shop.clear_cart` | Empties the cart; asks for confirmation when it has lines (offered only when core carries the confirmation gate) |
+| `shop.get_shipping_options` | Shipping methods for a country |
+| `shop.set_shipping` | Chooses one of them |
+| `shop.get_checkout_link` | A one-time link to the checkout hand-off page |
+
+- **Token and row.** A cart token is 32 random bytes plus a short MAC, signed with the host's
+  `secret_key_base` and never stored. The cart row is created by the first write only, under core's
+  per-IP and global cart-row limits (`session_id` starts with `api:`).
+- **Hand-off.** The link opens `/checkout/claim/:token` (no locale prefix). A GET shows the cart and
+  consumes nothing; the buyer's confirmation (a CSRF `POST`) consumes it once and moves the cart to
+  the buyer's browser session, replaces the cart already there, or merges into it. The old token then
+  answers `cart_locked`. The route is excluded from web analytics when that module is installed.
+- **Notifications.** An API write sends at most one message ("via assistant") through the two
+  existing cart notification actions and toggles, capped per cart and globally per hour.
+- **Settings** (E-Commerce settings page, "Assistant carts" card): `api_cart_idle_days` (7),
+  `api_checkout_claim_ttl_minutes` (30), `api_signal_per_cart_per_hour` (3),
+  `api_signal_global_per_hour` (30).
+- **Cron.** `oban_crons/0` adds an hourly sweep of idle `api:` carts, a daily deletion of empty
+  abandoned `api:` carts and a daily prune of used or expired claims; general cart expiry is
+  unchanged. Run `mix phoenix_kit.update`: it applies migration V5 (`phoenix_kit_shop_cart_claims`)
+  and writes the cron entries into the host's Oban crontab.
 
 ### CSV Import
 
@@ -576,6 +611,7 @@ lib/
 | `/cart` | Shopping cart |
 | `/checkout` | Checkout flow |
 | `/checkout/complete/:uuid` | Order confirmation |
+| `/checkout/claim/:token` | Hand-off page of the public cart API (GET shows, POST confirms; no locale prefix) |
 
 **Admin:**
 
