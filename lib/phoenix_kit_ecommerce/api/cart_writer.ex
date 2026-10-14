@@ -435,15 +435,19 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # `:listed` is addable, `:discontinued` is `not_on_sale`, and `:hidden` (or an
   # id the loader does not know) is `not_found`: the same answer
   # `shop.get_products` gives, so a hidden product cannot be put into a cart.
-  defp addable_product(%Record{
-         state: :listed,
-         product: %Product{} = product,
-         category: category
-       }),
-       do: {:ok, with_category(product, category)}
+  # Public for the checkout claim's merge, which applies the same rule.
+  @doc false
+  @spec addable_product(Record.t() | nil) ::
+          {:ok, Product.t()} | {:error, :not_on_sale | :not_found}
+  def addable_product(%Record{
+        state: :listed,
+        product: %Product{} = product,
+        category: category
+      }),
+      do: {:ok, with_category(product, category)}
 
-  defp addable_product(%Record{state: :discontinued}), do: {:error, :not_on_sale}
-  defp addable_product(_hidden_or_absent), do: {:error, :not_found}
+  def addable_product(%Record{state: :discontinued}), do: {:error, :not_on_sale}
+  def addable_product(_hidden_or_absent), do: {:error, :not_found}
 
   # The option schema of a product may come from its category. The loader's
   # view-struct has none attached on the catalogue source (the record carries
@@ -559,6 +563,14 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
         refusal(cart, plan, other)
     end
   end
+
+  @doc false
+  # True for the refusals of `add_to_cart` that it makes before it opens its own
+  # transaction and that a retry cannot change; the checkout claim's merge skips
+  # such a line, and anything else it treats as a failure.
+  @spec refused_before_write?(atom()) :: boolean()
+  def refused_before_write?(:currency_mismatch), do: true
+  def refused_before_write?(reason), do: reason in @line_refusals
 
   # What `add_to_cart` answered when it did not add the line. Only the refusals
   # it makes before it opens its own transaction (nothing was written, nothing
