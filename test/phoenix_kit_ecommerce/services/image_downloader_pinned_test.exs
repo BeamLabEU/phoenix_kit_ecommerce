@@ -40,8 +40,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPinnedTest do
   # -- a one-purpose origin ---------------------------------------------------
 
   # Listens on a loopback port and answers every connection with `reply`:
-  # `{:ok, body}` as a PNG, or `:silent` (read the request, say nothing).
-  # Each request line and header block is sent to the test as
+  # `{:ok, body}` as a PNG and closes; `{:keepalive, body}` the same but keeps
+  # the connection open and reports what its next read sees
+  # (`{:origin_saw, result}`: `{:error, :closed}` once the client closed);
+  # `{:redirect, location}` as a 302; or `:silent` (read the request, say
+  # nothing). A HEAD request gets the headers of the answer and no body. Each
+  # request line and header block is sent to the test as
   # `{:request, head, sni}`.
   defp start_origin(reply, tls \\ nil) do
     test = self()
@@ -86,22 +90,47 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPinnedTest do
          {:ok, head} <- read_head(mod, socket, "") do
       send(test, {:request, head, sni(mod, socket)})
 
-      case reply do
-        {:ok, body} ->
-          mod.send(socket, [
-            "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: ",
-            Integer.to_string(byte_size(body)),
-            "\r\nconnection: close\r\n\r\n",
-            body
-          ])
-
-          mod.close(socket)
-
-        :silent ->
-          Process.sleep(5_000)
-      end
+      respond(reply, request_method(head), mod, socket, test)
     end
   end
+
+  defp request_method(head), do: head |> String.split(" ", parts: 2) |> hd()
+
+  defp respond({:ok, body}, method, mod, socket, _test) do
+    mod.send(socket, [png_head(body, "connection: close\r\n"), body_for(method, body)])
+    mod.close(socket)
+  end
+
+  defp respond({:keepalive, body}, method, mod, socket, test) do
+    mod.send(socket, [png_head(body, ""), body_for(method, body)])
+    send(test, {:origin_saw, mod.recv(socket, 0, 1_000)})
+    mod.close(socket)
+  end
+
+  defp respond({:redirect, location}, _method, mod, socket, _test) do
+    mod.send(socket, [
+      "HTTP/1.1 302 Found\r\nlocation: ",
+      location,
+      "\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+    ])
+
+    mod.close(socket)
+  end
+
+  defp respond(:silent, _method, _mod, _socket, _test), do: Process.sleep(5_000)
+
+  defp png_head(body, extra) do
+    [
+      "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: ",
+      Integer.to_string(byte_size(body)),
+      "\r\n",
+      extra,
+      "\r\n"
+    ]
+  end
+
+  defp body_for("HEAD", _body), do: ""
+  defp body_for(_method, body), do: body
 
   defp handshake(:gen_tcp, socket), do: {:ok, socket}
 
@@ -213,6 +242,73 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPinnedTest do
                  @loopback,
                  request()
                )
+    end
+  end
+
+  describe "the connection of a pinned request" do
+    test "is closed by the client once the response is read" do
+      port = start_origin({:keepalive, "png-bytes"})
+
+      assert {:ok, %{status: 200}} =
+               ImageDownloader.pinned_get(
+                 "http://closing.example.test:#{port}/a.png",
+                 @loopback,
+                 request()
+               )
+
+      # The origin kept the connection open; its next read sees the end only
+      # if the client closed its side.
+      assert_receive {:origin_saw, {:error, closed}}, 3_000
+      assert closed in [:closed, :econnreset]
+    end
+
+    test "is closed by the client when the body is halted at the limit" do
+      port = start_origin({:keepalive, String.duplicate("x", 100_000)})
+      request = %{request() | max_bytes: 1_000}
+
+      assert {:ok, %{status: 200} = response} =
+               ImageDownloader.pinned_get(
+                 "http://halting.example.test:#{port}/a.png",
+                 @loopback,
+                 request
+               )
+
+      assert response.private[:too_large] >= 1_000
+      assert_receive {:origin_saw, {:error, closed}}, 3_000
+      assert closed in [:closed, :econnreset]
+    end
+
+    test "a HEAD preflight goes through the pinned connection and gets the headers" do
+      port = start_origin({:keepalive, "png-bytes"})
+
+      assert {:ok, %{status: 200} = response} =
+               ImageDownloader.pinned_head(
+                 "http://preflight.example.test:#{port}/a.png",
+                 @loopback,
+                 request()
+               )
+
+      assert response.body == ""
+      assert {"content-type", ["image/png"]} in Enum.to_list(response.headers)
+
+      assert_receive {:request, head, _sni}
+      assert head =~ "HEAD /a.png HTTP/1.1\r\n"
+      assert head =~ ~r/\r\nhost: preflight\.example\.test:#{port}\r\n/i
+      assert_receive {:origin_saw, {:error, closed}}, 3_000
+      assert closed in [:closed, :econnreset]
+    end
+
+    test "a redirect is read through the pinned connection and its target is checked again" do
+      for fetch <- [&ImageDownloader.pinned_get/3, &ImageDownloader.pinned_head/3] do
+        port = start_origin({:redirect, "http://169.254.169.254/latest/meta-data"})
+
+        assert {:error, :private_address_blocked} =
+                 fetch.("http://hop.example.test:#{port}/a.png", @loopback, request())
+
+        assert_receive {:request, _head, _sni}
+        # Only the first hop was connected to; the private target was not.
+        refute_receive {:request, _head, _sni}, 100
+      end
     end
   end
 

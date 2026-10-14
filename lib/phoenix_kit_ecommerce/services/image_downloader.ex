@@ -962,6 +962,12 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
           {:ok, Req.Response.t()} | {:error, term()}
   def pinned_get(url, pin, request), do: do_http_request(url, pin, request)
 
+  @doc false
+  # `pinned_get/3` for the HEAD preflight.
+  @spec pinned_head(String.t(), :inet.ip_address() | nil, map()) ::
+          {:ok, Req.Response.t()} | {:error, term()}
+  def pinned_head(url, pin, request), do: head_request(url, pin, request)
+
   defp do_http_request(_url, _pin, _request, 0), do: {:error, :too_many_redirects}
 
   defp do_http_request(url, pin, request, hops_left) do
