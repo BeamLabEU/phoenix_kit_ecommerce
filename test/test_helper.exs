@@ -35,7 +35,8 @@ support_dir = Path.expand("support", __DIR__)
   "shopify_fixtures.ex",
   "search_fixtures.ex",
   "data_case.ex",
-  "live_case.ex"
+  "live_case.ex",
+  "cart_api_fixtures.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -372,6 +373,15 @@ analytics_exclude =
     [:analytics]
   end
 
+# The MCP tests (tagged `:mcp`) need the MCP plug of the shop API as well.
+mcp_exclude =
+  if Code.ensure_loaded?(PhoenixKit.API.MCP) do
+    []
+  else
+    Logger.info("[test_helper] PhoenixKit.API.MCP not loaded - the MCP tests (:mcp) excluded.")
+    [:mcp]
+  end
+
 ExUnit.start(
   exclude:
     i18n_exclude ++
@@ -381,5 +391,5 @@ ExUnit.start(
       catalogue_exclude ++
       user_menu_exclude ++
       billing_user_menu_exclude ++
-      api_exclude ++ trigram_exclude ++ analytics_exclude
+      api_exclude ++ trigram_exclude ++ analytics_exclude ++ mcp_exclude
 )
