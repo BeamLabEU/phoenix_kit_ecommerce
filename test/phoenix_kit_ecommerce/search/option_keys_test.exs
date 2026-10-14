@@ -185,6 +185,41 @@ defmodule PhoenixKitEcommerce.Search.OptionKeysTest do
     assert Enum.map(options, & &1.key) == keys
   end
 
+  describe "the key rules a caller can reuse" do
+    test "neutral_key/1 trims the key and turns a colon into an underscore" do
+      assert OptionKeys.neutral_key(" size:eu ") == "size_eu"
+      assert OptionKeys.neutral_key("colour") == "colour"
+    end
+
+    test "neutral_key/1 gives the key extract/1 announces" do
+      metadata = %{"_option_values" => %{" colour name:x " => ["Light Red"]}}
+      [option] = OptionKeys.extract(product(metadata))
+
+      assert option.key == OptionKeys.neutral_key(" colour name:x ")
+    end
+
+    test "product_value_key/3 is the value key extract/1 announces, slug or slugified label" do
+      metadata = %{
+        "_option_values" => %{"size" => ["Large", "Light Red", "A:B"]},
+        "_value_slugs" => %{"size" => %{"Large" => "l-size"}}
+      }
+
+      product = product(metadata)
+      [option] = OptionKeys.extract(product)
+
+      for value <- option.values do
+        assert OptionKeys.product_value_key(product, "size", value.label) == value.key
+      end
+
+      assert OptionKeys.product_value_key(product, "size", "Large") == "l-size"
+      assert OptionKeys.product_value_key(product, "size", "Light Red") == "light-red"
+    end
+
+    test "product_value_key/3 works for a product without metadata" do
+      assert OptionKeys.product_value_key(%{metadata: nil}, "size", "Large") == "large"
+    end
+  end
+
   test "pairs/1 are unique and sorted" do
     options = [
       %{key: "size", values: [%{key: "small"}, %{key: "large"}, %{key: "small"}]},

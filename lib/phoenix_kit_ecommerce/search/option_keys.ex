@@ -38,7 +38,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     |> Enum.sort_by(fn {key, _labels} -> to_string(key) end)
     |> Enum.flat_map(fn {raw_key, labels} ->
       raw_key = to_string(raw_key)
-      key = raw_key |> String.trim() |> neutral()
+      key = neutral_key(raw_key)
       entries = entries(slugs, raw_key, key, labels)
 
       if entries == [] do
@@ -57,6 +57,25 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     |> Enum.group_by(& &1.key)
     |> Enum.sort_by(fn {key, _group} -> key end)
     |> Enum.map(fn {_key, [first | rest]} -> Enum.reduce(rest, first, &merge/2) end)
+  end
+
+  @doc """
+  The language-neutral form of an attribute key: trimmed, and without a colon,
+  because the pair format is `key:value`.
+  """
+  @spec neutral_key(String.t()) :: String.t()
+  def neutral_key(key) when is_binary(key), do: key |> String.trim() |> neutral()
+
+  @doc """
+  The value key `extract/1` announces for `label` of the option `raw_key` of
+  `product` (any map with `:metadata`): the catalogue's slug when the product
+  has one, else the slugified label. A caller that has to turn a key a client
+  sends back into a label (the cart) goes through this, never a rule of its own.
+  """
+  @spec product_value_key(map(), String.t(), String.t()) :: String.t()
+  def product_value_key(%{metadata: metadata}, raw_key, label) do
+    slugs = metadata |> map() |> Map.get("_value_slugs") |> map()
+    value_key(slugs, to_string(raw_key), label)
   end
 
   @doc "`[\"size:large\", ...]`, sorted and unique."
