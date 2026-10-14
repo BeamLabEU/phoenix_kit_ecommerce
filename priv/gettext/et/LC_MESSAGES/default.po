@@ -7596,3 +7596,43 @@ msgstr "Mõnda toodet ei saanud lisada, kuna need pole enam saadaval: %{items}"
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Your cart was not changed."
 msgstr "Midagi läks valesti. Teie ostukorvi ei muudetud."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant carts"
+msgstr "Assistendi ostukorvid"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
+msgstr "Ostukorvid, mille tehisintellekti assistent koostas poe API kaudu. Piirmäärad piiravad nende kohta käivaid teavitusi (0 lülitab need välja). Mitu uut assistendi ostukorvi võib üks klient avada, määratakse API seadete lehel."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Days before an idle assistant cart is abandoned"
+msgstr "Päevi, enne kui passiivne assistendi ostukorv loetakse hüljatuks"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Minutes a checkout link works"
+msgstr "Minuteid, mille jooksul maksmislink töötab"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per cart per hour"
+msgstr "Assistendi teavitusi ostukorvi kohta tunnis"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per hour, all carts"
+msgstr "Assistendi teavitusi tunnis, kõik ostukorvid kokku"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant cart settings updated"
+msgstr "Assistendi ostukorvide seaded uuendatud"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter whole numbers within the shown ranges."
+msgstr "Sisestage täisarvud näidatud vahemikes."

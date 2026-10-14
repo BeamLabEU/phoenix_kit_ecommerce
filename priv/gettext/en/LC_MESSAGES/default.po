@@ -7597,3 +7597,43 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Your cart was not changed."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant carts"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Days before an idle assistant cart is abandoned"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Minutes a checkout link works"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per cart per hour"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per hour, all carts"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant cart settings updated"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter whole numbers within the shown ranges."
+msgstr ""

@@ -7598,3 +7598,43 @@ msgstr "Certains articles n'ont pas pu être ajoutés car ils ne sont plus dispo
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Your cart was not changed."
 msgstr "Une erreur s'est produite. Votre panier n'a pas été modifié."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant carts"
+msgstr "Paniers d'assistant"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
+msgstr "Paniers constitués par un assistant IA via l'API de la boutique. Les plafonds limitent les notifications à leur sujet (0 les désactive). Le nombre de nouveaux paniers d'assistant qu'un client peut ouvrir se règle sur la page des paramètres de l'API."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Days before an idle assistant cart is abandoned"
+msgstr "Jours avant qu'un panier d'assistant inactif soit abandonné"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Minutes a checkout link works"
+msgstr "Minutes pendant lesquelles un lien de paiement fonctionne"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per cart per hour"
+msgstr "Notifications d'assistant par panier et par heure"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per hour, all carts"
+msgstr "Notifications d'assistant par heure, tous paniers confondus"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant cart settings updated"
+msgstr "Paramètres des paniers d'assistant mis à jour"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter whole numbers within the shown ranges."
+msgstr "Saisissez des nombres entiers dans les plages indiquées."

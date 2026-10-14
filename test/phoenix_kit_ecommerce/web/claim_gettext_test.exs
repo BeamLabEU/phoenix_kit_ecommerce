@@ -16,7 +16,15 @@ defmodule PhoenixKitEcommerce.Web.ClaimGettextTest do
     "This checkout link has already been used or has expired. Your cart is shown here.",
     "Your cart changed while you were deciding. Please choose again.",
     "Some items could not be added because they are no longer available: %{items}",
-    "Something went wrong. Your cart was not changed."
+    "Something went wrong. Your cart was not changed.",
+    "Assistant carts",
+    "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page.",
+    "Days before an idle assistant cart is abandoned",
+    "Minutes a checkout link works",
+    "Assistant notifications per cart per hour",
+    "Assistant notifications per hour, all carts",
+    "Assistant cart settings updated",
+    "Enter whole numbers within the shown ranges."
   ]
 
   @gettext Path.expand("../../../priv/gettext", __DIR__)

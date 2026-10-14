@@ -7656,3 +7656,43 @@ msgstr "Некоторые товары не удалось добавить, т
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Your cart was not changed."
 msgstr "Что-то пошло не так. Ваша корзина не изменена."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant carts"
+msgstr "Корзины ассистента"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
+msgstr "Корзины, собранные ИИ-ассистентом через API магазина. Лимиты ограничивают уведомления о них (0 отключает их). Сколько новых корзин ассистента может открыть один клиент, задаётся на странице настроек API."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Days before an idle assistant cart is abandoned"
+msgstr "Дней до того, как неактивная корзина ассистента считается брошенной"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Minutes a checkout link works"
+msgstr "Минут, в течение которых работает ссылка на оформление заказа"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per cart per hour"
+msgstr "Уведомлений ассистента на корзину в час"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant notifications per hour, all carts"
+msgstr "Уведомлений ассистента в час по всем корзинам"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Assistant cart settings updated"
+msgstr "Настройки корзин ассистента обновлены"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex
+#, elixir-autogen, elixir-format
+msgid "Enter whole numbers within the shown ranges."
+msgstr "Введите целые числа в указанных диапазонах."

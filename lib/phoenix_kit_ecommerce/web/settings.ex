@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.API.CartSettings
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
   alias PhoenixKitEcommerce.Policy
@@ -93,6 +94,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:translations_supported, Shop.translations_supported?())
       |> assign(:shop_shopify_enabled, Shop.shopify_enabled?())
       |> assign_stock_tracking()
+      |> assign(:api_cart_settings, api_cart_settings())
       |> assign_policy()
 
     {:ok, socket}
@@ -215,6 +217,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("save_name_prefixes", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("save_name_prefixes", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("save_api_cart_settings", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_api_cart_settings", params, socket)
     end)
   end
 
@@ -1169,6 +1178,80 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
             <div class="divider"></div>
 
+            <div id="shop-api-carts-card" class="mb-6">
+              <h3 class="font-medium mb-1">{gettext("Assistant carts")}</h3>
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext(
+                  "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
+                )}
+              </p>
+              <form
+                id="shop-api-carts-form"
+                phx-submit="save_api_cart_settings"
+                class="grid gap-3 sm:grid-cols-2 max-w-2xl"
+              >
+                <label class="flex flex-col gap-1">
+                  <span class="text-sm">
+                    {gettext("Days before an idle assistant cart is abandoned")}
+                  </span>
+                  <input
+                    type="number"
+                    name="settings[idle_days]"
+                    value={@api_cart_settings.idle_days}
+                    min="1"
+                    max="365"
+                    step="1"
+                    class="input input-bordered w-full"
+                  />
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span class="text-sm">{gettext("Minutes a checkout link works")}</span>
+                  <input
+                    type="number"
+                    name="settings[claim_ttl_minutes]"
+                    value={@api_cart_settings.claim_ttl_minutes}
+                    min="1"
+                    max="1440"
+                    step="1"
+                    class="input input-bordered w-full"
+                  />
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span class="text-sm">
+                    {gettext("Assistant notifications per cart per hour")}
+                  </span>
+                  <input
+                    type="number"
+                    name="settings[signal_per_cart_per_hour]"
+                    value={@api_cart_settings.signal_per_cart_per_hour}
+                    min="0"
+                    max="1000"
+                    step="1"
+                    class="input input-bordered w-full"
+                  />
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span class="text-sm">
+                    {gettext("Assistant notifications per hour, all carts")}
+                  </span>
+                  <input
+                    type="number"
+                    name="settings[signal_global_per_hour]"
+                    value={@api_cart_settings.signal_global_per_hour}
+                    min="0"
+                    max="100000"
+                    step="1"
+                    class="input input-bordered w-full"
+                  />
+                </label>
+                <div class="sm:col-span-2">
+                  <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="divider"></div>
+
             <div id="shop-name-prefixes-card" class="mb-6">
               <h3 class="font-medium mb-1">{gettext("Hide name prefixes on the storefront")}</h3>
               <p class="text-sm text-base-content/70 mb-3">
@@ -1405,6 +1488,21 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   # `?prefixes[]=x` / a missing field: the value must be a plain string.
   defp gated_event("save_name_prefixes", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
+  end
+
+  defp gated_event("save_api_cart_settings", %{"settings" => %{} = raw}, socket) do
+    case parse_api_cart_settings(raw) do
+      {:ok, values} ->
+        write_api_cart_settings(socket, values)
+
+      :error ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Enter whole numbers within the shown ranges."))}
+    end
+  end
+
+  defp gated_event("save_api_cart_settings", _params, socket) do
     {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 
@@ -2086,4 +2184,53 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   defp vocabulary_label("services"), do: gettext("Services")
   defp vocabulary_label("mixed"), do: gettext("Both (neutral wording)")
   defp vocabulary_label(_), do: gettext("Products")
+
+  # The four settings of the public cart API as the form shows them (the
+  # effective values, defaults included).
+  defp api_cart_settings do
+    Map.new(CartSettings.keys(), fn {name, _key} -> {name, CartSettings.get(name)} end)
+  end
+
+  # All four whole numbers, each inside its range, or nothing: a form with one
+  # bad field must not store the other three.
+  defp parse_api_cart_settings(raw) do
+    Enum.reduce_while(CartSettings.bounds(), {:ok, %{}}, fn {name, range}, {:ok, acc} ->
+      with value when is_binary(value) <- Map.get(raw, Atom.to_string(name)),
+           {number, ""} <- Integer.parse(String.trim(value)),
+           true <- number in range do
+        {:cont, {:ok, Map.put(acc, name, number)}}
+      else
+        _invalid -> {:halt, :error}
+      end
+    end)
+  end
+
+  defp write_api_cart_settings(socket, values) do
+    keys = CartSettings.keys()
+    changed = Enum.reject(values, fn {name, number} -> CartSettings.get(name) == number end)
+
+    written =
+      Enum.map(changed, fn {name, number} ->
+        {Map.fetch!(keys, name), number,
+         Settings.update_setting(Map.fetch!(keys, name), Integer.to_string(number))}
+      end)
+
+    if Enum.all?(written, &match?({_key, _number, {:ok, _}}, &1)) do
+      for {key, number, _result} <- written do
+        Activity.log("shop.api_cart_setting_updated",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"setting" => key, "value" => number}
+        )
+      end
+
+      {:noreply,
+       socket
+       |> assign(:api_cart_settings, api_cart_settings())
+       |> put_flash(:info, gettext("Assistant cart settings updated"))}
+    else
+      {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
 end
