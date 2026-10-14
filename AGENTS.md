@@ -52,7 +52,9 @@ pages.
   (`/shop`) and My Cart (`/cart`, also in the avatar dropdown via the
   `Tab` option `user_menu: true`). Public storefront routes: `/shop`,
   `/shop/category/:slug`, `/shop/product/:slug`, `/cart`, `/checkout`,
-  `/checkout/complete/:uuid`.
+  `/checkout/complete/:uuid`, and the assistant checkout hand-off
+  `/checkout/claim/:token` (GET and POST, no locale prefix; a controller route
+  emitted by `Web.Routes.generate/1`, not a LiveView).
 - **Module key** `"shop"`; settings prefix `shop_`.
 
 ## What this module does NOT do
@@ -260,6 +262,26 @@ Repo-local aliases:
   wrapper emits `/de/shop/...` links where the canonical link has no `/de/`
   segment, and the host answers each of them with a redirect. Each public
   handler has a test that checks the `url` of its items on such a domain.
+- **One lock order for "the active cart of this identity".**
+  `Shop.lock_cart_identity!/2` takes the user key, then the session key
+  (`pg_advisory_xact_lock`). The claim POST, the lazy creation of an `api:`
+  cart and the create path of `get_or_create_cart/1` all take it, and any new
+  code that creates or claims an active cart must too. Every write to an
+  `api:` cart re-checks, under the cart row lock, that the cart is still
+  active and still carries the token's `session_id`, because a claim moves a
+  cart without changing its status. `merge_guest_cart/2` and
+  `rekey_cart_session/2` do not take the lock and never touch `api:` sessions.
+  The SQL sandbox runs a test in one transaction, so these races cannot be
+  reproduced in the suite; only the sequential re-check is pinned.
+- **`API.CartWriter` and the claim's "add" merge hold a cart row and then
+  call `add_to_cart`, which locks Legacy product rows** (the reverse of the
+  module's product-then-cart order, see the note above `lock_active_cart!/1`).
+  Lines go in product-uuid order and `deadlock_detected` is rescued (a
+  retryable answer for the agent, the choice page again for the buyer); a new
+  caller that locks a cart and then adds to it must do the same. The
+  catalogue source locks no product rows. A rollback inside `add_to_cart`
+  (`{:product_not_available, _}`, invalid specs) poisons the surrounding
+  transaction, so a line is validated before the call.
 - **The test harness must apply billing's migration chain, not just core's.**
   This module reads and writes billing's schemas directly, and billing owns
   `phoenix_kit_currencies` from its own V2 on, so a test database built from
@@ -348,7 +370,7 @@ provider only while `shop_shopify_enabled` is on (off by default).
 ```
 lib/phoenix_kit_ecommerce.ex          # PhoenixKit.Module behaviour + the main context
 lib/phoenix_kit_ecommerce/
-├── schemas/          # Product, Category, Cart, CartItem, ShippingMethod,
+├── schemas/          # Product, Category, Cart, CartItem, CartClaim, ShippingMethod,
 │                     # ShopConfig, ImportConfig, ImportLog
 ├── options/          # option schema management, type system, metadata validation
 ├── import/           # CSV: format behaviour, detector, parser/validator/analyzer,
@@ -365,12 +387,15 @@ lib/phoenix_kit_ecommerce/
 ├── services/         # image download + batch image migration
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
 │                     # ShopifyMediaSyncWorker, TranslationSweepWorker,
-│                     # SearchReindexWorker, SearchRebuildWorker (queue shop_search)
+│                     # SearchReindexWorker, SearchRebuildWorker (queue shop_search),
+│                     # ApiCartSweepWorker, ApiCartPruneWorker, ApiClaimPruneWorker
 ├── search/           # public search index: Entry, Dictionary, Trigram, OptionKeys,
 │                     # Document, Indexer, Query, Jobs, Subscriber
 ├── api/              # public shop API tools: Visibility, Facts, Record, Loader, Context,
 │                     # Cards, PlainText, SearchParams, PublicTools, Public.Schemas,
-│                     # Public.Search, Public.Catalog
+│                     # Public.Search, Public.Catalog; the cart tools: CartTools,
+│                     # CartHandlers, CartToken, CartStore, CartWriter, CartOptions,
+│                     # CartView, CartMoney, CartSettings, Signals, Claims
 ├── mix_tasks/        # install, deduplicate_products,
 │                     # backfill_translation_fingerprints (one-shot),
 │                     # backfill_image_fingerprints (after upgrading)
@@ -408,6 +433,7 @@ All use UUIDv7 primary keys.
 | `Category` | `phoenix_kit_shop_categories` | hierarchical via `parent_uuid`, multi-language, per-category `option_schema`, position ordering |
 | `Cart` | `phoenix_kit_shop_carts` | guest (session-based, 30-day expiry) and user (persistent); status `active → converted \| merged \| abandoned \| expired` |
 | `CartItem` | `phoenix_kit_shop_cart_items` | price snapshots, selected specs, weight |
+| `CartClaim` | `phoenix_kit_shop_cart_claims` | one-time checkout claim of a cart the public cart API created: hashed token, expiry, used and superseded stamps |
 | `ShippingMethod` | `phoenix_kit_shop_shipping_methods` | weight/price constraints, geographic restrictions, free-shipping thresholds, delivery estimates |
 | `ShopConfig` | `phoenix_kit_shop_config` | JSONB key-value store; also carries the migration marker |
 | `ImportConfig` | `phoenix_kit_shop_import_configs` | CSV import profiles: keyword filtering, category rules, option mappings |
@@ -613,6 +639,14 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**.
   `:shipping_cache_max_list_size`). Both need `Shipping.Cache` running (it
   owns the tables).
 
+**Public cart API** (core's `api_` namespace, not `shop_`)
+
+- `api_cart_idle_days` (7, 1..365), `api_checkout_claim_ttl_minutes` (30,
+  1..1440), `api_signal_per_cart_per_hour` (3, 0..1000) and
+  `api_signal_global_per_hour` (30, 0..100000). Read through
+  `API.CartSettings` (defaults and ranges live there) and edited on the shop
+  settings page. The two cart-row limits belong to core.
+
 **Storefront notifications**
 
 - `shop_notify_cart_first_item`, `shop_notify_cart_item`,
@@ -709,7 +743,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V4. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V5. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -732,6 +766,13 @@ sort keys; unique on `(item_uuid, language)`, GIN on `document`,
 `CREATE EXTENSION IF NOT EXISTS pg_trgm`, building the trigram index only
 when the extension exists. The table is derived data: `down/1` leaves it, and
 `Search.Indexer.rebuild/0` refills it.
+V5 creates `phoenix_kit_shop_cart_claims` (one-time checkout claims of the
+public cart API: a unique `token_hash`, the cart it belongs to with
+`ON DELETE CASCADE`, the hash of the cart token it was issued for, the
+language, `expires_at`, `used_at`, `superseded_at`) and, when the analytics
+module's events table exists, appends `<url_prefix>/checkout/claim/*` to
+`web_analytics_exclude_paths` (the trailing `*` matters: analytics matches any
+other pattern as an exact path). `down/1` keeps the table and the setting.
 
 Rules for the chain, all of which have been broken at least once:
 
@@ -812,6 +853,9 @@ then `"en"`, not the stored default). The single-language link tests
 (`single_language_links_test.exs`) are written to pass on both kinds of core;
 run them against a core with the policy too (`PHOENIX_KIT_PATH=…`).
 
+`:mcp` (core without the MCP plug) and `:analytics` (no
+`phoenix_kit_web_analytics`) are excluded the same way.
+
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
 `phoenix_kit_ecommerce/dependency_floor_test.exs` (the core migration
@@ -828,6 +872,7 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 | AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source. The sweep's chain, gates and budget are `PhoenixKitAI.TranslationSweep`'s — the worker supplies only the shop's gates, settings, candidates and prompts, and answers `:ai_unavailable` when the installed `phoenix_kit_ai` has no engine | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
 | Shipping destination picker | `Web.Components.ShippingDestinationPicker` (the one LiveComponent, justified in its moduledoc) is embedded by `CartPage` and `CheckoutPage` under the selected calculated method. Shipping is worked out ONCE per cart change by the parent (`Shop.shipping_quote_snapshot/2`: status, entry, presented, `blocks?`, service) and passed down — never recompute it in `render/1` or per component (packing, hashing, the service list and the provider's destination check are not free). The picker keeps no cart of its own: it saves, the shipping broadcast reaches the parent, the parent passes the new cart down; `:shipping_recheck` asks the parent to recompute when only the answer changed. Anything that calls the carrier on behalf of an anonymous shopper is bounded (one lookup in flight, `:shipping_lookup_interval`, capped texts, `Web.ShippingRequote` for automatic quotes: once per cart state, at most 3 in a row). A transient service failure is a retry, never "not available for this order". The shared display lines (ETA, COD fee, estimate note, reasons) are `Web.Components.ShippingDisplay`; DOM ids inside the picker derive from its `id` | `Web.Components.ShippingDestinationPicker`, `Web.ShippingRequote`, `PhoenixKitEcommerce.shipping_quote_snapshot/2` |
 | Public read API and search index | Visibility is decided only by `API.Visibility` and every public tool loads products through `API.Loader`; the index holds listed products and base-currency prices only; `Indexer` upserts first and deletes stale rows last, so a rebuild never empties the index, and does nothing when the shop catalogue cannot be resolved; a hidden product, a malformed id and an unknown id answer alike; products and cards are always read live while the `count`, the facets and the category counts come from the index and lag a change by the reindex delay, so every write path of a product source must enqueue its reindex (`Search.Jobs`; the Legacy bulk category change and bulk delete do it themselves, the rest reaches `Search.Subscriber` as events, and the events of other catalogues are dropped there); a UUID from a caller is accepted only through `API.Loader.canonical_uuid/1`; money is converted only by `API.Context.money/2`; no value in a public answer is a `Decimal`, a `DateTime` or a struct | `API.Visibility`, `Search.Indexer`, `Search.Query`, `API.Public.*` moduledocs |
+| Public cart API | The cart token is a signed bearer value and is never stored, logged or put in a notification; the cart row is created only by the first write, under core's cart-row limits; option keys are the ones `Search.OptionKeys` announces and `CartOptions` only maps them back; a line is addable only when `API.Visibility` says `:listed`, and a UUID from a caller goes through `API.Loader.canonical_uuid/1`; a refusal of `add_to_cart` is that line's error, never a batch retry; `shop.clear_cart` asks for confirmation only when the cart has lines; a carrier-priced method has no price until the buyer picks a destination; the claim route has no locale prefix and a GET never consumes a claim | `API.CartTools`, `API.Claims`, `API.CartStore` moduledocs |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |
 
 ## Versioning & releases
