@@ -2919,6 +2919,11 @@ defmodule PhoenixKitEcommerce do
     in it before pricing, so `:selected_specs` values (option labels, which
     differ per language on the catalogue source) match its price modifiers,
     and the line's product title is snapshotted in it.
+  - `:via` - `:assistant` marks a write made through the public cart API
+    (`PhoenixKitEcommerce.API.CartWriter`): the per-line "item added"
+    notification is not sent, the API sends one coalesced signal per call
+    (`PhoenixKitEcommerce.API.Signals`). Default `nil`: the storefront
+    behaviour, unchanged.
 
   ## Examples
 
@@ -2933,6 +2938,7 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, opts) when is_list(opts) do
     selected_specs = Keyword.get(opts, :selected_specs, %{})
     skip_validation = Keyword.get(opts, :skip_spec_validation, false)
+    via = Keyword.get(opts, :via)
     language = Keyword.get(opts, :language)
 
     # The disabled check lives in the CONTEXT, not only the LiveView mounts:
@@ -2953,10 +2959,11 @@ defmodule PhoenixKitEcommerce do
           quantity,
           selected_specs,
           language,
-          skip_validation
+          skip_validation,
+          via
         )
       else
-        add_simple_product_to_cart(cart, product, quantity, language, skip_validation)
+        add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via)
       end
     end
   end
@@ -2967,7 +2974,7 @@ defmodule PhoenixKitEcommerce do
          :ok <- validate_quantity(quantity),
          :ok <- validate_cart_currency(cart, product),
          {:ok, cart} <- rebase_cart(cart) do
-      add_simple_product_to_cart(cart, product, quantity, nil, false)
+      add_simple_product_to_cart(cart, product, quantity, nil, false, nil)
     end
   end
 
@@ -3110,7 +3117,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation) do
+  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
@@ -3161,7 +3168,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
@@ -3258,7 +3265,8 @@ defmodule PhoenixKitEcommerce do
          quantity,
          selected_specs,
          language,
-         skip_validation
+         skip_validation,
+         via
        ) do
     result =
       repo().transaction(fn ->
@@ -3307,7 +3315,7 @@ defmodule PhoenixKitEcommerce do
     case result do
       {:ok, {updated_cart, item}} ->
         Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product)
+        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
