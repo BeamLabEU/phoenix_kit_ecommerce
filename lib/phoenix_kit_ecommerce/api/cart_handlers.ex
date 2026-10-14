@@ -394,7 +394,7 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
       if ctx[:dry_run?] == true do
         {:preview, %{would_issue_link: true, lines: length(cart.items)}, CartView.revision(cart)}
       else
-        with {:ok, base_url} <- claim_base_url(ctx), do: issue_link(cart, hash, base_url, ctx)
+        issue_link(cart, hash, ctx)
       end
     end
   end
@@ -421,7 +421,11 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
     end
   end
 
-  defp issue_link(cart, hash, base_url, ctx) do
+  defp issue_link(cart, hash, ctx) do
+    with {:ok, base_url} <- claim_base_url(ctx), do: issue_claim(cart, hash, base_url, ctx)
+  end
+
+  defp issue_claim(cart, hash, base_url, ctx) do
     language = ctx[:language] || Shop.get_default_language()
 
     case Claims.issue(cart, hash, language) do

@@ -169,22 +169,21 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
   defp hold_cart_row(cart, change) do
     test = self()
 
-    task =
-      Task.async(fn ->
-        unboxed(fn ->
-          Repo.transaction(fn ->
-            Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
-            send(test, :holding)
-
-            receive do
-              :release -> change.()
-            end
-          end)
-        end)
-      end)
+    task = Task.async(fn -> unboxed(fn -> Repo.transaction(hold(cart, change, test)) end) end)
 
     assert_receive :holding, 5_000
     task
+  end
+
+  defp hold(cart, change, test) do
+    fn ->
+      Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
+      send(test, :holding)
+
+      receive do
+        :release -> change.()
+      end
+    end
   end
 
   defp release(%Task{pid: pid} = task) do
