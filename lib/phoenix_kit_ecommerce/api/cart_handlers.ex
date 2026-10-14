@@ -419,8 +419,7 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
         {:ok, "#{if uri.scheme == "http", do: "http", else: "https"}://#{hd(hosts)}"}
 
       canonical ->
-        {:ok,
-         URI.to_string(%URI{scheme: canonical.scheme, host: canonical.host, port: canonical.port})}
+        {:ok, URI.to_string(%{canonical | path: nil, query: nil, fragment: nil, userinfo: nil})}
 
       true ->
         {:error, :internal_error, "The checkout link could not be created.", %{}}
