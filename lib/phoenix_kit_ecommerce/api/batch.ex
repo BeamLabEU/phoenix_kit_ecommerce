@@ -216,13 +216,13 @@ defmodule PhoenixKitEcommerce.API.Batch do
 
           # The transaction did not commit: no row of it was written.
           {:error, error} ->
-            Enum.map(rows, fn
-              %{plan: %{changed?: true}} = row -> fail(row, error)
-              row -> row
-            end)
+            Enum.map(rows, &fail_pending(&1, error))
         end
     end
   end
+
+  defp fail_pending(%{plan: %{changed?: true}} = row, error), do: fail(row, error)
+  defp fail_pending(row, _error), do: row
 
   defp still_planned(%{plan: %{changed?: true}, item: item} = row, locked, planner) do
     with {:ok, fresh} <- fetch_available(locked, item),
