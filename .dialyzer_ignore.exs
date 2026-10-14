@@ -12,14 +12,20 @@
   # released core older than that has no `Tool.new/1`, and the public tools are
   # simply not offered there. `@compile {:no_warn_undefined, ...}` silences the
   # compiler's xref but not dialyzer. Drop this line once the minimum core
-  # requirement in mix.exs carries `PhoenixKit.API.Tool`.
-  {"lib/phoenix_kit_ecommerce/api/public_tools.ex", :unknown_function},
+  # requirement in mix.exs carries `PhoenixKit.API.Tool`. Each entry below names
+  # the one missing function, so a new unknown call in the same file is still
+  # reported.
+  {"lib/phoenix_kit_ecommerce/api/public_tools.ex",
+   "Function PhoenixKit.API.Tool.new/1 does not exist."},
   # The cart store names `PhoenixKit.API.RateLimit` too (same reason).
-  {"lib/phoenix_kit_ecommerce/api/cart_store.ex", :unknown_function},
+  {"lib/phoenix_kit_ecommerce/api/cart_store.ex",
+   "Function PhoenixKit.API.RateLimit.check_cart_rows/1 does not exist."},
   # `PhoenixKitWebAnalytics.Config` is an optional dependency: the claim-path
   # exclusion step of the migration reads its default list when it is loaded.
-  {"lib/phoenix_kit_ecommerce/migrations.ex", :unknown_function},
+  {"lib/phoenix_kit_ecommerce/migrations.ex",
+   "Function PhoenixKitWebAnalytics.Config.default_exclusions/0 does not exist."},
   # The claim page marks itself with `PhoenixKitWebAnalytics.Plug.skip/1` when
   # that optional dependency is loaded.
-  {"lib/phoenix_kit_ecommerce/web/claim_controller.ex", :unknown_function}
+  {"lib/phoenix_kit_ecommerce/web/claim_controller.ex",
+   "Function PhoenixKitWebAnalytics.Plug.skip/1 does not exist."}
 ]
