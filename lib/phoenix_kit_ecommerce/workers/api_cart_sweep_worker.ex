@@ -6,7 +6,10 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepWorker do
 
   Only `api:` carts: a cart a buyer claimed has the buyer's session id (or is
   `merged`), guest and user carts never start with `api:` (the storefront's
-  ids are base64url without a colon). General cart expiry stays as it is.
+  ids are base64url without a colon). A cart with a live checkout link (an
+  unused, unsuperseded, unexpired claim) is left alone until the link dies, so
+  the buyer who opens it does not find the cart abandoned. General cart expiry
+  stays as it is.
   Does nothing while the shop module is disabled.
   """
 
@@ -19,6 +22,7 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepWorker do
   alias PhoenixKit.Utils.Date, as: UtilsDate
   alias PhoenixKitEcommerce.API.CartSettings
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartClaim
 
   @impl Oban.Worker
   def perform(_job) do
@@ -40,9 +44,18 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepWorker do
 
     {count, _} =
       from(c in Cart,
+        as: :cart,
         where: c.status == "active",
         where: like(c.session_id, "api:%"),
-        where: c.updated_at < ^threshold
+        where: c.updated_at < ^threshold,
+        where:
+          not exists(
+            from(k in CartClaim,
+              where:
+                k.cart_uuid == parent_as(:cart).uuid and is_nil(k.used_at) and
+                  is_nil(k.superseded_at) and k.expires_at > ^now
+            )
+          )
       )
       |> RepoHelper.repo().update_all(set: [status: "abandoned", updated_at: now])
 

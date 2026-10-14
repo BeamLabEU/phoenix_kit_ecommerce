@@ -94,6 +94,7 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       converted = cart!(api_id(), updated_at: old, status: "converted")
       merged = cart!(api_id(), updated_at: old, status: "merged")
       expired = cart!(api_id(), updated_at: old, status: "expired")
+      abandoned = cart!(api_id(), updated_at: old, status: "abandoned")
 
       assert {:ok, 0} = ApiCartSweepWorker.sweep()
 
@@ -103,6 +104,38 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       assert status(converted) == "converted"
       assert status(merged) == "merged"
       assert status(expired) == "expired"
+
+      # An abandoned cart is not re-stamped: its 30 days before the prune count
+      # from the day it was abandoned.
+      assert status(abandoned) == "abandoned"
+      assert Repo.get!(Cart, abandoned.uuid).updated_at == abandoned.updated_at
+    end
+
+    test "leaves an idle cart with a live checkout link alone, and sweeps it once the link is dead" do
+      live_until = DateTime.add(DateTime.utc_now(), 3600, :second) |> DateTime.truncate(:second)
+
+      linked = cart!(api_id(), updated_at: days_ago(8))
+      claim!(linked, expires_at: live_until)
+
+      dead =
+        for opts <- [
+              [expires_at: days_ago(1)],
+              [expires_at: live_until, used_at: days_ago(0)],
+              [expires_at: live_until, superseded_at: days_ago(0)]
+            ] do
+          cart = cart!(api_id(), updated_at: days_ago(8))
+          claim!(cart, opts)
+          cart
+        end
+
+      assert {:ok, 3} = ApiCartSweepWorker.sweep()
+
+      assert status(linked) == "active"
+      for cart <- dead, do: assert(status(cart) == "abandoned")
+
+      # The link expires: the next sweep takes the cart.
+      assert {:ok, 1} = ApiCartSweepWorker.sweep(DateTime.add(live_until, 60, :second))
+      assert status(linked) == "abandoned"
     end
 
     test "perform/1 sweeps while the shop is on and does nothing while it is off" do
@@ -189,8 +222,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
         )
 
       long_expired = claim!(cart, expires_at: days_ago(8))
-      recently_used = claim!(cart, used_at: days_ago(1), expires_at: days_ago(0))
-      recently_expired = claim!(cart, expires_at: days_ago(1))
+      recently_used = claim!(cart, used_at: days_ago(6), expires_at: days_ago(0))
+      recently_expired = claim!(cart, expires_at: days_ago(6))
 
       live =
         claim!(cart,
@@ -251,7 +284,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
         cart_token_hash: "ch-#{System.unique_integer([:positive])}",
         language: "en",
         expires_at: Keyword.get(opts, :expires_at, days_ago(0)),
-        used_at: Keyword.get(opts, :used_at)
+        used_at: Keyword.get(opts, :used_at),
+        superseded_at: Keyword.get(opts, :superseded_at)
       })
       |> Repo.insert()
 
