@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
   use PhoenixKitEcommerce.DataCase, async: false
   @moduletag :requires_core_api
 
+  import ExUnit.CaptureLog
   import PhoenixKitEcommerce.CartApiFixtures
 
   alias PhoenixKit.Cache
@@ -56,6 +57,66 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
     CartView.build(cart_of(hash)).lines
   end
 
+  @query_event [:phoenix_kit_ecommerce, :test, :repo, :query]
+
+  # Runs `fun` once, after the first `verb` ("INSERT", "SELECT") statement on
+  # `table`, inside the process that ran it: a way to change the world between two
+  # steps of the writer.
+  defp after_first_query(verb, table, fun) do
+    id = {__MODULE__, make_ref()}
+
+    :telemetry.attach(
+      id,
+      @query_event,
+      fn _event, _measurements, meta, _config ->
+        if meta.source == table and String.starts_with?(meta.query, verb) do
+          :telemetry.detach(id)
+          fun.()
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
+  end
+
+  # The product ids of the cart-item INSERTs the block runs, in statement order.
+  defp inserted_item_products(products, fun) do
+    id = {__MODULE__, make_ref()}
+    test = self()
+
+    :telemetry.attach(
+      id,
+      @query_event,
+      fn _event, _measurements, meta, _config ->
+        if meta.source == "phoenix_kit_shop_cart_items" and
+             String.starts_with?(meta.query, "INSERT"),
+           do: send(test, {:item_insert, meta.params})
+      end,
+      nil
+    )
+
+    try do
+      fun.()
+    after
+      :telemetry.detach(id)
+    end
+
+    known = Map.new(products, &{Ecto.UUID.dump!(&1.uuid), &1.uuid})
+    known = Map.merge(known, Map.new(products, &{&1.uuid, &1.uuid}))
+    drain_item_inserts(known, [])
+  end
+
+  defp drain_item_inserts(known, acc) do
+    receive do
+      {:item_insert, params} ->
+        found = Enum.find_value(params, &Map.get(known, &1))
+        drain_item_inserts(known, [found | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   defp toggles(first, every) do
     {:ok, _} =
       Settings.update_setting_with_module("shop_notify_cart_first_item", to_string(first), "shop")
@@ -101,6 +162,26 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
       assert actions(result) == ["unchanged"]
       assert CartStore.resolve(hash) == :empty
     end
+
+    test "a removal-only request reads the cart under its row lock, not as it first found it", %{
+      token: token,
+      hash: hash,
+      p1: p1,
+      p2: p2
+    } do
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+
+      # another writer adds a line after this request found the cart and before it locked it
+      after_first_query("SELECT", "phoenix_kit_shop_cart_items", fn ->
+        {:ok, _} = Shop.add_to_cart(cart, p2, 1)
+      end)
+
+      assert {:ok, result} = set(token, [line(p1, 0)])
+
+      assert actions(result) == ["unchanged"]
+      assert result.before.total == %{amount: "10.00", currency: "USD"}
+      assert result.after.total == result.before.total
+    end
   end
 
   describe "final quantities" do
@@ -130,6 +211,22 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
       assert [%{product_id: id}] = removed.cart.lines
       assert id == p2.uuid
       refute p3.uuid == id
+    end
+
+    test "lines are applied in product-uuid order, whatever order the request lists them", %{
+      token: token
+    } do
+      # Two writers that name the same Legacy products in opposite orders would lock
+      # the product rows crosswise; one fixed order is what keeps them from deadlocking.
+      products = for(_ <- 1..5, do: product!()) |> Enum.sort_by(& &1.uuid)
+      sorted_ids = Enum.map(products, & &1.uuid)
+
+      applied =
+        inserted_item_products(products, fn ->
+          assert {:ok, _} = set(token, products |> Enum.reverse() |> Enum.map(&line(&1, 1)))
+        end)
+
+      assert applied == sorted_ids
     end
 
     test "results come back in request order, however the lines are applied", %{token: token} do
@@ -340,6 +437,27 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
       assert Enum.sort(Enum.map(result.cart.lines, & &1.quantity)) == [1, 2]
     end
 
+    test "a product id that is not a UUID is an error, also when the quantity is 0", %{
+      token: token
+    } do
+      assert {:ok, result} =
+               set(token, [
+                 %{"product_id" => "not-a-uuid", "quantity" => 0},
+                 %{"product_id" => 42, "quantity" => 0},
+                 %{"product_id" => nil, "quantity" => 1}
+               ])
+
+      assert error_codes(result) == ["not_found", "not_found", "not_found"]
+      assert Enum.at(result.results, 0).ref.product_id == "not-a-uuid"
+    end
+
+    test "a line that is not an object is a line error, not a crash", %{token: token, p1: p1} do
+      assert {:ok, result} = set(token, ["nope", 7, line(p1, 1)])
+
+      assert actions(result) == ["error", "error", "created"]
+      assert error_codes(result) == ["not_found", "not_found", nil]
+    end
+
     test "a product id in upper case is the same product as in lower case", %{
       token: token,
       p1: p1
@@ -368,6 +486,39 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
                ])
 
       assert error_codes(result) == ["duplicate_line", "duplicate_line"]
+    end
+  end
+
+  describe "options from the product's category" do
+    test "a required option of the category schema is enforced and mapped", %{token: token} do
+      n = System.unique_integer([:positive])
+
+      {:ok, category} =
+        Shop.create_category(%{
+          "name" => %{"en" => "Pots #{n}"},
+          "slug" => %{"en" => "pots-#{n}"},
+          "option_schema" => [
+            %{
+              "key" => "size",
+              "label" => "Size",
+              "type" => "select",
+              "options" => ["S", "L"],
+              "required" => true,
+              "position" => 0
+            }
+          ]
+        })
+
+      pot = product!(%{"category_uuid" => category.uuid})
+
+      assert {:ok, missing} = set(token, [line(pot, 1)])
+
+      assert [%{error: %{code: "option_required", attribute_key: "size", allowed: ["s", "l"]}}] =
+               missing.results
+
+      assert {:ok, result} = set(token, [line(pot, 2, [opt("size", "l")])])
+      assert [%{action: "created"}] = result.results
+      assert [%{options: [%{attribute_key: "size", value_key: "l"}]}] = result.cart.lines
     end
   end
 
@@ -418,6 +569,44 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
 
       stored = hash |> cart_of() |> Map.fetch!(:items) |> Enum.map(& &1.metadata["api_options"])
       assert stored == [[%{"attribute_key" => "color", "value_key" => "red"}]]
+    end
+  end
+
+  describe "a product that changed between planning and writing" do
+    # The options are planned from one read of the product and checked again by
+    # `add_to_cart` under the product's row lock. When they disagree its refusal
+    # rolls back its own transaction, which dooms the writer's: the batch must answer
+    # the retryable state_changed, not run another statement into a dead transaction.
+    for {name, metadata, reason} <- [
+          {"an option value that is no longer offered",
+           %{"_option_values" => %{"color" => ["Green"]}}, ":invalid_option_value"},
+          {"a required option that appeared",
+           %{"_option_values" => %{"color" => ["Red", "Blue"], "size" => ["S"]}},
+           ":missing_required_option"},
+          {"an option that was removed", %{}, ":unknown_option_key"}
+        ] do
+      test "#{name} rolls the batch back for a retry", %{token: token, hash: hash, p1: p1} do
+        shirt = product_with_options!(%{"color" => ["Red", "Blue"]})
+        metadata = unquote(Macro.escape(metadata))
+
+        after_first_query("INSERT", "phoenix_kit_shop_carts", fn ->
+          {:ok, _} = Shop.update_product(shirt, %{"metadata" => metadata})
+        end)
+
+        log =
+          capture_log(fn ->
+            assert {:error, :validation_failed, _message, context} =
+                     set(token, [line(p1, 1), line(shirt, 1, [opt("color", "red")])])
+
+            assert context == %{reason: "state_changed", retry: true}
+          end)
+
+        assert log =~ "cart write rolled back: #{unquote(reason)}"
+        refute log =~ shirt.uuid
+
+        # nothing of the batch was kept, and the connection is still usable
+        assert CartStore.resolve(hash) == :empty
+      end
     end
   end
 
@@ -504,6 +693,32 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
       assert [%{quantity: 12}] = context.cart.lines
     end
 
+    test "a wrong revision does not spend a row slot of the network", %{token: token, p1: p1} do
+      put_setting!("api_public_cart_rows_per_ip_hour", 1)
+      ctx = ctx_for(token)
+
+      assert {:error, :revision_mismatch, _message, _context} =
+               set(token, [line(p1, 1)], ctx: ctx, extra: %{"expected_revision" => "bad"})
+
+      assert {:ok, _} = set(token, [line(p1, 1)], ctx: ctx)
+    end
+
+    test "a removal-only request on a token without a cart still checks the revision", %{
+      token: token,
+      hash: hash,
+      p1: p1
+    } do
+      assert {:error, :revision_mismatch, _message, context} =
+               set(token, [line(p1, 0)], extra: %{"expected_revision" => "0000000000000000"})
+
+      assert context.cart.lines == []
+
+      assert {:ok, _} =
+               set(token, [line(p1, 0)], extra: %{"expected_revision" => CartView.revision(nil)})
+
+      assert CartStore.resolve(hash) == :empty
+    end
+
     test "a wrong revision on a token without a cart creates no cart", %{
       token: token,
       hash: hash,
@@ -531,7 +746,8 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
       assert [%{path: "currency", allowed: ["USD"]}] = context.errors
 
       assert {:ok, _} = set(token, [line(p1, 2)], extra: %{"currency" => "USD"})
-      assert {:ok, _} = set(token, [line(p1, 3)])
+      assert {:ok, _} = set(token, [line(p1, 3)], extra: %{"currency" => "usd"})
+      assert {:ok, _} = set(token, [line(p1, 4)])
     end
 
     test "the first write creates the cart in the call's currency", %{

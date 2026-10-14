@@ -17,6 +17,8 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   code the storefront uses.
   """
 
+  require Logger
+
   alias PhoenixKit.RepoHelper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartMoney
@@ -73,9 +75,11 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
 
   defp transaction(hash, plans, input, ctx, write?, dry?) do
     repo().transaction(fn ->
+      if write?, do: check_cartless_revision!(hash, input, ctx)
+
       case fetch_cart(hash, ctx, write?, dry?) do
         {:ok, cart, origin} -> run(hash, cart, origin, plans, input, ctx, dry?)
-        :no_cart -> no_cart(plans, ctx, dry?)
+        :no_cart -> no_cart(plans, input, ctx, dry?)
         {:locked, claim} -> repo().rollback({:locked, claim})
         :not_found -> repo().rollback(:not_found)
         {:error, :rate_limited, retry} -> repo().rollback({:rate_limited, retry})
@@ -104,8 +108,13 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # A request made only of removals and invalid lines, on a token without a
   # cart. A dry run must answer `{:preview, ...}` here as everywhere else:
   # core's executor turns any other answer to a dry run into a 500.
-  defp no_cart(plans, ctx, true), do: repo().rollback({:dry_run, nothing_to_do(plans, ctx)})
-  defp no_cart(plans, ctx, false), do: {:nothing, nothing_to_do(plans, ctx)}
+  defp no_cart(plans, input, ctx, dry?) do
+    check_empty_cart_revision!(input, ctx)
+
+    if dry?,
+      do: repo().rollback({:dry_run, nothing_to_do(plans, ctx)}),
+      else: {:nothing, nothing_to_do(plans, ctx)}
+  end
 
   defp run(hash, cart, origin, plans, input, ctx, dry?) do
     before_snapshot = CartView.snapshot(cart)
@@ -183,15 +192,28 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     {:error, :revision_mismatch, "The cart has changed since the revision you sent.", context}
   end
 
-  defp finish({:error, {:state_changed, _reason}}) do
+  defp finish({:error, {:state_changed, reason}}) do
+    Logger.warning("[Shop] cart write rolled back: #{kind(reason)}")
+
     {:error, :validation_failed,
      "The cart or a product changed while the request ran. Read the cart and send it again.",
      %{reason: "state_changed", retry: true}}
   end
 
-  defp finish({:error, _other}) do
+  defp finish({:error, other}) do
+    Logger.error("[Shop] cart write failed: #{kind(other)}")
     {:error, :internal_error, "The cart could not be updated.", %{}}
   end
+
+  # Only the shape of an unexpected answer is logged: its content can hold
+  # request data (a changeset keeps the values it was given).
+  defp kind(%{__struct__: module}), do: inspect(module)
+  defp kind(atom) when is_atom(atom), do: inspect(atom)
+
+  defp kind(tuple) when is_tuple(tuple),
+    do: "{" <> (tuple |> Tuple.to_list() |> Enum.take(2) |> Enum.map_join(", ", &kind/1)) <> "}"
+
+  defp kind(_other), do: "term"
 
   # --- checks -------------------------------------------------------------------
 
@@ -217,6 +239,24 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
 
       revision ->
         repo().rollback({:revision_mismatch, mismatch(cart, revision, before_view)})
+    end
+  end
+
+  # A token without a cart stands for the empty cart. A wrong revision is
+  # refused before the first write takes the session lock and spends one of the
+  # network's row slots (which a rollback does not give back).
+  defp check_cartless_revision!(hash, input, ctx) do
+    if input["expected_revision"] != nil and CartStore.resolve(hash) == :empty,
+      do: check_empty_cart_revision!(input, ctx)
+  end
+
+  defp check_empty_cart_revision!(input, ctx) do
+    expected = input["expected_revision"]
+    empty = CartView.empty(CartStore.display_currency(ctx))
+
+    if expected != nil and expected != empty.revision do
+      context = %{current_revision: empty.revision, expected_revision: expected, cart: empty}
+      repo().rollback({:revision_mismatch, context})
     end
   end
 
@@ -267,8 +307,21 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
 
   # Only the lines that reach `plan_product/2` need their product.
   defp loadable?(entry, duplicated) do
-    entry.options_ok? and not MapSet.member?(duplicated, key(entry)) and
-      valid_quantity?(entry.quantity) and entry.quantity > 0 and is_binary(entry.product_id)
+    entry.options_ok? and entry.id_ok? and not MapSet.member?(duplicated, key(entry)) and
+      valid_quantity?(entry.quantity) and entry.quantity > 0
+  end
+
+  # Anything but an object cannot name a product: it is a `not_found` line.
+  defp entry({item, index}) when not is_map(item) do
+    %{
+      index: index,
+      ref: %{product_id: nil, options: []},
+      product_id: nil,
+      quantity: nil,
+      options: [],
+      options_ok?: true,
+      id_ok?: false
+    }
   end
 
   defp entry({item, index}) do
@@ -286,7 +339,8 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
       product_id: canonical_id(item["product_id"]),
       quantity: item["quantity"],
       options: options,
-      options_ok?: options_ok?
+      options_ok?: options_ok?,
+      id_ok?: is_binary(item["product_id"]) and Loader.canonical_uuid(item["product_id"]) != nil
     }
   end
 
@@ -303,7 +357,7 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
 
   defp duplicated_keys(entries) do
     entries
-    |> Enum.filter(& &1.options_ok?)
+    |> Enum.filter(&(&1.options_ok? and &1.id_ok?))
     |> Enum.map(&key/1)
     |> Enum.frequencies()
     |> Enum.filter(fn {_key, count} -> count > 1 end)
@@ -327,6 +381,9 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
           "This product and option combination appears more than once; send it once with the final quantity.",
           %{}
         )
+
+      not entry.id_ok? ->
+        error_plan(entry, :not_found, "No such product.", %{})
 
       not valid_quantity?(entry.quantity) ->
         error_plan(
@@ -370,22 +427,11 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # `:listed` is addable, `:discontinued` is `not_on_sale`, and `:hidden` (or an
   # id the loader does not know) is `not_found`: the same answer
   # `shop.get_products` gives, so a hidden product cannot be put into a cart.
-  defp addable_product(%Record{
-         state: :listed,
-         product: %Product{} = product,
-         category: category
-       }),
-       do: {:ok, with_category(product, category)}
+  defp addable_product(%Record{state: :listed, product: %Product{} = product}),
+    do: {:ok, product}
 
   defp addable_product(%Record{state: :discontinued}), do: {:error, :not_on_sale}
   defp addable_product(_hidden_or_absent), do: {:error, :not_found}
-
-  # The option schema of a product may come from its category; a view-struct
-  # that arrived without one gets the record's.
-  defp with_category(%Product{category: %Ecto.Association.NotLoaded{}} = product, %{} = category),
-    do: %{product | category: category}
-
-  defp with_category(product, _category), do: product
 
   defp ok_plan(entry, product, specs) do
     %{
@@ -491,37 +537,24 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     end
   end
 
-  # What `add_to_cart` answered when it did not add the line. Its deterministic
-  # refusals (it makes them before it opens its own transaction: nothing was
-  # written, nothing is poisoned) are this line's error and the good lines go
-  # on; retrying them would fail forever, so they must never become the
-  # retryable `state_changed` of the batch.
+  # What `add_to_cart` answered when it did not add the line. The refusals it
+  # makes before it opens its own transaction (nothing was written, nothing is
+  # poisoned) are this line's error and the good lines go on; retrying them
+  # would fail forever, so they must never become the retryable `state_changed`
+  # of the batch.
   defp refusal(cart, plan, {:error, :currency_mismatch}) do
     refused(cart, plan, :not_on_sale, "This product cannot be sold in this cart.", %{
       reason: "currency_mismatch"
     })
   end
 
-  defp refusal(cart, plan, {:error, :shop_disabled}) do
-    refused(cart, plan, :not_on_sale, "This product is not on sale.", %{reason: "shop_disabled"})
-  end
-
-  defp refusal(cart, plan, {:error, :missing_required_option, key}) do
-    refused(cart, plan, :option_required, "A required option is missing.", %{attribute_key: key})
-  end
-
-  defp refusal(cart, plan, {:error, :unknown_option_key, key}) do
-    refused(cart, plan, :option_invalid, "That option is not valid for this product.", %{
-      attribute_key: key
-    })
-  end
-
-  defp refusal(cart, plan, {:error, :invalid_option_value, %{key: key, allowed: allowed}}) do
-    refused(cart, plan, :option_invalid, "That option value is not offered.", %{
-      attribute_key: key,
-      allowed: allowed
-    })
-  end
+  # The option refusals are made inside `add_to_cart`'s own transaction and roll
+  # it back, which dooms this one: no further statement may run. The planner has
+  # already checked the options, so they mean the product changed since it was
+  # read; a retry plans again and gets the line's proper error.
+  defp refusal(_cart, _plan, {:error, reason, _detail})
+       when reason in [:missing_required_option, :unknown_option_key, :invalid_option_value],
+       do: {:abort, reason}
 
   # The cart changed under the writer: retry.
   defp refusal(_cart, _plan, {:error, reason}) when reason in [:cart_not_active, :cart_not_found],
