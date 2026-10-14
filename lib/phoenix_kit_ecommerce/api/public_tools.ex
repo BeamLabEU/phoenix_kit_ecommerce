@@ -9,11 +9,12 @@ defmodule PhoenixKitEcommerce.API.PublicTools do
   No tool here needs a key, a scope or a permission (`audience: :public`); the
   API switch (`api_public_enabled`) and the website password gate are core's.
 
-  This is the only lib module that names a `PhoenixKit.API.*` module. It
-  checks with `Code.ensure_loaded?/1` that core has `PhoenixKit.API.Tool`, so
-  the package still compiles with `--warnings-as-errors` against a released
-  core that has no shop API: there `tools/0` answers `[]` and `api_tools/0` is
-  never called.
+  This module, `API.CartTools` and `API.CartStore` are the lib modules that
+  name core's `PhoenixKit.API.*` modules, each behind `Code.ensure_loaded?/1`
+  or `@compile {:no_warn_undefined, ...}`. This one checks that core has
+  `PhoenixKit.API.Tool`, so the package still compiles with
+  `--warnings-as-errors` against a released core that has no shop API: there
+  `tools/0` answers `[]` and `api_tools/0` is never called.
 
   A tool that core refuses is left out and logged once; it never takes the
   other tools (or the module's other API tools) down with it. Core asks for the
