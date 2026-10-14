@@ -11,14 +11,69 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   which is how each row owns exactly the `data` paths it writes.
   """
 
-  @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
+  @compile {:no_warn_undefined,
+            [
+              PhoenixKitCatalogue.Catalogue,
+              PhoenixKitCatalogue.Schemas.Category,
+              PhoenixKitCatalogue.Schemas.Item
+            ]}
+
+  import Ecto.Query, only: [from: 2]
 
   require Logger
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Schemas.Category
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.API.{Meta, Rows}
 
   @type answer :: {:ok, struct()} | {:unchanged, struct()} | {:error, Rows.t()}
+
+  @doc """
+  Runs `fun` in a transaction that holds the lock of every item in `items`,
+  and answers what `fun` answers. `fun` gets the locked rows as read now,
+  `%{uuid => item}` (an item that is gone is absent), so it can check them
+  against what a plan was made from and have `update_rows/2` write in the same
+  transaction. The locks are taken in the catalogue's own order (the
+  categories involved `FOR SHARE`, then the items `FOR UPDATE`, each sorted by
+  uuid), so this cannot deadlock with a batch of the catalogue or a category
+  trash. The caller must only write fields whose rows `update_items` leaves
+  alone outside the transaction: price and availability rows move no folder,
+  which is what the catalogue asks a caller inside its transaction to be sure of.
+  """
+  @spec with_locked_items([struct()], (%{String.t() => struct()} -> result)) :: result
+        when result: term()
+  def with_locked_items(items, fun) when is_list(items) and is_function(fun, 1) do
+    repo = PhoenixKit.Config.get_repo()
+    uuids = items |> Enum.map(& &1.uuid) |> Enum.uniq() |> Enum.sort()
+
+    {:ok, result} =
+      repo.transaction(fn ->
+        repo.all(
+          from(c in Category,
+            where:
+              c.uuid in subquery(
+                from(i in Item,
+                  where: i.uuid in ^uuids and not is_nil(i.category_uuid),
+                  select: i.category_uuid
+                )
+              ),
+            order_by: c.uuid,
+            lock: "FOR SHARE",
+            select: c.uuid
+          )
+        )
+
+        locked =
+          from(i in Item, where: i.uuid in ^uuids, order_by: i.uuid, lock: "FOR UPDATE")
+          |> repo.all()
+          |> Map.new(&{&1.uuid, &1})
+
+        fun.(locked)
+      end)
+
+    result
+  end
 
   @doc """
   Updates `entries` (`[{item, attrs, row_opts}]`) in one batch and answers one

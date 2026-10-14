@@ -27,12 +27,12 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   carries the API metadata (tool, key prefix, request id) and the counts.
   """
 
-  @compile {:no_warn_undefined, [PhoenixKitCatalogue.Attachments, PhoenixKitCatalogue.Catalogue]}
+  @compile {:no_warn_undefined, PhoenixKitCatalogue.Attachments}
 
   require Logger
 
   alias PhoenixKitCatalogue.Attachments
-  alias PhoenixKitEcommerce.API.{Batch, Gate, Meta, PlanSupport, Rows}
+  alias PhoenixKitEcommerce.API.{Batch, CatalogueWrites, Gate, Meta, PlanSupport, Rows}
   alias PhoenixKitEcommerce.Catalogue.Writer
   alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.StorefrontCache
@@ -87,7 +87,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       if Map.get(ctx, :dry_run?, false) do
         {:preview, Batch.preview(rows), Batch.fingerprint(rows)}
       else
-        {:ok, rows |> attach(ctx) |> Batch.render()}
+        {:ok, rows |> attach(ctx, catalogue_uuid) |> Batch.render()}
       end
     end
   end
@@ -182,15 +182,24 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
 
   # -- attaching --------------------------------------------------------------
 
-  defp attach(rows, ctx) do
+  defp attach(rows, ctx, catalogue_uuid) do
     user_uuid = Meta.actor_uuid(ctx)
     index = reuse_index(rows)
     downloaded = download_missing(rows, index, user_uuid)
 
-    Enum.map(rows, fn
-      %{plan: %{changed?: true}} = row -> attach_row(row, {index, downloaded}, user_uuid, ctx)
-      row -> row
-    end)
+    rows =
+      Enum.map(rows, fn
+        %{plan: %{changed?: true}} = row ->
+          attach_row(row, {index, downloaded}, {user_uuid, catalogue_uuid}, ctx)
+
+        row ->
+          row
+      end)
+
+    # After the rows are committed: a page rendered between the clear and the
+    # commit would put the old pictures back into the cache.
+    if Enum.any?(rows, &match?(%{result: {:ok, _}}, &1)), do: StorefrontCache.clear()
+    rows
   end
 
   # URL -> file uuid for the pictures of this call only (at most 20 keys).
@@ -221,12 +230,35 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     urls |> ImageDownloader.download_batch(user_uuid, download_opts()) |> Map.new()
   end
 
-  defp attach_row(%{item: item, plan: plan} = row, lookups, user_uuid, ctx) do
+  # The downloads can take a minute and a half, so the product is read again
+  # now, with its row locked, and must still be in the shop catalogue and out
+  # of the trash: the pictures it has, and whether it may take new ones, are
+  # what they are at this moment, not at planning time. The lock is held until
+  # the pictures are attached, so a trash or a move waits for them.
+  defp attach_row(%{item: item} = row, lookups, {user_uuid, catalogue_uuid}, ctx) do
+    CatalogueWrites.with_locked_items([item], fn locked ->
+      case available(locked, item, catalogue_uuid) do
+        {:ok, fresh} -> attach_to(%{row | item: fresh}, lookups, user_uuid, ctx)
+        :error -> gone(row)
+      end
+    end)
+  end
+
+  defp available(locked, item, catalogue_uuid) do
+    with {:ok, fresh} <- Map.fetch(locked, item.uuid),
+         true <- Batch.available?(fresh, catalogue_uuid) do
+      {:ok, fresh}
+    else
+      _gone -> :error
+    end
+  end
+
+  defp gone(row),
+    do: Batch.fail(row, Rows.error(:not_found, "The product is no longer in the shop catalogue."))
+
+  defp attach_to(%{item: item, plan: plan} = row, lookups, user_uuid, ctx) do
     {resolved, failures} = resolve(plan.images, lookups)
 
-    # The pictures the product has are read now, after the downloads, not at
-    # planning time: an editor or another call may have added some since.
-    item = fresh_item(item)
     existing = existing_order(item)
     new = resolved |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Kernel.--(existing)
     featured = featured_uuid(plan.images, resolved, item, new)
@@ -243,7 +275,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
 
     cond do
       change? ->
-        store(%{row | item: item}, {existing, new}, featured, user_uuid, extra, ctx)
+        store(row, {existing, new}, featured, user_uuid, extra, ctx)
 
       failures != [] ->
         Batch.fail(
@@ -256,14 +288,11 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     end
   end
 
-  defp fresh_item(item), do: PhoenixKitCatalogue.Catalogue.get_item(item.uuid) || item
-
   defp store(%{item: item, plan: plan} = row, {existing, new}, featured, user_uuid, extra, ctx) do
     opts = [featured: featured, order: existing ++ new, actor_uuid: user_uuid]
 
     case Attachments.attach_files(item, new, opts) do
       {:ok, updated} ->
-        StorefrontCache.clear()
         log(updated, ctx, extra)
         changes = %{"images" => %{"add" => length(new)}}
 

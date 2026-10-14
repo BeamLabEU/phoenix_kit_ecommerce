@@ -26,6 +26,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
 
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Settings
+  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.AttachImages
   alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
@@ -513,6 +514,60 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
 
       assert length(error["context"]["errors"]) == 10
       assert microseconds < 2_000_000
+    end
+  end
+
+  describe "a product that leaves the shop catalogue while its pictures download" do
+    # The picture is fetched by the stub below, which first lets `leave` happen
+    # to the product: the downloads take long enough in production for that.
+    defp serve_while(png, leave) do
+      Req.Test.stub(@stub, fn conn ->
+        leave.()
+        conn |> Plug.Conn.put_resp_content_type("image/png") |> Plug.Conn.send_resp(200, png)
+      end)
+    end
+
+    test "a trashed product gets no pictures and its row says so", %{
+      catalogue: catalogue,
+      ctx: ctx,
+      first: first
+    } do
+      item = F.item!(catalogue)
+      serve_while(first, fn -> {:ok, _} = Catalogue.trash_item(item) end)
+
+      assert {:ok, %{"results" => [result], "summary" => %{"error" => 1, "updated" => 0}}} =
+               attach([row(item, [image("/a.png")])], ctx)
+
+      assert result["error"]["code"] == "not_found"
+      assert F.reload!(item).data["media_order"] in [nil, []]
+    end
+
+    test "a product moved to another catalogue gets no pictures", %{
+      catalogue: catalogue,
+      ctx: ctx,
+      first: first
+    } do
+      item = F.item!(catalogue)
+      other = F.other_catalogue!()
+
+      serve_while(first, fn ->
+        {:ok, _} = Catalogue.update_item(item, %{catalogue_uuid: other.uuid})
+      end)
+
+      assert {:ok, %{"results" => [%{"error" => %{"code" => "not_found"}}]}} =
+               attach([row(item, [image("/a.png")])], ctx)
+
+      assert F.reload!(item).data["media_order"] in [nil, []]
+    end
+
+    test "a product that stays gets its pictures", %{catalogue: catalogue, ctx: ctx, first: first} do
+      item = F.item!(catalogue)
+      serve_while(first, fn -> :ok end)
+
+      assert {:ok, %{"summary" => %{"updated" => 1}}} =
+               attach([row(item, [image("/a.png")])], ctx)
+
+      assert [_picture] = F.reload!(item).data["media_order"]
     end
   end
 

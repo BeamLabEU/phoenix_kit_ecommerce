@@ -69,6 +69,15 @@ defmodule PhoenixKitEcommerce.API.Batch do
   def fail(row, error), do: %{row | error: error, plan: nil}
 
   @doc """
+  Whether `item`, as read now, is still a product of the shop: in the catalogue
+  `catalogue_uuid` and not in the trash. A product resolved at planning time
+  can be trashed or moved out of the catalogue before a slow write.
+  """
+  @spec available?(struct(), String.t()) :: boolean()
+  def available?(item, catalogue_uuid),
+    do: item.catalogue_uuid == catalogue_uuid and item.status != "deleted"
+
+  @doc """
   Plans every row that resolved. `planner` takes the row and returns
   `{:ok, plan}` or `{:error, row_error}`. A product named again after a row
   of it was planned successfully fails with `duplicate_line` and is not
