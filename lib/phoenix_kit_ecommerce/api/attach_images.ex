@@ -151,8 +151,9 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   end
 
   # Each URL's name lookup has a deadline of its own (`ImageDownloader`), and
-  # they run side by side: one slow resolver holds the call for one deadline,
-  # not for one per picture.
+  # they run `@url_check_concurrency` at a time: a slow resolver holds the call
+  # for at most ceil(urls / 5) deadlines (4 of 3 s for the 20 URLs a call may
+  # have), not for one per picture.
   defp url_errors(images) do
     images
     |> Enum.with_index()
@@ -423,7 +424,9 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     )
   end
 
-  defp reason_text(:private_address_blocked), do: "the address is private or does not resolve"
+  defp reason_text(:private_address_blocked),
+    do: "the address is private, does not resolve, or the name lookup did not answer in time"
+
   defp reason_text(:invalid_scheme), do: "only http and https URLs are accepted"
   defp reason_text(:invalid_host), do: "the URL has no host"
   defp reason_text(:invalid_url), do: "the URL contains characters that must be percent-encoded"

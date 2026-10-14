@@ -38,6 +38,10 @@ defmodule PhoenixKitEcommerce.Services.PinnedAdapter do
   next to it (how the tests stand in for the network).
   """
   @spec run(Req.Request.t()) :: {Req.Request.t(), Req.Response.t() | Exception.t()}
+  # WARNING: this clause skips the address pin and the hostname check. A
+  # `plug:` option must only ever come from code (test config, the host's
+  # `:api_image_download_opts`, a caller's own `Req.new` options), never from
+  # input, a job argument or anything else a caller can name.
   def run(%Req.Request{options: %{plug: _plug}} = request), do: Req.Plug.run(request)
 
   def run(%Req.Request{} = request) do

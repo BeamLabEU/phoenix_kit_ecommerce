@@ -501,7 +501,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
       end)
     end
 
-    test "a resolver that never answers holds a dry run for one deadline, not one per URL",
+    test "a resolver that never answers holds a dry run for one deadline per batch of five URLs, not one per URL",
          %{catalogue: catalogue, ctx: ctx} do
       item = F.item!(catalogue)
       urls = for n <- 1..10, do: %{"url" => "https://slow-#{n}.example.test/a.png"}
