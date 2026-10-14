@@ -177,8 +177,15 @@ defmodule PhoenixKitEcommerce.API.CartView do
 
     changed = Enum.flat_map(new_lines, fn {key, line} -> changed_line(line, old_lines[key]) end)
 
-    %{added: added, removed: removed, changed: changed, shipping: shipping_change(old, new)}
+    %{
+      added: ordered(added),
+      removed: ordered(removed),
+      changed: ordered(changed),
+      shipping: shipping_change(old, new)
+    }
   end
+
+  defp ordered(changes), do: Enum.sort_by(changes, &{&1.product_id || "", &1.options})
 
   defp changed_line(_line, nil), do: []
   defp changed_line(%{"quantity" => same}, %{"quantity" => same}), do: []
@@ -217,7 +224,7 @@ defmodule PhoenixKitEcommerce.API.CartView do
   defp records_by_id(items) do
     ids = items |> Enum.map(&line_product_id/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
-    if ids == [], do: %{}, else: Loader.load(ids)
+    Loader.load(ids)
   end
 
   defp line(%CartItem{} = item, %Cart{} = cart, records) do
