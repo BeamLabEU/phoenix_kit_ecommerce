@@ -842,6 +842,135 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
     end
   end
 
+  describe "browser_cart/1" do
+    setup do
+      %{user: fixture_user()}
+    end
+
+    defp stamp!(cart, updated_at, inserted_at \\ nil) do
+      set = [updated_at: updated_at] ++ if(inserted_at, do: [inserted_at: inserted_at], else: [])
+      Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: set)
+    end
+
+    defp at(offset),
+      do: DateTime.utc_now() |> DateTime.add(offset, :second) |> DateTime.truncate(:second)
+
+    test "is nil for a browser with no active cart" do
+      assert Claims.browser_cart(browser()) == nil
+    end
+
+    test "is the guest's unowned session cart with its lines, and nobody else's", ctx do
+      browser = browser()
+      mine = browser_cart!(browser, [{ctx.p1, 2}])
+      _other = browser_cart!(browser(), [{ctx.p2, 1}])
+
+      assert %Cart{uuid: uuid, items: [%CartItem{quantity: 2}]} = Claims.browser_cart(browser)
+      assert uuid == mine.uuid
+    end
+
+    test "ignores an abandoned cart and a cart a user owns when the browser is a guest", ctx do
+      browser = browser()
+      {:ok, owned} = Shop.create_cart(user_uuid: ctx.user.uuid, session_id: browser.session_id)
+      gone = browser_cart!(browser, [{ctx.p1, 1}])
+      gone |> Cart.status_changeset("abandoned") |> Repo.update!()
+
+      assert owned.status == "active"
+      assert Claims.browser_cart(browser) == nil
+    end
+
+    test "is the user's own cart before a newer unowned session cart, as for the storefront",
+         ctx do
+      browser = browser(ctx.user.uuid)
+      mine = user_cart!(ctx.user, [])
+      guest = browser_cart!(browser, [{ctx.p1, 1}])
+      stamp!(mine, at(-60))
+      stamp!(guest, at(60))
+
+      assert Claims.browser_cart(browser).uuid == mine.uuid
+
+      found = Shop.find_active_cart(user_uuid: ctx.user.uuid, session_id: browser.session_id)
+      assert found.uuid == mine.uuid
+    end
+
+    test "falls back to the unowned session cart when the user owns none", ctx do
+      browser = browser(ctx.user.uuid)
+      guest = browser_cart!(browser, [{ctx.p1, 1}])
+
+      assert Claims.browser_cart(browser).uuid == guest.uuid
+    end
+
+    test "never takes another user's cart that carries this session", ctx do
+      browser = browser(ctx.user.uuid)
+
+      {:ok, _theirs} =
+        Shop.create_cart(user_uuid: fixture_user().uuid, session_id: browser.session_id)
+
+      assert Claims.browser_cart(browser) == nil
+    end
+
+    test "of several candidates the newest wins, ties by creation time and uuid", ctx do
+      browser = browser()
+      a = browser_cart!(browser, [{ctx.p1, 1}])
+      b = browser_cart!(browser, [{ctx.p2, 1}])
+      stamp!(a, at(-30), at(-30))
+      stamp!(b, at(-10), at(-10))
+      assert Claims.browser_cart(browser).uuid == b.uuid
+
+      same = at(-5)
+      stamp!(a, same, at(-20))
+      stamp!(b, same, at(-20))
+      expected = Enum.max([a.uuid, b.uuid])
+
+      for _ <- 1..5, do: assert(Claims.browser_cart(browser).uuid == expected)
+    end
+  end
+
+  describe "redeem/3 leaves the storefront one cart to find" do
+    setup do
+      %{user: fixture_user()}
+    end
+
+    test "an older empty cart of the user beside a newer guest cart with lines", ctx do
+      api = api_cart!([{ctx.p1, 1}])
+      {raw, _} = issue!(api)
+      browser = browser(ctx.user.uuid)
+      empty = user_cart!(ctx.user, [])
+      guest = browser_cart!(browser, [{ctx.p2, 1}])
+      stamp!(empty, at(-60))
+      stamp!(guest, at(60))
+
+      assert {:error, :reshow} = redeem(raw, browser, guest.uuid, "replace")
+      assert {:ok, %{mode: :moved}} = redeem(raw, browser, "none")
+
+      assert [%Cart{uuid: uuid}] = active_user_carts(ctx.user)
+      assert uuid == api.cart.uuid
+      assert Repo.get!(Cart, empty.uuid).status == "abandoned"
+
+      found = Shop.find_active_cart(user_uuid: ctx.user.uuid, session_id: browser.session_id)
+      assert found.uuid == api.cart.uuid
+    end
+
+    test "a cart of the user with lines beside a newer empty guest cart is still asked about",
+         ctx do
+      api = api_cart!([{ctx.p1, 1}])
+      {raw, _} = issue!(api)
+      browser = browser(ctx.user.uuid)
+      mine = user_cart!(ctx.user, [{ctx.p2, 1}])
+      empty = browser_cart!(browser, [])
+      stamp!(mine, at(-60))
+      stamp!(empty, at(60))
+
+      assert {:error, :reshow} = redeem(raw, browser, "none")
+      assert {:ok, %{mode: :replaced}} = redeem(raw, browser, mine.uuid, "replace")
+
+      assert [%Cart{uuid: uuid}] = active_user_carts(ctx.user)
+      assert uuid == api.cart.uuid
+
+      found = Shop.find_active_cart(user_uuid: ctx.user.uuid, session_id: browser.session_id)
+      assert found.uuid == api.cart.uuid
+    end
+  end
+
   describe "helpers" do
     test "path/1 is outside the locale prefix and carries the token", ctx do
       {raw, _} = issue!(api_cart!([{ctx.p1, 1}]))

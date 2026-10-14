@@ -80,6 +80,7 @@ defmodule PhoenixKitEcommerce.Web.Routes do
   `:browser` (session, CSRF, flash), core's `:phoenix_kit_auto_setup` (the
   logged-in user) and `:phoenix_kit_shop_session` (the browser's cart id).
   """
+  @spec generate(String.t()) :: Macro.t()
   def generate(url_prefix) do
     quote do
       scope unquote(url_prefix) do

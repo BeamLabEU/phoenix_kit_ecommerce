@@ -10,8 +10,9 @@ defmodule PhoenixKitEcommerce.API.Claims do
     * `redeem/3` is what the CSRF POST uses: one transaction that locks the
       browser's identity, the claim, the API cart and the browser's active
       cart, re-checks what the page offered, and then moves the cart,
-      replaces the browser's cart, or merges into it. It can never leave two
-      active carts for one identity, and a claim is used exactly once.
+      replaces the browser's cart, or merges into it. It never leaves the
+      storefront two carts to choose from (see `browser_cart/1`), and a claim is
+      used exactly once.
 
   `redeem/3` takes its locks in one order everywhere: the browser's identity
   (user key, then session key), the API cart's own identity (the key
@@ -259,10 +260,13 @@ defmodule PhoenixKitEcommerce.API.Claims do
   end
 
   @doc """
-  The active cart a claim of this browser is compared against: the newest of the
-  logged-in user's cart and the browser's unowned session cart, or nil. Reads
-  only. The page and `redeem/3` share this one definition, so what the page
-  offers is exactly what a POST finds.
+  The active cart a claim of this browser is compared against, or nil. Reads
+  only. It is the cart the storefront shows the browser (`Shop.find_active_cart/1`):
+  the logged-in user's own cart first, the browser's unowned session cart only
+  when the user has none; of several candidates the newest wins, ties broken by
+  creation time and uuid. The page and `redeem/3` share this one definition, so
+  what the page offers is exactly what a POST finds, and a claim never leaves the
+  storefront with two carts to choose from.
   """
   @spec browser_cart(browser()) :: Cart.t() | nil
   def browser_cart(%{session_id: _session_id} = browser) do
@@ -275,7 +279,12 @@ defmodule PhoenixKitEcommerce.API.Claims do
     query =
       from(c in Cart,
         where: c.status == "active",
-        order_by: [desc: c.updated_at],
+        order_by: [
+          asc: is_nil(c.user_uuid),
+          desc: c.updated_at,
+          desc: c.inserted_at,
+          desc: c.uuid
+        ],
         limit: 1
       )
 

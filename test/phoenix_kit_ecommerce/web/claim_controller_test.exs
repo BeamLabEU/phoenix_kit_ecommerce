@@ -62,8 +62,20 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
   defp page(conn, raw), do: get(conn, Claims.path(raw))
 
+  # A fresh API cart holding `products` (one unit each) and a claim for it.
+  defp claim_for!(products) do
+    token = new_token!()
+    {:ok, hash} = CartToken.verify(token)
+    input = %{"items" => Enum.map(products, &%{"product_id" => &1.uuid, "quantity" => 1})}
+    {:ok, _} = CartWriter.set_items(hash, input, ctx_for(token))
+    {:ok, cart} = CartStore.resolve(hash)
+    {:ok, %{token: raw}} = Claims.issue(cart, hash, "en")
+    {raw, cart}
+  end
+
   defp csrf_token(html) do
-    [_, token] = Regex.run(~r/name="_csrf_token" value="([^"]+)"/, html)
+    [input] = Regex.run(~r/<input[^>]*name="_csrf_token"[^>]*>/, html)
+    [_, token] = Regex.run(~r/value="([^"]+)"/, input)
     token
   end
 
@@ -136,9 +148,10 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert html =~ ~s(name="offer" value="#{mine.uuid}")
     end
 
-    # Two definitions of "the browser's cart" would show here: the page offers
-    # nothing (the user's cart is empty), the POST finds the newer guest cart.
-    test "the page offers the cart a POST will compare against", ctx do
+    # The browser's cart is the one the storefront shows (`Shop.find_active_cart/1`): the
+    # user's own cart first. A newer guest cart with lines does not outrank an older cart
+    # the user owns, so the claim never sits beside a second cart for the user.
+    test "a user's own empty cart is the browser's cart, whatever newer guest cart exists", ctx do
       user = PhoenixKitEcommerce.DataCase.fixture_user()
       {:ok, _empty} = Shop.create_cart(user_uuid: user.uuid)
       {:ok, guest} = Shop.create_cart(session_id: ctx.session)
@@ -148,11 +161,48 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       conn = signed_in(ctx.conn, user)
       html = conn |> page(ctx.raw) |> html_response(200)
 
-      assert html =~ ~s(name="offer" value="#{guest.uuid}")
+      assert html =~ ~s(id="claim-continue")
+      assert html =~ ~s(name="offer" value="none")
 
-      stale = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      stale =
+        post(conn, Claims.path(ctx.raw), %{"offer" => guest.uuid, "choice" => "replace"})
+
       assert redirected_to(stale) == Claims.path(ctx.raw)
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+
+      done = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+
+      assert redirected_to(done) == Shop.checkout_url("en")
+      assert [only] = active_carts_of(user)
+      assert only.uuid == ctx.api_cart.uuid
+      found = Shop.find_active_cart(user_uuid: user.uuid, session_id: ctx.session)
+      assert found.uuid == ctx.api_cart.uuid
+    end
+
+    test "a user's own cart with lines is offered, however new an empty guest cart is", ctx do
+      user = PhoenixKitEcommerce.DataCase.fixture_user()
+      {:ok, mine} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+      {:ok, empty_guest} = Shop.create_cart(session_id: ctx.session)
+      newest!(empty_guest)
+
+      conn = signed_in(ctx.conn, user)
+      html = conn |> page(ctx.raw) |> html_response(200)
+
+      assert html =~ ~s(name="offer" value="#{mine.uuid}")
+      refute html =~ ~s(id="claim-continue")
+
+      skipped = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      assert redirected_to(skipped) == Claims.path(ctx.raw)
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+
+      done = post(conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "replace"})
+
+      assert redirected_to(done) == Shop.checkout_url("en")
+      assert [only] = active_carts_of(user)
+      assert only.uuid == ctx.api_cart.uuid
+      found = Shop.find_active_cart(user_uuid: user.uuid, session_id: ctx.session)
+      assert found.uuid == ctx.api_cart.uuid
     end
 
     test "two active carts of the browser never make an error page", ctx do
@@ -198,6 +248,57 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
         assert redirected_to(conn) == Shop.cart_url("en"), inspect(raw)
         assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "already been used or has expired"
       end
+    end
+
+    test "speaks the language of a dialect claim", ctx do
+      {:ok, %{token: dialect}} = Claims.issue(ctx.api_cart, ctx.hash, "de-DE")
+
+      conn = page(ctx.conn, dialect)
+      html = html_response(conn, 200)
+
+      assert html =~ "Weiter zur Kasse"
+      assert conn.assigns.content_language == "de-DE"
+    end
+
+    test "a cart that is gone goes to the cart page with the same notice", ctx do
+      Repo.update_all(from(c in Cart, where: c.uuid == ^ctx.api_cart.uuid),
+        set: [status: "abandoned"]
+      )
+
+      conn = page(ctx.conn, ctx.raw)
+
+      assert redirected_to(conn) == Shop.cart_url("en")
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "already been used or has expired"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+    end
+
+    test "shows the options of a line", ctx do
+      shirt = product_with_options!(%{"color" => ["Red", "Blue"]})
+      token = new_token!()
+      {:ok, hash} = CartToken.verify(token)
+
+      {:ok, _} =
+        CartWriter.set_items(
+          hash,
+          %{
+            "items" => [
+              %{
+                "product_id" => shirt.uuid,
+                "quantity" => 1,
+                "options" => [%{"attribute_key" => "color", "value_key" => "red"}]
+              }
+            ]
+          },
+          ctx_for(token)
+        )
+
+      {:ok, cart} = CartStore.resolve(hash)
+      {:ok, %{token: raw}} = Claims.issue(cart, hash, "en")
+
+      html = ctx.conn |> page(raw) |> html_response(200)
+
+      assert html =~ "Color:"
+      assert html =~ "Red"
     end
 
     test "a shop that is switched off is not touched", ctx do
@@ -275,6 +376,65 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert [only] = active_carts(ctx.session)
       assert only.uuid == mine.uuid
       assert Repo.get!(Cart, ctx.api_cart.uuid).status == "merged"
+    end
+
+    # The notice rides in the cookie-backed session (4096 bytes in all): a long skipped list
+    # must never turn a claim that was consumed into an error page.
+    test "add names a bounded few of many skipped lines and still ends at checkout", ctx do
+      long = String.duplicate("long product title ", 7)
+      lots = for n <- 1..30, do: product!(%{"title" => %{"en" => "#{n} #{long}"}})
+      {raw, cart} = claim_for!(lots)
+      for product <- lots, do: {:ok, _} = Shop.update_product(product, %{"status" => "archived"})
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+
+      assert redirected_to(conn) == Shop.checkout_url("en")
+      notice = Phoenix.Flash.get(conn.assigns.flash, :error)
+      assert notice =~ "no longer available"
+      assert String.ends_with?(notice, "\u2026")
+      assert byte_size(notice) < 600
+      assert Repo.get!(Cart, cart.uuid).status == "merged"
+    end
+
+    test "a title is cut and a short list is named in full", ctx do
+      long = String.duplicate("w", 100)
+      cut = product!(%{"title" => %{"en" => long}})
+      {raw, _cart} = claim_for!([cut])
+      {:ok, _} = Shop.update_product(cut, %{"status" => "archived"})
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      conn = post(ctx.conn, Claims.path(raw), %{"offer" => mine.uuid, "choice" => "add"})
+
+      notice = Phoenix.Flash.get(conn.assigns.flash, :error)
+      refute notice =~ long
+      assert notice =~ String.duplicate("w", 59) <> "\u2026"
+      refute String.ends_with?(notice, ", \u2026")
+    end
+
+    test "a dialect claim ends at the checkout of its language", ctx do
+      {:ok, %{token: dialect}} = Claims.issue(ctx.api_cart, ctx.hash, "de-DE")
+
+      conn = post(ctx.conn, Claims.path(dialect), %{"offer" => "none"})
+
+      assert redirected_to(conn) == Shop.checkout_url("de-DE")
+      assert [cart] = active_carts(ctx.session)
+      assert cart.uuid == ctx.api_cart.uuid
+    end
+
+    test "a cart that is gone consumes nothing and shows the cart page", ctx do
+      Repo.update_all(from(c in Cart, where: c.uuid == ^ctx.api_cart.uuid),
+        set: [status: "abandoned"]
+      )
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+
+      assert redirected_to(conn) == Shop.cart_url("en")
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "already been used or has expired"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+      assert active_carts(ctx.session) == []
     end
 
     test "junk parameters are a choice again, never a crash", ctx do
@@ -358,6 +518,16 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert [only] = active_carts_of(user)
       assert only.uuid == mine.uuid
       assert Repo.get!(Cart, ctx.api_cart.uuid).status == "merged"
+    end
+
+    test "the notice of a closed shop does not inherit the previous request's language", ctx do
+      {:ok, %{token: german}} = Claims.issue(ctx.api_cart, ctx.hash, "de")
+      assert ctx.conn |> page(german) |> html_response(200) =~ "Weiter zur Kasse"
+
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "The shop is currently unavailable"
     end
 
     test "a shop that is switched off consumes nothing", ctx do

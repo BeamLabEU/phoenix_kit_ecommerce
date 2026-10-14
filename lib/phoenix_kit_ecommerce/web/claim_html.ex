@@ -1,9 +1,9 @@
 defmodule PhoenixKitEcommerce.Web.ClaimHTML do
   @moduledoc """
-  The checkout claim page: a bare card inside the host's root
-  layout, in the language of the claim. One form posts back to the claim URL
-  with the CSRF token; `offer` tells the server what the page showed (`none`,
-  or the uuid of the buyer's own cart) so a change in between is noticed.
+  The checkout claim page: a bare card inside the host's root layout, in the
+  language of the claim. One form posts back to the claim URL (`<.form>` adds
+  the CSRF token); `offer` tells the server what the page showed (`none`, or the
+  uuid of the buyer's own cart) so a change in between is noticed.
   """
 
   use PhoenixKitEcommerce.Web, :html
@@ -23,13 +23,22 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
 
           <ul id="claim-lines" class="divide-y divide-base-200">
             <li
-              :for={item <- @cart.items}
+              :for={item <- Enum.sort_by(@cart.items, & &1.uuid)}
               id={"claim-line-#{item.uuid}"}
               class="flex justify-between gap-4 py-2 text-sm"
             >
               <span>
                 {item.product_title}
                 <span class="text-base-content/60">×{item.quantity}</span>
+                <span
+                  :if={item.selected_specs not in [nil, %{}]}
+                  class="block text-xs text-base-content/60"
+                >
+                  <span :for={{key, value} <- item.selected_specs} class="inline-block mr-2">
+                    <span class="font-medium">{Helpers.humanize_key(key)}:</span>
+                    <span>{value}</span>
+                  </span>
+                </span>
               </span>
               <span class="font-medium">{Helpers.format_price(item.line_total, @cart.currency)}</span>
             </li>
@@ -40,25 +49,23 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
             <span id="claim-subtotal">{Helpers.format_price(@cart.subtotal, @cart.currency)}</span>
           </div>
 
-          <form :if={is_nil(@existing)} id="claim-form" method="post" action={@action} class="flex flex-col gap-2">
-            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
-            <input type="hidden" name="offer" value="none" />
+          <.form for={%{}} id="claim-form" action={@action} method="post" class="flex flex-col gap-3">
+            <input type="hidden" name="offer" value={if @existing, do: @existing.uuid, else: "none"} />
+
             <button
+              :if={is_nil(@existing)}
               type="submit"
               id="claim-continue"
               class="btn btn-primary btn-block transition-transform hover:scale-[1.01]"
             >
               {gettext("Continue to checkout")}
             </button>
-          </form>
 
-          <form :if={@existing} id="claim-form" method="post" action={@action} class="flex flex-col gap-3">
-            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
-            <input type="hidden" name="offer" value={@existing.uuid} />
-            <p class="text-sm text-base-content/70">
+            <p :if={@existing} class="text-sm text-base-content/70">
               {gettext("You already have items in your cart. What would you like to do?")}
             </p>
             <button
+              :if={@existing}
               type="submit"
               name="choice"
               value="add"
@@ -68,6 +75,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
               {gettext("Add these items to my cart")}
             </button>
             <button
+              :if={@existing}
               type="submit"
               name="choice"
               value="replace"
@@ -76,7 +84,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
             >
               {gettext("Replace my cart")}
             </button>
-          </form>
+          </.form>
         </div>
       </div>
     </div>

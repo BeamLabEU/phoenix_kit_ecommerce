@@ -20,6 +20,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   plug :privacy_headers
 
   @dead_ends [:invalid, :used, :superseded, :expired, :cart_unavailable]
+  @notice_titles 5
+  @notice_title_length 60
 
   @doc "GET: the interstitial. Reads only."
   def show(conn, %{"token" => token}) do
@@ -90,14 +92,6 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
       {:error, reason} when reason in @dead_ends ->
         unavailable(conn, Claims.language_of(token))
-
-      {:error, _other} ->
-        language = Claims.language_of(token) || Shop.get_default_language()
-        put_locale(language)
-
-        conn
-        |> put_flash(:error, gettext("Something went wrong. Your cart was not changed."))
-        |> redirect(to: Shop.cart_url(language))
     end
   end
 
@@ -129,6 +123,9 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   end
 
   defp shop_closed(conn) do
+    # The process keeps the previous request's locale: use the shop's default.
+    put_locale(nil)
+
     # The HOST's root, not Routes.path("/"), like the cart page does.
     conn
     |> put_flash(:error, gettext("The shop is currently unavailable"))
@@ -154,9 +151,26 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
       conn,
       :error,
       gettext("Some items could not be added because they are no longer available: %{items}",
-        items: Enum.join(titles, ", ")
+        items: skipped_list(titles)
       )
     )
+  end
+
+  # The notice travels in the cookie-backed session, whose whole value is capped
+  # at 4096 bytes, and a cart holds up to 50 lines with titles of any length:
+  # name a few, cut long titles, and end with an ellipsis when there are more.
+  defp skipped_list(titles) do
+    shown = titles |> Enum.take(@notice_titles) |> Enum.map_join(", ", &shorten/1)
+
+    if length(titles) > @notice_titles, do: shown <> ", \u2026", else: shown
+  end
+
+  defp shorten(title) do
+    title = to_string(title)
+
+    if String.length(title) > @notice_title_length,
+      do: String.slice(title, 0, @notice_title_length - 1) <> "\u2026",
+      else: title
   end
 
   defp text(value) when is_binary(value), do: value
