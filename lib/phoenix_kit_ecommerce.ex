@@ -2829,8 +2829,9 @@ defmodule PhoenixKitEcommerce do
     #
     #   * `status == "active"` — a converted or abandoned cart is finished
     #     business, and matching one would keep the migration window open
-    #     forever (nothing deletes carts; `mark_abandoned_carts/1` only
-    #     flips a status and is wired to no cron).
+    #     forever (only abandoned `api:` carts are deleted, after 30 days;
+    #     browser carts stay, and `mark_abandoned_carts/1` only flips a
+    #     status and is wired to no cron).
     #   * `is_nil(user_uuid)` — a cart already claimed by an account must
     #     never be reachable by presenting an unsigned cookie.
     Cart

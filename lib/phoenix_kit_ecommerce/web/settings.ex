@@ -2177,8 +2177,6 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     Map.new(CartSettings.keys(), fn {name, _key} -> {name, CartSettings.get(name)} end)
   end
 
-  # All four whole numbers, each inside its range, or nothing: a form with one
-  # bad field must not store the other three.
   defp assign_api_cart_form(socket) do
     values =
       Map.new(api_cart_settings(), fn {name, number} ->
@@ -2188,6 +2186,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     assign(socket, :api_cart_form, to_form(values, as: :settings))
   end
 
+  # All four whole numbers, each inside its range, or nothing: a form with one
+  # bad field must not store the other three.
   defp parse_api_cart_settings(raw) do
     Enum.reduce_while(CartSettings.bounds(), {:ok, %{}}, fn {name, range}, {:ok, acc} ->
       with value when is_binary(value) <- Map.get(raw, Atom.to_string(name)),

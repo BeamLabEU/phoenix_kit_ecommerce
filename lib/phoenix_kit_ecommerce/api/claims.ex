@@ -186,10 +186,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
   `revision` cannot match the cart and is answered `{:error, :reshow}` too, so
   a caller that forgets it can never claim a cart the buyer was not shown.
 
-  A Postgres `deadlock_detected` (a merge holds the browser's
-  cart and then locks product rows inside `add_to_cart`, while a storefront add
-  in another tab of the same browser holds the product row and waits for that
-  cart) is `{:error, :busy}`: nothing was claimed, the buyer can try again.
+  A Postgres `deadlock_detected` (a merge holds the browser's cart and then
+  locks product rows inside `add_to_cart`, while a storefront add in another
+  tab of the same browser holds the product row and waits for that cart) is
+  `{:error, :busy}`: nothing was claimed, the buyer can try again.
   Any other atom is a refusal this module does not know; a caller fails closed.
   """
   # The trailing `atom()` is deliberate: without it dialyzer proves the caller's

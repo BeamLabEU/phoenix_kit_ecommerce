@@ -62,6 +62,22 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiCartsTest do
     assert has_element?(view, "#shop-api-carts-form[novalidate]")
   end
 
+  test "each input steers the spinner with the range the server enforces", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+
+    for {id, name} <- [
+          {"api-cart-idle-days", :idle_days},
+          {"api-cart-claim-ttl-minutes", :claim_ttl_minutes},
+          {"api-cart-signal-per-cart", :signal_per_cart_per_hour},
+          {"api-cart-signal-global", :signal_global_per_hour}
+        ] do
+      %Range{first: min, last: max} = Map.fetch!(CartSettings.bounds(), name)
+
+      assert has_element?(view, "input##{id}[min='#{min}'][max='#{max}'][step='1']"),
+             "#{id} does not carry min #{min}, max #{max}"
+    end
+  end
+
   defp stored(key),
     do: Repo.one(from s in "phoenix_kit_settings", where: s.key == ^key, select: s.value)
 
