@@ -813,6 +813,82 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     end
   end
 
+  describe "a cart that changes hands while a write waits for its row" do
+    # The cart is read as an active api cart; then, before the write takes its row
+    # lock, it is handed to a buyer or swept. A benign race: the tool answers as
+    # it would on any later call with that token, never a 500.
+    setup %{physical: physical} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      %{token: token, method: method!(%{"countries" => ["DE"]})}
+    end
+
+    defp change_hands_after_first_cart_read(token, how) do
+      session = "api:" <> CartToken.digest(token)
+
+      after_first_query("SELECT", "phoenix_kit_shop_carts", fn ->
+        cart = Repo.get_by!(Cart, session_id: session)
+        query = from(c in Cart, where: c.uuid == ^cart.uuid)
+
+        case how do
+          :handed_over ->
+            Repo.update_all(query, set: [session_id: "browser-x"])
+            used_claim!(cart, token)
+
+          :swept ->
+            Repo.update_all(query, set: [status: "abandoned"])
+        end
+      end)
+    end
+
+    defp used_claim!(cart, token) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      %CartClaim{}
+      |> CartClaim.changeset(%{
+        token_hash: "th-#{System.unique_integer([:positive])}",
+        cart_uuid: cart.uuid,
+        cart_token_hash: CartToken.digest(token),
+        language: "en",
+        expires_at: DateTime.add(now, 600, :second),
+        used_at: now
+      })
+      |> Repo.insert!()
+    end
+
+    defp run_tool(:get_checkout_link, token, _method),
+      do: CartHandlers.get_checkout_link(%{"cart_token" => token}, ctx_for(token))
+
+    defp run_tool(:clear_cart, token, _method),
+      do: CartHandlers.clear_cart(%{"cart_token" => token}, ctx_for(token))
+
+    defp run_tool(:set_shipping, token, method) do
+      input = %{"cart_token" => token, "country" => "DE", "method_id" => method.uuid}
+      CartHandlers.set_shipping(input, ctx_for(token))
+    end
+
+    for tool <- [:get_checkout_link, :clear_cart, :set_shipping] do
+      test "#{tool}: a cart handed over meanwhile is cart_locked", %{token: token, method: method} do
+        change_hands_after_first_cart_read(token, :handed_over)
+
+        assert {:error, :cart_locked, _message, %{}} = run_tool(unquote(tool), token, method)
+      end
+
+      test "#{tool}: a cart swept meanwhile is cart_not_found", %{token: token, method: method} do
+        change_hands_after_first_cart_read(token, :swept)
+
+        assert {:error, :cart_not_found, _message, %{}} = run_tool(unquote(tool), token, method)
+      end
+    end
+
+    test "a link that lost the race issues no claim", %{token: token, method: method} do
+      change_hands_after_first_cart_read(token, :swept)
+      {:error, :cart_not_found, _, _} = run_tool(:get_checkout_link, token, method)
+
+      assert Repo.aggregate(CartClaim, :count) == 0
+    end
+  end
+
   describe "every result conforms to its tool's declared output schema" do
     # An MCP client may validate structuredContent against outputSchema: a null where the schema
     # says string would be rejected client-side (the answers are kept free of nil).

@@ -422,6 +422,11 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
            expires_in_seconds: max(0, DateTime.diff(claim.expires_at, DateTime.utc_now()))
          }}
 
+      # The cart was handed over or swept between the read and the lock: a
+      # benign race, answered like any other call on that token.
+      {:error, :cart_unavailable} ->
+        hash |> CartStore.gone() |> write_failed()
+
       {:error, _reason} ->
         {:error, :internal_error, "The checkout link could not be created.", %{}}
     end
