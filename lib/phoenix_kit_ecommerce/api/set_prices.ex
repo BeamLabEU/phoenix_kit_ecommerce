@@ -25,26 +25,49 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
   alias PhoenixKitEcommerce.API.Settings, as: ApiSettings
 
   @tool "ecommerce.set_prices"
+  @changed_message "A price changed while the call was being checked. Read the prices again and repeat the call."
 
   @doc "Handler of the tool."
   @spec run(map(), map()) ::
           {:ok, map()} | {:preview, map(), String.t()} | Gate.refusal()
   def run(input, ctx) do
-    with {:ok, rows} <- plan_rows(input) do
-      if Map.get(ctx, :dry_run?, false) do
-        {:preview, Batch.preview(rows, %{"largest_price_change_pct" => largest_pct(rows)}),
-         Batch.fingerprint(rows)}
-      else
-        {:ok, rows |> Batch.write(ctx, @tool) |> Batch.render()}
+    with {:ok, rows, planner} <- plan_rows(input) do
+      cond do
+        Map.get(ctx, :dry_run?, false) ->
+          {:preview, Batch.preview(rows, %{"largest_price_change_pct" => largest_pct(rows)}),
+           Batch.fingerprint(rows)}
+
+        unconfirmed_but_dangerous?(rows, ctx) ->
+          {:error, :validation_failed, @changed_message,
+           %{
+             errors: [
+               %{
+                 path: "items",
+                 message: "changed while the call was checked",
+                 limit: nil,
+                 allowed: nil
+               }
+             ]
+           }}
+
+        true ->
+          {:ok, rows |> Batch.write_if_unchanged(ctx, @tool, planner) |> Batch.render()}
       end
     end
   end
+
+  # The danger check ran on one read of the prices and this plan is another.
+  # A call that went through without a confirmation was judged on the first;
+  # if a price moved in between so that the same call is now dangerous, it
+  # must not be written as if it had been confirmed.
+  defp unconfirmed_but_dangerous?(rows, ctx),
+    do: is_nil(Map.get(ctx, :confirmation_uuid)) and Batch.dangerous?(rows)
 
   @doc "The `danger` check of the tool: `true` when the call needs a confirmation."
   @spec dangerous?(map(), map()) :: boolean()
   def dangerous?(input, _ctx) do
     case plan_rows(input) do
-      {:ok, rows} -> Batch.dangerous?(rows)
+      {:ok, rows, _planner} -> Batch.dangerous?(rows)
       {:error, _code, _detail, _context} -> false
     end
   end
@@ -56,7 +79,9 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
       loaded = Batch.load(input["items"], catalogue_uuid)
       sets_by_item = sets_by_item(loaded)
 
-      {:ok, Batch.plan(loaded, &plan_row(&1, pct, shopify?, sets_by_item))}
+      planner = &plan_row(&1, pct, shopify?, sets_by_item)
+
+      {:ok, Batch.plan(loaded, planner), planner}
     end
   end
 

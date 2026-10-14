@@ -194,4 +194,107 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert modifiers == %{"a.b" => %{"c" => "3.00"}}
     end
   end
+
+  describe "write_if_unchanged/4" do
+    # Plans a price change from the item as it is read; the planner can be
+    # called again on a fresher item and answers the values it reads there.
+    defp price_planner(price) do
+      fn %{item: item} ->
+        {:ok,
+         %{
+           from: %{price: item.base_price},
+           changes: %{"price" => %{"from" => "?", "to" => Decimal.to_string(price)}},
+           changed?: true,
+           dangerous?: false,
+           warnings: [],
+           attrs: %{base_price: price},
+           owned_paths: []
+         }}
+      end
+    end
+
+    defp planned(catalogue, item, planner) do
+      [row] = Batch.load([%{"ref" => %{"id" => item.uuid}}], catalogue.uuid)
+      [row] = Batch.plan([row], planner)
+      row
+    end
+
+    test "writes a row whose values are still the ones it was planned from",
+         %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      planner = price_planner(Decimal.new("120.00"))
+      row = planned(catalogue, item, planner)
+
+      assert [%{result: {:ok, _item}}] =
+               Batch.write_if_unchanged([row], ctx, "ecommerce.set_prices", planner)
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("120.00"))
+    end
+
+    test "does not write a row another writer changed after the plan, and leaves its value",
+         %{catalogue: catalogue, ctx: ctx} do
+      changed = F.item!(catalogue)
+      untouched = F.item!(catalogue)
+      planner = price_planner(Decimal.new("120.00"))
+
+      rows =
+        Batch.load(
+          [%{"ref" => %{"id" => changed.uuid}}, %{"ref" => %{"id" => untouched.uuid}}],
+          catalogue.uuid
+        )
+        |> Batch.plan(planner)
+
+      {:ok, _} = Catalogue.update_item(changed, %{base_price: Decimal.new("1000.00")})
+
+      assert [failed, written] =
+               Batch.write_if_unchanged(rows, ctx, "ecommerce.set_prices", planner)
+
+      assert %{error: %{"code" => "validation_failed", "context" => %{"reason" => reason}}} =
+               failed
+
+      assert reason == "changed_since_planned"
+      assert %{result: {:ok, _item}} = written
+      assert Decimal.equal?(F.reload!(changed).base_price, Decimal.new("1000.00"))
+      assert Decimal.equal?(F.reload!(untouched).base_price, Decimal.new("120.00"))
+    end
+
+    test "a row whose product is gone fails with not_found", %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      planner = price_planner(Decimal.new("120.00"))
+      row = planned(catalogue, item, planner)
+
+      {:ok, _} = Catalogue.permanently_delete_item(item)
+
+      assert [%{error: %{"code" => "not_found"}}] =
+               Batch.write_if_unchanged([row], ctx, "ecommerce.set_prices", planner)
+    end
+
+    test "a row whose product was trashed or moved to another catalogue fails with not_found",
+         %{catalogue: catalogue, ctx: ctx} do
+      trashed = F.item!(catalogue)
+      moved = F.item!(catalogue)
+      planner = price_planner(Decimal.new("120.00"))
+
+      rows =
+        Batch.load(
+          [%{"ref" => %{"id" => trashed.uuid}}, %{"ref" => %{"id" => moved.uuid}}],
+          catalogue.uuid
+        )
+        |> Batch.plan(planner)
+
+      {:ok, _} = Catalogue.trash_item(trashed)
+      {:ok, _} = Catalogue.update_item(moved, %{catalogue_uuid: F.other_catalogue!().uuid})
+
+      assert [%{error: %{"code" => "not_found"}}, %{error: %{"code" => "not_found"}}] =
+               Batch.write_if_unchanged(rows, ctx, "ecommerce.set_prices", planner)
+
+      assert Decimal.equal?(F.reload!(trashed).base_price, Decimal.new("100.00"))
+      assert Decimal.equal?(F.reload!(moved).base_price, Decimal.new("100.00"))
+    end
+
+    test "writes nothing and opens no transaction when no row changes", %{ctx: ctx} do
+      assert [] ==
+               Batch.write_if_unchanged([], ctx, "ecommerce.set_prices", fn _ -> raise "no" end)
+    end
+  end
 end

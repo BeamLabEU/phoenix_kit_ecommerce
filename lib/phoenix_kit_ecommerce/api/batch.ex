@@ -143,6 +143,12 @@ defmodule PhoenixKitEcommerce.API.Batch do
   """
   @spec write([row()], map(), String.t()) :: [row()]
   def write(rows, ctx, tool) do
+    written = write_rows(rows, ctx, tool)
+    clear_storefront_cache(written)
+    written
+  end
+
+  defp write_rows(rows, ctx, tool) do
     pending = for %{plan: %{changed?: true}} = row <- rows, do: row
 
     entries =
@@ -164,8 +170,6 @@ defmodule PhoenixKitEcommerce.API.Batch do
       |> Enum.zip(CatalogueWrites.update_rows(entries, opts))
       |> Map.new()
 
-    clear_storefront_cache(results)
-
     Enum.map(rows, fn row ->
       case Map.fetch(results, row.index) do
         {:ok, {:ok, item}} -> %{row | item: item, result: {:ok, item}}
@@ -176,11 +180,78 @@ defmodule PhoenixKitEcommerce.API.Batch do
     end)
   end
 
+  @doc """
+  `write/3` for rows whose plan must still hold: inside one transaction the
+  items are locked and read again, `planner` plans each row against the fresh
+  item, and a row whose current values (`plan.from`) are no longer the ones it
+  was planned from is not written but fails alone (`validation_failed`, reason
+  `changed_since_planned`; `not_found` when the product is gone). A plan is made
+  from a read; between that read and the write another writer (the Shopify sync,
+  an editor) can change the same values, and the write would then replace them
+  with a figure that was judged against the old ones.
+  """
+  @spec write_if_unchanged(
+          [row()],
+          map(),
+          String.t(),
+          (row() -> {:ok, map()} | {:error, Rows.t()})
+        ) :: [row()]
+  def write_if_unchanged(rows, ctx, tool, planner) do
+    case for(%{plan: %{changed?: true}, item: item} <- rows, do: item) do
+      [] ->
+        rows
+
+      items ->
+        written =
+          CatalogueWrites.with_locked_items(items, fn locked ->
+            rows |> Enum.map(&still_planned(&1, locked, planner)) |> write_rows(ctx, tool)
+          end)
+
+        # After the commit: a page rendered before it would put the old
+        # prices back into the cache.
+        clear_storefront_cache(written)
+        written
+    end
+  end
+
+  defp still_planned(%{plan: %{changed?: true}, item: item} = row, locked, planner) do
+    with {:ok, fresh} <- fetch_available(locked, item),
+         {:ok, plan} <- planner.(%{row | item: fresh}),
+         true <- same_values?(item.uuid, row.plan, plan) do
+      row
+    else
+      :error ->
+        fail(row, Rows.error(:not_found, "The product no longer exists."))
+
+      _changed ->
+        fail(
+          row,
+          Rows.error(
+            :validation_failed,
+            "The product changed while the call was being checked. Read it again and repeat the call.",
+            %{"reason" => "changed_since_planned"}
+          )
+        )
+    end
+  end
+
+  defp still_planned(row, _locked, _planner), do: row
+
+  defp fetch_available(locked, item) do
+    case Map.fetch(locked, item.uuid) do
+      {:ok, fresh} -> if available?(fresh, item.catalogue_uuid), do: {:ok, fresh}, else: :error
+      :error -> :error
+    end
+  end
+
+  defp same_values?(uuid, planned, fresh),
+    do: Fingerprint.compute([{uuid, planned.from}]) == Fingerprint.compute([{uuid, fresh.from}])
+
   # The storefront caches its category list and facets for about a minute
   # (`StorefrontCache`); a write of this package must show on the next page
   # view, as the Shopify sync's catalogue writes do. Only a row that changed.
-  defp clear_storefront_cache(results) do
-    if Enum.any?(results, &match?({_index, {:ok, _item}}, &1)), do: StorefrontCache.clear()
+  defp clear_storefront_cache(rows) do
+    if Enum.any?(rows, &match?(%{result: {:ok, _item}}, &1)), do: StorefrontCache.clear()
     :ok
   end
 

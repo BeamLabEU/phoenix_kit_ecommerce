@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
   @moduletag :core_confirm
 
   alias PhoenixKit.Settings
+  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.{CatalogueWrites, PricePlan, SetPrices}
   alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
@@ -31,6 +32,10 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
   defp set_prices_raw(items, ctx), do: SetPrices.run(%{"items" => items}, ctx)
 
   defp ecommerce(item), do: F.reload!(item).data["ecommerce"]
+
+  # The context of a call that ran under a confirmation code: core's executor
+  # sets `confirmation_uuid` only then.
+  defp confirmed(ctx), do: Map.put(ctx, :confirmation_uuid, Ecto.UUID.generate())
 
   defp dangerous?(item, price, ctx),
     do:
@@ -54,8 +59,9 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
         "price_modifiers" => %{"liquid_color" => %{"black" => "32.00"}}
       }
 
+      # a 32.00 option price on a 100.00 product is a dangerous change
       assert {:ok, %{"results" => [result], "summary" => %{"updated" => 1}}} =
-               set_prices([row], ctx)
+               set_prices([row], confirmed(ctx))
 
       assert result["action"] == "updated"
       assert result["id"] == item.uuid
@@ -154,7 +160,7 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
         "price_modifiers" => %{"c" => %{"x" => nil}}
       }
 
-      assert {:ok, %{"summary" => %{"updated" => 1}}} = set_prices([row], ctx)
+      assert {:ok, %{"summary" => %{"updated" => 1}}} = set_prices([row], confirmed(ctx))
 
       assert ecommerce(item)["compare_at_price"] == nil
       assert ecommerce(item)["price_modifiers"] == %{"c" => %{"y" => "2.00"}}
@@ -261,6 +267,37 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
                "liquid_color" => %{"black" => "3.00"},
                "size" => %{"large" => "4.00"}
              }
+    end
+  end
+
+  describe "a price that moves between the danger check and the plan" do
+    test "an unconfirmed call is not written once its plan has become dangerous", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      row = %{"ref" => %{"id" => item.uuid}, "price" => "101.00"}
+
+      # The danger check reads 100.00 and sees a 1 percent move ...
+      refute SetPrices.dangerous?(%{"items" => [row]}, ctx)
+
+      # ... then an editor sets the price to 1000.00 before the call is planned.
+      {:ok, _} = Catalogue.update_item(item, %{base_price: Decimal.new("1000.00")})
+
+      assert {:error, :validation_failed, _message, %{errors: [%{path: "items"}]}} =
+               set_prices([row], ctx)
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("1000.00"))
+    end
+
+    test "the same call under a confirmation code is written", %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      {:ok, _} = Catalogue.update_item(item, %{base_price: Decimal.new("1000.00")})
+
+      assert {:ok, %{"summary" => %{"updated" => 1}}} =
+               set_prices([%{"ref" => %{"id" => item.uuid}, "price" => "101.00"}], confirmed(ctx))
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("101.00"))
     end
   end
 
