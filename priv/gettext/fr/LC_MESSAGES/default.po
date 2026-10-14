@@ -7553,3 +7553,48 @@ msgstr "La vitrine Shopify a redirigé vers une adresse non autorisée — la sy
 #, elixir-autogen, elixir-format
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr "La vitrine Shopify a redirigé trop de fois — la synchronisation a été arrêtée."
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "An assistant prepared this cart for you"
+msgstr "Un assistant a préparé ce panier pour vous"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Continue to checkout"
+msgstr "Passer à la caisse"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "You already have items in your cart. What would you like to do?"
+msgstr "Vous avez déjà des articles dans votre panier. Que souhaitez-vous faire ?"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Replace my cart"
+msgstr "Remplacer mon panier"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Add these items to my cart"
+msgstr "Ajouter ces articles à mon panier"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "This checkout link has already been used or has expired. Your cart is shown here."
+msgstr "Ce lien de paiement a déjà été utilisé ou a expiré. Votre panier s'affiche ici."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Your cart changed while you were deciding. Please choose again."
+msgstr "Votre panier a changé pendant que vous réfléchissiez. Veuillez choisir à nouveau."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Some items could not be added because they are no longer available: %{items}"
+msgstr "Certains articles n'ont pas pu être ajoutés car ils ne sont plus disponibles : %{items}"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Your cart was not changed."
+msgstr "Une erreur s'est produite. Votre panier n'a pas été modifié."

@@ -7553,3 +7553,48 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "An assistant prepared this cart for you"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Continue to checkout"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "You already have items in your cart. What would you like to do?"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Replace my cart"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Add these items to my cart"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "This checkout link has already been used or has expired. Your cart is shown here."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Your cart changed while you were deciding. Please choose again."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Some items could not be added because they are no longer available: %{items}"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Your cart was not changed."
+msgstr ""

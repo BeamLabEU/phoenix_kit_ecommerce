@@ -7553,3 +7553,48 @@ msgstr "Die Storefront von Shopify hat auf eine nicht erlaubte Adresse weitergel
 #, elixir-autogen, elixir-format
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr "Die Storefront von Shopify hat zu oft weitergeleitet — die Synchronisierung wurde gestoppt."
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "An assistant prepared this cart for you"
+msgstr "Ein Assistent hat diesen Warenkorb für Sie vorbereitet"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Continue to checkout"
+msgstr "Weiter zur Kasse"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "You already have items in your cart. What would you like to do?"
+msgstr "Sie haben bereits Artikel in Ihrem Warenkorb. Was möchten Sie tun?"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Replace my cart"
+msgstr "Meinen Warenkorb ersetzen"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Add these items to my cart"
+msgstr "Diese Artikel zu meinem Warenkorb hinzufügen"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "This checkout link has already been used or has expired. Your cart is shown here."
+msgstr "Dieser Checkout-Link wurde bereits verwendet oder ist abgelaufen. Ihr Warenkorb wird hier angezeigt."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Your cart changed while you were deciding. Please choose again."
+msgstr "Ihr Warenkorb hat sich geändert, während Sie entschieden haben. Bitte wählen Sie erneut."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Some items could not be added because they are no longer available: %{items}"
+msgstr "Einige Artikel konnten nicht hinzugefügt werden, da sie nicht mehr verfügbar sind: %{items}"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Your cart was not changed."
+msgstr "Etwas ist schiefgelaufen. Ihr Warenkorb wurde nicht geändert."

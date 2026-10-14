@@ -7611,3 +7611,48 @@ msgstr "Витрина Shopify перенаправила на недопуст�
 #, elixir-autogen, elixir-format
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr "Витрина Shopify слишком много раз перенаправляла — синхронизация остановлена."
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "An assistant prepared this cart for you"
+msgstr "Ассистент подготовил эту корзину для вас"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Continue to checkout"
+msgstr "Перейти к оформлению заказа"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "You already have items in your cart. What would you like to do?"
+msgstr "В вашей корзине уже есть товары. Что вы хотите сделать?"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Replace my cart"
+msgstr "Заменить мою корзину"
+
+#: lib/phoenix_kit_ecommerce/web/claim_html.ex
+#, elixir-autogen, elixir-format
+msgid "Add these items to my cart"
+msgstr "Добавить эти товары в мою корзину"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "This checkout link has already been used or has expired. Your cart is shown here."
+msgstr "Эта ссылка на оформление заказа уже использована или истекла. Здесь показана ваша корзина."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Your cart changed while you were deciding. Please choose again."
+msgstr "Ваша корзина изменилась, пока вы выбирали. Пожалуйста, выберите снова."
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Some items could not be added because they are no longer available: %{items}"
+msgstr "Некоторые товары не удалось добавить, так как они больше недоступны: %{items}"
+
+#: lib/phoenix_kit_ecommerce/web/claim_controller.ex
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Your cart was not changed."
+msgstr "Что-то пошло не так. Ваша корзина не изменена."

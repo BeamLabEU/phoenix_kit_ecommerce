@@ -1,0 +1,167 @@
+defmodule PhoenixKitEcommerce.Web.ClaimController do
+  @moduledoc """
+  The checkout claim page of the public cart API.
+
+  GET shows the interstitial and consumes nothing (link-preview bots only ever
+  GET); POST, through the browser pipeline's CSRF check, consumes the claim
+  once. Every dead end (unknown, used, superseded or expired link, a cart that
+  is gone, a choice that is stale) is a redirect with a notice, never an error
+  page. See `PhoenixKitEcommerce.API.Claims` for what a POST does to the carts.
+  """
+
+  use PhoenixKitEcommerce.Web, :controller
+
+  alias PhoenixKit.Modules.Languages.DialectMapper
+  alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.API.Claims
+  alias PhoenixKitEcommerce.Web.ClaimHTML
+
+  plug :put_view, html: ClaimHTML
+  plug :privacy_headers
+
+  @dead_ends [:invalid, :used, :superseded, :expired, :cart_unavailable]
+
+  @doc "GET: the interstitial. Reads only."
+  def show(conn, %{"token" => token}) do
+    case browser(conn) do
+      :closed -> shop_closed(conn)
+      {:ok, browser} -> show_claim(conn, token, browser)
+    end
+  end
+
+  @doc "POST: consumes the claim for this browser."
+  def create(conn, %{"token" => token} = params) do
+    case browser(conn) do
+      :closed -> shop_closed(conn)
+      {:ok, browser} -> redeem(conn, token, browser, params)
+    end
+  end
+
+  defp show_claim(conn, token, browser) do
+    case Claims.peek(token) do
+      {:ok, %{claim: claim, cart: cart}} ->
+        put_locale(claim.language)
+
+        existing =
+          case Shop.find_active_cart(user_uuid: browser.user_uuid, session_id: browser.session_id) do
+            %{items: [_ | _]} = browser_cart -> browser_cart
+            _none_or_empty -> nil
+          end
+
+        render(conn, :interstitial,
+          cart: cart,
+          existing: existing,
+          action: Claims.path(token),
+          page_title: gettext("An assistant prepared this cart for you")
+        )
+
+      {:error, _reason} ->
+        unavailable(conn, Claims.language_of(token))
+    end
+  end
+
+  defp redeem(conn, token, browser, params) do
+    decision = %{offer: text(params["offer"]), choice: choice(params["choice"])}
+
+    case Claims.redeem(token, browser, decision) do
+      {:ok, %{language: language, skipped: skipped}} ->
+        put_locale(language)
+
+        conn
+        |> skipped_notice(skipped)
+        |> redirect(to: Shop.checkout_url(language))
+
+      # `:reshow`: the browser's cart changed since the page was shown. `:busy`: Postgres
+      # aborted this POST as a deadlock victim against a storefront add in another tab (see
+      # `Claims.redeem/3`); nothing was claimed. Both show the choice again, with the same
+      # notice, never an error page.
+      {:error, reason} when reason in [:reshow, :busy] ->
+        put_locale(Claims.language_of(token))
+
+        conn
+        |> put_flash(
+          :info,
+          gettext("Your cart changed while you were deciding. Please choose again.")
+        )
+        |> redirect(to: Claims.path(token))
+
+      {:error, reason} when reason in @dead_ends ->
+        unavailable(conn, Claims.language_of(token))
+
+      {:error, _other} ->
+        language = Claims.language_of(token) || Shop.get_default_language()
+        put_locale(language)
+
+        conn
+        |> put_flash(:error, gettext("Something went wrong. Your cart was not changed."))
+        |> redirect(to: Shop.cart_url(language))
+    end
+  end
+
+  # The browser's identity: the shop session the shop-session plug put into the
+  # Phoenix session, and the logged-in user core's auto-setup pipeline assigned.
+  defp browser(conn) do
+    session_id = get_session(conn, "shop_session_id")
+
+    if Shop.enabled?() and is_binary(session_id) and session_id != "" do
+      {:ok, %{session_id: session_id, user_uuid: user_uuid(conn)}}
+    else
+      :closed
+    end
+  end
+
+  defp user_uuid(conn) do
+    case conn.assigns[:phoenix_kit_current_user] do
+      %{uuid: uuid} when is_binary(uuid) -> uuid
+      _ -> nil
+    end
+  end
+
+  defp shop_closed(conn) do
+    # The HOST's root, not Routes.path("/"), like the cart page does.
+    conn
+    |> put_flash(:error, gettext("The shop is currently unavailable"))
+    |> redirect(to: "/")
+  end
+
+  defp unavailable(conn, language) do
+    language = language || Shop.get_default_language()
+    put_locale(language)
+
+    conn
+    |> put_flash(
+      :info,
+      gettext("This checkout link has already been used or has expired. Your cart is shown here.")
+    )
+    |> redirect(to: Shop.cart_url(language))
+  end
+
+  defp skipped_notice(conn, []), do: conn
+
+  defp skipped_notice(conn, titles) do
+    put_flash(
+      conn,
+      :error,
+      gettext("Some items could not be added because they are no longer available: %{items}",
+        items: Enum.join(titles, ", ")
+      )
+    )
+  end
+
+  defp text(value) when is_binary(value), do: value
+  defp text(_other), do: ""
+
+  defp choice(value) when value in ["replace", "add"], do: value
+  defp choice(_other), do: nil
+
+  defp put_locale(language) do
+    base = DialectMapper.extract_base(language || Shop.get_default_language())
+    Gettext.put_locale(PhoenixKitEcommerce.Gettext, base)
+  end
+
+  defp privacy_headers(conn, _opts) do
+    conn
+    |> put_resp_header("referrer-policy", "no-referrer")
+    |> put_resp_header("cache-control", "no-store")
+  end
+end
