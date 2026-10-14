@@ -549,11 +549,24 @@ Rules that must hold:
   product source is the catalogue and the catalogue is new enough, judged by
   what it exports, not by its version), `API.Refs`
   (`PhoenixKitCatalogue.API.resolve_refs/2`) and `API.CatalogueWrites`
-  (`Catalogue.update_items/2`). Three call sites reach the catalogue
-  directly: `AttachImages` (`Attachments.attach_files/3` and
-  `Catalogue.get_item/1`) and `SetPrices` (`AttributeSets.resolve_for_items/2`);
-  `Gate.catalogue_api_ready?/0` does not probe them. Anything the gate refuses
-  answers `unsupported_source` and writes nothing.
+  (`Catalogue.update_items/2`). Two more call sites reach the catalogue
+  directly: `AttachImages` (`Attachments.attach_files/3`) and `SetPrices`
+  (`AttributeSets.resolve_for_items/2`); `Gate.catalogue_api_ready?/0` does not
+  probe them. Anything the gate refuses answers `unsupported_source` and
+  writes nothing.
+- **`CatalogueWrites.with_locked_items/2` queries the catalogue's own tables**
+  (`PhoenixKitCatalogue.Schemas.Item` and `Category`, no public function of
+  the catalogue does it) and **copies the catalogue's lock order**: the
+  categories involved `FOR SHARE`, then the items `FOR UPDATE`, each sorted by
+  uuid, as `lock_items_for_batch` in `Catalogue` does. A catalogue that
+  changes that order makes a deadlock with its own batch or a category trash
+  possible, so a change of the order there means a change here (the proper
+  fix is a public `lock_items/2` in the catalogue). `Gate.catalogue_api_ready?/0`
+  probes the two schemas and the columns the query uses, not the order. The
+  transaction can fail to commit (a write inside it rolled the transaction
+  back, as a nested rollback does to the one around it); the helper then
+  answers `{:error, row_error}` (it does not raise a `MatchError`), and the callers answer a row
+  failure (`database_error`) for the rows it was to write.
 - **Writes are limited to the `data` sub-paths a row changes**
   (`data_owned_paths`; an option price is one path per leaf), so a concurrent
   writer of any other field, the Shopify sync included, is never overwritten.
@@ -596,7 +609,15 @@ Rules that must hold:
   certificate name. Never `connect_options: [hostname: ...]`: `Req` starts a
   `Finch` pool with a new atom per distinct value and never stops it, so every
   hostname a caller names would stay in the node. Every name lookup of the
-  guard has a deadline (`:image_dns_timeout`, 3 s) and fails closed.
+  guard has a deadline (`:image_dns_timeout`, 3 s) and fails closed. The
+  adapter is an adapter module and delegates a `plug:` request to
+  `Req.Plug.run/1`, so `mix.exs` requires Req 0.7 (`dependency_floor_test.exs`
+  pins it). **Cost:** with no pool there is no keep-alive, so every picture
+  pays two TCP+TLS handshakes (the HEAD preflight and the GET), and each
+  redirect hop one more. That is nothing for the API (20 URLs a call); the
+  Shopify media sync and the CSV import fetch hundreds of pictures through the
+  same path, so measure a real run on the stand before relying on their old
+  timings.
 - **A write that changed a product clears `StorefrontCache`** (once per call,
   after the rows are committed, in `API.Batch.write/3`,
   `API.Batch.write_if_unchanged/4` and `API.AttachImages`), like the Shopify

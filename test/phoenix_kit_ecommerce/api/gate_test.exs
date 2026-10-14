@@ -14,6 +14,7 @@ defmodule PhoenixKitEcommerce.API.GateTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
+  alias PhoenixKitCatalogue.Schemas.{Category, Item}
   alias PhoenixKitEcommerce.API.Gate
   alias PhoenixKitEcommerce.APIFixtures, as: F
 
@@ -50,6 +51,15 @@ defmodule PhoenixKitEcommerce.API.GateTest do
       assert Gate.catalogue_api_ready?()
       assert {:ok, uuid} = Gate.check()
       assert uuid == catalogue.uuid
+    end
+
+    test "the schemas and columns with_locked_items queries are the catalogue's" do
+      # `CatalogueWrites.with_locked_items/2` selects, locks and orders by
+      # these directly; `catalogue_api_ready?/0` probes the same ones.
+      assert :uuid in Item.__schema__(:fields)
+      assert :category_uuid in Item.__schema__(:fields)
+      assert :uuid in Category.__schema__(:fields)
+      assert Gate.catalogue_api_ready?()
     end
 
     test "a shop catalogue that does not exist is refused" do

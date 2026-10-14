@@ -86,7 +86,9 @@ defmodule PhoenixKitEcommerce.API.Gate do
   `:data_owned_paths` options of the writes. It is the witness for those
   options: an update without `:data_owned_paths` would replace a product's
   whole `data` map, and nothing at run time would notice, so a build that
-  exports the batch update but not the witness is refused.
+  exports the batch update but not the witness is refused. It also covers
+  what `API.CatalogueWrites.with_locked_items/2` queries directly: the
+  catalogue's `Item` and `Category` schemas and the columns it locks by.
 
   Judged by what the modules export, not by a version number: a fork
   branch of the catalogue keeps the version of its base.
@@ -97,7 +99,18 @@ defmodule PhoenixKitEcommerce.API.Gate do
       function_exported?(PhoenixKitCatalogue.API, :resolve_refs, 2) and
       Code.ensure_loaded?(PhoenixKitCatalogue.Catalogue) and
       function_exported?(PhoenixKitCatalogue.Catalogue, :update_items, 2) and
-      function_exported?(PhoenixKitCatalogue.Catalogue, :preview_item_update, 3)
+      function_exported?(PhoenixKitCatalogue.Catalogue, :preview_item_update, 3) and
+      lock_schemas_ready?()
+  end
+
+  defp lock_schemas_ready? do
+    schema_fields?(PhoenixKitCatalogue.Schemas.Item, [:uuid, :category_uuid]) and
+      schema_fields?(PhoenixKitCatalogue.Schemas.Category, [:uuid])
+  end
+
+  defp schema_fields?(schema, fields) do
+    Code.ensure_loaded?(schema) and function_exported?(schema, :__schema__, 1) and
+      Enum.all?(fields, &(&1 in schema.__schema__(:fields)))
   end
 
   defp refusal(reason) do
