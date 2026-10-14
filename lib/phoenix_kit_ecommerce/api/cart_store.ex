@@ -55,6 +55,13 @@ defmodule PhoenixKitEcommerce.API.CartStore do
   end
 
   @doc """
+  True when no cart row stands for the token yet and it is not claimed. Cheaper
+  than `resolve/1`: it reads neither the lines nor the shipping method.
+  """
+  @spec empty?(String.t()) :: boolean()
+  def empty?(hash) when is_binary(hash), do: resolve(hash, []) == :empty
+
+  @doc """
   The cart a write goes to, creating it on the first write.
 
   Takes the session lock, re-resolves under it (a concurrent first write may

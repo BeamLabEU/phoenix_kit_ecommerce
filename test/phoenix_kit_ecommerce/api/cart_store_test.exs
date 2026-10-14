@@ -160,6 +160,18 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
     end
   end
 
+  describe "empty?/1" do
+    test "is true only for a token that has no cart row yet", %{hash: hash} do
+      assert CartStore.empty?(hash)
+
+      {:ok, cart} = Shop.create_cart(session_id: CartToken.session_id(hash))
+      refute CartStore.empty?(hash)
+
+      cart |> Cart.status_changeset("abandoned") |> Repo.update!()
+      refute CartStore.empty?(hash)
+    end
+  end
+
   describe "for_write/3" do
     test "creates the row on the first write, with the token's session id and the request currency",
          %{hash: hash} do

@@ -61,7 +61,7 @@ defmodule PhoenixKitEcommerce.API.CartWriterCatalogueTest do
     attach_set(item, "Cup Color", "cup_color", [{"White", "white"}, {"Gold", "gold"}])
 
     token = new_token!()
-    %{item: item, token: token, ctx: ctx_for(token)}
+    %{item: item, catalogue: catalogue, token: token, ctx: ctx_for(token)}
   end
 
   defp attach_set(item, name, slug, values) do
@@ -128,5 +128,73 @@ defmodule PhoenixKitEcommerce.API.CartWriterCatalogueTest do
 
     assert Enum.sort_by(read.options, & &1.attribute_key) ==
              Enum.sort_by(line.options, & &1.attribute_key)
+  end
+
+  describe "an item whose category carries the option schema" do
+    setup %{catalogue: catalogue} do
+      {:ok, category} =
+        Catalogue.create_category(%{
+          name: "Engraved",
+          catalogue_uuid: catalogue.uuid,
+          data: %{
+            "ecommerce" => %{
+              "shop_status" => "active",
+              "option_schema" => [
+                %{
+                  "key" => "engraving",
+                  "label" => "Engraving",
+                  "type" => "select",
+                  "options" => ["Yes", "No"],
+                  "required" => true,
+                  "position" => 0
+                }
+              ]
+            }
+          }
+        })
+
+      {:ok, item} =
+        Catalogue.create_item(%{
+          catalogue_uuid: catalogue.uuid,
+          category_uuid: category.uuid,
+          name: "Engraved Plaque",
+          base_price: Decimal.new("10.00"),
+          status: "active",
+          slug: %{"en-US" => "engraved-plaque"},
+          data: %{"ecommerce" => %{"shop_status" => "active"}}
+        })
+
+      %{plaque: item}
+    end
+
+    test "a missing required option of the category is that line's error, not a retry", t do
+      assert {:ok, %{results: [%{action: "error", error: error}]}} =
+               set(t.token, t.ctx, t.plaque, 1, [])
+
+      assert error.code == "option_required"
+      assert error.attribute_key == "engraving"
+      assert error.allowed == ["yes", "no"]
+    end
+
+    test "the category's option is offered, accepted and echoed", t do
+      options = [%{"attribute_key" => "engraving", "value_key" => "yes"}]
+
+      assert {:ok, result} = set(t.token, t.ctx, t.plaque, 2, options)
+
+      assert [%{action: "created"}] = result.results
+
+      assert [%{quantity: 2, options: [%{attribute_key: "engraving", value_key: "yes"}]}] =
+               result.cart.lines
+    end
+
+    test "a value the category does not offer lists the ones it does", t do
+      options = [%{"attribute_key" => "engraving", "value_key" => "maybe"}]
+
+      assert {:ok, %{results: [%{action: "error", error: error}]}} =
+               set(t.token, t.ctx, t.plaque, 1, options)
+
+      assert error.code == "option_invalid"
+      assert error.allowed == ["yes", "no"]
+    end
   end
 end

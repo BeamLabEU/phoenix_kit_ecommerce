@@ -431,8 +431,15 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
 
       assert actions(result) == ["created", "error", "created"]
 
-      assert [%{error: %{code: "not_on_sale", reason: "currency_mismatch"}}] =
-               Enum.filter(result.results, &(&1.action == "error"))
+      assert [
+               %{
+                 error: %{
+                   code: "not_on_sale",
+                   reason: "currency_mismatch",
+                   message: "This product cannot be sold in this cart."
+                 }
+               }
+             ] = Enum.filter(result.results, &(&1.action == "error"))
 
       assert Enum.sort(Enum.map(result.cart.lines, & &1.quantity)) == [1, 2]
     end
@@ -607,6 +614,88 @@ defmodule PhoenixKitEcommerce.API.CartWriterTest do
         # nothing of the batch was kept, and the connection is still usable
         assert CartStore.resolve(hash) == :empty
       end
+    end
+  end
+
+  describe "an answer the writer does not recognise" do
+    # `add_to_cart` rolls its own transaction back for most of what it does not
+    # name as a line's fault, which dooms the writer's: continuing would raise a
+    # DBConnection error (a 500). Anything that is not a known permanent refusal
+    # rolls the batch back for a retry.
+    test "a rollback inside the cart rebase rolls the batch back for a retry", %{
+      token: token,
+      p1: p1,
+      p2: p2
+    } do
+      {:ok, _} = set(token, [line(p1, 1)])
+      Repo.update_all(CartItem, set: [base_unit_price: nil])
+
+      assert {:ok, %{old_base: "USD"}} =
+               PhoenixKitBilling.change_base_currency("EUR",
+                 catalog_size: 1,
+                 reprice: &Shop.reprice_for_base_change/3
+               )
+
+      log =
+        capture_log(fn ->
+          assert {:error, :validation_failed, _message, context} = set(token, [line(p2, 1)])
+          assert context == %{reason: "state_changed", retry: true}
+        end)
+
+      assert log =~ "cart write rolled back: :no_base_price"
+      assert [%{quantity: 1}] = cart_lines(token)
+    end
+
+    test "only the shape of the answer is logged, never the product it names", %{
+      token: token,
+      hash: hash,
+      p1: p1
+    } do
+      # The product is archived between planning and the locked read: `add_to_cart`
+      # answers with a tuple that carries the product's uuid.
+      after_first_query("INSERT", "phoenix_kit_shop_carts", fn ->
+        {:ok, _} = Shop.update_product(p1, %{"status" => "archived"})
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:error, :validation_failed, _message, %{retry: true}} =
+                   set(token, [line(p1, 1)])
+        end)
+
+      assert log =~ "cart write rolled back: {:error, {:product_not_available, term}}"
+      refute log =~ p1.uuid
+      assert CartStore.resolve(hash) == :empty
+    end
+  end
+
+  describe "a deadlock the database resolves against the writer" do
+    # A trigger raises what Postgres raises for the aborted side of a deadlock
+    # (SQLSTATE 40P01). The DDL rolls back with the test's transaction.
+    test "is the retryable state_changed, not a 500, and keeps nothing", %{
+      token: token,
+      hash: hash,
+      p1: p1
+    } do
+      Repo.query!("""
+      CREATE FUNCTION pk_test_raise_deadlock() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01'; END
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER pk_test_raise_deadlock BEFORE INSERT ON phoenix_kit_shop_cart_items
+      FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
+      """)
+
+      log =
+        capture_log(fn ->
+          assert {:error, :validation_failed, _message, context} = set(token, [line(p1, 1)])
+          assert context == %{reason: "state_changed", retry: true}
+        end)
+
+      assert log =~ "cart write rolled back: :deadlock"
+      assert CartStore.resolve(hash) == :empty
     end
   end
 

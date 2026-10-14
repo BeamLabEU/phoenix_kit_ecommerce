@@ -30,6 +30,7 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   alias PhoenixKitEcommerce.API.Signals
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
+  alias PhoenixKitEcommerce.Category
   alias PhoenixKitEcommerce.Product
 
   @max_quantity 99
@@ -37,12 +38,19 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # per cart, so an anonymous token cannot grow a cart without bound.
   @max_lines 50
 
+  # Refusals of `add_to_cart` that are decided before it writes anything and that
+  # a retry cannot change: the shop is off, or the cart's frozen currency cannot
+  # be rebased onto the current base currency. (A currency mismatch has its own
+  # message.)
+  @line_refusals [:shop_disabled, :cart_base_unavailable, :currency_unavailable]
+
   @type error :: {:error, atom(), String.t(), map()}
 
   @doc """
-  Applies `input["items"]` to the cart behind `hash`. `input` may carry
-  `"expected_revision"` and `"currency"`; `ctx` is the handler context
-  (`language`, `currency`, `dry_run?`, `actor`).
+  Applies `input["items"]` to the cart behind `hash`. `hash` is the digest
+  `CartToken.verify/1` returned: the writer trusts its caller to have verified
+  the token. `input` may carry `"expected_revision"` and `"currency"`; `ctx` is
+  the handler context (`language`, `currency`, `dry_run?`, `actor`).
   """
   @spec set_items(String.t(), map(), map()) ::
           {:ok, map()} | {:preview, map(), String.t()} | error()
@@ -127,7 +135,7 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     after_cart = CartStore.lock_active!(cart.uuid, hash)
     after_snapshot = CartView.stamp(CartView.snapshot(after_cart))
 
-    if after_snapshot["revision"] != before_view.revision or origin == :created do
+    if after_snapshot["revision"] != before_view.revision do
       CartStore.put_snapshot!(after_cart, after_snapshot)
     end
 
@@ -246,7 +254,7 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # refused before the first write takes the session lock and spends one of the
   # network's row slots (which a rollback does not give back).
   defp check_cartless_revision!(hash, input, ctx) do
-    if input["expected_revision"] != nil and CartStore.resolve(hash) == :empty,
+    if input["expected_revision"] != nil and CartStore.empty?(hash),
       do: check_empty_cart_revision!(input, ctx)
   end
 
@@ -427,11 +435,26 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   # `:listed` is addable, `:discontinued` is `not_on_sale`, and `:hidden` (or an
   # id the loader does not know) is `not_found`: the same answer
   # `shop.get_products` gives, so a hidden product cannot be put into a cart.
-  defp addable_product(%Record{state: :listed, product: %Product{} = product}),
-    do: {:ok, product}
+  defp addable_product(%Record{
+         state: :listed,
+         product: %Product{} = product,
+         category: category
+       }),
+       do: {:ok, with_category(product, category)}
 
   defp addable_product(%Record{state: :discontinued}), do: {:error, :not_on_sale}
   defp addable_product(_hidden_or_absent), do: {:error, :not_found}
+
+  # The option schema of a product may come from its category. The loader's
+  # view-struct has none attached on the catalogue source (the record carries
+  # it), and a category the struct does not hold would be looked up in the
+  # legacy table, so the planner would not see the options `add_to_cart` does.
+  defp with_category(%Product{category: %Category{}} = product, _category), do: product
+
+  defp with_category(%Product{} = product, %Category{} = category),
+    do: %{product | category: category}
+
+  defp with_category(product, _category), do: product
 
   defp ok_plan(entry, product, specs) do
     %{
@@ -537,47 +560,35 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     end
   end
 
-  # What `add_to_cart` answered when it did not add the line. The refusals it
-  # makes before it opens its own transaction (nothing was written, nothing is
-  # poisoned) are this line's error and the good lines go on; retrying them
-  # would fail forever, so they must never become the retryable `state_changed`
-  # of the batch.
+  # What `add_to_cart` answered when it did not add the line. Only the refusals
+  # it makes before it opens its own transaction (nothing was written, nothing
+  # is poisoned) and that no retry can change are this line's error, and the
+  # good lines go on: retrying them would fail forever, so they must never
+  # become the retryable `state_changed` of the batch.
   defp refusal(cart, plan, {:error, :currency_mismatch}) do
     refused(cart, plan, :not_on_sale, "This product cannot be sold in this cart.", %{
       reason: "currency_mismatch"
     })
   end
 
-  # The option refusals are made inside `add_to_cart`'s own transaction and roll
-  # it back, which dooms this one: no further statement may run. The planner has
-  # already checked the options, so they mean the product changed since it was
-  # read; a retry plans again and gets the line's proper error.
-  defp refusal(_cart, _plan, {:error, reason, _detail})
-       when reason in [:missing_required_option, :unknown_option_key, :invalid_option_value],
-       do: {:abort, reason}
-
-  # The cart changed under the writer: retry.
-  defp refusal(_cart, _plan, {:error, reason}) when reason in [:cart_not_active, :cart_not_found],
-    do: {:abort, reason}
-
-  # Every other refusal `add_to_cart` names is a decision about this line or this
-  # cart (a cart frozen against a base currency that is gone, a stock check a
-  # later release adds).
-  defp refusal(cart, plan, {:error, reason}) when is_atom(reason),
-    do: refused_for(cart, plan, reason)
-
-  defp refusal(cart, plan, {:error, reason, _detail}) when is_atom(reason),
-    do: refused_for(cart, plan, reason)
-
-  # Anything else (a changeset, a rollback inside its transaction, a lost race)
-  # is unexpected: the batch is rolled back.
-  defp refusal(_cart, _plan, other), do: {:abort, other}
-
-  defp refused_for(cart, plan, reason) do
+  defp refusal(cart, plan, {:error, reason}) when reason in @line_refusals do
     refused(cart, plan, :not_on_sale, "This product cannot be added to this cart.", %{
       reason: Atom.to_string(reason)
     })
   end
+
+  # Everything else fails closed. Some refusals are made inside `add_to_cart`'s
+  # own transaction (a rollback in a nested transaction) and doom this one: no
+  # further statement may run. That covers the option refusals, which mean the
+  # product changed since the planner read it (a retry plans again and gets the
+  # line's proper error), the cart rebase's rolled-back answer, and a cart that
+  # changed under the writer.
+  defp refusal(_cart, _plan, {:error, reason}) when is_atom(reason), do: {:abort, reason}
+  defp refusal(_cart, _plan, {:error, reason, _detail}) when is_atom(reason), do: {:abort, reason}
+
+  # Anything else (a changeset, a rollback inside its transaction, a lost race)
+  # is unexpected: the batch is rolled back.
+  defp refusal(_cart, _plan, other), do: {:abort, other}
 
   defp refused(cart, plan, code, message, extra) do
     error = %{index: plan.index, ref: plan.ref, code: code, message: message, extra: extra}
