@@ -70,6 +70,18 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
   defp active_carts(session),
     do: Repo.all(from c in Cart, where: c.status == "active" and c.session_id == ^session)
 
+  defp active_carts_of(user),
+    do: Repo.all(from c in Cart, where: c.status == "active" and c.user_uuid == ^user.uuid)
+
+  # `updated_at` has second precision: make "the newest cart" unambiguous.
+  defp newest!(cart) do
+    later = DateTime.utc_now() |> DateTime.add(60, :second) |> DateTime.truncate(:second)
+    Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: [updated_at: later])
+  end
+
+  defp signed_in(conn, user),
+    do: Plug.Test.init_test_session(conn, %{"phoenix_kit_test_scope" => %{user: user}})
+
   describe "GET" do
     test "shows the lines and one button, and consumes nothing however often it is opened", ctx do
       html =
@@ -78,6 +90,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
           assert conn.status == 200
           assert ["no-referrer"] = get_resp_header(conn, "referrer-policy")
           assert ["no-store" <> _] = get_resp_header(conn, "cache-control")
+          assert ["noindex, nofollow"] = get_resp_header(conn, "x-robots-tag")
           html_response(conn, 200)
         end)
 
@@ -110,16 +123,61 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert html =~ ~s(id="claim-continue")
     end
 
+    test "a logged-in buyer who owns a cart with lines is offered it", ctx do
+      user = PhoenixKitEcommerce.DataCase.fixture_user()
+      {:ok, mine} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      html = ctx.conn |> signed_in(user) |> page(ctx.raw) |> html_response(200)
+
+      assert html =~ ~s(id="claim-add")
+      assert html =~ ~s(id="claim-replace")
+      refute html =~ ~s(id="claim-continue")
+      assert html =~ ~s(name="offer" value="#{mine.uuid}")
+    end
+
+    # Two definitions of "the browser's cart" would show here: the page offers
+    # nothing (the user's cart is empty), the POST finds the newer guest cart.
+    test "the page offers the cart a POST will compare against", ctx do
+      user = PhoenixKitEcommerce.DataCase.fixture_user()
+      {:ok, _empty} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, guest} = Shop.create_cart(session_id: ctx.session)
+      {:ok, guest} = Shop.add_to_cart(guest, product!(), 1)
+      newest!(guest)
+
+      conn = signed_in(ctx.conn, user)
+      html = conn |> page(ctx.raw) |> html_response(200)
+
+      assert html =~ ~s(name="offer" value="#{guest.uuid}")
+
+      stale = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      assert redirected_to(stale) == Claims.path(ctx.raw)
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+    end
+
+    test "two active carts of the browser never make an error page", ctx do
+      {:ok, _first} = Shop.create_cart(session_id: ctx.session)
+      {:ok, second} = Shop.create_cart(session_id: ctx.session)
+      {:ok, second} = Shop.add_to_cart(second, product!(), 1)
+      newest!(second)
+
+      html = ctx.conn |> page(ctx.raw) |> html_response(200)
+
+      assert html =~ ~s(name="offer" value="#{second.uuid}")
+    end
+
     test "speaks the claim's language", ctx do
       {:ok, %{token: german}} = Claims.issue(ctx.api_cart, ctx.hash, "de")
 
-      html = ctx.conn |> page(german) |> html_response(200)
+      conn = page(ctx.conn, german)
+      html = html_response(conn, 200)
 
       assert html =~ "Weiter zur Kasse"
+      assert conn.assigns.content_language == "de"
       assert html =~ "Ein Assistent hat diesen Warenkorb"
     end
 
-    test "unknown, used, superseded and expired links go to the cart page with a notice", ctx do
+    test "unknown, superseded and expired links go to the cart page with a notice", ctx do
       {:ok, %{token: newer}} = Claims.issue(ctx.api_cart, ctx.hash, "en")
 
       expired =
@@ -258,15 +316,85 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
       assert Repo.get!(CartClaim, ctx.claim.uuid).used_at != nil
     end
 
-    test "a logged-in buyer's cart is found by user", ctx do
+    test "a logged-in buyer receives the claimed cart as their own", ctx do
       user = PhoenixKitEcommerce.DataCase.fixture_user()
-      conn = Plug.Test.init_test_session(ctx.conn, %{"phoenix_kit_test_scope" => %{user: user}})
 
-      response = post(conn, Claims.path(ctx.raw), %{"offer" => "none"})
+      response =
+        ctx.conn |> signed_in(user) |> post(Claims.path(ctx.raw), %{"offer" => "none"})
 
       assert redirected_to(response) == Shop.checkout_url("en")
-      found = Shop.find_active_cart(user_uuid: user.uuid, session_id: ctx.session)
+      assert [found] = active_carts_of(user)
       assert found.uuid == ctx.api_cart.uuid
+      assert found.user_uuid == user.uuid
+      assert found.expires_at == nil
+    end
+
+    test "a logged-in buyer who owns a cart ends with exactly one active cart, either way", ctx do
+      user = PhoenixKitEcommerce.DataCase.fixture_user()
+      {:ok, mine} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+      conn = signed_in(ctx.conn, user)
+
+      replaced =
+        post(conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "replace"})
+
+      assert redirected_to(replaced) == Shop.checkout_url("en")
+      assert [only] = active_carts_of(user)
+      assert only.uuid == ctx.api_cart.uuid
+      assert Repo.get!(Cart, mine.uuid).status == "abandoned"
+    end
+
+    test "a logged-in buyer who adds keeps their own cart as the only active one", ctx do
+      user = PhoenixKitEcommerce.DataCase.fixture_user()
+      {:ok, mine} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      added =
+        ctx.conn
+        |> signed_in(user)
+        |> post(Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
+
+      assert redirected_to(added) == Shop.checkout_url("en")
+      assert [only] = active_carts_of(user)
+      assert only.uuid == mine.uuid
+      assert Repo.get!(Cart, ctx.api_cart.uuid).status == "merged"
+    end
+
+    test "a shop that is switched off consumes nothing", ctx do
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => "none"})
+
+      assert redirected_to(conn) == "/"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "currently unavailable"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+      assert Repo.get!(Cart, ctx.api_cart.uuid).status == "active"
+      assert Repo.get!(Cart, ctx.api_cart.uuid).session_id == "api:" <> ctx.hash
+    end
+
+    # A trigger raises what Postgres raises for the aborted side of a deadlock
+    # (SQLSTATE 40P01); the DDL rolls back with the test's transaction.
+    test "a deadlock victim goes back to the choice, with nothing claimed", ctx do
+      {:ok, mine} = Shop.create_cart(session_id: ctx.session)
+      {:ok, mine} = Shop.add_to_cart(mine, product!(), 1)
+
+      Repo.query!("""
+      CREATE FUNCTION pk_test_raise_deadlock() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01'; END
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER pk_test_raise_deadlock BEFORE INSERT ON phoenix_kit_shop_cart_items
+      FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
+      """)
+
+      conn = post(ctx.conn, Claims.path(ctx.raw), %{"offer" => mine.uuid, "choice" => "add"})
+
+      assert redirected_to(conn) == Claims.path(ctx.raw)
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Your cart was not changed"
+      assert Repo.get!(CartClaim, ctx.claim.uuid).used_at == nil
+      assert Repo.get!(Cart, ctx.api_cart.uuid).status == "active"
     end
   end
 end

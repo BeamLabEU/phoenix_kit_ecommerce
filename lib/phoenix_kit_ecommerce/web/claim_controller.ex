@@ -11,10 +11,10 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
 
   use PhoenixKitEcommerce.Web, :controller
 
-  alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.Web.ClaimHTML
+  alias PhoenixKitEcommerce.Web.Helpers
 
   plug :put_view, html: ClaimHTML
   plug :privacy_headers
@@ -42,15 +42,11 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
       {:ok, %{claim: claim, cart: cart}} ->
         put_locale(claim.language)
 
-        existing =
-          case Shop.find_active_cart(user_uuid: browser.user_uuid, session_id: browser.session_id) do
-            %{items: [_ | _]} = browser_cart -> browser_cart
-            _none_or_empty -> nil
-          end
-
-        render(conn, :interstitial,
+        conn
+        |> assign(:content_language, claim.language)
+        |> render(:interstitial,
           cart: cart,
-          existing: existing,
+          existing: existing_cart(browser),
           action: Claims.path(token),
           page_title: gettext("An assistant prepared this cart for you")
         )
@@ -71,11 +67,8 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
         |> skipped_notice(skipped)
         |> redirect(to: Shop.checkout_url(language))
 
-      # `:reshow`: the browser's cart changed since the page was shown. `:busy`: Postgres
-      # aborted this POST as a deadlock victim against a storefront add in another tab (see
-      # `Claims.redeem/3`); nothing was claimed. Both show the choice again, with the same
-      # notice, never an error page.
-      {:error, reason} when reason in [:reshow, :busy] ->
+      # The browser's cart changed since the page was shown: show the choice again.
+      {:error, :reshow} ->
         put_locale(Claims.language_of(token))
 
         conn
@@ -83,6 +76,16 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
           :info,
           gettext("Your cart changed while you were deciding. Please choose again.")
         )
+        |> redirect(to: Claims.path(token))
+
+      # Postgres aborted this POST as a deadlock victim against a storefront add in another
+      # tab (see `Claims.redeem/3`); nothing was claimed and the cart did not change. The
+      # page is shown again so the buyer can try again.
+      {:error, :busy} ->
+        put_locale(Claims.language_of(token))
+
+        conn
+        |> put_flash(:error, gettext("Something went wrong. Your cart was not changed."))
         |> redirect(to: Claims.path(token))
 
       {:error, reason} when reason in @dead_ends ->
@@ -114,6 +117,14 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
     case conn.assigns[:phoenix_kit_current_user] do
       %{uuid: uuid} when is_binary(uuid) -> uuid
       _ -> nil
+    end
+  end
+
+  # The browser's cart with lines, as `Claims.redeem/3` will find it, else nil.
+  defp existing_cart(browser) do
+    case Claims.browser_cart(browser) do
+      %{items: [_ | _]} = cart -> cart
+      _none_or_empty -> nil
     end
   end
 
@@ -154,14 +165,13 @@ defmodule PhoenixKitEcommerce.Web.ClaimController do
   defp choice(value) when value in ["replace", "add"], do: value
   defp choice(_other), do: nil
 
-  defp put_locale(language) do
-    base = DialectMapper.extract_base(language || Shop.get_default_language())
-    Gettext.put_locale(PhoenixKitEcommerce.Gettext, base)
-  end
+  defp put_locale(language),
+    do: Helpers.put_content_locale(language || Shop.get_default_language())
 
   defp privacy_headers(conn, _opts) do
     conn
     |> put_resp_header("referrer-policy", "no-referrer")
     |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("x-robots-tag", "noindex, nofollow")
   end
 end

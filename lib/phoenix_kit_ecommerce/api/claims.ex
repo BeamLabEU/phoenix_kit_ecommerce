@@ -254,33 +254,44 @@ defmodule PhoenixKitEcommerce.API.Claims do
     end
   end
 
-  defp lock_browser_cart(%{session_id: session_id} = browser) do
+  defp lock_browser_cart(browser) do
+    browser |> browser_cart_query() |> lock("FOR UPDATE") |> repo().one() |> preload_cart()
+  end
+
+  @doc """
+  The active cart a claim of this browser is compared against: the newest of the
+  logged-in user's cart and the browser's unowned session cart, or nil. Reads
+  only. The page and `redeem/3` share this one definition, so what the page
+  offers is exactly what a POST finds.
+  """
+  @spec browser_cart(browser()) :: Cart.t() | nil
+  def browser_cart(%{session_id: _session_id} = browser) do
+    browser |> browser_cart_query() |> repo().one() |> preload_cart()
+  end
+
+  defp browser_cart_query(%{session_id: session_id} = browser) do
     user_uuid = Map.get(browser, :user_uuid)
 
     query =
       from(c in Cart,
         where: c.status == "active",
         order_by: [desc: c.updated_at],
-        limit: 1,
-        lock: "FOR UPDATE"
+        limit: 1
       )
 
-    query =
-      if user_uuid do
-        where(
-          query,
-          [c],
-          c.user_uuid == ^user_uuid or (c.session_id == ^session_id and is_nil(c.user_uuid))
-        )
-      else
-        where(query, [c], c.session_id == ^session_id and is_nil(c.user_uuid))
-      end
-
-    case repo().one(query) do
-      nil -> nil
-      cart -> repo().preload(cart, @preloads, force: true)
+    if user_uuid do
+      where(
+        query,
+        [c],
+        c.user_uuid == ^user_uuid or (c.session_id == ^session_id and is_nil(c.user_uuid))
+      )
+    else
+      where(query, [c], c.session_id == ^session_id and is_nil(c.user_uuid))
     end
   end
+
+  defp preload_cart(nil), do: nil
+  defp preload_cart(cart), do: repo().preload(cart, @preloads, force: true)
 
   # What the page offered (`offer`) must still be what the browser has: "none"
   # while it has no cart with lines, the uuid of its cart while it has one. Any

@@ -13,6 +13,10 @@ defmodule PhoenixKitEcommerce.Web.ClaimRoutesTest do
   """
   use ExUnit.Case, async: true
 
+  # Session, flash and CSRF; the logged-in user; the browser's cart id. They are
+  # what protect the consuming POST.
+  @pipelines [:browser, :phoenix_kit_auto_setup, :phoenix_kit_shop_session]
+
   defmodule ProbeRouter do
     use Phoenix.Router
 
@@ -49,5 +53,15 @@ defmodule PhoenixKitEcommerce.Web.ClaimRoutesTest do
 
     assert [%{path: "/checkout/claim/:token", plug_opts: :create}] =
              Enum.filter(routes, &(&1.verb == :post))
+  end
+
+  test "both routes run through the browser, auto-setup and shop-session pipelines" do
+    for {verb, action} <- [{"GET", :show}, {"POST", :create}] do
+      assert %{
+               plug: PhoenixKitEcommerce.Web.ClaimController,
+               plug_opts: ^action,
+               pipe_through: @pipelines
+             } = Phoenix.Router.route_info(ProbeRouter, verb, "/checkout/claim/abc", "")
+    end
   end
 end
