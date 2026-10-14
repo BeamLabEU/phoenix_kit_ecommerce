@@ -859,6 +859,40 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert Repo.aggregate(CartClaim, :count) == 0
     end
 
+    test "a host that differs only in case from a served one is served, port kept", %{p1: p1} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      assert {:ok, %{url: "https://shop.test:8443/checkout/claim/" <> _}} =
+               CartHandlers.get_checkout_link(
+                 %{"cart_token" => token},
+                 ctx_for(token, %{hosts: ["Shop.TEST"], base_url: "https://shop.test:8443"})
+               )
+    end
+
+    test "a dry run refuses where the real call does: no host to use", %{p1: p1} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+
+      for hosts <- [[], nil], dry_run? <- [true, false] do
+        overrides = %{hosts: hosts, base_url: "https://evil.example", dry_run?: dry_run?}
+
+        assert {:error, :internal_error, _message, %{}} =
+                 CartHandlers.get_checkout_link(
+                   %{"cart_token" => token},
+                   ctx_for(token, overrides)
+                 )
+      end
+
+      assert Repo.aggregate(CartClaim, :count) == 0
+
+      assert {:preview, %{would_issue_link: true}, _fingerprint} =
+               CartHandlers.get_checkout_link(
+                 %{"cart_token" => token},
+                 ctx_for(token, %{dry_run?: true})
+               )
+    end
+
     test "through the executor, a host hook that pins the domain wins over the Host header", %{
       p1: p1
     } do
@@ -960,6 +994,52 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     defp stored_responses do
       %{rows: rows} = Repo.query!("SELECT response::text FROM phoenix_kit_api_idempotency")
       for [response] <- rows, is_binary(response), do: response
+    end
+  end
+
+  describe "shop.get_checkout_link with a site_url setting" do
+    setup %{p1: p1} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
+      put_setting!("site_url", "https://Canonical.test:8443/")
+      %{token: token}
+    end
+
+    defp link(token, overrides),
+      do: CartHandlers.get_checkout_link(%{"cart_token" => token}, ctx_for(token, overrides))
+
+    test "the install's own host is served even when the hosts do not name it", %{token: token} do
+      assert {:ok, %{url: "https://canonical.test:8443/checkout/claim/" <> _}} =
+               link(token, %{base_url: "https://canonical.test:8443"})
+    end
+
+    test "a host the request made up is not served when the hosts name the domains", %{
+      token: token
+    } do
+      assert {:ok, %{url: "https://shop.test/checkout/claim/" <> _}} =
+               link(token, %{base_url: "https://evil.example"})
+    end
+
+    test "a call with no hosts links to the install's own address, a dry run too", %{
+      token: token
+    } do
+      for hosts <- [[], nil] do
+        assert {:ok, %{url: "https://canonical.test:8443/checkout/claim/" <> _}} =
+                 link(token, %{hosts: hosts, base_url: "https://evil.example"})
+
+        assert {:preview, %{would_issue_link: true}, _fingerprint} =
+                 link(token, %{hosts: hosts, base_url: "https://evil.example", dry_run?: true})
+      end
+    end
+
+    test "a setting that is not an http(s) address names no host", %{token: token} do
+      for site_url <- ["canonical.test", "ftp://canonical.test", "https://", "   "] do
+        put_setting!("site_url", site_url)
+
+        assert {:error, :internal_error, _message, %{}} =
+                 link(token, %{hosts: [], base_url: "https://canonical.test"}),
+               site_url
+      end
     end
   end
 

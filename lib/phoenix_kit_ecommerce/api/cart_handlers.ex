@@ -19,6 +19,7 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   """
 
   alias PhoenixKit.RepoHelper
+  alias PhoenixKit.Settings
   alias PhoenixKit.Utils.CountryData
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartMoney
@@ -380,34 +381,65 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   claim path, which has no locale prefix; the claim remembers the call's
   language for the page. The response carries a credential, so core's
   idempotency layer never stores it for replay, and the URL must point at a
-  host this install serves: when the host of `ctx.base_url` is not in
-  `ctx.hosts` the first of `ctx.hosts` is used instead, and a call with no
-  hosts at all is refused (before a claim exists). Core fills `ctx.hosts` with
-  the request host unless the host app's `:api_request_context` hook names the
-  domains, so a multi-domain install should name them there.
+  host this install serves: `ctx.hosts` plus the host of the `site_url`
+  setting when one is set. When the host of `ctx.base_url` is not served the
+  first of `ctx.hosts` is used instead (the `site_url` origin when there are
+  none), and a call with no host to use at all is refused before a claim
+  exists. A dry run refuses in exactly the same cases. Core fills `ctx.hosts`
+  with the request host unless the host app's `:api_request_context` hook
+  names the domains, so that default accepts whatever Host header the request
+  came with; a multi-domain install should name its domains there.
   """
   @spec get_checkout_link(map(), map()) :: result()
   def get_checkout_link(input, ctx), do: in_cart_context(input, ctx, &do_get_checkout_link/3)
 
+  # The base URL is resolved before the dry-run branch: a preview must refuse
+  # exactly where the real call does.
   defp do_get_checkout_link(hash, _input, ctx) do
-    with {:ok, cart} <- linkable_cart(hash) do
+    with {:ok, cart} <- linkable_cart(hash),
+         {:ok, base_url} <- claim_base_url(ctx) do
       if ctx[:dry_run?] == true do
         {:preview, %{would_issue_link: true, lines: length(cart.items)}, CartView.revision(cart)}
       else
-        issue_link(cart, hash, ctx)
+        issue_claim(cart, hash, base_url, ctx)
       end
     end
   end
 
   defp claim_base_url(ctx) do
     hosts = Enum.map(ctx[:hosts] || [], &String.downcase/1)
+    canonical = canonical_site()
+    served = hosts ++ List.wrap(canonical && canonical.host)
     uri = URI.parse(ctx[:base_url] || "")
-    served? = is_binary(uri.host) and String.downcase(uri.host) in hosts
+    served? = is_binary(uri.host) and String.downcase(uri.host) in served
 
     cond do
-      served? and uri.scheme in ["http", "https"] -> {:ok, ctx.base_url}
-      hosts == [] -> {:error, :internal_error, "The checkout link could not be created.", %{}}
-      true -> {:ok, "#{if uri.scheme == "http", do: "http", else: "https"}://#{hd(hosts)}"}
+      served? and uri.scheme in ["http", "https"] ->
+        {:ok, ctx.base_url}
+
+      hosts != [] ->
+        {:ok, "#{if uri.scheme == "http", do: "http", else: "https"}://#{hd(hosts)}"}
+
+      canonical ->
+        {:ok,
+         URI.to_string(%URI{scheme: canonical.scheme, host: canonical.host, port: canonical.port})}
+
+      true ->
+        {:error, :internal_error, "The checkout link could not be created.", %{}}
+    end
+  end
+
+  # The install's own address (`site_url` setting), when it is set and usable;
+  # core's MCP origin check reads the same setting.
+  defp canonical_site do
+    with site_url when is_binary(site_url) and site_url != "" <-
+           Settings.get_setting_cached("site_url", ""),
+         {:ok, %URI{scheme: scheme, host: host} = uri}
+         when scheme in ["http", "https"] and is_binary(host) and host != "" <-
+           URI.new(String.trim(site_url)) do
+      %URI{uri | host: String.downcase(host)}
+    else
+      _unset_or_unusable -> nil
     end
   end
 
@@ -419,10 +451,6 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
       {:locked, _claim} -> locked()
       :not_found -> cart_not_found()
     end
-  end
-
-  defp issue_link(cart, hash, ctx) do
-    with {:ok, base_url} <- claim_base_url(ctx), do: issue_claim(cart, hash, base_url, ctx)
   end
 
   defp issue_claim(cart, hash, base_url, ctx) do
