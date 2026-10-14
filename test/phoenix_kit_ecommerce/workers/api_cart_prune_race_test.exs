@@ -40,7 +40,7 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneRaceTest do
       assert Task.yield(pruner, 300) == nil, "the prune did not wait for the cart row"
       release(holder)
 
-      assert {:ok, 0} = Task.await(pruner, 10_000)
+      assert {:ok, _count} = Task.await(pruner, 10_000)
       assert unboxed(fn -> Repo.get(Cart, cart.uuid) end) != nil
     end
   end
@@ -54,7 +54,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneRaceTest do
     assert Task.yield(pruner, 300) == nil, "the prune did not wait for the cart row"
     release(holder)
 
-    assert {:ok, 1} = Task.await(pruner, 10_000)
+    assert {:ok, count} = Task.await(pruner, 10_000)
+    assert count >= 1
     assert unboxed(fn -> Repo.get(Cart, cart.uuid) end) == nil
   end
 
@@ -62,21 +63,17 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneRaceTest do
 
   defp expired_api_cart! do
     session_id = "api:prune-race-" <> Integer.to_string(System.unique_integer([:positive]))
-    stamp = days_ago(40)
+    cart = unboxed(fn -> elem(PhoenixKitEcommerce.create_cart(session_id: session_id), 1) end)
 
-    cart =
-      unboxed(fn ->
-        {:ok, cart} = PhoenixKitEcommerce.create_cart(session_id: session_id)
-
-        Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid),
-          set: [status: "abandoned", updated_at: stamp]
-        )
-
-        cart
-      end)
-
+    # Registered before any further write, so a raise below cannot leak the cart.
     on_exit(fn ->
       unboxed(fn -> Repo.delete_all(from(c in Cart, where: c.uuid == ^cart.uuid)) end)
+    end)
+
+    unboxed(fn ->
+      Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid),
+        set: [status: "abandoned", updated_at: days_ago(40)]
+      )
     end)
 
     cart

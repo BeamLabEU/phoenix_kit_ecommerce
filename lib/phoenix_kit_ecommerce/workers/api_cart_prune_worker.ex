@@ -48,6 +48,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneWorker do
 
     {deleted, _} = RepoHelper.repo().delete_all(query)
 
+    # A short batch ends the run, also when rows of the batch changed meanwhile:
+    # the rest waits for the next daily run.
     if deleted < @batch,
       do: deleted_so_far + deleted,
       else: delete_expired(cutoff, deleted_so_far + deleted)

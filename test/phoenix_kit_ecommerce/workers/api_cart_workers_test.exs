@@ -47,6 +47,46 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
     Repo.get!(Cart, cart.uuid)
   end
 
+  # Bulk insert of api carts, bypassing the changesets; returns their uuids.
+  defp insert_carts!(count, attrs) do
+    rows =
+      for _ <- 1..count do
+        Map.merge(
+          %{
+            uuid: UUIDv7.generate(),
+            session_id: api_id(),
+            status: "abandoned",
+            subtotal: Decimal.new(0),
+            shipping_amount: Decimal.new(0),
+            tax_amount: Decimal.new(0),
+            discount_amount: Decimal.new(0),
+            total: Decimal.new(0),
+            total_weight_grams: 0,
+            items_count: 0,
+            metadata: %{},
+            inserted_at: attrs.updated_at,
+            updated_at: attrs.updated_at
+          },
+          attrs
+        )
+      end
+
+    rows |> Enum.chunk_every(300) |> Enum.each(&Repo.insert_all(Cart, &1))
+    Enum.map(rows, & &1.uuid)
+  end
+
+  # Carts the prune would take, whatever else the shared database holds.
+  defp expired_api_count do
+    cutoff = days_ago(30)
+
+    Repo.aggregate(
+      from(c in Cart,
+        where: c.status == "abandoned" and like(c.session_id, "api:%") and c.updated_at < ^cutoff
+      ),
+      :count
+    )
+  end
+
   defp api_id, do: "api:" <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
   defp status(cart), do: Repo.get!(Cart, cart.uuid).status
   defp exists?(schema, uuid), do: Repo.get(schema, uuid) != nil
@@ -156,7 +196,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       old = cart!(api_id(), status: "abandoned", updated_at: days_ago(31))
       claim = claim!(old)
 
-      assert {:ok, 1} = ApiCartPruneWorker.prune()
+      assert {:ok, deleted} = ApiCartPruneWorker.prune()
+      assert deleted >= 1
 
       refute exists?(Cart, old.uuid)
       refute exists?(CartClaim, claim.uuid)
@@ -170,7 +211,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       assert Repo.aggregate(from(i in CartItem, where: i.cart_uuid == ^with_lines.uuid), :count) ==
                1
 
-      assert {:ok, 1} = ApiCartPruneWorker.prune()
+      assert {:ok, deleted} = ApiCartPruneWorker.prune()
+      assert deleted >= 1
 
       refute exists?(Cart, with_lines.uuid)
 
@@ -192,41 +234,39 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
       {:ok, _} = Shop.add_to_cart(browser_lines, product!(), 1)
       browser_lines = set!(browser_lines, status: "abandoned", updated_at: days_ago(100))
 
-      assert {:ok, 0} = ApiCartPruneWorker.prune()
+      assert {:ok, _deleted} = ApiCartPruneWorker.prune()
 
       for cart <- [young, active, browser, converted, young_lines, browser_lines],
           do: assert(exists?(Cart, cart.uuid))
     end
 
     test "deletes every expired cart when there are more than one batch of them" do
-      stamp = days_ago(40)
-
-      rows =
-        for _ <- 1..1003 do
-          %{
-            uuid: UUIDv7.generate(),
-            session_id: api_id(),
-            status: "abandoned",
-            subtotal: Decimal.new(0),
-            shipping_amount: Decimal.new(0),
-            tax_amount: Decimal.new(0),
-            discount_amount: Decimal.new(0),
-            total: Decimal.new(0),
-            total_weight_grams: 0,
-            items_count: 0,
-            metadata: %{},
-            inserted_at: stamp,
-            updated_at: stamp
-          }
-        end
-
-      rows |> Enum.chunk_every(300) |> Enum.each(&Repo.insert_all(Cart, &1))
       young = cart!(api_id(), status: "abandoned", updated_at: days_ago(2))
+      expired = insert_carts!(1003, %{updated_at: days_ago(40)})
+      before = expired_api_count()
+      assert before >= 1003
 
-      assert {:ok, 1003} = ApiCartPruneWorker.prune()
+      assert {:ok, ^before} = ApiCartPruneWorker.prune()
 
-      assert Repo.aggregate(from(c in Cart, where: c.status == "abandoned"), :count) == 1
+      assert expired_api_count() == 0
+      assert Repo.aggregate(from(c in Cart, where: c.uuid in ^expired), :count) == 0
       assert exists?(Cart, young.uuid)
+    end
+
+    # The subquery that picks a batch must itself select expired carts only: a
+    # batch of the first 500 rows would be all young or active carts here, the
+    # DELETE would keep every one of them and the run would stop at once.
+    test "finds the expired carts behind more than one batch of carts that are not expired" do
+      young = insert_carts!(300, %{updated_at: days_ago(2)})
+      active = insert_carts!(300, %{status: "active", updated_at: days_ago(100)})
+      expired = insert_carts!(3, %{updated_at: days_ago(40)})
+
+      assert {:ok, deleted} = ApiCartPruneWorker.prune()
+      assert deleted >= 3
+
+      assert Repo.aggregate(from(c in Cart, where: c.uuid in ^expired), :count) == 0
+      assert Repo.aggregate(from(c in Cart, where: c.uuid in ^young), :count) == 300
+      assert Repo.aggregate(from(c in Cart, where: c.uuid in ^active), :count) == 300
     end
 
     test "perform/1 does nothing while the shop is off" do
