@@ -23,6 +23,7 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
   alias PhoenixKitEcommerce.API.CartStore
   alias PhoenixKitEcommerce.API.CartToken
   alias PhoenixKitEcommerce.API.CartTools
+  alias PhoenixKitEcommerce.API.CartView
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.API.Context
   alias PhoenixKitEcommerce.Cart
@@ -521,6 +522,29 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert {200, %{"lines" => []}, _} = call("shop.get_cart", %{"cart_token" => token})
     end
 
+    # A token that never wrote is cleared at once when asked in the ordinary way,
+    # but a caller may ask for a dry run all the same; core answers 500 to a dry
+    # run whose handler does not preview.
+    test "a dry run on a token without a cart previews an empty cart, not a 500", _ctx do
+      token = new_cart_token()
+
+      assert {:preview, %{lines_removed: 0, cart: %{lines: []}, would_be: %{lines: []}},
+              fingerprint} =
+               CartHandlers.clear_cart(%{"cart_token" => token}, %{
+                 ctx_for(token)
+                 | dry_run?: true
+               })
+
+      assert fingerprint == CartView.revision(nil)
+
+      assert {200,
+              %{
+                "executed" => false,
+                "dry_run" => true,
+                "preview" => %{"lines_removed" => 0, "cart" => %{"lines" => []}}
+              }, _} = call("shop.clear_cart", %{"cart_token" => token, "dry_run" => true})
+    end
+
     test "clearing a token without a cart is a no-op", _ctx do
       token = new_cart_token()
 
@@ -650,7 +674,116 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     end
   end
 
+  describe "shipping dry runs and revision snapshots" do
+    defp shipping_input(token, method),
+      do: %{"cart_token" => token, "country" => "DE", "method_id" => method.uuid}
+
+    test "a dry run of set_shipping previews the choice and leaves the cart as it was", %{
+      physical: physical
+    } do
+      token = new_cart_token()
+      {200, %{"revision" => revision}, _} = write(token, [{physical, 1}])
+      method = method!(%{"countries" => ["DE"]})
+      {:ok, hash} = CartToken.verify(token)
+      {:ok, before} = CartStore.resolve(hash)
+
+      assert {:preview, %{method: method_id, country: "DE", cart: %{lines: [_]}}, fingerprint} =
+               CartHandlers.set_shipping(shipping_input(token, method), %{
+                 ctx_for(token)
+                 | dry_run?: true
+               })
+
+      assert method_id == method.uuid
+      assert fingerprint == revision
+
+      assert {200,
+              %{
+                "executed" => false,
+                "dry_run" => true,
+                "preview" => %{"method" => ^method_id, "country" => "DE"}
+              }, _} =
+               call("shop.set_shipping", Map.put(shipping_input(token, method), "dry_run", true))
+
+      {:ok, after_dry_runs} = CartStore.resolve(hash)
+
+      for field <- [:shipping_method_uuid, :shipping_country, :shipping_amount, :total] do
+        assert Map.fetch!(after_dry_runs, field) == Map.fetch!(before, field), inspect(field)
+      end
+
+      assert is_nil(after_dry_runs.shipping_method_uuid)
+
+      assert {200, %{"revision" => ^revision}, _} =
+               call("shop.get_cart", %{"cart_token" => token})
+    end
+
+    # The revision a tool answers with must be one `expected_revision` can be
+    # sent back with: the writer remembers the cart it leaves, and so must the
+    # other writing tools, or the agent gets the whole cart instead of what
+    # changed.
+    test "the revision set_shipping answers with is remembered for changes_since", %{
+      physical: physical,
+      p1: p1
+    } do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      method = method!(%{"countries" => ["DE"]})
+
+      {200, %{"revision" => chosen}, _} =
+        call("shop.set_shipping", shipping_input(token, method))
+
+      {200, _, _} = write(token, [{physical, 1}, {p1, 1}])
+
+      assert {409, %{"code" => "revision_mismatch", "context" => context}, _} =
+               write(token, [{p1, 2}], %{"expected_revision" => chosen})
+
+      assert [%{"product_id" => id}] = context["changes_since"]["added"]
+      assert id == p1.uuid
+      refute Map.has_key?(context, "cart")
+    end
+
+    test "the revision a confirmed clear_cart leaves is remembered for changes_since", %{
+      physical: physical,
+      p1: p1
+    } do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      method = method!(%{"countries" => ["DE"]})
+      {200, _, _} = call("shop.set_shipping", shipping_input(token, method))
+
+      {200, %{"confirm_token" => code}, _} = call("shop.clear_cart", %{"cart_token" => token})
+
+      {200, %{"lines_removed" => 1, "cart" => %{"revision" => cleared}}, _} =
+        call("shop.clear_cart", %{"cart_token" => token, "confirm_token" => code})
+
+      # The cleared cart keeps its shipping choice, so its revision is not the
+      # empty cart's: only a stored snapshot can answer for it.
+      refute cleared == CartView.revision(nil)
+
+      {200, _, _} = write(token, [{p1, 1}])
+
+      assert {409, %{"code" => "revision_mismatch", "context" => context}, _} =
+               write(token, [{p1, 2}], %{"expected_revision" => cleared})
+
+      assert [%{"product_id" => id}] = context["changes_since"]["added"]
+      assert id == p1.uuid
+      refute Map.has_key?(context, "cart")
+    end
+  end
+
   describe "shop.get_checkout_link" do
+    test "a line whose product left the shop does not stop the link", %{p1: p1, p2: p2} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}, {p2, 1}])
+      {:ok, _} = Shop.update_product(p1, %{"status" => "archived"})
+
+      assert {200, %{"lines" => lines}, _} = call("shop.get_cart", %{"cart_token" => token})
+      assert Enum.sort(Enum.map(lines, & &1["status"])) == ["ok", "unavailable"]
+
+      assert {200, %{"url" => url}, _} = call("shop.get_checkout_link", %{"cart_token" => token})
+      assert {:ok, %{cart: cart}} = url |> String.split("/") |> List.last() |> Claims.peek()
+      assert length(cart.items) == 2
+    end
+
     test "issues a one-time claim URL for a cart with lines", %{p1: p1} do
       token = new_cart_token()
       {200, _, _} = write(token, [{p1, 1}])
@@ -856,6 +989,32 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
 
       assert {409, %{"code" => "cart_locked"}, _} =
                call("shop.clear_cart", %{"cart_token" => token})
+    end
+
+    # Deliberate: get_cart is the one read that answers a claimed cart with
+    # `checking_out`; the other read, the shipping options, refuses it like a write.
+    test "get_cart says checking_out while get_shipping_options says cart_locked", %{
+      physical: physical
+    } do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      {200, %{"url" => url}, _} = call("shop.get_checkout_link", %{"cart_token" => token})
+      raw = url |> String.split("/") |> List.last()
+
+      assert {:ok, %{mode: :moved}} =
+               Claims.redeem(
+                 raw,
+                 %{session_id: "browser-#{System.unique_integer([:positive])}"},
+                 %{
+                   offer: "none"
+                 }
+               )
+
+      assert {200, %{"status" => "checking_out"}, _} =
+               call("shop.get_cart", %{"cart_token" => token})
+
+      assert {409, %{"code" => "cart_locked"}, _} =
+               call("shop.get_shipping_options", %{"cart_token" => token, "country" => "DE"})
     end
 
     # The three hand-off paths (moved, replaced, merged) all lock the old token. "none" is the

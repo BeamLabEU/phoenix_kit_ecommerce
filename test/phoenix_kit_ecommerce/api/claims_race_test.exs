@@ -24,6 +24,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
   alias PhoenixKitEcommerce.API.CartToken
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.Test.Repo
 
   @moduletag :integration
@@ -111,7 +112,85 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
     end
   end
 
+  # `issue/3` and `redeem/3` meet on the API cart's row. Here one side is played
+  # by a transaction that holds the row (as the real one would until its commit)
+  # and the other is the real call: it must wait for the row, then decide on what
+  # it finds there. The test fails when the call does not wait (no lock) or
+  # decides on what it read before the wait (no re-check under the lock).
+  test "a link asked for while the cart is being handed over waits for the hand-over and is refused" do
+    {_raw, api} = api_cart_with_claim!()
+    hash = String.replace_prefix(api.session_id, "api:", "")
+    browser = browser!()
+
+    holder =
+      hold_cart_row(api, fn ->
+        Repo.update_all(from(c in Cart, where: c.uuid == ^api.uuid),
+          set: [session_id: browser.session_id]
+        )
+      end)
+
+    issuer = Task.async(fn -> unboxed(fn -> Claims.issue(api, hash, "en") end) end)
+
+    assert Task.yield(issuer, 300) == nil, "issue/3 did not wait for the cart row"
+    release(holder)
+
+    assert {:error, :cart_unavailable} = Task.await(issuer, 10_000)
+
+    assert unboxed(fn ->
+             Repo.aggregate(from(k in CartClaim, where: k.cart_uuid == ^api.uuid), :count)
+           end) == 1
+  end
+
+  test "a redeem waiting for the cart row finds the claim superseded by the link that got there first" do
+    {raw, api} = api_cart_with_claim!()
+    browser = browser!()
+
+    holder =
+      hold_cart_row(api, fn ->
+        Repo.update_all(from(k in CartClaim, where: k.cart_uuid == ^api.uuid),
+          set: [superseded_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+        )
+      end)
+
+    redeemer = Task.async(fn -> unboxed(fn -> redeem(raw, browser) end) end)
+
+    assert Task.yield(redeemer, 300) == nil, "redeem/3 did not wait for the cart row"
+    release(holder)
+
+    assert {:error, :superseded} = Task.await(redeemer, 10_000)
+    assert count_active(browser) == 0
+    assert unboxed(fn -> Repo.get!(Cart, api.uuid).session_id end) == api.session_id
+  end
+
   # --- helpers ------------------------------------------------------------------
+
+  # A transaction on its own connection that locks the cart row, runs `change`
+  # and commits when `release/1` says so. Returns once the lock is held.
+  defp hold_cart_row(cart, change) do
+    test = self()
+
+    task =
+      Task.async(fn ->
+        unboxed(fn ->
+          Repo.transaction(fn ->
+            Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
+            send(test, :holding)
+
+            receive do
+              :release -> change.()
+            end
+          end)
+        end)
+      end)
+
+    assert_receive :holding, 5_000
+    task
+  end
+
+  defp release(%Task{pid: pid} = task) do
+    send(pid, :release)
+    assert {:ok, _} = Task.await(task, 10_000)
+  end
 
   defp redeem(raw, browser), do: Claims.redeem(raw, browser, %{offer: "none", choice: nil})
 
