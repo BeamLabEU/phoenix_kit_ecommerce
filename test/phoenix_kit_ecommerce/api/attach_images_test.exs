@@ -571,6 +571,45 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     end
   end
 
+  describe "a row whose attachment rolls the lock's transaction back" do
+    # An item whose name is blank fails the catalogue's validation inside
+    # `Attachments.attach_files/3`, which rolls back the transaction it is
+    # nested in. That row must answer an error; the call must go on.
+    defp blank_name!(item) do
+      import Ecto.Query, only: [from: 2]
+
+      {1, _} =
+        PhoenixKit.Config.get_repo().update_all(
+          from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^item.uuid),
+          set: [name: ""]
+        )
+    end
+
+    test "answers a database_error for that row and still attaches the next one",
+         %{catalogue: catalogue, ctx: ctx, first: first} do
+      broken = F.item!(catalogue)
+      fine = F.item!(catalogue)
+      blank_name!(broken)
+      serve(%{"/a.png" => {"image/png", first}})
+
+      {answer, _log} =
+        with_log([level: :error], fn ->
+          attach([row(broken, [image("/a.png")]), row(fine, [image("/a.png")])], ctx)
+        end)
+
+      assert {:ok, %{"results" => [bad, good], "summary" => %{"error" => 1, "updated" => 1}}} =
+               answer
+
+      assert bad["action"] == "error"
+      assert bad["error"]["code"] == "validation_failed"
+      assert bad["error"]["context"]["reason"] == "database_error"
+      assert good["action"] == "updated"
+
+      assert F.reload!(broken).data["media_order"] in [nil, []]
+      assert [_picture] = F.reload!(fine).data["media_order"]
+    end
+  end
+
   test "a signed URL's query string reaches no log line, no stored file metadata, no activity entry and no answer",
        %{catalogue: catalogue, user: user, ctx: ctx, first: first} do
     # The test environment logs from :warning up; the downloader's lines that

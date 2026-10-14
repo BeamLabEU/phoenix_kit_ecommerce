@@ -31,8 +31,12 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
 
   @doc """
   Runs `fun` in a transaction that holds the lock of every item in `items`,
-  and answers what `fun` answers. `fun` gets the locked rows as read now,
-  `%{uuid => item}` (an item that is gone is absent), so it can check them
+  and answers `{:ok, what_fun_answers}`. If the transaction does not commit
+  (a write inside it rolled the transaction back, as a nested rollback does to
+  the one around it, or the database refused), nothing of it is kept and the
+  answer is `{:error, row_error}`, a `Rows` error (`database_error`) fit to
+  stand for each row that was to be written. `fun` gets the locked rows as read
+  now, `%{uuid => item}` (an item that is gone is absent), so it can check them
   against what a plan was made from and have `update_rows/2` write in the same
   transaction. The locks are taken in the catalogue's own order (the
   categories involved `FOR SHARE`, then the items `FOR UPDATE`, each sorted by
@@ -41,38 +45,48 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   alone outside the transaction: price and availability rows move no folder,
   which is what the catalogue asks a caller inside its transaction to be sure of.
   """
-  @spec with_locked_items([struct()], (%{String.t() => struct()} -> result)) :: result
+  @spec with_locked_items([struct()], (%{String.t() => struct()} -> result)) ::
+          {:ok, result} | {:error, Rows.t()}
         when result: term()
   def with_locked_items(items, fun) when is_list(items) and is_function(fun, 1) do
     repo = PhoenixKit.Config.get_repo()
     uuids = items |> Enum.map(& &1.uuid) |> Enum.uniq() |> Enum.sort()
 
-    {:ok, result} =
-      repo.transaction(fn ->
-        repo.all(
-          from(c in Category,
-            where:
-              c.uuid in subquery(
-                from(i in Item,
-                  where: i.uuid in ^uuids and not is_nil(i.category_uuid),
-                  select: i.category_uuid
-                )
-              ),
-            order_by: c.uuid,
-            lock: "FOR SHARE",
-            select: c.uuid
-          )
+    case repo.transaction(fn -> repo |> lock(uuids) |> fun.() end) do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, reason} ->
+        Logger.error(
+          "[API.CatalogueWrites] with_locked_items failed: " <> Meta.term_class(reason)
         )
 
-        locked =
-          from(i in Item, where: i.uuid in ^uuids, order_by: i.uuid, lock: "FOR UPDATE")
-          |> repo.all()
-          |> Map.new(&{&1.uuid, &1})
+        {:error,
+         Rows.error(:validation_failed, "The product could not be saved.", %{
+           "reason" => "database_error"
+         })}
+    end
+  end
 
-        fun.(locked)
-      end)
+  defp lock(repo, uuids) do
+    repo.all(
+      from(c in Category,
+        where:
+          c.uuid in subquery(
+            from(i in Item,
+              where: i.uuid in ^uuids and not is_nil(i.category_uuid),
+              select: i.category_uuid
+            )
+          ),
+        order_by: c.uuid,
+        lock: "FOR SHARE",
+        select: c.uuid
+      )
+    )
 
-    result
+    from(i in Item, where: i.uuid in ^uuids, order_by: i.uuid, lock: "FOR UPDATE")
+    |> repo.all()
+    |> Map.new(&{&1.uuid, &1})
   end
 
   @doc """

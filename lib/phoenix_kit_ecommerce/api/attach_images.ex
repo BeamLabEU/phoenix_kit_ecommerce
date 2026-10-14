@@ -236,12 +236,20 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   # what they are at this moment, not at planning time. The lock is held until
   # the pictures are attached, so a trash or a move waits for them.
   defp attach_row(%{item: item} = row, lookups, {user_uuid, catalogue_uuid}, ctx) do
-    CatalogueWrites.with_locked_items([item], fn locked ->
-      case available(locked, item, catalogue_uuid) do
-        {:ok, fresh} -> attach_to(%{row | item: fresh}, lookups, user_uuid, ctx)
-        :error -> gone(row)
-      end
-    end)
+    locked_result =
+      CatalogueWrites.with_locked_items([item], fn locked ->
+        case available(locked, item, catalogue_uuid) do
+          {:ok, fresh} -> attach_to(%{row | item: fresh}, lookups, user_uuid, ctx)
+          :error -> gone(row)
+        end
+      end)
+
+    case locked_result do
+      {:ok, attached} -> attached
+      # The transaction did not commit (a rollback inside it), so nothing of
+      # this row was kept.
+      {:error, error} -> Batch.fail(row, error)
+    end
   end
 
   defp available(locked, item, catalogue_uuid) do

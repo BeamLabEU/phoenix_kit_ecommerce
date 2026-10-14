@@ -292,6 +292,36 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert Decimal.equal?(F.reload!(moved).base_price, Decimal.new("100.00"))
     end
 
+    test "a transaction that cannot commit fails the row to write and writes nothing",
+         %{catalogue: catalogue, ctx: ctx} do
+      repo = PhoenixKit.Config.get_repo()
+      item = F.item!(catalogue)
+      plain = price_planner(Decimal.new("120.00"))
+
+      # Inside the lock's transaction a nested rollback (what a catalogue
+      # write that fails its validation does) dooms the transaction around
+      # it. The plan then differs, so nothing is written after the doom.
+      doomed = fn row ->
+        {:ok, plan} = plain.(row)
+
+        if repo.in_transaction?() do
+          repo.transaction(fn -> repo.rollback(:nested) end)
+          {:ok, %{plan | from: %{price: :moved}}}
+        else
+          {:ok, plan}
+        end
+      end
+
+      row = planned(catalogue, item, doomed)
+
+      assert [%{error: error}] =
+               Batch.write_if_unchanged([row], ctx, "ecommerce.set_prices", doomed)
+
+      assert error["code"] == "validation_failed"
+      assert error["context"]["reason"] == "database_error"
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
+    end
+
     test "writes nothing and opens no transaction when no row changes", %{ctx: ctx} do
       assert [] ==
                Batch.write_if_unchanged([], ctx, "ecommerce.set_prices", fn _ -> raise "no" end)

@@ -202,15 +202,25 @@ defmodule PhoenixKitEcommerce.API.Batch do
         rows
 
       items ->
-        written =
+        locked_result =
           CatalogueWrites.with_locked_items(items, fn locked ->
             rows |> Enum.map(&still_planned(&1, locked, planner)) |> write_rows(ctx, tool)
           end)
 
-        # After the commit: a page rendered before it would put the old
-        # prices back into the cache.
-        clear_storefront_cache(written)
-        written
+        case locked_result do
+          {:ok, written} ->
+            # After the commit: a page rendered before it would put the old
+            # prices back into the cache.
+            clear_storefront_cache(written)
+            written
+
+          # The transaction did not commit: no row of it was written.
+          {:error, error} ->
+            Enum.map(rows, fn
+              %{plan: %{changed?: true}} = row -> fail(row, error)
+              row -> row
+            end)
+        end
     end
   end
 
