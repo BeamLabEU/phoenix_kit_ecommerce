@@ -82,7 +82,7 @@ defmodule PhoenixKitEcommerce.API.Claims do
 
     result =
       repo().transaction(fn ->
-        lock_still_api_cart!(cart_uuid, expected)
+        lock_still_api_cart!(cart_uuid, expected, now)
 
         # Bounded table: a link superseded earlier can be redeemed by nobody, so
         # it goes (it reads as `:invalid`, the same notice for the buyer); the
@@ -116,8 +116,12 @@ defmodule PhoenixKitEcommerce.API.Claims do
   end
 
   # The cart row, locked, and still the cart of the token: active and not handed
-  # over (a handed-over cart carries the buyer's session id).
-  defp lock_still_api_cart!(cart_uuid, expected_session_id) do
+  # over (a handed-over cart carries the buyer's session id). The row is also
+  # written (`updated_at`): a sweep whose UPDATE waits on a row that is only
+  # locked resumes on the same row version and decides on what it saw before the
+  # link existed, while a changed row version is checked again against the
+  # sweep's conditions, where the cart is no longer idle.
+  defp lock_still_api_cart!(cart_uuid, expected_session_id, now) do
     case repo().one(
            from(c in Cart,
              where: c.uuid == ^cart_uuid,
@@ -125,8 +129,11 @@ defmodule PhoenixKitEcommerce.API.Claims do
              select: {c.status, c.session_id}
            )
          ) do
-      {"active", ^expected_session_id} -> :ok
-      _handed_over_or_gone -> repo().rollback(:cart_unavailable)
+      {"active", ^expected_session_id} ->
+        repo().update_all(from(c in Cart, where: c.uuid == ^cart_uuid), set: [updated_at: now])
+
+      _handed_over_or_gone ->
+        repo().rollback(:cart_unavailable)
     end
   end
 
