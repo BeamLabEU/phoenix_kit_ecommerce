@@ -207,7 +207,7 @@ search and product tools to anonymous callers (the cart tools, which write, are 
 |---|---|
 | `shop.search_products` | Search by words, category branch, price, options, vendor and sale status; facets; exact count; cursor paging |
 | `shop.search_products_batch` | Up to 20 searches in one call (one rate-limit unit each) |
-| `shop.get_products` | Full cards for up to 50 ids; a discontinued product is a three-field stub; hidden or unknown ids are `not_found` |
+| `shop.get_products` | Full cards for up to 50 ids (one rate-limit unit per ten ids); a discontinued product is a three-field stub; hidden or unknown ids are `not_found` |
 | `shop.list_categories` | The active categories as a tree with product counts |
 | `shop.similar_products` | Products in the same category or sharing an option value or tag |
 

@@ -294,4 +294,45 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
   def shop_data(shop_status, extra \\ %{}) do
     %{"ecommerce" => Map.merge(%{"shop_status" => shop_status}, extra)}
   end
+
+  # Settings and currencies are cache-backed in a running app; the test run has
+  # no cache, so every read of them reaches the database and would drown the
+  # queries a measurement is about.
+  @cached_tables ~w(phoenix_kit_settings phoenix_kit_currencies)
+
+  @doc """
+  The number of repo queries `fun` ran (in this process's sandbox connection),
+  not counting the reads of settings and currencies. Warm caches first when two
+  measurements are compared.
+  """
+  def count_queries(fun) when is_function(fun, 0) do
+    handler_id = {:query_count, make_ref()}
+    test_pid = self()
+
+    :telemetry.attach(
+      handler_id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, metadata, _config ->
+        unless Enum.any?(@cached_tables, &String.contains?(metadata.query, ~s|FROM "#{&1}"|)),
+          do: send(test_pid, :query_ran)
+      end,
+      nil
+    )
+
+    try do
+      fun.()
+    after
+      :telemetry.detach(handler_id)
+    end
+
+    drain_queries(0)
+  end
+
+  defp drain_queries(count) do
+    receive do
+      :query_ran -> drain_queries(count + 1)
+    after
+      0 -> count
+    end
+  end
 end

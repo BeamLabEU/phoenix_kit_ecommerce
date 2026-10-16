@@ -970,9 +970,16 @@ defmodule PhoenixKitEcommerce.Options do
   but are not defined in the schema (e.g., imported products with custom options).
   """
   def get_price_affecting_specs_for_product(product) do
-    product
-    |> get_option_schema_for_product()
-    |> price_affecting_specs(product)
+    get_price_affecting_specs_for_product(product, get_option_schema_for_product(product))
+  end
+
+  @doc """
+  `get_price_affecting_specs_for_product/1` over an option schema the caller
+  already built with `get_option_schema_for_product/1` or `merge_schemas/2`, so
+  that a caller pricing many products reads the schema once.
+  """
+  def get_price_affecting_specs_for_product(product, schema) when is_list(schema) do
+    price_affecting_specs(schema, product)
   end
 
   defp price_affecting_specs(schema, product) do

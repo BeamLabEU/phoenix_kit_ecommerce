@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
   """
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.API.CardLookup
   alias PhoenixKitEcommerce.API.Context
   alias PhoenixKitEcommerce.API.PlainText
   alias PhoenixKitEcommerce.API.Record
@@ -35,31 +36,76 @@ defmodule PhoenixKitEcommerce.API.Cards do
   @spec list_fields() :: [String.t()]
   def list_fields, do: @list_fields
 
-  @spec list_item(Record.t(), Context.t()) :: map()
-  def list_item(%Record{product: product} = record, %Context{} = context) do
+  @doc """
+  What the cards of `records` share, read once for all of them (see
+  `PhoenixKitEcommerce.API.CardLookup`), to be passed to `list_item/3` and
+  `card/3` as `:lookup`. Options: `:keys` (the list fields asked for, default
+  all) and `card?` (the full card's pictures too).
+  """
+  @spec lookup([Record.t()], keyword()) :: CardLookup.t()
+  def lookup(records, opts \\ []) do
+    keys = Keyword.get(opts, :keys) || @list_fields
+    products = Enum.map(records, & &1.product)
+
+    list_pictures =
+      if "image" in keys,
+        do:
+          for(
+            product <- products,
+            uuid = Helpers.first_stored_image(product),
+            do: {uuid, "small"}
+          ),
+        else: []
+
+    card_pictures =
+      if Keyword.get(opts, :card?, false),
+        do: for(product <- products, uuid <- image_uuids(product), do: {uuid, "medium"}),
+        else: []
+
+    CardLookup.build(products,
+      schemas: "price_from" in keys,
+      pictures: list_pictures ++ card_pictures
+    )
+  end
+
+  @doc """
+  A product in a list. Options: `:keys` (build only these fields, default all)
+  and `:lookup` (from `lookup/2`; built for this one record when absent).
+  """
+  @spec list_item(Record.t(), Context.t(), keyword()) :: map()
+  def list_item(%Record{product: product} = record, %Context{} = context, opts \\ []) do
+    keys = Keyword.get(opts, :keys) || @list_fields
+    lookup = Keyword.get_lazy(opts, :lookup, fn -> lookup([record], keys: keys) end)
     language = context.language
     on_request? = PriceDisplay.on_request?(product)
-    {low, high} = Shop.get_price_range(product)
-
     slug = link_slug(product, language)
 
     %{
-      "id" => record.id,
-      "title" => Translations.get_display(product, :title, language),
-      "slug" => slug,
-      "url" => slug && Context.absolute(context, Shop.product_url(product, language)),
-      "price" => priced(on_request?, fn -> Context.money(context, product.price) end),
-      "price_from" => priced(on_request?, fn -> price_from(context, low, high) end),
-      "compare_at" => priced(on_request?, fn -> Context.money(context, compare_at(product)) end),
-      "discount_pct" => priced(on_request?, fn -> discount_pct(product) end),
-      "price_on_request" => on_request?,
-      "made_to_order" => product.made_to_order == true,
-      "vendor" => blank_to_nil(product.vendor),
-      "product_type" => product.product_type,
-      "category_path" => category_path(record, language),
-      "status" => "active",
-      "image" => Context.absolute(context, Helpers.first_image(product))
+      "id" => fn -> record.id end,
+      "title" => fn -> Translations.get_display(product, :title, language) end,
+      "slug" => fn -> slug end,
+      "url" => fn -> slug && Context.absolute(context, Shop.product_url(product, language)) end,
+      "price" => fn -> priced(on_request?, fn -> Context.money(context, product.price) end) end,
+      "price_from" => fn ->
+        priced(on_request?, fn -> lowest_price(context, product, lookup) end)
+      end,
+      "compare_at" => fn ->
+        priced(on_request?, fn -> Context.money(context, compare_at(product)) end)
+      end,
+      "discount_pct" => fn -> priced(on_request?, fn -> discount_pct(product) end) end,
+      "price_on_request" => fn -> on_request? end,
+      "made_to_order" => fn -> product.made_to_order == true end,
+      "vendor" => fn -> blank_to_nil(product.vendor) end,
+      "product_type" => fn -> product.product_type end,
+      "category_path" => fn -> category_path(record, language) end,
+      "status" => fn -> "active" end,
+      "image" => fn ->
+        context
+        |> Context.absolute(Helpers.first_image(product, &CardLookup.url(lookup, &1, &2)))
+      end
     }
+    |> Map.take(keys)
+    |> Map.new(fn {key, build} -> {key, build.()} end)
     |> compact()
   end
 
@@ -80,13 +126,15 @@ defmodule PhoenixKitEcommerce.API.Cards do
   """
   @spec card(Record.t(), Context.t(), keyword()) :: map()
   def card(%Record{product: product} = record, %Context{} = context, opts \\ []) do
+    lookup = Keyword.get_lazy(opts, :lookup, fn -> lookup([record], card?: true) end)
+
     record
-    |> list_item(context)
+    |> list_item(context, lookup: lookup)
     |> Map.merge(%{
       "description" => description(product, context.language, Keyword.get(opts, :format, "text")),
       "tags" => product.tags |> List.wrap() |> Enum.filter(&is_binary/1),
       "options" => Enum.map(OptionKeys.extract(product), &option/1),
-      "images" => images(product, context)
+      "images" => images(product, context, lookup)
     })
     |> compact()
   end
@@ -110,6 +158,11 @@ defmodule PhoenixKitEcommerce.API.Cards do
 
   defp priced(true, _fun), do: nil
   defp priced(false, fun), do: fun.()
+
+  defp lowest_price(context, product, lookup) do
+    {low, high} = Shop.get_price_range(product, CardLookup.schema(lookup, product))
+    price_from(context, low, high)
+  end
 
   defp compare_at(%{price: %Decimal{} = price, compare_at_price: %Decimal{} = compare_at}) do
     if Decimal.compare(price, 0) == :gt and Decimal.compare(compare_at, price) == :gt,
@@ -176,19 +229,20 @@ defmodule PhoenixKitEcommerce.API.Cards do
     }
   end
 
-  defp images(product, context) do
-    uuids =
-      [product.featured_image_uuid | List.wrap(product.image_uuids)]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-
-    stored = Enum.map(uuids, &Helpers.get_storage_image_url(&1, "medium"))
+  defp images(product, context, lookup) do
+    stored = Enum.map(image_uuids(product), &CardLookup.url(lookup, &1, "medium"))
     legacy = for %{"src" => src} <- List.wrap(product.images), is_binary(src), do: src
 
     (stored ++ legacy)
     |> Enum.reject(&is_nil/1)
     |> Enum.take(@images_limit)
     |> Enum.map(&Context.absolute(context, &1))
+  end
+
+  defp image_uuids(product) do
+    [product.featured_image_uuid | List.wrap(product.image_uuids)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
   end
 
   defp compact(map), do: Map.reject(map, fn {_key, value} -> is_nil(value) end)

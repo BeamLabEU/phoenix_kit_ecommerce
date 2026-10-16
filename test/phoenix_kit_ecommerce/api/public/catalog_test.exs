@@ -24,34 +24,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
     sample_shop!()
   end
 
-  defp count_queries(fun) do
-    handler_id = {:catalog_query_count, make_ref()}
-    test_pid = self()
-
-    :telemetry.attach(
-      handler_id,
-      [:phoenix_kit_ecommerce, :test, :repo, :query],
-      fn _event, _measurements, _metadata, _config -> send(test_pid, :query_ran) end,
-      nil
-    )
-
-    try do
-      fun.()
-    after
-      :telemetry.detach(handler_id)
-    end
-
-    drain(0)
-  end
-
-  defp drain(count) do
-    receive do
-      :query_ran -> drain(count + 1)
-    after
-      0 -> count
-    end
-  end
-
   defp get!(input, overrides \\ []) do
     assert {:ok, out} = Catalog.get_products(input, public_ctx(overrides))
     out

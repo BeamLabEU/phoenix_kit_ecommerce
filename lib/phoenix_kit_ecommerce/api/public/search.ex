@@ -16,10 +16,12 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   fails), so for that time a count can include a product the items no longer
   show. The product itself, its title and its id are never read from the index.
 
-  Cost: a page builds each card from live data, a few queries per card (price
-  range, options, image), and every search, each cursor page included, reads
-  the matched rows (up to 5000) for the facets. That is bounded by the page
-  size (at most 100), the 50 ids of `shop.get_products`, the 200 cards of a
+  Cost: what the cards of an answer share (the option schema, the categories,
+  the pictures' variants) is read once for the answer, per query block in a
+  batch, and only for the fields asked for (`fields`), so a page of any size
+  runs a fixed handful of queries beside the search itself. Every search, each
+  cursor page included, also reads the matched rows (up to 5000) for the
+  facets. That is bounded by the page size (at most 100), the 200 cards of a
   batch and the rate limit, and accepted for a catalogue of some thousands of
   products.
   """
@@ -175,10 +177,12 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
 
     keys = item_keys(Map.get(query, "fields"))
 
-    items =
-      for id <- result.ids, %Record{state: :listed} = record <- [Map.get(records, id)] do
-        record |> Cards.list_item(context) |> pick(keys)
-      end
+    listed =
+      for id <- result.ids, %Record{state: :listed} = record <- [Map.get(records, id)], do: record
+
+    lookup = Cards.lookup(listed, keys: keys)
+
+    items = Enum.map(listed, &Cards.list_item(&1, context, keys: keys, lookup: lookup))
 
     warnings = if result.truncated?, do: warnings ++ [facets_truncated()], else: warnings
 
@@ -196,9 +200,6 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
 
   defp item_keys(fields) when is_list(fields), do: Enum.uniq(["id" | fields])
   defp item_keys(_none), do: nil
-
-  defp pick(item, keys) when is_list(keys), do: Map.take(item, keys)
-  defp pick(item, nil), do: item
 
   defp facets_truncated do
     %{

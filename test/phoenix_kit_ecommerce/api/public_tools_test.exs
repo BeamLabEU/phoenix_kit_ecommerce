@@ -102,15 +102,19 @@ defmodule PhoenixKitEcommerce.API.PublicToolsTest do
     assert caps["shop.search_products"] == nil
   end
 
-  test "the batch search is priced per query through the declarative cost" do
+  test "the batch tools are priced through the declarative cost: a query, ten ids" do
     costs = Map.new(tools(), &{&1.name, &1.cost})
 
     assert costs["shop.search_products_batch"] ==
              {PhoenixKitEcommerce.API.Public.Search, :batch_cost}
 
-    assert costs |> Map.delete("shop.search_products_batch") |> Map.values() |> Enum.uniq() == [
-             nil
-           ]
+    assert costs["shop.get_products"] ==
+             {PhoenixKitEcommerce.API.Public.Catalog, :get_products_cost}
+
+    assert costs
+           |> Map.drop(["shop.search_products_batch", "shop.get_products"])
+           |> Map.values()
+           |> Enum.uniq() == [nil]
   end
 
   test "every input schema is closed and declares language and currency" do

@@ -1862,13 +1862,19 @@ defmodule PhoenixKitEcommerce do
       # Product with base $20, material options (0, +5, +10), finish options (0%, +20%)
       get_price_range(product)
       # => {Decimal.new("20.00"), Decimal.new("36.00")}
+
+  A caller pricing many products passes the option `schema` it already built
+  (`Options.get_option_schema_for_product/1`), so that it is read once.
   """
-  def get_price_range(%Product{} = product) do
+  def get_price_range(%Product{} = product, schema \\ nil) do
     base_price = product.price || Decimal.new("0")
     metadata = product.metadata || %{}
 
     # Get price-affecting options
-    price_affecting_specs = Options.get_price_affecting_specs_for_product(product)
+    price_affecting_specs =
+      if schema,
+        do: Options.get_price_affecting_specs_for_product(product, schema),
+        else: Options.get_price_affecting_specs_for_product(product)
 
     if Enum.empty?(price_affecting_specs) do
       {base_price, base_price}

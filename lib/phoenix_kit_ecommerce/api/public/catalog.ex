@@ -28,6 +28,7 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
   alias PhoenixKitEcommerce.Translations
 
   @max_ids 50
+  @ids_per_unit 10
   @default_similar 10
   @max_similar 20
   @not_found %{"code" => "not_found", "message" => "No such product."}
@@ -45,6 +46,23 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     end
   end
 
+  @doc """
+  The rate-limit price of `shop.get_products`: one unit per ten ids, so a
+  full call of 50 costs 5. Declared on the tool as
+  `cost: {#{inspect(__MODULE__)}, :get_products_cost}`.
+
+  The executor calls it with the RAW input, before validation, so it must
+  answer a positive integer for any term and never raise. A call over the cap
+  is refused by the schema (422); it is charged the cap.
+  """
+  @spec get_products_cost(term()) :: pos_integer()
+  def get_products_cost(%{"ids" => ids}) when is_list(ids) do
+    units = div(length(ids) + @ids_per_unit - 1, @ids_per_unit)
+    units |> max(1) |> min(div(@max_ids, @ids_per_unit))
+  end
+
+  def get_products_cost(_input), do: 1
+
   # Each distinct id is loaded once and its card built once, however often the
   # caller repeats it; the answer still has one row per input id, in order.
   defp products_answer(ids, format, context) do
@@ -52,8 +70,11 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     unique = canonical |> Enum.reject(&is_nil/1) |> Enum.uniq()
     records = Loader.load(unique, language: context.language)
 
+    lookup =
+      records |> Map.values() |> Enum.filter(&(&1.state == :listed)) |> Cards.lookup(card?: true)
+
     products =
-      Map.new(unique, fn id -> {id, product(Map.get(records, id), context, format)} end)
+      Map.new(unique, fn id -> {id, product(Map.get(records, id), context, format, lookup)} end)
 
     results =
       ids
@@ -63,13 +84,13 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     %{"results" => results, "summary" => summary(results)}
   end
 
-  defp product(%Record{state: :listed} = record, context, format),
-    do: Cards.card(record, context, format: format)
+  defp product(%Record{state: :listed} = record, context, format, lookup),
+    do: Cards.card(record, context, format: format, lookup: lookup)
 
-  defp product(%Record{state: :discontinued} = record, context, _format),
+  defp product(%Record{state: :discontinued} = record, context, _format, _lookup),
     do: Cards.stub(record, context)
 
-  defp product(_hidden_or_unknown, _context, _format), do: nil
+  defp product(_hidden_or_unknown, _context, _format, _lookup), do: nil
 
   defp row(ref, nil), do: %{"ref" => ref, "error" => @not_found}
   defp row(ref, product), do: %{"ref" => ref, "product" => product}
@@ -175,10 +196,9 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
     ids = Query.similar(base, limit)
     records = Loader.load(ids, language: context.language)
 
-    items =
-      for id <- ids, %Record{state: :listed} = record <- [Map.get(records, id)] do
-        Cards.list_item(record, context)
-      end
+    listed = for id <- ids, %Record{state: :listed} = record <- [Map.get(records, id)], do: record
+    lookup = Cards.lookup(listed)
+    items = Enum.map(listed, &Cards.list_item(&1, context, lookup: lookup))
 
     out = %{"items" => items, "count" => length(items)}
     if warnings == [], do: out, else: Map.put(out, "warnings", warnings)
