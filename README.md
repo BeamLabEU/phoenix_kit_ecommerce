@@ -295,8 +295,9 @@ on the site's own checkout.
   `api_checkout_claim_ttl_minutes` (30), `api_signal_per_cart_per_hour` (3),
   `api_signal_global_per_hour` (30).
 - **Cron.** `oban_crons/0` adds an hourly sweep of idle `api:` carts, a daily deletion of
-  abandoned `api:` carts (with their lines) and a daily prune of used or expired claims; general
-  cart expiry is unchanged. Run `mix phoenix_kit.update`: it applies migration V5 (`phoenix_kit_shop_cart_claims`)
+  abandoned `api:` carts (with their lines) and a daily prune of used or expired claims (seven days
+  after a hand-off the old token stops answering `cart_locked`: it reads as an empty open cart, or
+  `cart_not_found` if the cart was merged); general cart expiry is unchanged. Run `mix phoenix_kit.update`: it applies migration V5 (`phoenix_kit_shop_cart_claims`)
   and writes the cron entries into the host's Oban crontab.
 
 ### CSV Import
