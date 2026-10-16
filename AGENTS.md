@@ -63,9 +63,15 @@ pages.
   `/checkout/claim/:token` (GET and POST, no locale prefix; a controller route
   emitted by `Web.Routes.generate/1`, not a LiveView).
 - **The claim token is in the request path** (`GET /checkout/claim/<token>`).
-  The host's request logger (`Plug.Telemetry` / `Plug.Logger`) writes the path
-  to its log before any controller runs, and this module cannot keep it out: a
-  host log filter for `/checkout/claim/` paths is needed. The module's own
+  Three log lines carry the path before any controller runs: the endpoint's
+  request logger (`Plug.Telemetry`, `GET /checkout/claim/...` at info) and core's
+  `PhoenixKitWeb.Plugs.RequestTimer` (a `START` line at debug and an `END` line
+  at info), which sits in the `:phoenix_kit_auto_setup` pipeline the claim route
+  goes through. This module cannot keep them out (`filter_parameters` covers the
+  `Parameters:` line only): the host needs a primary `:logger` filter that drops
+  messages containing `/checkout/claim/` (the exact filter is in the README, in
+  the hand-off paragraph of the assistant cart section), and core could skip the
+  path in `RequestTimer`. The module's own
   guards: a claim is single-use, short-lived (`api_checkout_claim_ttl_minutes`)
   and only its digest is stored; the page sends `referrer-policy: no-referrer`,
   `cache-control: no-store` and `x-robots-tag: noindex, nofollow`, logs no

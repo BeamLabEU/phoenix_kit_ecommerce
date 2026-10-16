@@ -255,9 +255,35 @@ on the site's own checkout.
   answers `cart_locked`. The claim page marks itself as not to be tracked by the web analytics module
   (`PhoenixKitWebAnalytics.Plug.skip/1`, when the installed version has it), and the V5 migration step
   also adds `/checkout/claim/*` to `web_analytics_exclude_paths` if the analytics tables existed when
-  it ran; if analytics was installed later, add that pattern yourself. The claim token is part of the
-  request path, so a request logger in the host (`Plug.Telemetry`, `Plug.Logger`) writes it to the log:
-  filter `/checkout/claim/` paths there.
+  it ran; if analytics was installed later, add that pattern yourself. **The claim token is part of
+  the request path, and this module cannot keep it out of your logs:** the path is written before
+  any controller runs, by the endpoint's request logger (`Plug.Telemetry`, the `GET /checkout/claim/...`
+  line) and by core's `RequestTimer` (a `START` line at debug and an `END` line at info, both with
+  the path; it is part of the `:phoenix_kit_auto_setup` pipeline the claim route goes through). The
+  `Parameters:` line is already `[FILTERED]` by core's `filter_parameters`, which covers parameters
+  and not the path. Anyone who can read the log can open a live link before the buyer, for up to
+  `api_checkout_claim_ttl_minutes`, so drop these lines in the host with a primary `:logger` filter,
+  which covers all three at once:
+
+  ```elixir
+  defmodule MyApp.ClaimLogFilter do
+    @moduledoc false
+    def filter(%{msg: {:string, text}}, _extra) do
+      if text |> IO.chardata_to_string() |> String.contains?("/checkout/claim/"),
+        do: :stop,
+        else: :ignore
+    end
+
+    def filter(_event, _extra), do: :ignore
+  end
+
+  # In MyApp.Application.start/2, before the supervisor starts:
+  :logger.add_primary_filter(:claim_token, {&MyApp.ClaimLogFilter.filter/2, []})
+  ```
+
+  Keep the link lifetime short (the default is 30 minutes). A fix at the source belongs to core
+  (skipping the path in `RequestTimer`) and to the host's endpoint (`Plug.Telemetry`'s `log:` option
+  can return `false` for these paths).
 - **Notifications.** An API write sends at most one message ("via assistant") through the two
   existing cart notification actions and toggles, capped per cart and globally per hour.
 - **Settings** (E-Commerce settings page, "Assistant carts" card): `api_cart_idle_days` (7),
