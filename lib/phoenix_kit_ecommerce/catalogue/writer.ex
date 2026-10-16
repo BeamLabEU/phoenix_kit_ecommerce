@@ -738,6 +738,14 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
     %{url_index: source_url_index(files), active_uuids: MapSet.new(files, & &1.uuid)}
   end
 
+  @doc "Which of the files `uuids` are active in Storage now."
+  @spec active_file_uuids([String.t()]) :: [String.t()]
+  def active_file_uuids(uuids) when is_list(uuids) do
+    RepoHelper.repo().all(
+      from(f in StorageFile, where: f.uuid in ^uuids and f.status == "active", select: f.uuid)
+    )
+  end
+
   defp reuse_files_query(:all) do
     from(f in StorageFile,
       where: f.status == "active" and fragment("?->>'source_url' IS NOT NULL", f.metadata)

@@ -19,6 +19,15 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   log lines and from the `source_url` it stores, and no answer repeats it. A
   URL with credentials in it (`user:password@host`) is refused.
 
+  The downloads happen before a product is locked. A product trashed or moved
+  meanwhile (or a row that fails) leaves its downloaded pictures in Storage with
+  no owner, where the media orphan count shows them until a later call with the
+  same URL reuses them; a stored picture that was trashed since it was looked
+  up is not attached. The worst case of one call is about 12 seconds of name
+  checks and 100 seconds of downloads, close to the 120 second idempotency lease
+  of core, so a retry of a call that was slow can run beside the first one (the
+  stored URLs are reused, nothing is stored twice).
+
   With `ctx.dry_run?` the URLs are checked (scheme, host, resolution into a
   private range) and nothing is fetched or stored.
 
@@ -295,7 +304,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     do: Batch.fail(row, Rows.error(:not_found, "The product is no longer in the shop catalogue."))
 
   defp attach_to(%{item: item, plan: plan} = row, lookups, user_uuid, ctx) do
-    {resolved, failures} = resolve(plan.images, lookups)
+    {resolved, failures} = plan.images |> resolve(lookups) |> drop_unavailable()
 
     existing = existing_order(item)
     new = resolved |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Kernel.--(existing)
@@ -376,6 +385,31 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       end)
 
     {Enum.reverse(ok), Enum.reverse(failed)}
+  end
+
+  # The stored pictures were looked up before the downloads, which can take a
+  # minute and a half; one trashed since then is not attached. One query for
+  # the reused ones, made with the product's row locked.
+  defp drop_unavailable({resolved, failures}) do
+    reused = for {_url, uuid, :reused} <- resolved, uniq: true, do: uuid
+
+    active =
+      case reused do
+        [] -> MapSet.new()
+        uuids -> uuids |> Writer.active_file_uuids() |> MapSet.new()
+      end
+
+    {kept, dropped} =
+      Enum.split_with(resolved, fn {_url, uuid, how} -> how != :reused or uuid in active end)
+
+    gone =
+      for {url, _uuid, _how} <- dropped,
+          do: %{
+            "url" => ImageDownloader.source_key(url),
+            "reason" => "the stored picture is no longer available"
+          }
+
+    {kept, failures ++ gone}
   end
 
   defp lookup(url, url_index, downloaded) do

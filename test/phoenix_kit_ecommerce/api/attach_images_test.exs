@@ -174,6 +174,58 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
     assert F.reload!(one).data["media_order"] == F.reload!(two).data["media_order"]
   end
 
+  test "a stored picture trashed after the call looked it up is not attached", %{
+    catalogue: catalogue,
+    ctx: ctx,
+    first: first
+  } do
+    one = F.item!(catalogue)
+    two = F.item!(catalogue)
+    serve(%{"/a.png" => {"image/png", first}})
+
+    assert {:ok, _} = attach([row(one, [image("/a.png")])], ctx)
+    [stored] = F.reload!(one).data["media_order"]
+
+    # Between the lookup of the stored pictures and the product's lock.
+    trash_after_the_lookup(stored)
+
+    assert {:ok, %{"results" => [result], "summary" => %{"error" => 1}}} =
+             attach([row(two, [image("/a.png")])], ctx)
+
+    assert result["error"]["context"]["images"] == [
+             %{
+               "url" => @host <> "/a.png",
+               "reason" => "the stored picture is no longer available"
+             }
+           ]
+
+    refute Map.has_key?(F.reload!(two).data, "media_order")
+  end
+
+  defp trash_after_the_lookup(file_uuid) do
+    id = {:trash_after_lookup, make_ref()}
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, meta, _config ->
+        if meta.source == "phoenix_kit_files" and String.starts_with?(meta.query, "SELECT") do
+          :telemetry.detach(id)
+
+          import Ecto.Query, only: [from: 2]
+
+          PhoenixKitEcommerce.Test.Repo.update_all(
+            from(f in PhoenixKit.Modules.Storage.File, where: f.uuid == ^file_uuid),
+            set: [status: "trashed"]
+          )
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
+  end
+
   test "a re-encoded copy of a picture the shop already has reuses that file instead of storing another",
        %{catalogue: catalogue, ctx: ctx, first: first, second: second} do
     one = F.item!(catalogue)
