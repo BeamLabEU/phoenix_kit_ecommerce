@@ -74,6 +74,14 @@ defmodule PhoenixKitEcommerce.Search.JobsTest do
              Enum.sort([%{}, %{"catalogue_uuid" => catalogue}])
   end
 
+  test "enabling the shop asks for a rebuild: products changed while it was off were not indexed" do
+    assert jobs(@rebuild) == []
+
+    {:ok, _setting} = PhoenixKitEcommerce.enable_system()
+
+    assert [%{args: %{}, queue: "shop_search"}] = jobs(@rebuild)
+  end
+
   test "a rebuild is scheduled about ten seconds ahead" do
     {:ok, _} = Jobs.enqueue_rebuild(nil)
 

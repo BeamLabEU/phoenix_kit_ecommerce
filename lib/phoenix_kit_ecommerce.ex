@@ -205,6 +205,10 @@ defmodule PhoenixKitEcommerce do
     result = Settings.update_boolean_setting_with_module("shop_enabled", true, "shop")
     refresh_dashboard_tabs()
     recover_translation_sweep()
+    # The search index drops every product event while the shop is off, so what
+    # changed in the meantime (or a fresh install's empty table) is rebuilt now,
+    # not at the nightly rebuild. A refused insert is logged by `Search.Jobs`.
+    SearchJobs.enqueue_rebuild(nil)
     result
   end
 
