@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
   @moduletag :catalogue_api
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitEcommerce.API.{Batch, PricePlan}
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.StorefrontCache
@@ -245,7 +246,7 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
         )
         |> Batch.plan(planner)
 
-      PhoenixKitCatalogue.Catalogue.PubSub.subscribe()
+      CataloguePubSub.subscribe()
       test_pid = self()
       handler_id = {:batch_write_timeline, make_ref()}
 

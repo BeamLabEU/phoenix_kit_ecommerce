@@ -85,46 +85,34 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartSweepRaceTest do
   # when `release/1` says so. Returns once the link is issued and the cart row
   # is still held.
   defp hold_issuing(cart, hash) do
+    hold(fn ->
+      {:ok, _issued} = Claims.issue(cart, hash, "en")
+    end)
+  end
+
+  # The control: the same hold, nothing changed.
+  defp hold_cart_row(cart) do
+    hold(fn -> Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE")) end)
+  end
+
+  defp hold(work) do
     test = self()
-
-    task =
-      Task.async(fn ->
-        unboxed(fn ->
-          Repo.transaction(fn ->
-            {:ok, _issued} = Claims.issue(cart, hash, "en")
-            send(test, :holding)
-
-            receive do
-              :release -> :ok
-            end
-          end)
-        end)
-      end)
+    task = Task.async(fn -> unboxed(fn -> hold_transaction(work, test) end) end)
 
     assert_receive :holding, 5_000
     task
   end
 
-  # The control: the same hold, nothing changed.
-  defp hold_cart_row(cart) do
-    test = self()
+  defp hold_transaction(work, test),
+    do: Repo.transaction(fn -> work_then_wait(work, test) end)
 
-    task =
-      Task.async(fn ->
-        unboxed(fn ->
-          Repo.transaction(fn ->
-            Repo.one(from(c in Cart, where: c.uuid == ^cart.uuid, lock: "FOR UPDATE"))
-            send(test, :holding)
+  defp work_then_wait(work, test) do
+    work.()
+    send(test, :holding)
 
-            receive do
-              :release -> :ok
-            end
-          end)
-        end)
-      end)
-
-    assert_receive :holding, 5_000
-    task
+    receive do
+      :release -> :ok
+    end
   end
 
   defp release(%Task{pid: pid} = task) do

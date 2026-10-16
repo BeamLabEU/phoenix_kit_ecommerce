@@ -219,7 +219,7 @@ defmodule PhoenixKitEcommerce.API.Batch do
             # earlier could read the old values (or hear of a change that a
             # rollback then took back).
             clear_storefront_cache(written)
-            CatalogueWrites.announce_updated(for %{result: {:ok, item}} <- written, do: item)
+            announce_updated(written)
             written
 
           # The transaction did not commit: no row of it was written.
@@ -228,6 +228,9 @@ defmodule PhoenixKitEcommerce.API.Batch do
         end
     end
   end
+
+  defp announce_updated(rows),
+    do: CatalogueWrites.announce_updated(for %{result: {:ok, item}} <- rows, do: item)
 
   defp fail_pending(%{plan: %{changed?: true}} = row, error), do: fail(row, error)
   defp fail_pending(row, _error), do: row

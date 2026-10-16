@@ -1294,20 +1294,23 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
         id,
         [:phoenix_kit_ecommerce, :test, :repo, :query],
         fn _event, _measurements, meta, _config ->
-          if meta.source == "phoenix_kit_shop_carts" and String.starts_with?(meta.query, "SELECT") do
-            :counters.add(reads, 1, 1)
-
-            if :counters.get(reads, 1) == 2 do
-              Repo.update_all(from(c in Cart, where: c.session_id == ^session),
-                set: [status: "abandoned"]
-              )
-            end
-          end
+          if meta.source == "phoenix_kit_shop_carts" and String.starts_with?(meta.query, "SELECT"),
+            do: deactivate_on_second_read(reads, session)
         end,
         nil
       )
 
       on_exit(fn -> :telemetry.detach(id) end)
+    end
+
+    defp deactivate_on_second_read(reads, session) do
+      :counters.add(reads, 1, 1)
+
+      if :counters.get(reads, 1) == 2 do
+        Repo.update_all(from(c in Cart, where: c.session_id == ^session),
+          set: [status: "abandoned"]
+        )
+      end
     end
 
     test "clear_cart answers internal_error and logs the shape of the failure, not its content",

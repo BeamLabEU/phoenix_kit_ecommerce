@@ -32,6 +32,7 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.StorefrontCache
+  alias PhoenixKitEcommerce.Test.Repo
 
   @stub __MODULE__
   @host "https://93.184.216.34"
@@ -211,19 +212,20 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
       fn _event, _measurements, meta, _config ->
         if meta.source == "phoenix_kit_files" and String.starts_with?(meta.query, "SELECT") do
           :telemetry.detach(id)
-
-          import Ecto.Query, only: [from: 2]
-
-          PhoenixKitEcommerce.Test.Repo.update_all(
-            from(f in PhoenixKit.Modules.Storage.File, where: f.uuid == ^file_uuid),
-            set: [status: "trashed"]
-          )
+          trash_file(file_uuid)
         end
       end,
       nil
     )
 
     on_exit(fn -> :telemetry.detach(id) end)
+  end
+
+  defp trash_file(file_uuid) do
+    Repo.update_all(
+      from(f in Storage.File, where: f.uuid == ^file_uuid),
+      set: [status: "trashed"]
+    )
   end
 
   test "a re-encoded copy of a picture the shop already has reuses that file instead of storing another",
