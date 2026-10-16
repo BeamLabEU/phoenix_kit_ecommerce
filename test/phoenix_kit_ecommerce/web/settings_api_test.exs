@@ -83,7 +83,11 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiTest do
       assert has_element?(view, "#shop-api-confirm-pct-input[value='45']")
 
       assert_activity_logged("shop.api_confirm_price_change_pct_changed",
-        metadata_has: %{"setting" => "api_confirm_price_change_pct", "value" => 45}
+        metadata_has: %{
+          "setting" => "api_confirm_price_change_pct",
+          "value" => 45,
+          "previous" => 30
+        }
       )
     end
 

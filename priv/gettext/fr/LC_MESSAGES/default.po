@@ -27,7 +27,7 @@ msgstr "Tableau de bord"
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:154
 #: lib/phoenix_kit_ecommerce/web/products.ex:58
 #: lib/phoenix_kit_ecommerce/web/products.ex:293
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2309
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2315
 #: lib/phoenix_kit_ecommerce/web/trail.ex:45
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1855
 #, elixir-autogen
@@ -493,12 +493,12 @@ msgstr "Nouvelle tentative impossible : le fichier n'existe plus"
 msgid "Carts will appear here when customers add items"
 msgstr "Les paniers apparaîtront ici lorsque les clients ajouteront des articles"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1966
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1972
 #, elixir-autogen, elixir-format
 msgid "Categories in shop disabled"
 msgstr "Catégories désactivées dans la boutique"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1965
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1971
 #, elixir-autogen, elixir-format
 msgid "Categories in shop enabled"
 msgstr "Catégories activées dans la boutique"
@@ -548,12 +548,12 @@ msgstr "Catégorie supprimée"
 msgid "Category description"
 msgstr "Description de la catégorie"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1941
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1947
 #, elixir-autogen, elixir-format
 msgid "Category display setting updated"
 msgstr "Paramètre d'affichage des catégories mis à jour"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2006
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2012
 #, elixir-autogen, elixir-format
 msgid "Category icon setting updated"
 msgstr "Paramètre d'icône de catégorie mis à jour"
@@ -1064,8 +1064,8 @@ msgstr "Expiration :"
 msgid "Failed"
 msgstr "Échoué"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2076
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2113
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2082
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2119
 #, elixir-autogen, elixir-format
 msgid "Failed to add filter"
 msgstr "Échec de l'ajout du filtre"
@@ -1102,41 +1102,41 @@ msgstr "Échec de la suppression du mode de livraison"
 msgid "Failed to read CSV file headers"
 msgstr "Échec de la lecture des en-têtes du fichier CSV"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2129
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2135
 #, elixir-autogen, elixir-format
 msgid "Failed to remove filter"
 msgstr "Échec de la suppression du filtre"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2144
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2150
 #, elixir-autogen, elixir-format
 msgid "Failed to reset filters"
 msgstr "Échec de la réinitialisation des filtres"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1945
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1951
 #, elixir-autogen, elixir-format
 msgid "Failed to update category display setting"
 msgstr "Échec de la mise à jour du paramètre d'affichage de la catégorie"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2009
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2015
 #, elixir-autogen, elixir-format
 msgid "Failed to update category icon setting"
 msgstr "Échec de la mise à jour du paramètre d'icône de la catégorie"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2031
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2037
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter"
 msgstr "Échec de la mise à jour du filtre"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2046
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2052
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter label"
 msgstr "Échec de la mise à jour du libellé du filtre"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:439
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1582
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1971
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1993
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2365
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1977
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1999
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2371
 #, elixir-autogen, elixir-format
 msgid "Failed to update setting"
 msgstr "Échec de la mise à jour du paramètre"
@@ -1171,24 +1171,24 @@ msgstr "Nom du fichier"
 msgid "Filter"
 msgstr "Filtre"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2073
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2110
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2079
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2116
 #, elixir-autogen, elixir-format
 msgid "Filter '%{key}' added"
 msgstr "Filtre « %{key} » ajouté"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2055
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2091
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2061
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2097
 #, elixir-autogen, elixir-format
 msgid "Filter for '%{key}' already exists"
 msgstr "Un filtre pour « %{key} » existe déjà"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2126
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2132
 #, elixir-autogen, elixir-format
 msgid "Filter removed"
 msgstr "Filtre supprimé"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2141
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2147
 #, elixir-autogen, elixir-format
 msgid "Filters reset to defaults"
 msgstr "Filtres réinitialisés aux valeurs par défaut"
@@ -2274,7 +2274,7 @@ msgstr "L'image du stockage est prioritaire"
 msgid "Storefront Filters"
 msgstr "Filtres de la boutique"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2028
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2034
 #, elixir-autogen, elixir-format
 msgid "Storefront filter updated"
 msgstr "Filtre de la boutique mis à jour"
@@ -3239,12 +3239,12 @@ msgstr "Panier"
 msgid "Show the storefront cart bar"
 msgstr "Afficher la barre de panier de la boutique"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1988
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1994
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar disabled"
 msgstr "Barre de panier de la boutique désactivée"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1987
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1993
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar enabled"
 msgstr "Barre de panier de la boutique activée"
@@ -3639,7 +3639,7 @@ msgstr "Ajoutez quelque chose pour commencer"
 msgid "All Services"
 msgstr "Tous les services"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2308
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2314
 #, elixir-autogen, elixir-format
 msgid "Both (neutral wording)"
 msgstr "Les deux (formulation neutre)"
@@ -3684,7 +3684,7 @@ msgstr "Catalogue"
 msgid "Catalogue vocabulary"
 msgstr "Terminologie du catalogue"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1918
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1924
 #, elixir-autogen, elixir-format
 msgid "Catalogue vocabulary updated"
 msgstr "Terminologie du catalogue mise à jour"
@@ -3694,8 +3694,8 @@ msgstr "Terminologie du catalogue mise à jour"
 msgid "Everything"
 msgstr "Tout"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1921
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1926
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1927
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1932
 #, elixir-autogen, elixir-format
 msgid "Failed to update catalogue vocabulary"
 msgstr "Échec de la mise à jour de la terminologie du catalogue"
@@ -3752,7 +3752,7 @@ msgid "Service not found"
 msgstr "Service introuvable"
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:63
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2307
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2313
 #, elixir-autogen, elixir-format
 msgid "Services"
 msgstr "Services"
@@ -3860,7 +3860,7 @@ msgstr "Veuillez sélectionner un profil de facturation"
 msgid "%{price} each"
 msgstr "%{price} l'unité"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1819
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1825
 #, elixir-autogen, elixir-format
 msgid "Failed to update price format"
 msgstr "Échec de la mise à jour du format de prix"
@@ -3875,7 +3875,7 @@ msgstr "Masquer les ,00 sur les prix entiers (40 au lieu de 40,00)"
 msgid "Price format"
 msgstr "Format de prix"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1816
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1822
 #, elixir-autogen, elixir-format
 msgid "Price format updated"
 msgstr "Format de prix mis à jour"
@@ -4137,14 +4137,14 @@ msgstr "Continuer"
 msgid "Every item added to a cart"
 msgstr "Chaque article ajouté à un panier"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1644
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1660
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1676
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1650
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1666
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1682
 #, elixir-autogen, elixir-format
 msgid "Failed to update notification setting"
 msgstr "Échec de la mise à jour du paramètre de notification"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1702
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1708
 #, elixir-autogen, elixir-format
 msgid "Failed to update recipients"
 msgstr "Échec de la mise à jour des destinataires"
@@ -4159,14 +4159,14 @@ msgstr "Premier article ajouté à un panier"
 msgid "No shipping methods are available for your country."
 msgstr "Aucun mode de livraison n'est disponible pour votre pays."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1699
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1705
 #, elixir-autogen, elixir-format
 msgid "Notification recipients updated"
 msgstr "Destinataires des notifications mis à jour"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1641
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1657
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1673
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1647
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1663
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1679
 #, elixir-autogen, elixir-format
 msgid "Notification setting updated"
 msgstr "Paramètre de notification mis à jour"
@@ -4241,14 +4241,14 @@ msgstr "Page du panier (par défaut)"
 msgid "Checkout step, after billing"
 msgstr "Étape de commande, après la facturation"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1734
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1739
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1740
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1745
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping requirement"
 msgstr "Échec de la mise à jour de l'exigence de livraison"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1756
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1761
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1762
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1767
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping selection step"
 msgstr "Échec de la mise à jour de l'étape de sélection de la livraison"
@@ -4273,12 +4273,12 @@ msgstr "Exiger un mode de livraison (par défaut)"
 msgid "Shipping requirement"
 msgstr "Exigence de livraison"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1731
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1737
 #, elixir-autogen, elixir-format
 msgid "Shipping requirement updated"
 msgstr "Exigence de livraison mise à jour"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1753
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1759
 #, elixir-autogen, elixir-format
 msgid "Shipping selection step updated"
 msgstr "Étape de sélection de la livraison mise à jour"
@@ -4834,7 +4834,7 @@ msgstr "Ajoutez un filtre de vitrine basé sur un ensemble d'attributs du catalo
 msgid "Attribute Set Filter"
 msgstr "Filtre d'ensemble d'attributs"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2087
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2093
 #, elixir-autogen, elixir-format
 msgid "Set slug can't be blank"
 msgstr "Le slug de l'ensemble ne peut pas être vide"
@@ -5012,8 +5012,8 @@ msgstr "La devise de ce panier n'est pas disponible pour le moment."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1588
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1603
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1950
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2014
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1956
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2020
 #, elixir-autogen, elixir-format
 msgid "Invalid value"
 msgstr "Valeur invalide"
@@ -5161,7 +5161,7 @@ msgid_plural "Clear the stored reference for %{count} resources matching the fil
 msgstr[0] "Effacer la référence enregistrée pour %{count} ressource correspondant aux filtres ci-dessus — sur toutes les pages, pas seulement celle affichée. La traduction existante est conservée telle quelle ; la paire passe à « inconnu » jusqu'à ce qu'elle soit marquée comme référence ou retraduite."
 msgstr[1] "Effacer la référence enregistrée pour %{count} ressources correspondant aux filtres ci-dessus — sur toutes les pages, pas seulement celle affichée. La traduction existante est conservée telle quelle ; la paire passe à « inconnu » jusqu'à ce qu'elle soit marquée comme référence ou retraduite."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1852
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1858
 #, elixir-autogen, elixir-format
 msgid "Configure an enabled AI endpoint in the AI section before enabling this."
 msgstr "Configurez un point de terminaison IA activé dans la section IA avant d'activer ceci."
@@ -5196,67 +5196,67 @@ msgstr "Stock"
 msgid "Stock tracking"
 msgstr "Suivi des stocks"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1887
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1893
 #, elixir-autogen, elixir-format
 msgid "Stock tracking enabled"
 msgstr "Suivi des stocks activé"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1888
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1894
 #, elixir-autogen, elixir-format
 msgid "Stock tracking disabled"
 msgstr "Suivi des stocks désactivé"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2207
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2213
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is not installed."
 msgstr "Le suivi des stocks n'a pas été activé : le module Warehouse n'est pas installé."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2210
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2216
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is disabled."
 msgstr "Le suivi des stocks n'a pas été activé : le module Warehouse est désactivé."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2213
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2219
 #, elixir-autogen, elixir-format
 msgid "Failed to update stock tracking"
 msgstr "Échec de la mise à jour du suivi des stocks"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2222
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2228
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Install it from Modules → Not installed."
 msgstr "Le suivi des stocks nécessite le module Warehouse. Installez-le depuis Modules → Non installés."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2234
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2240
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Enable it in Modules → Disabled."
 msgstr "Le suivi des stocks nécessite le module Warehouse. Activez-le dans Modules → Désactivés."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2244
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2250
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module. Choose a default warehouse in Warehouse settings first."
 msgstr "Le stock est géré par le module Warehouse. Choisissez d'abord un entrepôt par défaut dans les paramètres de Warehouse."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2255
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2261
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module."
 msgstr "Le stock est géré par le module Warehouse."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2225
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2231
 #, elixir-autogen, elixir-format
 msgid "Open Modules"
 msgstr "Ouvrir les modules"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2235
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2241
 #, elixir-autogen, elixir-format
 msgid "Enable Warehouse"
 msgstr "Activer Warehouse"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2247
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2253
 #, elixir-autogen, elixir-format
 msgid "Set up Warehouse"
 msgstr "Configurer Warehouse"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2256
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2262
 #, elixir-autogen, elixir-format
 msgid "Open stock"
 msgstr "Ouvrir le stock"
@@ -5271,12 +5271,12 @@ msgstr "Activer le rapprochement automatique"
 msgid "Enable shop translations"
 msgstr "Activer les traductions de la boutique"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2290
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2296
 #, elixir-autogen, elixir-format
 msgid "Failed to update Shopify sync"
 msgstr "Échec de la mise à jour de la synchronisation Shopify"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2176
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2182
 #, elixir-autogen, elixir-format
 msgid "Failed to update shop translations"
 msgstr "Échec de la mise à jour des traductions de la boutique"
@@ -5488,22 +5488,22 @@ msgstr "Traductions de la boutique"
 msgid "Shop translations aren't enabled. Turn them on in E-Commerce settings first."
 msgstr "Les traductions de la boutique ne sont pas activées. Activez-les d'abord dans les paramètres E-Commerce."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2171
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2177
 #, elixir-autogen, elixir-format
 msgid "Shop translations disabled"
 msgstr "Traductions de la boutique désactivées"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2170
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2176
 #, elixir-autogen, elixir-format
 msgid "Shop translations enabled"
 msgstr "Traductions de la boutique activées"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2285
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2291
 #, elixir-autogen, elixir-format
 msgid "Shopify sync disabled"
 msgstr "Synchronisation Shopify désactivée"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2284
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2290
 #, elixir-autogen, elixir-format
 msgid "Shopify sync enabled"
 msgstr "Synchronisation Shopify activée"
@@ -5726,7 +5726,7 @@ msgid "Products are managed in the Catalogues module now."
 msgstr "Les produits sont désormais gérés dans le module Catalogues."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:762
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1842
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1848
 #, elixir-autogen, elixir-format
 msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
 msgstr "Indisponible tant que la boutique lit les produits depuis le module Catalogues — les adaptateurs de traduction ne couvrent que les tables de produits et de catégories propres à la boutique."
@@ -6252,7 +6252,7 @@ msgstr "Modifier les informations de livraison"
 msgid "Check delivery details"
 msgstr "Vérifier les informations de livraison"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1790
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1796
 #, elixir-autogen, elixir-format
 msgid "Check the default parcel values"
 msgstr "Vérifiez les valeurs par défaut du colis"
@@ -6281,7 +6281,7 @@ msgstr "Fourni par le client"
 msgid "Default parcel"
 msgstr "Colis par défaut"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1784
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1790
 #, elixir-autogen, elixir-format
 msgid "Default parcel updated"
 msgstr "Colis par défaut mis à jour"
@@ -6337,8 +6337,8 @@ msgstr "Livraison jusqu'à (jours)"
 msgid "Estimated price: the carrier did not respond"
 msgstr "Prix estimé : le transporteur n'a pas répondu"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1793
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1798
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1799
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1804
 #, elixir-autogen, elixir-format
 msgid "Failed to update the default parcel"
 msgstr "Échec de la mise à jour du colis par défaut"
@@ -6780,12 +6780,12 @@ msgstr "D'où vient le prix de ce mode."
 msgid "Width (mm)"
 msgstr "Largeur (mm)"
 
-#: lib/phoenix_kit_ecommerce.ex:416
+#: lib/phoenix_kit_ecommerce.ex:420
 #, elixir-autogen, elixir-format
 msgid "is required when the other sides are set"
 msgstr "est obligatoire lorsque les autres côtés sont renseignés"
 
-#: lib/phoenix_kit_ecommerce.ex:411
+#: lib/phoenix_kit_ecommerce.ex:415
 #, elixir-autogen, elixir-format
 msgid "must be a whole number from 0 to %{max}"
 msgstr "doit être un nombre entier de 0 à %{max}"
@@ -7443,7 +7443,7 @@ msgstr "Définissez l'ajustement en pourcentage pour chaque valeur (0 pour aucun
 msgid "Set price adjustment for each option (use 0 for no change)"
 msgstr "Définissez l'ajustement de prix pour chaque valeur (0 pour aucun changement)"
 
-#: lib/phoenix_kit_ecommerce.ex:5667
+#: lib/phoenix_kit_ecommerce.ex:5677
 #, elixir-autogen, elixir-format
 msgid "Shipping: %{method}"
 msgstr "Livraison : %{method}"
@@ -7621,23 +7621,18 @@ msgstr "La synchronisation Shopify est activée. Un prix écrit via l'API peut �
 msgid "Confirmation threshold for price changes (%)"
 msgstr "Seuil de confirmation des changements de prix (%)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1050
-#, elixir-autogen, elixir-format
-msgid "A price change larger than this percentage of the current price is held until it is confirmed. A first price is never held back."
-msgstr "Un changement de prix supérieur à ce pourcentage du prix actuel est retenu jusqu'à confirmation. Un premier prix n'est jamais retenu."
-
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1060
 #, elixir-autogen, elixir-format
 msgid "Open API settings →"
 msgstr "Ouvrir les réglages de l'API →"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1620
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1626
 #, elixir-autogen, elixir-format
 msgid "Price change threshold updated"
 msgstr "Seuil de changement de prix mis à jour"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1623
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1629
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1635
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to 1000."
 msgstr "Saisissez un nombre entier de 0 à 1000."
@@ -7724,7 +7719,7 @@ msgstr "Notifications d'assistant par panier et par heure"
 msgid "Assistant notifications per hour, all carts"
 msgstr "Notifications d'assistant par heure, tous paniers confondus"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2363
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2369
 #, elixir-autogen, elixir-format
 msgid "Assistant cart settings updated"
 msgstr "Paramètres des paniers d'assistant mis à jour"
@@ -7733,3 +7728,8 @@ msgstr "Paramètres des paniers d'assistant mis à jour"
 #, elixir-autogen, elixir-format
 msgid "Enter whole numbers within the shown ranges."
 msgstr "Saisissez des nombres entiers dans les plages indiquées."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1050
+#, elixir-autogen, elixir-format
+msgid "A price change larger than this percentage of the current price is held until it is confirmed. A price set to zero is always held; any other first price is not. From 100 percent on, only increases are held, as a cut cannot exceed 100 percent."
+msgstr "Un changement de prix supérieur à ce pourcentage du prix actuel est retenu jusqu'à confirmation. Un prix fixé à zéro est toujours retenu ; tout autre premier prix ne l'est pas. À partir de 100 pour cent, seules les hausses sont retenues, car une baisse ne peut pas dépasser 100 pour cent."

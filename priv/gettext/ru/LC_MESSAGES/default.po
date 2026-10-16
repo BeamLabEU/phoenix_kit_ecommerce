@@ -25,7 +25,7 @@ msgstr "Панель управления"
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:154
 #: lib/phoenix_kit_ecommerce/web/products.ex:58
 #: lib/phoenix_kit_ecommerce/web/products.ex:293
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2309
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2315
 #: lib/phoenix_kit_ecommerce/web/trail.ex:45
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1855
 #, elixir-autogen
@@ -495,12 +495,12 @@ msgstr "Повтор невозможен: файл больше не сущес
 msgid "Carts will appear here when customers add items"
 msgstr "Корзины появятся здесь, когда покупатели добавят товары"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1966
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1972
 #, elixir-autogen, elixir-format
 msgid "Categories in shop disabled"
 msgstr "Категории в магазине отключены"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1965
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1971
 #, elixir-autogen, elixir-format
 msgid "Categories in shop enabled"
 msgstr "Категории в магазине включены"
@@ -550,12 +550,12 @@ msgstr "Категория удалена"
 msgid "Category description"
 msgstr "Описание категории"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1941
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1947
 #, elixir-autogen, elixir-format
 msgid "Category display setting updated"
 msgstr "Настройка отображения категорий обновлена"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2006
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2012
 #, elixir-autogen, elixir-format
 msgid "Category icon setting updated"
 msgstr "Настройка иконки категорий обновлена"
@@ -1066,8 +1066,8 @@ msgstr "Срок действия:"
 msgid "Failed"
 msgstr "Не удалось"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2076
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2113
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2082
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2119
 #, elixir-autogen, elixir-format
 msgid "Failed to add filter"
 msgstr "Не удалось добавить фильтр"
@@ -1104,41 +1104,41 @@ msgstr "Не удалось удалить способ доставки"
 msgid "Failed to read CSV file headers"
 msgstr "Не удалось прочитать заголовки CSV-файла"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2129
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2135
 #, elixir-autogen, elixir-format
 msgid "Failed to remove filter"
 msgstr "Не удалось удалить фильтр"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2144
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2150
 #, elixir-autogen, elixir-format
 msgid "Failed to reset filters"
 msgstr "Не удалось сбросить фильтры"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1945
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1951
 #, elixir-autogen, elixir-format
 msgid "Failed to update category display setting"
 msgstr "Не удалось обновить настройку отображения категории"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2009
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2015
 #, elixir-autogen, elixir-format
 msgid "Failed to update category icon setting"
 msgstr "Не удалось обновить настройку иконки категории"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2031
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2037
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter"
 msgstr "Не удалось обновить фильтр"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2046
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2052
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter label"
 msgstr "Не удалось обновить метку фильтра"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:439
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1582
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1971
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1993
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2365
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1977
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1999
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2371
 #, elixir-autogen, elixir-format
 msgid "Failed to update setting"
 msgstr "Не удалось обновить настройку"
@@ -1173,24 +1173,24 @@ msgstr "Имя файла"
 msgid "Filter"
 msgstr "Фильтр"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2073
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2110
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2079
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2116
 #, elixir-autogen, elixir-format
 msgid "Filter '%{key}' added"
 msgstr "Фильтр «%{key}» добавлен"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2055
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2091
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2061
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2097
 #, elixir-autogen, elixir-format
 msgid "Filter for '%{key}' already exists"
 msgstr "Фильтр для «%{key}» уже существует"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2126
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2132
 #, elixir-autogen, elixir-format
 msgid "Filter removed"
 msgstr "Фильтр удалён"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2141
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2147
 #, elixir-autogen, elixir-format
 msgid "Filters reset to defaults"
 msgstr "Фильтры сброшены"
@@ -2276,7 +2276,7 @@ msgstr "Изображение из Хранилища имеет приорит
 msgid "Storefront Filters"
 msgstr "Фильтры витрины"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2028
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2034
 #, elixir-autogen, elixir-format
 msgid "Storefront filter updated"
 msgstr "Фильтр витрины обновлён"
@@ -3245,12 +3245,12 @@ msgstr "Корзина"
 msgid "Show the storefront cart bar"
 msgstr "Показывать панель корзины в витрине"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1988
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1994
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar disabled"
 msgstr "Панель корзины отключена"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1987
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1993
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar enabled"
 msgstr "Панель корзины включена"
@@ -3645,7 +3645,7 @@ msgstr "Добавьте что-нибудь, чтобы начать"
 msgid "All Services"
 msgstr "Все услуги"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2308
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2314
 #, elixir-autogen, elixir-format
 msgid "Both (neutral wording)"
 msgstr "Оба (нейтральные формулировки)"
@@ -3690,7 +3690,7 @@ msgstr "Каталог"
 msgid "Catalogue vocabulary"
 msgstr "Терминология каталога"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1918
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1924
 #, elixir-autogen, elixir-format
 msgid "Catalogue vocabulary updated"
 msgstr "Терминология каталога обновлена"
@@ -3700,8 +3700,8 @@ msgstr "Терминология каталога обновлена"
 msgid "Everything"
 msgstr "Всё"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1921
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1926
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1927
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1932
 #, elixir-autogen, elixir-format
 msgid "Failed to update catalogue vocabulary"
 msgstr "Не удалось обновить терминологию каталога"
@@ -3758,7 +3758,7 @@ msgid "Service not found"
 msgstr "Услуга не найдена"
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:63
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2307
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2313
 #, elixir-autogen, elixir-format
 msgid "Services"
 msgstr "Услуги"
@@ -3866,7 +3866,7 @@ msgstr "Выберите платёжный профиль"
 msgid "%{price} each"
 msgstr "%{price} за штуку"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1819
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1825
 #, elixir-autogen, elixir-format
 msgid "Failed to update price format"
 msgstr "Не удалось обновить формат цены"
@@ -3881,7 +3881,7 @@ msgstr "Скрывать .00 у целых цен (40 вместо 40.00)"
 msgid "Price format"
 msgstr "Формат цены"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1816
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1822
 #, elixir-autogen, elixir-format
 msgid "Price format updated"
 msgstr "Формат цены обновлён"
@@ -4150,14 +4150,14 @@ msgstr "Продолжить"
 msgid "Every item added to a cart"
 msgstr "Каждый товар добавлен в корзину"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1644
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1660
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1676
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1650
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1666
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1682
 #, elixir-autogen, elixir-format
 msgid "Failed to update notification setting"
 msgstr "Не удалось обновить настройку"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1702
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1708
 #, elixir-autogen, elixir-format
 msgid "Failed to update recipients"
 msgstr "Не удалось обновить получателей"
@@ -4172,14 +4172,14 @@ msgstr "Первый товар добавлен в корзину"
 msgid "No shipping methods are available for your country."
 msgstr "Для вашей страны нет доступных способов доставки."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1699
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1705
 #, elixir-autogen, elixir-format
 msgid "Notification recipients updated"
 msgstr "Получатели уведомлений обновлены"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1641
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1657
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1673
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1647
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1663
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1679
 #, elixir-autogen, elixir-format
 msgid "Notification setting updated"
 msgstr "Настройка уведомлений обновлена"
@@ -4254,14 +4254,14 @@ msgstr "Страница корзины (по умолчанию)"
 msgid "Checkout step, after billing"
 msgstr "Шаг оформления, после платёжных данных"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1734
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1739
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1740
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1745
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping requirement"
 msgstr "Не удалось обновить требование к доставке"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1756
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1761
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1762
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1767
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping selection step"
 msgstr "Не удалось обновить шаг выбора доставки"
@@ -4286,12 +4286,12 @@ msgstr "Требовать способ доставки (по умолчани�
 msgid "Shipping requirement"
 msgstr "Требование к доставке"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1731
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1737
 #, elixir-autogen, elixir-format
 msgid "Shipping requirement updated"
 msgstr "Требование к доставке обновлено"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1753
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1759
 #, elixir-autogen, elixir-format
 msgid "Shipping selection step updated"
 msgstr "Шаг выбора доставки обновлён"
@@ -4856,7 +4856,7 @@ msgstr "Добавьте фильтр витрины на основе набо�
 msgid "Attribute Set Filter"
 msgstr "Фильтр набора атрибутов"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2087
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2093
 #, elixir-autogen, elixir-format
 msgid "Set slug can't be blank"
 msgstr "Слаг набора не может быть пустым"
@@ -5034,8 +5034,8 @@ msgstr "Валюта этой корзины сейчас недоступна."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1588
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1603
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1950
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2014
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1956
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2020
 #, elixir-autogen, elixir-format
 msgid "Invalid value"
 msgstr "Недопустимое значение"
@@ -5192,7 +5192,7 @@ msgstr[0] "Очистить сохранённый эталон для %{count} 
 msgstr[1] "Очистить сохранённый эталон для %{count} ресурсов, подходящих под фильтры выше — на всех страницах, а не только на текущей. Существующий перевод сохраняется как есть; пара получит статус «неизвестно», пока не будет зафиксирован эталон или выполнен перевод заново."
 msgstr[2] "Очистить сохранённый эталон для %{count} ресурсов, подходящих под фильтры выше — на всех страницах, а не только на текущей. Существующий перевод сохраняется как есть; пара получит статус «неизвестно», пока не будет зафиксирован эталон или выполнен перевод заново."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1852
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1858
 #, elixir-autogen, elixir-format
 msgid "Configure an enabled AI endpoint in the AI section before enabling this."
 msgstr "Прежде чем включать это, настройте включённый эндпоинт ИИ в разделе ИИ."
@@ -5227,67 +5227,67 @@ msgstr "Остатки"
 msgid "Stock tracking"
 msgstr "Учёт остатков"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1887
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1893
 #, elixir-autogen, elixir-format
 msgid "Stock tracking enabled"
 msgstr "Учёт остатков включён"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1888
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1894
 #, elixir-autogen, elixir-format
 msgid "Stock tracking disabled"
 msgstr "Учёт остатков выключен"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2207
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2213
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is not installed."
 msgstr "Учёт остатков не включён: модуль Warehouse не установлен."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2210
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2216
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is disabled."
 msgstr "Учёт остатков не включён: модуль Warehouse отключён."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2213
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2219
 #, elixir-autogen, elixir-format
 msgid "Failed to update stock tracking"
 msgstr "Не удалось обновить учёт остатков"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2222
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2228
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Install it from Modules → Not installed."
 msgstr "Для учёта остатков нужен модуль Warehouse. Установите его в разделе Модули → Не установленные."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2234
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2240
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Enable it in Modules → Disabled."
 msgstr "Для учёта остатков нужен модуль Warehouse. Включите его в разделе Модули → Отключённые."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2244
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2250
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module. Choose a default warehouse in Warehouse settings first."
 msgstr "Остатками управляет модуль Warehouse. Сначала выберите склад по умолчанию в настройках Warehouse."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2255
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2261
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module."
 msgstr "Остатками управляет модуль Warehouse."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2225
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2231
 #, elixir-autogen, elixir-format
 msgid "Open Modules"
 msgstr "Открыть модули"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2235
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2241
 #, elixir-autogen, elixir-format
 msgid "Enable Warehouse"
 msgstr "Включить Warehouse"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2247
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2253
 #, elixir-autogen, elixir-format
 msgid "Set up Warehouse"
 msgstr "Настроить Warehouse"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2256
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2262
 #, elixir-autogen, elixir-format
 msgid "Open stock"
 msgstr "Открыть остатки"
@@ -5302,12 +5302,12 @@ msgstr "Включить автоматическую сверку"
 msgid "Enable shop translations"
 msgstr "Включить переводы магазина"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2290
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2296
 #, elixir-autogen, elixir-format
 msgid "Failed to update Shopify sync"
 msgstr "Не удалось обновить синхронизацию Shopify"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2176
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2182
 #, elixir-autogen, elixir-format
 msgid "Failed to update shop translations"
 msgstr "Не удалось обновить переводы магазина"
@@ -5524,22 +5524,22 @@ msgstr "Переводы магазина"
 msgid "Shop translations aren't enabled. Turn them on in E-Commerce settings first."
 msgstr "Переводы магазина не включены. Сначала включите их в настройках интернет-магазина."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2171
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2177
 #, elixir-autogen, elixir-format
 msgid "Shop translations disabled"
 msgstr "Переводы магазина отключены"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2170
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2176
 #, elixir-autogen, elixir-format
 msgid "Shop translations enabled"
 msgstr "Переводы магазина включены"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2285
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2291
 #, elixir-autogen, elixir-format
 msgid "Shopify sync disabled"
 msgstr "Синхронизация Shopify отключена"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2284
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2290
 #, elixir-autogen, elixir-format
 msgid "Shopify sync enabled"
 msgstr "Синхронизация Shopify включена"
@@ -5769,7 +5769,7 @@ msgid "Products are managed in the Catalogues module now."
 msgstr "Товары теперь управляются в модуле «Каталоги»."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:762
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1842
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1848
 #, elixir-autogen, elixir-format
 msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
 msgstr "Недоступно, пока магазин берёт товары из модуля «Каталоги» — адаптеры перевода работают только с собственными таблицами товаров и категорий магазина."
@@ -6305,7 +6305,7 @@ msgstr "Изменить данные доставки"
 msgid "Check delivery details"
 msgstr "Проверить данные доставки"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1790
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1796
 #, elixir-autogen, elixir-format
 msgid "Check the default parcel values"
 msgstr "Проверьте значения посылки по умолчанию"
@@ -6334,7 +6334,7 @@ msgstr "Указывает покупатель"
 msgid "Default parcel"
 msgstr "Посылка по умолчанию"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1784
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1790
 #, elixir-autogen, elixir-format
 msgid "Default parcel updated"
 msgstr "Посылка по умолчанию обновлена"
@@ -6392,8 +6392,8 @@ msgstr "Доставка до (дней)"
 msgid "Estimated price: the carrier did not respond"
 msgstr "Ориентировочная цена: перевозчик не ответил"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1793
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1798
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1799
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1804
 #, elixir-autogen, elixir-format
 msgid "Failed to update the default parcel"
 msgstr "Не удалось обновить посылку по умолчанию"
@@ -6835,12 +6835,12 @@ msgstr "Откуда берётся цена этого способа."
 msgid "Width (mm)"
 msgstr "Ширина (мм)"
 
-#: lib/phoenix_kit_ecommerce.ex:416
+#: lib/phoenix_kit_ecommerce.ex:420
 #, elixir-autogen, elixir-format
 msgid "is required when the other sides are set"
 msgstr "обязательно, если заданы остальные стороны"
 
-#: lib/phoenix_kit_ecommerce.ex:411
+#: lib/phoenix_kit_ecommerce.ex:415
 #, elixir-autogen, elixir-format
 msgid "must be a whole number from 0 to %{max}"
 msgstr "должно быть целым числом от 0 до %{max}"
@@ -7501,7 +7501,7 @@ msgstr "Задайте процентную надбавку для каждог
 msgid "Set price adjustment for each option (use 0 for no change)"
 msgstr "Задайте надбавку к цене для каждого значения (0 — без изменений)"
 
-#: lib/phoenix_kit_ecommerce.ex:5667
+#: lib/phoenix_kit_ecommerce.ex:5677
 #, elixir-autogen, elixir-format
 msgid "Shipping: %{method}"
 msgstr "Доставка: %{method}"
@@ -7679,23 +7679,18 @@ msgstr "Синхронизация с Shopify включена. Цена, зап
 msgid "Confirmation threshold for price changes (%)"
 msgstr "Порог подтверждения изменения цены (%)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1050
-#, elixir-autogen, elixir-format
-msgid "A price change larger than this percentage of the current price is held until it is confirmed. A first price is never held back."
-msgstr "Изменение цены, превышающее этот процент от текущей цены, удерживается до подтверждения. Первая цена никогда не удерживается."
-
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1060
 #, elixir-autogen, elixir-format
 msgid "Open API settings →"
 msgstr "Открыть настройки API →"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1620
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1626
 #, elixir-autogen, elixir-format
 msgid "Price change threshold updated"
 msgstr "Порог изменения цены обновлён"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1623
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1629
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1635
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to 1000."
 msgstr "Введите целое число от 0 до 1000."
@@ -7782,7 +7777,7 @@ msgstr "Уведомлений ассистента на корзину в ча�
 msgid "Assistant notifications per hour, all carts"
 msgstr "Уведомлений ассистента в час по всем корзинам"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2363
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2369
 #, elixir-autogen, elixir-format
 msgid "Assistant cart settings updated"
 msgstr "Настройки корзин ассистента обновлены"
@@ -7791,3 +7786,8 @@ msgstr "Настройки корзин ассистента обновлены"
 #, elixir-autogen, elixir-format
 msgid "Enter whole numbers within the shown ranges."
 msgstr "Введите целые числа в указанных диапазонах."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1050
+#, elixir-autogen, elixir-format
+msgid "A price change larger than this percentage of the current price is held until it is confirmed. A price set to zero is always held; any other first price is not. From 100 percent on, only increases are held, as a cut cannot exceed 100 percent."
+msgstr "Изменение цены, превышающее этот процент от текущей цены, удерживается до подтверждения. Цена, установленная в ноль, удерживается всегда; любая другая первая цена — нет. Начиная со 100 процентов удерживаются только повышения, так как снижение не может превышать 100 процентов."

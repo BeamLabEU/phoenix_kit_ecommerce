@@ -1034,7 +1034,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   type="number"
                   name="pct"
                   min="0"
-                  max="1000"
+                  max={ApiSettings.max_price_change_pct()}
                   step="1"
                   value={@api_confirm_pct}
                   class="input input-bordered w-32"
@@ -1048,7 +1048,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             </p>
             <p class="text-sm text-base-content/70 mt-2">
               {gettext(
-                "A price change larger than this percentage of the current price is held until it is confirmed. A first price is never held back."
+                "A price change larger than this percentage of the current price is held until it is confirmed. A price set to zero is always held; any other first price is not. From 100 percent on, only increases are held, as a cut cannot exceed 100 percent."
               )}
             </p>
 
@@ -1605,13 +1605,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp gated_event("save_api_confirm_price_change_pct", %{"pct" => raw}, socket)
        when is_binary(raw) do
+    previous = ApiSettings.price_change_pct()
+
     with {pct, ""} <- Integer.parse(String.trim(raw)),
          {:ok, _setting} <- ApiSettings.put_price_change_pct(pct) do
       Activity.log("shop.api_confirm_price_change_pct_changed",
         actor_uuid: Activity.actor_uuid(socket),
         actor_role: Activity.actor_role(socket),
         resource_type: "setting",
-        metadata: %{"setting" => ApiSettings.price_change_pct_key(), "value" => pct}
+        metadata: %{
+          "setting" => ApiSettings.price_change_pct_key(),
+          "value" => pct,
+          "previous" => previous
+        }
       )
 
       {:noreply,
