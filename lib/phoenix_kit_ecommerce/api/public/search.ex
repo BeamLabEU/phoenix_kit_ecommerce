@@ -106,7 +106,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
       warning = %{
         "code" => "batch_limit_trimmed",
         "message" =>
-          "A batch builds at most #{@batch_card_budget} cards; limit was reduced to #{allowed}.",
+          "A batch builds about #{@batch_card_budget} cards; limit was reduced to #{allowed}.",
         "requested" => limit,
         "applied" => allowed
       }
