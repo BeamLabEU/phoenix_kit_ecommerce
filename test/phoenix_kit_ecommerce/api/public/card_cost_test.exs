@@ -93,12 +93,27 @@ defmodule PhoenixKitEcommerce.API.Public.CardCostTest do
     assert many_queries == few_queries
   end
 
-  test "every card still carries its stored pictures" do
-    ids = shop_of(3) |> Enum.map(& &1.uuid)
+  test "every card carries its own stored pictures and none of another card's" do
+    products = shop_of(4)
+    own = Map.new(products, &{&1.uuid, Enum.uniq([&1.featured_image_uuid | &1.image_uuids])})
+    cards = get!(Map.keys(own))["results"] |> Enum.map(& &1["product"])
 
-    for %{"product" => product} <- get!(ids)["results"] do
-      assert "https://shop.test/" <> _ = product["image"]
-      assert [_, _, _] = product["images"]
+    assert length(cards) == 4
+    assert cards |> Enum.map(& &1["id"]) |> Enum.sort() == own |> Map.keys() |> Enum.sort()
+
+    for card <- cards do
+      files = Map.fetch!(own, card["id"])
+      foreign = own |> Map.delete(card["id"]) |> Map.values() |> List.flatten()
+
+      assert "https://shop.test/" <> _ = card["image"]
+      assert [_, _, _] = card["images"]
+      assert String.contains?(card["image"], hd(files))
+
+      for file <- files, do: assert(Enum.count(card["images"], &String.contains?(&1, file)) == 1)
+
+      for url <- [card["image"] | card["images"]], file <- foreign do
+        refute String.contains?(url, file)
+      end
     end
   end
 
