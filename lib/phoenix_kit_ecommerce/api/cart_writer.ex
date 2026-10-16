@@ -737,14 +737,14 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
   end
 
   @doc false
-  # The product's current base price for the variant a line holds. The line's
-  # stored `selected_specs` are LABELS in the language the line was added in,
-  # while `product` is loaded in this call's language, so on the Catalogue
-  # source the modifiers would be looked up under labels that do not match and
-  # a price change would be reported (or missed) for every call in another
-  # language. The line's neutral options are mapped to this product's labels
-  # instead; only a line without a usable mapping falls back to its stored
-  # labels.
+  # The product's current base price for the variant a line holds. A line
+  # stored before keys were the identity holds LABELS in the language it was
+  # added in, while `product` is loaded in this call's language, so on the
+  # Catalogue source the modifiers would be looked up under labels that do not
+  # match and a price change would be reported (or missed) for every call in
+  # another language. The line's neutral options are mapped to this product's
+  # values instead; only a line without a usable mapping falls back to its
+  # stored specs.
   @spec current_base_price(CartItem.t(), Product.t()) :: Decimal.t()
   def current_base_price(%CartItem{} = item, %Product{} = product) do
     specs =

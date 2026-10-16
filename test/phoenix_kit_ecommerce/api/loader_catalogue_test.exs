@@ -284,6 +284,7 @@ defmodule PhoenixKitEcommerce.API.LoaderCatalogueTest do
     end
 
     defp option_values(product), do: product.metadata["_option_values"]
+    defp value_labels(product), do: product.metadata["_value_labels"]
 
     test "products_for_items/2 labels the options in the language it is given" do
       item = item_with_translated_option!(catalogue_source!())
@@ -293,9 +294,13 @@ defmodule PhoenixKitEcommerce.API.LoaderCatalogueTest do
       assert [en] = CatalogueSource.products_for_items(items, language: "en-US")
       assert [none] = CatalogueSource.products_for_items(items)
 
-      assert option_values(fr) == %{"color" => ["Rouge"]}
-      assert option_values(en) == %{"color" => ["Red"]}
-      assert option_values(none) == %{"color" => ["Red"]}
+      assert option_values(fr) == %{"color" => ["red"]}
+      assert option_values(en) == option_values(fr)
+      assert option_values(none) == option_values(fr)
+
+      assert value_labels(fr) == %{"color" => %{"red" => "Rouge"}}
+      assert value_labels(en) == %{"color" => %{"red" => "Red"}}
+      assert value_labels(none) == %{"color" => %{"red" => "Red"}}
     end
 
     test "load/2 passes its language option on" do
@@ -305,9 +310,9 @@ defmodule PhoenixKitEcommerce.API.LoaderCatalogueTest do
       en = Loader.load([item.uuid], language: "en-US")[item.uuid]
       none = Loader.load([item.uuid])[item.uuid]
 
-      assert option_values(fr.product) == %{"color" => ["Rouge"]}
-      assert option_values(en.product) == %{"color" => ["Red"]}
-      assert option_values(none.product) == %{"color" => ["Red"]}
+      assert value_labels(fr.product) == %{"color" => %{"red" => "Rouge"}}
+      assert value_labels(en.product) == %{"color" => %{"red" => "Red"}}
+      assert value_labels(none.product) == %{"color" => %{"red" => "Red"}}
     end
   end
 

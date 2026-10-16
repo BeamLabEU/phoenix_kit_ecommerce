@@ -167,6 +167,43 @@ defmodule PhoenixKitEcommerce.API.CartOptionsTest do
     end
   end
 
+  describe "to_specs/2 and to_options/2 under the catalogue source with keyed values" do
+    defp keyed_product(language_labels) do
+      %Product{
+        uuid: Ecto.UUID.generate(),
+        status: "active",
+        metadata: %{
+          "_option_values" => %{"color" => ["red", "blue"]},
+          "_value_labels" => %{"color" => language_labels},
+          "_value_slugs" =>
+            Map.new(%{"color" => Map.new(language_labels, fn {k, l} -> {l, k} end)})
+        }
+      }
+    end
+
+    test "the value key is stored as it is, in every language" do
+      german = keyed_product(%{"red" => "Rot", "blue" => "Blau"})
+      french = keyed_product(%{"red" => "Rouge", "blue" => "Bleu"})
+
+      assert {:ok, %{"color" => "red"}} = CartOptions.to_specs(german, opts([{"color", "red"}]))
+      assert {:ok, %{"color" => "red"}} = CartOptions.to_specs(french, opts([{"color", "red"}]))
+      assert CartOptions.to_options(french, %{"color" => "red"}) == opts([{"color", "red"}])
+    end
+
+    test "a label is not a value key" do
+      german = keyed_product(%{"red" => "Rot", "blue" => "Blau"})
+
+      assert {:error, :option_invalid, %{value_key: "Rot", allowed: ["red", "blue"]}} =
+               CartOptions.to_specs(german, opts([{"color", "Rot"}]))
+    end
+
+    test "a line stored with the label of its language reads back as the value key" do
+      french = keyed_product(%{"red" => "Rouge", "blue" => "Bleu"})
+
+      assert CartOptions.to_options(french, %{"color" => "Rouge"}) == opts([{"color", "red"}])
+    end
+  end
+
   describe "from_item/2" do
     test "prefers the neutral options stored on the line" do
       item = %CartItem{

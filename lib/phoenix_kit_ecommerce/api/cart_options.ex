@@ -3,14 +3,14 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
   Language-neutral cart options of the public cart API.
 
   In input and output an option is `%{attribute_key, value_key}`. `add_to_cart`
-  stores and prices by `selected_specs`, a map of attribute key to the value's
-  **label** in the language the line was added in. This module converts both
-  ways:
+  stores and prices by `selected_specs`, a map of attribute key to the value
+  as the product source identifies it: the catalogue's value key, or on a
+  legacy product the value's label. This module converts both ways:
 
     * the keys are the ones the product card announces: `Search.OptionKeys`
       (the attribute key with a colon turned into an underscore, the value's
-      catalogue slug, else the slugified label). This module has no key rule of
-      its own; it only maps a key back to the label `add_to_cart` stores.
+      catalogue key, else the slugified label). This module has no key rule of
+      its own; it only maps a key back to the value `add_to_cart` stores.
 
   A product offers the options `Options.get_selectable_specs_for_product/1`
   returns; the ones flagged `"required"` must be given (the same rule
@@ -19,6 +19,10 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
   The writer stores the neutral options on the line (`metadata["api_options"]`)
   so that a cart written in one language reads the same in another;
   `from_item/2` prefers them.
+
+  A line stored before the catalogue's value keys were its identity holds the
+  labels of the language it was added in; `to_options/2` maps those back
+  through the product.
   """
 
   alias PhoenixKitEcommerce.CartItem
@@ -94,7 +98,7 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
   defp map_options(options, by_key, product) do
     Enum.reduce_while(options, {:ok, %{}}, fn option, {:ok, acc} ->
       case map_option(option, by_key, product) do
-        {:ok, raw_key, label} -> {:cont, {:ok, Map.put(acc, raw_key, label)}}
+        {:ok, raw_key, stored} -> {:cont, {:ok, Map.put(acc, raw_key, stored)}}
         {:error, _code, _context} = error -> {:halt, error}
       end
     end)
@@ -111,15 +115,15 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
          }}
 
       {:ok, spec} ->
-        label_for(key, value, spec, product)
+        stored_for(key, value, spec, product)
     end
   end
 
-  defp label_for(key, value, spec, product) do
+  defp stored_for(key, value, spec, product) do
     pairs = value_pairs(spec, product)
 
     case List.keyfind(pairs, value, 0) do
-      {_value_key, label} -> {:ok, spec["key"], label}
+      {_value_key, stored} -> {:ok, spec["key"], stored}
       nil when pairs == [] -> {:ok, spec["key"], value}
       nil -> invalid(key, value, Enum.map(pairs, &elem(&1, 0)))
     end
@@ -142,34 +146,29 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
     end
   end
 
-  # `[{value_key, label}]` this product offers for an option: the labels of its
-  # option list (every label the catalogue has a slug for when the list is
-  # empty), each under the key the product card announces for it.
+  # `[{value_key, stored}]` this product offers for an option: the values of
+  # its option list, each under the key the product card announces for it.
+  # `stored` is what `selected_specs` holds for it.
   defp value_pairs(spec, product) do
     raw_key = spec["key"]
 
-    labels =
+    values =
       case spec["options"] do
         list when is_list(list) -> Enum.filter(list, &is_binary/1)
         _ -> []
       end
 
-    labels =
-      if labels == [],
-        do: product |> value_slugs() |> Map.get(raw_key, %{}) |> Map.keys() |> Enum.sort(),
-        else: labels
-
-    Enum.map(labels, &{OptionKeys.product_value_key(product, raw_key, &1), &1})
+    Enum.map(values, &{OptionKeys.product_value_key(product, raw_key, &1), &1})
   end
 
   @doc "The neutral options of a `selected_specs` map for a product."
   @spec to_options(Product.t() | map(), %{String.t() => String.t()}) :: [option()]
   def to_options(%{metadata: _} = product, specs) when is_map(specs) do
     specs
-    |> Enum.map(fn {key, label} ->
+    |> Enum.map(fn {key, value} ->
       %{
         attribute_key: OptionKeys.neutral_key(to_string(key)),
-        value_key: OptionKeys.product_value_key(product, key, to_string(label))
+        value_key: OptionKeys.product_value_key(product, key, to_string(value))
       }
     end)
     |> sort()
@@ -177,7 +176,7 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
 
   @doc """
   The neutral options of a cart line: the ones the API stored on it, else its
-  labels mapped through `product` (when given), else through the key rule alone.
+  values mapped through `product` (when given), else through the key rule alone.
   """
   @spec from_item(CartItem.t(), Product.t() | nil) :: [option()]
   def from_item(%CartItem{} = item, product) do
@@ -211,14 +210,4 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
   end
 
   defp sort(options), do: Enum.sort_by(options, &{&1.attribute_key, &1.value_key})
-
-  defp value_slugs(%Product{metadata: metadata}) do
-    case (metadata || %{})["_value_slugs"] do
-      %{} = map ->
-        Map.new(map, fn {key, labels} -> {key, if(is_map(labels), do: labels, else: %{})} end)
-
-      _ ->
-        %{}
-    end
-  end
 end

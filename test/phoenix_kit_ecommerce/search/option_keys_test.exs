@@ -220,6 +220,36 @@ defmodule PhoenixKitEcommerce.Search.OptionKeysTest do
     end
   end
 
+  describe "catalogue value keys" do
+    defp keyed_product do
+      product(%{
+        "_option_values" => %{"colour" => ["red-2", "red"], "size" => ["Large"]},
+        "_value_labels" => %{"colour" => %{"red" => "Red", "red-2" => "Red", "blue" => "Blue"}},
+        "_value_slugs" => %{"colour" => %{"Red" => "red", "Blue" => "blue"}}
+      })
+    end
+
+    test "a value of _option_values is the value key and _value_labels is what it is shown as" do
+      assert [colour, size] = OptionKeys.extract(keyed_product())
+
+      assert colour.values == [%{key: "red-2", label: "Red"}, %{key: "red", label: "Red"}]
+      assert size.values == [%{key: "large", label: "Large"}]
+    end
+
+    test "two values that share a label stay two pairs" do
+      assert OptionKeys.pairs(OptionKeys.extract(keyed_product())) ==
+               ["colour:red", "colour:red-2", "size:large"]
+    end
+
+    test "product_value_key/3 keeps a value key and still maps a label to its key" do
+      product = keyed_product()
+
+      assert OptionKeys.product_value_key(product, "colour", "red-2") == "red-2"
+      assert OptionKeys.product_value_key(product, "colour", "Blue") == "blue"
+      assert OptionKeys.product_value_key(product, "size", "Large") == "large"
+    end
+  end
+
   test "pairs/1 are unique and sorted" do
     options = [
       %{key: "size", values: [%{key: "small"}, %{key: "large"}, %{key: "small"}]},

@@ -2,9 +2,9 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
   @moduledoc """
   The checkout claim's "add" merge on the catalogue source: the API cart's
   option lines are matched to the product as the buyer's language shows it
-  (a value labelled `Red` in English and `Rouge` in French), join an identical
-  line of the browser cart, and are added with the label of the claim's
-  language.
+  (a value labelled `Red` in English and `Rouge` in French, keyed `red`), join
+  an identical line of the browser cart, and are added with the label of the
+  claim's language.
 
   Needs `phoenix_kit_catalogue` loaded (`:catalogue`). `async: false`: flips the
   process-wide `shop_product_source` key.
@@ -29,6 +29,7 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
   alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.API.Loader
+  alias PhoenixKitEcommerce.SelectedSpecs
   alias PhoenixKitEntities.EntityData
 
   setup do
@@ -107,13 +108,13 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
 
   test "an option line joins the identical line the buyer already has, in the claim's language",
        ctx do
-    {browser, mine} = browser_cart!([{french(ctx.vase), 1, %{"color" => "Rouge"}}])
+    {browser, mine} = browser_cart!([{french(ctx.vase), 1, %{"color" => "red"}}])
 
     assert {:ok, %{mode: :merged, skipped: []}} =
              redeem_shown(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
 
     assert [{_product, specs}] = Map.keys(lines(mine))
-    assert specs == %{"color" => "Rouge"}
+    assert specs == %{"color" => "red"}
     assert lines(mine) |> Map.values() == [3]
   end
 
@@ -124,6 +125,9 @@ defmodule PhoenixKitEcommerce.API.ClaimsCatalogueTest do
              redeem_shown(ctx.raw, browser, %{offer: mine.uuid, choice: "add"})
 
     by_specs = Map.new(lines(mine), fn {{_product, specs}, quantity} -> {specs, quantity} end)
-    assert by_specs == %{%{} => 1, %{"color" => "Rouge"} => 2}
+    assert by_specs == %{%{} => 1, %{"color" => "red"} => 2}
+
+    assert [added] = Enum.filter(Shop.get_cart(mine.uuid).items, &(&1.selected_specs != %{}))
+    assert SelectedSpecs.labels(added) == %{"color" => "Rouge"}
   end
 end

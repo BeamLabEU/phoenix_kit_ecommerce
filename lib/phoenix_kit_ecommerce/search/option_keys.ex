@@ -2,12 +2,17 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
   @moduledoc """
   The language-neutral option keys of a product (an option is
   `{attribute_key, value_key}`), read from the metadata both product sources
-  keep: `_option_values` (key to labels, in the language the view was built
-  for), `_value_slugs` (key to label to value slug; catalogue source),
+  keep: `_option_values` (key to values), `_value_labels` (key to value key to
+  label, in the language the view was built for; catalogue source),
+  `_value_slugs` (key to label to value key; catalogue source),
   `_option_labels` (key to the set's display name) and `_price_modifiers`.
 
-  A value with no slug entry gets `PhoenixKit.Utils.Slug.slugify/2` of its
-  label, so a legacy product and a catalogue item expose the same shape.
+  On the catalogue source a value of `_option_values` is the catalogue's own
+  value key, and `_value_labels` says what it is shown as. A legacy product
+  has no `_value_labels`: its value is its label, and it has no slug entry
+  unless `_value_slugs` gives one, so it gets
+  `PhoenixKit.Utils.Slug.slugify/2` of the label, which makes both shapes
+  expose the same option.
   """
 
   alias PhoenixKit.Utils.Slug
@@ -31,6 +36,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     meta = map(product.metadata)
     values = map(meta["_option_values"])
     slugs = map(meta["_value_slugs"])
+    shown = map(meta["_value_labels"])
     names = map(meta["_option_labels"])
     modifiers = map(meta["_price_modifiers"])
 
@@ -39,7 +45,7 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     |> Enum.flat_map(fn {raw_key, labels} ->
       raw_key = to_string(raw_key)
       key = neutral_key(raw_key)
-      entries = entries(slugs, raw_key, key, labels)
+      entries = entries(slugs, shown, raw_key, key, labels)
 
       if entries == [] do
         []
@@ -67,15 +73,20 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
   def neutral_key(key) when is_binary(key), do: key |> String.trim() |> neutral()
 
   @doc """
-  The value key `extract/1` announces for `label` of the option `raw_key` of
-  `product` (any map with `:metadata`): the catalogue's slug when the product
-  has one, else the slugified label. A caller that has to turn a key a client
-  sends back into a label (the cart) goes through this, never a rule of its own.
+  The value key `extract/1` announces for `value` of the option `raw_key` of
+  `product` (any map with `:metadata`): `value` itself when it is one of the
+  catalogue's value keys, else the catalogue's slug for the label `value`,
+  else the slugified label. A caller that has to turn a key a client sends
+  back into what the cart stores goes through this, never a rule of its own.
   """
   @spec product_value_key(map(), String.t(), String.t()) :: String.t()
-  def product_value_key(%{metadata: metadata}, raw_key, label) do
-    slugs = metadata |> map() |> Map.get("_value_slugs") |> map()
-    value_key(slugs, to_string(raw_key), label)
+  def product_value_key(%{metadata: metadata}, raw_key, value) do
+    metadata = map(metadata)
+    raw_key = to_string(raw_key)
+
+    if keyed_value?(map(metadata["_value_labels"]), raw_key, value),
+      do: neutral(value),
+      else: value_key(map(metadata["_value_slugs"]), raw_key, value)
   end
 
   @doc "`[\"size:large\", ...]`, sorted and unique."
@@ -96,13 +107,30 @@ defmodule PhoenixKitEcommerce.Search.OptionKeys do
     end)
   end
 
-  defp entries(slugs, raw_key, key, labels) do
+  defp entries(slugs, shown, raw_key, key, values) do
     entries =
-      for label <- List.wrap(labels), is_binary(label), String.trim(label) != "" do
-        %{key: value_key(slugs, raw_key, label), label: String.trim(label)}
+      for value <- List.wrap(values), is_binary(value), String.trim(value) != "" do
+        entry(slugs, shown, raw_key, value)
       end
 
     if key == "", do: [], else: Enum.uniq_by(entries, & &1.key)
+  end
+
+  defp entry(slugs, shown, raw_key, value) do
+    case shown |> Map.get(raw_key) |> map() |> Map.get(value) do
+      label when is_binary(label) and label != "" ->
+        %{key: neutral(value), label: String.trim(label)}
+
+      _none ->
+        %{key: value_key(slugs, raw_key, value), label: String.trim(value)}
+    end
+  end
+
+  defp keyed_value?(shown, raw_key, value) do
+    case shown |> Map.get(raw_key) |> map() |> Map.get(value) do
+      label when is_binary(label) and label != "" -> true
+      _none -> false
+    end
   end
 
   defp value_key(slugs, key, label) do
