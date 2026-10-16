@@ -156,6 +156,10 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
     assert Decimal.compare(max, Decimal.new("18")) == :gt
   end
 
+  test "an option key is trimmed, as the index keeps it" do
+    assert {%{options: %{"size" => ["large"]}}, []} = ok(%{"options" => %{" size " => ["large"]}})
+  end
+
   test "options keep values unique and refuse malformed shapes" do
     assert {%{options: %{"size" => ["large", "xl"]}}, []} =
              ok(%{"options" => %{"size" => ["large", "xl", "large"]}})

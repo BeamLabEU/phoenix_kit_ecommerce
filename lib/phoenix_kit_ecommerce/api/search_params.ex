@@ -192,7 +192,8 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
          )}
 
       valid_values?(values) ->
-        {Map.put(acc, key, Enum.uniq(values)), state}
+        # The index keeps trimmed keys (`OptionKeys.neutral_key/1`).
+        {Map.put(acc, String.trim(key), Enum.uniq(values)), state}
 
       true ->
         {acc,
