@@ -18,6 +18,8 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   over the cart and `status: "checking_out"` to a read.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
 
   alias PhoenixKit.RepoHelper
@@ -557,9 +559,9 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   end
 
   defp claimed_currency(claim, ctx) do
-    case Shop.get_cart(claim.cart_uuid) do
-      %Cart{currency: currency} -> currency
+    case repo().one(from(c in Cart, where: c.uuid == ^claim.cart_uuid, select: c.currency)) do
       nil -> CartStore.display_currency(ctx)
+      currency -> currency
     end
   end
 
