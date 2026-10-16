@@ -263,9 +263,11 @@ Repo-local aliases:
   `ApiCartPruneWorker`, `ApiClaimPruneWorker`), on `default`: they are
   short, scheduled through `oban_crons/0`, and must not wait behind an import.
   The Shopify sync runs ONE kind at a
-  time: images and variants each write an item's whole `data` map from a
-  read taken when the run started, so two kinds together drop each other's
-  keys. `ShopifyMediaSyncWorker` is unique across kinds and its `perform/1`
+  time: on a catalogue that does not honour `data_owned_paths`, images and
+  variants each write an item's whole `data` map from a read taken when the
+  run started, so two kinds together drop each other's keys (with the owned
+  paths each write is limited to the paths it changed, and the rule stays
+  as the cheap guard). `ShopifyMediaSyncWorker` is unique across kinds and its `perform/1`
   snoozes behind a run that started earlier; a new kind of sync joins that
   worker rather than getting a queue entry of its own.
 - **Schemas:** UUIDv7 primary keys (`@primary_key {:uuid, UUIDv7,
