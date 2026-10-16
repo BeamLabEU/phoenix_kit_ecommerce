@@ -225,7 +225,7 @@ seconds and the queue, or until the nightly rebuild if the job fails), so for th
 include a product the items no longer show, and a query only that product matches answers `count: 1`
 with no items. The category counts of `shop.list_categories` come from the index too, and a
 sub-category under an unlisted middle category counts towards its listed ancestor's search but not
-towards that ancestor's `total_count`. Enabling the shop queues a rebuild. Prices come in the language and
+towards that ancestor's `total_count`. Enabling the shop queues a rebuild; enabling a language does not, so call `PhoenixKitEcommerce.Search.Jobs.enqueue_rebuild/0` or wait for the nightly one (03:40). Prices come in the language and
 currency of the domain the request came to (a host maps domains with
 `config :phoenix_kit, :api_request_context, {Mod, :fun}`); `language` and `currency` inputs override.
 
