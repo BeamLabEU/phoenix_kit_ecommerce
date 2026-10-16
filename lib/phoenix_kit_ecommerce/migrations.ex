@@ -512,8 +512,8 @@ defmodule PhoenixKitEcommerce.Migrations do
             ON CONFLICT (key) DO NOTHING;
           ELSIF NOT EXISTS (
             SELECT 1
-            FROM unnest(regexp_split_to_array(coalesce(current_value, ''), E'\\r?\\n')) AS line
-            WHERE btrim(line) = claim_pattern
+            FROM unnest(regexp_split_to_array(coalesce(current_value, ''), E'[,\\r\\n]')) AS line
+            WHERE btrim(line, E' \\t\\r') = claim_pattern
           ) THEN
             UPDATE #{p}phoenix_kit_settings
             SET value = rtrim(coalesce(current_value, ''), chr(10) || chr(13) || chr(9) || ' ')

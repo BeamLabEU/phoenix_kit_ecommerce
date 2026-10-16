@@ -117,6 +117,28 @@ defmodule PhoenixKitEcommerce.CartClaimTest do
       assert setting(@key) == value
     end
 
+    test "the pattern in a comma separated or tab padded value is left alone, like analytics reads it" do
+      stub_analytics_table!()
+      [step] = Migrations.claim_analytics_statements("public")
+
+      for value <- ["/admin*,/checkout/claim/*", "/admin*\n\t/checkout/claim/*\t\n/live*"] do
+        {:ok, _} = PhoenixKit.Settings.update_setting(@key, value)
+        Repo.query!(step)
+        assert setting(@key) == value
+      end
+    end
+
+    test "a comma separated value without the pattern gets it once" do
+      stub_analytics_table!()
+      {:ok, _} = PhoenixKit.Settings.update_setting(@key, "/admin*,/shop/checkout/claim/*")
+
+      [step] = Migrations.claim_analytics_statements("public")
+      Repo.query!(step)
+      Repo.query!(step)
+
+      assert setting(@key) == "/admin*,/shop/checkout/claim/*\n/checkout/claim/*"
+    end
+
     test "writes the analytics defaults plus the pattern when the setting has no row yet" do
       stub_analytics_table!()
       Repo.delete_all(from s in "phoenix_kit_settings", where: s.key == ^@key)
