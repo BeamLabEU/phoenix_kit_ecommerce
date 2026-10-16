@@ -202,8 +202,14 @@ defmodule PhoenixKitEcommerce.API.Cards do
     raw = raw_description(product, language)
 
     case format do
-      "markdown" -> raw |> HtmlToMarkdown.convert() |> cut(@description_limit)
-      _text -> PlainText.convert(raw, @description_limit)
+      "markdown" ->
+        raw
+        |> PlainText.bound(@description_limit)
+        |> HtmlToMarkdown.convert()
+        |> cut(@description_limit)
+
+      _text ->
+        PlainText.convert(raw, @description_limit)
     end
   end
 

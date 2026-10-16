@@ -93,6 +93,18 @@ defmodule PhoenixKitEcommerce.API.PlainText do
   # The legacy references HTML also accepts in capitals (`&AMP;`).
   @any_case ~w(amp lt gt quot nbsp copy reg trade)
 
+  @doc """
+  `raw` cut to a few times `limit` characters (at a tag boundary), for a
+  converter that has no bound of its own: one pathological value cannot then
+  stall the caller. Not a string: returned as it is.
+  """
+  @spec bound(term(), pos_integer()) :: term()
+  def bound(raw, limit) when is_binary(raw) and is_integer(limit) do
+    raw |> String.slice(0, @max_input) |> cut(limit * @input_factor)
+  end
+
+  def bound(other, _limit), do: other
+
   @doc "Plain text of `raw`, at most `limit` characters; `nil` for blank or not a string."
   @spec convert(term(), pos_integer()) :: String.t() | nil
   def convert(raw, limit) when is_binary(raw) and is_integer(limit) do

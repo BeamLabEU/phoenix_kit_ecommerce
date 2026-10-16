@@ -263,4 +263,19 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
       assert shape == shape |> JSON.encode!() |> JSON.decode!()
     end
   end
+
+  test "a huge stored description is cut before it is converted to Markdown", %{context: context} do
+    product =
+      legacy_product!(%{"en" => "Big"}, %{
+        body_html: %{"en" => String.duplicate("<p><b>", 100_000)}
+      })
+
+    {:reductions, before} = Process.info(self(), :reductions)
+    card = Cards.card(record(product), context, format: "markdown")
+    {:reductions, after_} = Process.info(self(), :reductions)
+
+    assert is_map(card)
+    # Converting all 600,000 characters costs about 120 million; the cut input, about 1.5 million.
+    assert after_ - before < 15_000_000
+  end
 end
