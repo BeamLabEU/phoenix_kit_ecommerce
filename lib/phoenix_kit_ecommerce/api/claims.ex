@@ -427,7 +427,8 @@ defmodule PhoenixKitEcommerce.API.Claims do
          quantity when quantity > 0 <- room_for(cart, product, specs, item.quantity) do
       add_checked(cart, item, product, quantity, specs, language, skipped)
     else
-      0 -> {cart, skipped}
+      # Also the line the buyer's cart already holds at the cap (`room_for/4` is
+      # 0): named, not dropped quietly with the claim consumed.
       _not_addable -> {cart, [item.product_title | skipped]}
     end
   end

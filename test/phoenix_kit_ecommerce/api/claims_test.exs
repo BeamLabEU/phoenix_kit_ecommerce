@@ -433,6 +433,24 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
       assert length(Shop.get_cart(mine.uuid).items) == 2
     end
 
+    test "add names a line whose product the buyer's cart already holds at the cap", ctx do
+      api = api_cart!([{ctx.p1, 1}, {ctx.p2, 1}])
+      {raw, _} = issue!(api)
+      browser = browser()
+      mine = browser_cart!(browser, [{ctx.p1, CartWriter.max_quantity()}])
+
+      assert {:ok, %{mode: :merged, skipped: [title]}} = redeem(raw, browser, mine.uuid, "add")
+
+      assert title == ctx.p1.title["en"]
+      added = Shop.get_cart(mine.uuid).items
+
+      assert Enum.find(added, &(&1.product_uuid == ctx.p1.uuid)).quantity ==
+               CartWriter.max_quantity()
+
+      assert Enum.any?(added, &(&1.product_uuid == ctx.p2.uuid))
+      assert Repo.get!(Cart, api.cart.uuid).status == "merged"
+    end
+
     test "add skips a line that add_to_cart refuses for good, and keeps the others", ctx do
       foreign = product!(%{"currency" => "EUR"})
       api = api_cart!([{ctx.p1, 1}, {foreign, 1}])
