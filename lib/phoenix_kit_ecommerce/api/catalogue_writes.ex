@@ -90,9 +90,25 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   end
 
   @doc """
+  Tells the catalogue's listeners about items `update_rows/2` wrote with
+  `broadcast: false`, once per catalogue. The catalogue sends these events
+  itself after its own statements, which inside a caller's transaction is
+  before the caller commits; a caller that writes in one passes
+  `broadcast: false` and calls this after the commit.
+  """
+  @spec announce_updated([struct()]) :: :ok
+  def announce_updated(items) do
+    items
+    |> Enum.group_by(& &1.catalogue_uuid, & &1.uuid)
+    |> Enum.each(fn {catalogue_uuid, uuids} ->
+      Catalogue.broadcast_item_batch_change(catalogue_uuid, :updated, uuids)
+    end)
+  end
+
+  @doc """
   Updates `entries` (`[{item, attrs, row_opts}]`) in one batch and answers one
   result per entry, in order. `opts` go to the catalogue unchanged
-  (`:actor_uuid`, `:log_metadata`, `:mode`, `:skip_derive`); `row_opts` are
+  (`:actor_uuid`, `:log_metadata`, `:mode`, `:skip_derive`, `:broadcast`); `row_opts` are
   `:data_owned_paths` and `:logged_data_paths`.
   """
   @spec update_rows([{struct(), map(), keyword()}], keyword()) :: [answer()]

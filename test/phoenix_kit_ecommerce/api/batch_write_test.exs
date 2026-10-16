@@ -231,6 +231,48 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("120.00"))
     end
 
+    test "announces the catalogue change once, after the commit and not before it",
+         %{catalogue: catalogue, ctx: ctx} do
+      first = F.item!(catalogue)
+      second = F.item!(catalogue)
+      unchanged = F.item!(catalogue, %{base_price: Decimal.new("120.00")})
+      planner = price_planner(Decimal.new("120.00"))
+
+      rows =
+        Batch.load(
+          for(item <- [first, second, unchanged], do: %{"ref" => %{"id" => item.uuid}}),
+          catalogue.uuid
+        )
+        |> Batch.plan(planner)
+
+      PhoenixKitCatalogue.Catalogue.PubSub.subscribe()
+      test_pid = self()
+      handler_id = {:batch_write_timeline, make_ref()}
+
+      :telemetry.attach(
+        handler_id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, %{query: query}, _config ->
+          if query in ["begin", "commit"], do: send(test_pid, {:transaction, query})
+        end,
+        nil
+      )
+
+      try do
+        Batch.write_if_unchanged(rows, ctx, "ecommerce.set_prices", planner)
+      after
+        :telemetry.detach(handler_id)
+      end
+
+      timeline =
+        Enum.reverse(drain_timeline([]))
+
+      assert [{:transaction, "begin"}, {:transaction, "commit"}, {:bulk, uuids}, :data_changed] =
+               timeline
+
+      assert Enum.sort(uuids) == Enum.sort([first.uuid, second.uuid])
+    end
+
     test "does not write a row another writer changed after the plan, and leaves its value",
          %{catalogue: catalogue, ctx: ctx} do
       changed = F.item!(catalogue)
@@ -320,6 +362,21 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert error["code"] == "validation_failed"
       assert error["context"]["reason"] == "database_error"
       assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
+    end
+
+    defp drain_timeline(acc) do
+      receive do
+        {:transaction, _} = step ->
+          drain_timeline([step | acc])
+
+        {:catalogue_bulk_change, _catalogue, :updated, uuids, _from} ->
+          drain_timeline([{:bulk, uuids} | acc])
+
+        {:catalogue_data_changed, :item, nil, _catalogue} ->
+          drain_timeline([:data_changed | acc])
+      after
+        0 -> acc
+      end
     end
 
     test "writes nothing and opens no transaction when no row changes", %{ctx: ctx} do

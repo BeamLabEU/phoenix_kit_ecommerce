@@ -148,7 +148,7 @@ defmodule PhoenixKitEcommerce.API.Batch do
     written
   end
 
-  defp write_rows(rows, ctx, tool) do
+  defp write_rows(rows, ctx, tool, extra_opts \\ []) do
     pending = for %{plan: %{changed?: true}} = row <- rows, do: row
 
     entries =
@@ -157,12 +157,13 @@ defmodule PhoenixKitEcommerce.API.Batch do
         {row.item, row.plan.attrs, data_owned_paths: paths, logged_data_paths: paths}
       end)
 
-    opts = [
-      actor_uuid: Meta.actor_uuid(ctx),
-      log_metadata: Meta.log_metadata(ctx, tool),
-      mode: "auto",
-      skip_derive: true
-    ]
+    opts =
+      [
+        actor_uuid: Meta.actor_uuid(ctx),
+        log_metadata: Meta.log_metadata(ctx, tool),
+        mode: "auto",
+        skip_derive: true
+      ] ++ extra_opts
 
     results =
       pending
@@ -204,14 +205,19 @@ defmodule PhoenixKitEcommerce.API.Batch do
       items ->
         locked_result =
           CatalogueWrites.with_locked_items(items, fn locked ->
-            rows |> Enum.map(&still_planned(&1, locked, planner)) |> write_rows(ctx, tool)
+            rows
+            |> Enum.map(&still_planned(&1, locked, planner))
+            |> write_rows(ctx, tool, broadcast: false)
           end)
 
         case locked_result do
           {:ok, written} ->
             # After the commit: a page rendered before it would put the old
-            # prices back into the cache.
+            # prices back into the cache, and a listener told of the change
+            # earlier could read the old values (or hear of a change that a
+            # rollback then took back).
             clear_storefront_cache(written)
+            CatalogueWrites.announce_updated(for %{result: {:ok, item}} <- written, do: item)
             written
 
           # The transaction did not commit: no row of it was written.

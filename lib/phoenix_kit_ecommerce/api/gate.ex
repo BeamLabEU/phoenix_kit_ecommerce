@@ -81,10 +81,12 @@ defmodule PhoenixKitEcommerce.API.Gate do
 
   @doc """
   Whether the loaded catalogue ships what the admin API writes through: the
-  ref resolver and the batch update, and `preview_item_update/3`,
+  ref resolver and the batch update, `broadcast_item_batch_change/3` (a write
+  inside the API's own transaction announces itself after the commit) and
+  `preview_item_update/3`,
   which the catalogue adds together with the `:log_metadata`, `:logged_data_paths` and
-  `:data_owned_paths` options of the writes. It is the witness for those
-  options: an update without `:data_owned_paths` would replace a product's
+  `:data_owned_paths` options of the writes. `preview_item_update/3` is the
+  witness for those options: an update without `:data_owned_paths` would replace a product's
   whole `data` map, and nothing at run time would notice, so a build that
   exports the batch update but not the witness is refused. It also covers
   what `API.CatalogueWrites.with_locked_items/2` queries directly: the
@@ -100,6 +102,7 @@ defmodule PhoenixKitEcommerce.API.Gate do
       Code.ensure_loaded?(PhoenixKitCatalogue.Catalogue) and
       function_exported?(PhoenixKitCatalogue.Catalogue, :update_items, 2) and
       function_exported?(PhoenixKitCatalogue.Catalogue, :preview_item_update, 3) and
+      function_exported?(PhoenixKitCatalogue.Catalogue, :broadcast_item_batch_change, 3) and
       lock_schemas_ready?()
   end
 
