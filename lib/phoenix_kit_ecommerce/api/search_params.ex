@@ -11,9 +11,12 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
   never trusts a value it did not parse itself.
 
   Price bounds arrive in the response currency and leave in the base currency,
-  each widened by half of the response currency's smallest unit so a product
-  whose price is *displayed* at the edge is inside the filter (a bound of
-  18.18 EUR must find the product shown as 18.18 EUR).
+  each widened by how far the response currency's display rounding can move a
+  price from its converted figure (half of its smallest unit; half a unit for
+  `integer` and `charm_90`; one unit upwards for `charm_99`, which rounds down
+  to the next X.99) so a product whose price is *displayed* at the edge is
+  inside the filter (a bound of 18.18 EUR must find the product shown as 18.18
+  EUR). A product shown just outside the bound can be inside the filter too.
   """
 
   alias PhoenixKitEcommerce.API.Context
@@ -121,14 +124,25 @@ defmodule PhoenixKitEcommerce.API.SearchParams do
     do: amount
 
   defp bound(%Context{currency: currency} = context, amount, direction) do
-    places = currency.decimal_places || 2
-    half = Decimal.div(Decimal.new(1), Decimal.new(2 * Integer.pow(10, places)))
+    margin = margin(currency, direction)
 
     widened =
-      if direction == :min, do: Decimal.sub(amount, half), else: Decimal.add(amount, half)
+      if direction == :min, do: Decimal.sub(amount, margin), else: Decimal.add(amount, margin)
 
     base = Context.to_base(context, widened)
     if Decimal.compare(base, 0) == :lt, do: Decimal.new(0), else: base
+  end
+
+  # How far `Currency.present/3` can put a displayed price from the converted
+  # figure, towards the side the bound is widened to.
+  defp margin(%{rounding_rule: rule}, _direction) when rule in ["integer", "charm_90"],
+    do: Decimal.new("0.5")
+
+  defp margin(%{rounding_rule: "charm_99"}, :max), do: Decimal.new(1)
+
+  defp margin(currency, _direction) do
+    places = currency.decimal_places || 2
+    Decimal.div(Decimal.new(1), Decimal.new(2 * Integer.pow(10, places)))
   end
 
   defp parse_decimal(value) when is_integer(value), do: non_negative(Decimal.new(value))

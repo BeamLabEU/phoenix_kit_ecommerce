@@ -10,12 +10,18 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
   alias PhoenixKitEcommerce.API.SearchParams
   alias PhoenixKitEcommerce.Search.Query
 
-  defp currency(code, rate),
-    do: struct(Currency, code: code, decimal_places: 2, exchange_rate: Decimal.new(rate))
+  defp currency(code, rate, rule \\ "exact"),
+    do:
+      struct(Currency,
+        code: code,
+        decimal_places: 2,
+        exchange_rate: Decimal.new(rate),
+        rounding_rule: rule
+      )
 
-  defp context(code \\ "USD") do
+  defp context(code \\ "USD", rule \\ "exact") do
     base = currency("USD", "1.0")
-    shown = if code == "USD", do: base, else: currency(code, "0.909091")
+    shown = if code == "USD", do: base, else: currency(code, "0.909091", rule)
 
     %Context{
       language: "en",
@@ -125,6 +131,29 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
 
     assert {%{price_min: zero}, []} = ok(%{"price_min" => "0"}, eur)
     assert Decimal.compare(zero, 0) == :eq
+  end
+
+  test "bounds are widened by what the currency's rounding rule can move a displayed price" do
+    # 22.00 USD is 20.00 EUR before rounding: shown as 19.99 under charm_99, as 20 under integer.
+    charm_99 = context("EUR", "charm_99")
+    assert {%{price_max: max}, []} = ok(%{"price_max" => "19.99"}, charm_99)
+    assert Decimal.compare(max, Decimal.new("22")) == :gt
+
+    assert {%{price_min: min}, []} = ok(%{"price_min" => "19.99"}, charm_99)
+    assert Decimal.compare(min, Decimal.new("22")) == :lt
+
+    # 21.00 USD is 19.09 EUR (shown as 19) and 23.00 USD is 20.91 (shown as 21).
+    integer = context("EUR", "integer")
+    assert {%{price_max: max}, []} = ok(%{"price_max" => "19"}, integer)
+    assert Decimal.compare(max, Decimal.new("21")) == :gt
+
+    assert {%{price_min: min}, []} = ok(%{"price_min" => "21"}, integer)
+    assert Decimal.compare(min, Decimal.new("23")) == :lt
+
+    # 18.00 USD is 16.36 EUR, shown as 15.90 under charm_90.
+    charm_90 = context("EUR", "charm_90")
+    assert {%{price_max: max}, []} = ok(%{"price_max" => "15.90"}, charm_90)
+    assert Decimal.compare(max, Decimal.new("18")) == :gt
   end
 
   test "options keep values unique and refuse malformed shapes" do
