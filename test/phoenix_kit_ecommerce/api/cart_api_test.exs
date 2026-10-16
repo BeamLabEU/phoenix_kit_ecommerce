@@ -1235,6 +1235,98 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     end
   end
 
+  describe "set_shipping on a cart that is emptied, or that changes while the call waits" do
+    test "a cart that was emptied (the row stays, with no lines) is cart_empty, not a shipping choice",
+         %{physical: physical} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      {200, _, _} = write(token, [{physical, 0}])
+      {:ok, hash} = CartToken.verify(token)
+      assert {:ok, %Cart{items: []}} = CartStore.resolve(hash)
+      method = method!(%{"countries" => ["DE"]})
+
+      assert {422, %{"code" => "validation_failed", "context" => %{"reason" => "cart_empty"}}, _} =
+               call("shop.set_shipping", shipping_input(token, method))
+
+      assert {:ok, %Cart{shipping_method_uuid: nil}} = CartStore.resolve(hash)
+    end
+
+    test "a method that stopped being available while the call waited for the row is refused, and not stored",
+         %{physical: physical} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      session = "api:" <> CartToken.digest(token)
+      {:ok, hash} = CartToken.verify(token)
+      {:ok, cart} = CartStore.resolve(hash)
+
+      # Served while the cart holds at least its subtotal; the cart is emptied of
+      # value after the call has read it and before it locks the row.
+      method =
+        method!(%{"countries" => ["DE"], "min_order_amount" => Decimal.add(cart.subtotal, 0)})
+
+      after_first_query("SELECT", "phoenix_kit_shop_carts", fn ->
+        from(c in Cart, where: c.session_id == ^session)
+        |> Repo.update_all(set: [subtotal: Decimal.new("0.00")])
+      end)
+
+      assert {422,
+              %{
+                "code" => "validation_failed",
+                "context" => %{"reason" => "method_unavailable"}
+              }, _} = call("shop.set_shipping", shipping_input(token, method))
+
+      assert Repo.get_by!(Cart, session_id: session).shipping_method_uuid == nil
+    end
+  end
+
+  describe "a write that fails unexpectedly" do
+    import ExUnit.CaptureLog
+
+    # The cart is read (1), locked by the handler (2) and locked again by the
+    # shop's own clear_cart (3). The cart stops being active after the second
+    # read, so the third refuses it: a failure the handler did not plan for.
+    defp deactivate_after_the_handler_locked_the_cart(token) do
+      session = "api:" <> CartToken.digest(token)
+      id = {:deactivate, make_ref()}
+      reads = :counters.new(1, [])
+
+      :telemetry.attach(
+        id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, meta, _config ->
+          if meta.source == "phoenix_kit_shop_carts" and String.starts_with?(meta.query, "SELECT") do
+            :counters.add(reads, 1, 1)
+
+            if :counters.get(reads, 1) == 2 do
+              Repo.update_all(from(c in Cart, where: c.session_id == ^session),
+                set: [status: "abandoned"]
+              )
+            end
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(id) end)
+    end
+
+    test "clear_cart answers internal_error and logs the shape of the failure, not its content",
+         %{physical: physical} do
+      token = new_cart_token()
+      {200, _, _} = write(token, [{physical, 1}])
+      deactivate_after_the_handler_locked_the_cart(token)
+
+      log =
+        capture_log(fn ->
+          assert {:error, :internal_error, "The cart could not be updated.", %{}} =
+                   run_tool(:clear_cart, token, nil)
+        end)
+
+      assert log =~ "[Shop] cart write failed: :cart_not_active"
+      refute log =~ token
+    end
+  end
+
   describe "every result conforms to its tool's declared output schema" do
     # An MCP client may validate structuredContent against outputSchema: a null where the schema
     # says string would be rejected client-side (the answers are kept free of nil).

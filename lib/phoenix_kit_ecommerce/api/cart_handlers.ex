@@ -18,6 +18,8 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   over the cart and `status: "checking_out"` to a read.
   """
 
+  require Logger
+
   alias PhoenixKit.RepoHelper
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.CountryData
@@ -31,6 +33,7 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   alias PhoenixKitEcommerce.API.Claims
   alias PhoenixKitEcommerce.API.Context
   alias PhoenixKitEcommerce.API.Loader
+  alias PhoenixKitEcommerce.API.Meta
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.ShippingMethod
 
@@ -303,7 +306,8 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
 
   defp existing_cart(hash) do
     case CartStore.resolve(hash) do
-      {:ok, cart} -> {:ok, cart}
+      {:ok, %Cart{items: [_ | _]} = cart} -> {:ok, cart}
+      {:ok, %Cart{}} -> cart_empty("Add items to the cart before choosing shipping.")
       :empty -> cart_empty("Add items to the cart before choosing shipping.")
       {:locked, _claim} -> locked()
       :not_found -> cart_not_found()
@@ -322,24 +326,11 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   defp find_method(_other), do: invalid("method_id", "Unknown shipping method.", nil)
 
   defp choose_shipping(hash, cart, method, country, ctx) do
-    candidate = %{cart | shipping_country: country}
-    available = Shop.get_available_shipping_methods(candidate)
+    available = available_methods(cart, country)
 
     cond do
-      not Enum.any?(available, &(&1.uuid == method.uuid)) ->
-        {:error, :validation_failed,
-         "That shipping method is not available for this cart and country.",
-         %{
-           reason: "method_unavailable",
-           errors: [
-             %{
-               path: "method_id",
-               message: "Not available for this cart and country.",
-               limit: nil,
-               allowed: Enum.map(available, & &1.uuid)
-             }
-           ]
-         }}
+      not available?(available, method) ->
+        method_unavailable(available)
 
       ctx[:dry_run?] == true ->
         preview(
@@ -352,10 +343,38 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
     end
   end
 
+  defp available_methods(cart, country),
+    do: Shop.get_available_shipping_methods(%{cart | shipping_country: country})
+
+  defp available?(available, method), do: Enum.any?(available, &(&1.uuid == method.uuid))
+
+  defp method_unavailable(available) do
+    {:error, :validation_failed,
+     "That shipping method is not available for this cart and country.",
+     %{
+       reason: "method_unavailable",
+       errors: [
+         %{
+           path: "method_id",
+           message: "Not available for this cart and country.",
+           limit: nil,
+           allowed: Enum.map(available, & &1.uuid)
+         }
+       ]
+     }}
+  end
+
+  # The choice was checked on the cart as it was read; another write may have
+  # changed the lines (the subtotal, the weight) before the row lock, so the
+  # method is checked again on the locked cart.
   defp write_shipping(hash, cart, method, country) do
     result =
       repo().transaction(fn ->
         locked = CartStore.lock_active!(cart.uuid, hash)
+        available = available_methods(locked, country)
+
+        if not available?(available, method),
+          do: repo().rollback({:method_unavailable, available})
 
         case Shop.set_cart_shipping(locked, method, country) do
           {:ok, _updated} ->
@@ -530,7 +549,12 @@ defmodule PhoenixKitEcommerce.API.CartHandlers do
   # unexpected.
   defp write_failed({:locked, _claim}), do: locked()
   defp write_failed(:not_found), do: cart_not_found()
-  defp write_failed(_other), do: {:error, :internal_error, "The cart could not be updated.", %{}}
+  defp write_failed({:method_unavailable, available}), do: method_unavailable(available)
+
+  defp write_failed(other) do
+    Logger.error("[Shop] cart write failed: #{Meta.term_class(other)}")
+    {:error, :internal_error, "The cart could not be updated.", %{}}
+  end
 
   defp claimed_currency(claim, ctx) do
     case Shop.get_cart(claim.cart_uuid) do
