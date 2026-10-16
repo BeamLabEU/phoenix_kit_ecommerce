@@ -17,6 +17,8 @@ defmodule PhoenixKitEcommerce.API.Batch do
   all of it.
   """
 
+  require Logger
+
   alias PhoenixKitEcommerce.API.{CatalogueWrites, Fingerprint, Meta, Refs, Rows}
   alias PhoenixKitEcommerce.StorefrontCache
 
@@ -192,6 +194,10 @@ defmodule PhoenixKitEcommerce.API.Batch do
   from a read; between that read and the write another writer (the Shopify sync,
   an editor) can change the same values, and the write would then replace them
   with a figure that was judged against the old ones.
+
+  The catalogue event is announced after the commit. If that announcement
+  raises, the committed rows keep their answer and the failure is logged; the
+  nightly search rebuild is the backstop for an event that was lost.
   """
   @spec write_if_unchanged(
           [row()],
@@ -229,8 +235,17 @@ defmodule PhoenixKitEcommerce.API.Batch do
     end
   end
 
-  defp announce_updated(rows),
-    do: CatalogueWrites.announce_updated(for %{result: {:ok, item}} <- rows, do: item)
+  # The rows are committed: a failing broadcast must not turn them into errors.
+  defp announce_updated(rows) do
+    CatalogueWrites.announce_updated(for %{result: {:ok, item}} <- rows, do: item)
+  rescue
+    error -> log_announce_failed(error.__struct__)
+  catch
+    :exit, _reason -> log_announce_failed(:exit)
+  end
+
+  defp log_announce_failed(class),
+    do: Logger.error("[API.Batch] announcing the update failed: #{inspect(class)}")
 
   defp fail_pending(%{plan: %{changed?: true}} = row, error), do: fail(row, error)
   defp fail_pending(row, _error), do: row

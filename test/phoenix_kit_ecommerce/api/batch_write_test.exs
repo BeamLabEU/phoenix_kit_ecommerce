@@ -274,6 +274,34 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert Enum.sort(uuids) == Enum.sort([first.uuid, second.uuid])
     end
 
+    test "an announcement that raises after the commit leaves the write and its answer intact",
+         %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      planner = price_planner(Decimal.new("120.00"))
+      row = planned(catalogue, item, planner)
+
+      previous = Application.get_env(:phoenix_kit, :pubsub)
+      Application.put_env(:phoenix_kit, :pubsub, PhoenixKitEcommerce.NoSuchPubSub)
+
+      log =
+        try do
+          ExUnit.CaptureLog.capture_log(fn ->
+            send(
+              self(),
+              {:rows, Batch.write_if_unchanged([row], ctx, "ecommerce.set_prices", planner)}
+            )
+          end)
+        after
+          if previous,
+            do: Application.put_env(:phoenix_kit, :pubsub, previous),
+            else: Application.delete_env(:phoenix_kit, :pubsub)
+        end
+
+      assert_received {:rows, [%{result: {:ok, _item}, error: nil}]}
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("120.00"))
+      assert log =~ "announcing the update failed: ArgumentError"
+    end
+
     test "does not write a row another writer changed after the plan, and leaves its value",
          %{catalogue: catalogue, ctx: ctx} do
       changed = F.item!(catalogue)
