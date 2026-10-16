@@ -68,6 +68,18 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
       end
     end
 
+    test "a price of zero is held whatever it replaces: a first price included" do
+      for current <- [nil, dec("5.00")] do
+        assert plan!(%{"price" => "0.00"}, item(%{base_price: current})).dangerous?
+      end
+    end
+
+    test "a price that is zero already and stays zero is not a change to hold" do
+      plan = plan!(%{"price" => "0.00", "compare_at" => "5.00"}, item(%{base_price: dec("0.00")}))
+
+      refute plan.dangerous?
+    end
+
     test "exactly the threshold is not 'more than', one cent past it is" do
       refute plan!(%{"price" => "130.00"}).dangerous?
       assert plan!(%{"price" => "130.01"}).dangerous?

@@ -423,6 +423,14 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
       end
     end
 
+    test "a price of zero is held, a first price included", %{catalogue: catalogue, ctx: ctx} do
+      for current <- [nil, Decimal.new("0.00"), Decimal.new("20.00")] do
+        item = F.item!(catalogue, %{base_price: current})
+
+        assert dangerous?(item, "0.00", ctx) == (current != Decimal.new("0.00"))
+      end
+    end
+
     test "a new option price is held by the size of the move against the product's price", %{
       catalogue: catalogue,
       ctx: ctx

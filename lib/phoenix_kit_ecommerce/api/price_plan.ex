@@ -374,8 +374,9 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
   @doc """
   Whether moving `from` to `to` is more than `pct` percent of `from`. A first
-  price (`from` is `nil` or zero) is never held back, and exactly `pct`
-  percent is not "more than". A `to` of `nil` counts as zero.
+  price (`from` is `nil` or zero) is never held back here (`dangerous?/4` holds
+  a first price of zero), and exactly `pct` percent is not "more than". A `to`
+  of `nil` counts as zero.
   """
   @spec moved_over?(Decimal.t() | nil, Decimal.t() | nil, non_neg_integer()) :: boolean()
   def moved_over?(%Decimal{} = from, to, pct) do
@@ -395,11 +396,19 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
   # through - when it adds or takes away more than `pct` percent of the
   # product's current base price: that is the amount the customer's price of
   # the option moves by, whatever the leaf was before. An unpriced product
-  # has no base to measure against, so only its first price is exempt.
+  # has no base to measure against, so only its first price is exempt - except
+  # a price of zero, which a percentage of nothing would never catch: a price
+  # set to zero is held whatever it replaces.
   defp dangerous?(cur, to, leaves, pct) do
-    moved_over?(cur.price, to.price, pct) or
+    moved_over?(cur.price, to.price, pct) or zeroed?(cur.price, to.price) or
       Enum.any?(leaves, &modifier_dangerous?(cur, to, &1, pct))
   end
+
+  defp zeroed?(from, %Decimal{} = to), do: Decimal.eq?(to, 0) and not zero?(from)
+  defp zeroed?(_from, _to), do: false
+
+  defp zero?(%Decimal{} = price), do: Decimal.eq?(price, 0)
+  defp zero?(_price), do: false
 
   defp modifier_dangerous?(cur, to, key, pct) do
     from = cur.price_modifiers |> leaf(key) |> Money.to_decimal()
