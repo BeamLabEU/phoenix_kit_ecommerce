@@ -160,6 +160,11 @@ defmodule PhoenixKitEcommerce.API.SearchParamsTest do
     assert {%{options: %{"size" => ["large"]}}, []} = ok(%{"options" => %{" size " => ["large"]}})
   end
 
+  test "two keys that trim to the same option are merged, not one dropped" do
+    assert {%{options: %{"size" => ["a", "b"]}}, []} =
+             ok(%{"options" => %{" size " => ["a"], "size" => ["b", "a"]}})
+  end
+
   test "options keep values unique and refuse malformed shapes" do
     assert {%{options: %{"size" => ["large", "xl"]}}, []} =
              ok(%{"options" => %{"size" => ["large", "xl", "large"]}})
