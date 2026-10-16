@@ -191,7 +191,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
     rows =
       Enum.map(rows, fn
         %{plan: %{changed?: true}} = row ->
-          attach_row(row, {index, downloaded}, {user_uuid, catalogue_uuid}, ctx)
+          attach_row_safely(row, {index, downloaded}, {user_uuid, catalogue_uuid}, ctx)
 
         row ->
           row
@@ -229,6 +229,35 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
           do: url
 
     urls |> ImageDownloader.download_batch(user_uuid, download_opts()) |> Map.new()
+  end
+
+  # An exception in one row (a driver error that is not an `{:error, _}`) must
+  # not take the answers of the rows already committed with it, nor the cache
+  # clear: it is that row's storage_error, like the `{:error, _}` of `store/7`.
+  # Only the exception module is logged: its message can hold request values.
+  defp attach_row_safely(row, lookups, ids, ctx) do
+    attach_row(row, lookups, ids, ctx)
+  rescue
+    error -> row |> log_raised(ctx, error.__struct__) |> fail_storage()
+  catch
+    :exit, _reason -> row |> log_raised(ctx, :exit) |> fail_storage()
+  end
+
+  defp log_raised(row, ctx, class) do
+    Logger.error(
+      "[attach_images] request #{Map.get(ctx, :request_id)}: attaching raised: #{inspect(class)}"
+    )
+
+    row
+  end
+
+  defp fail_storage(row) do
+    Batch.fail(
+      row,
+      Rows.error(:validation_failed, "The pictures could not be attached.", %{
+        "reason" => "storage_error"
+      })
+    )
   end
 
   # The downloads can take a minute and a half, so the product is read again
@@ -321,12 +350,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
             Meta.term_class(reason)
         )
 
-        Batch.fail(
-          row,
-          Rows.error(:validation_failed, "The pictures could not be attached.", %{
-            "reason" => "storage_error"
-          })
-        )
+        fail_storage(row)
     end
   end
 
