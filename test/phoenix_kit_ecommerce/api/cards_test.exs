@@ -278,4 +278,19 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     # Converting all 600,000 characters costs about 120 million; the cut input, about 1.5 million.
     assert after_ - before < 15_000_000
   end
+
+  test "script, style and inline pictures do not use up the Markdown cut", %{context: context} do
+    body =
+      "<p>Head</p><script>" <>
+        String.duplicate("x", 50_000) <>
+        "</script><p>Tail <img src=\"data:image/png;base64," <>
+        String.duplicate("A", 50_000) <> "\"></p>"
+
+    product = legacy_product!(%{"en" => "Heavy"}, %{body_html: %{"en" => body}})
+
+    card = Cards.card(record(product), context, format: "markdown")
+
+    assert card["description"] =~ "Head"
+    assert card["description"] =~ "Tail"
+  end
 end

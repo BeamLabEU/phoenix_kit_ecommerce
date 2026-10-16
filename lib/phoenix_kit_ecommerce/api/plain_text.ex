@@ -96,11 +96,18 @@ defmodule PhoenixKitEcommerce.API.PlainText do
   @doc """
   `raw` cut to a few times `limit` characters (at a tag boundary), for a
   converter that has no bound of its own: one pathological value cannot then
-  stall the caller. Not a string: returned as it is.
+  stall the caller. Script and style bodies and inline pictures are dropped
+  first, as in `convert/2`, so they do not use up the cut; the cut itself stays
+  tighter than `convert/2`'s, because the Markdown converter costs more per
+  character. Not a string: returned as it is.
   """
   @spec bound(term(), pos_integer()) :: term()
   def bound(raw, limit) when is_binary(raw) and is_integer(limit) do
-    raw |> String.slice(0, @max_input) |> cut(limit * @input_factor)
+    raw
+    |> String.slice(0, @max_input)
+    |> drop_script_and_style()
+    |> drop_data_uris()
+    |> cut(limit * @input_factor)
   end
 
   def bound(other, _limit), do: other
