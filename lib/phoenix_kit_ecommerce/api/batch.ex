@@ -12,7 +12,9 @@ defmodule PhoenixKitEcommerce.API.Batch do
   A plan is whatever the tool's planner returns, with at least `:from`
   (the current values of the fields the row touches), `:changes`
   (`field => %{"from" => _, "to" => _}`), `:changed?`, `:dangerous?`,
-  `:warnings`, `:attrs` and `:owned_paths`.
+  `:warnings`, `:attrs` and `:owned_paths`, and optionally `:guard`: the part
+  of `:from` the plan depends on, compared by `write_if_unchanged/4` instead of
+  all of it.
   """
 
   alias PhoenixKitEcommerce.API.{CatalogueWrites, Fingerprint, Meta, Refs, Rows}
@@ -261,7 +263,11 @@ defmodule PhoenixKitEcommerce.API.Batch do
   end
 
   defp same_values?(uuid, planned, fresh),
-    do: Fingerprint.compute([{uuid, planned.from}]) == Fingerprint.compute([{uuid, fresh.from}])
+    do:
+      Fingerprint.compute([{uuid, guard(planned)}]) == Fingerprint.compute([{uuid, guard(fresh)}])
+
+  # What a plan says it read (`:guard`), else everything it carries as `:from`.
+  defp guard(plan), do: Map.get(plan, :guard, plan.from)
 
   # The storefront caches its category list and facets for about a minute
   # (`StorefrontCache`); a write of this package must show on the next page

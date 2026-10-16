@@ -127,6 +127,38 @@ defmodule PhoenixKitEcommerce.API.PricePlanTest do
     end
   end
 
+  describe "guard (what the plan reads of the item)" do
+    defp with_modifiers(modifiers),
+      do: item(%{data: %{"ecommerce" => %{"price_modifiers" => modifiers}}})
+
+    test "leaves out the option prices the row does not name" do
+      row = %{"price_modifiers" => %{"liquid" => %{"red" => "3.00"}}}
+      before = plan!(row, with_modifiers(%{"liquid" => %{"black" => "32.00"}}))
+
+      synced =
+        plan!(row, with_modifiers(%{"liquid" => %{"black" => "40.00"}, "size" => %{"l" => "9"}}))
+
+      refute before.from == synced.from
+      assert before.guard == synced.guard
+    end
+
+    test "carries the option price the row names, the base price and the compare-at price" do
+      row = %{"price_modifiers" => %{"liquid" => %{"black" => "50.00"}}}
+      base = plan!(row, with_modifiers(%{"liquid" => %{"black" => "32.00"}}))
+
+      refute base.guard == plan!(row, with_modifiers(%{"liquid" => %{"black" => "33.00"}})).guard
+
+      refute base.guard ==
+               plan!(row, %{
+                 with_modifiers(%{"liquid" => %{"black" => "32.00"}})
+                 | base_price: dec("90.00")
+               }).guard
+
+      assert base.guard.price == dec("100.00")
+      assert base.guard.price_modifiers == %{"liquid" => %{"black" => "32.00"}}
+    end
+  end
+
   describe "price_modifiers" do
     test "adds a value and owns only that leaf: the stored ones, a numeric leaf included, are not in the write" do
       plan = plan!(%{"price_modifiers" => %{"liquid" => %{"red" => "3.00"}}})

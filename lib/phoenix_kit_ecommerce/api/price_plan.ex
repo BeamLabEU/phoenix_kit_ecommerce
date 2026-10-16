@@ -44,7 +44,8 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
           warnings: [String.t()],
           attrs: map(),
           owned_paths: [[String.t()]],
-          leaves: [{String.t(), String.t()}]
+          leaves: [{String.t(), String.t()}],
+          guard: map()
         }
 
   @doc "The values of an item that `ecommerce.set_prices` can change."
@@ -88,14 +89,14 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
 
       true ->
         values = Map.new(parsed, fn {field, {:ok, value}} -> {field, value} end)
-        finish(cur, values, item, opts)
+        finish(cur, values, {row, item}, opts)
     end
   end
 
   defp errors_of({:error, errors}), do: errors
   defp errors_of({:ok, _value}), do: []
 
-  defp finish(cur, values, item, opts) do
+  defp finish(cur, values, {row, item}, opts) do
     to = %{
       price: pick(values.price, cur.price),
       compare_at: pick(values.compare_at, cur.compare_at),
@@ -116,7 +117,8 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
             changed?: changes != %{},
             dangerous?: dangerous?(cur, to, leaves, Keyword.fetch!(opts, :pct)),
             warnings: warnings(item, to, opts),
-            leaves: leaves
+            leaves: leaves,
+            guard: guard(cur, row)
           })
 
         validate_write(plan)
@@ -125,6 +127,29 @@ defmodule PhoenixKitEcommerce.API.PricePlan do
         {:error, [error("price_modifiers", message)]}
     end
   end
+
+  # What the plan reads of the item, to tell whether the item is still the one
+  # it was made from (`Batch.write_if_unchanged/4`): the prices and the option
+  # prices the row names. `from` carries the whole option map, which the
+  # confirmation fingerprint wants; an option price the row does not name is
+  # none of this row's business, and a sync rewriting it meanwhile must not
+  # fail the row.
+  defp guard(cur, row) do
+    leaves =
+      Enum.reduce(named_leaves(row), %{}, fn {option, value} = key, acc ->
+        Map.update(acc, option, %{value => leaf(cur.price_modifiers, key)}, fn values ->
+          Map.put(values, value, leaf(cur.price_modifiers, key))
+        end)
+      end)
+
+    %{price: cur.price, compare_at: cur.compare_at, price_modifiers: leaves}
+  end
+
+  defp named_leaves(%{"price_modifiers" => given}) when is_map(given) do
+    for {option, values} <- given, is_map(values), value <- Map.keys(values), do: {option, value}
+  end
+
+  defp named_leaves(_row), do: []
 
   defp pick(:unset, current), do: current
   defp pick(value, _current), do: value

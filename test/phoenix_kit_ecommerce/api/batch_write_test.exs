@@ -300,6 +300,31 @@ defmodule PhoenixKitEcommerce.API.BatchWriteTest do
       assert Decimal.equal?(F.reload!(untouched).base_price, Decimal.new("120.00"))
     end
 
+    test "a plan that names what it read (guard) is compared on that, not on all of `from`",
+         %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      base = price_planner(Decimal.new("120.00"))
+
+      # `from` also carries something the plan does not depend on, which changes
+      # between the plan and the write; the guard does not.
+      planner = fn row ->
+        {:ok, plan} = base.(row)
+
+        {:ok,
+         Map.merge(plan, %{
+           from: %{price: row.item.base_price, noise: make_ref()},
+           guard: %{price: row.item.base_price}
+         })}
+      end
+
+      row = planned(catalogue, item, planner)
+
+      assert [%{result: {:ok, _item}}] =
+               Batch.write_if_unchanged([row], ctx, "ecommerce.set_prices", planner)
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("120.00"))
+    end
+
     test "a row whose product is gone fails with not_found", %{catalogue: catalogue, ctx: ctx} do
       item = F.item!(catalogue)
       planner = price_planner(Decimal.new("120.00"))
