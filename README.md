@@ -220,7 +220,12 @@ curl -s -X POST https://shop.example.com/api/shop/v1/shop.search_products \
 What a caller sees is decided by one rule (`PhoenixKitEcommerce.API.Visibility`): draft, inactive,
 deleted products and products in hidden or deleted categories are never shown (every product and
 card is read live); discontinued or archived ones appear only as a stub in `shop.get_products`.
-The counts and facets come from the search index and can lag a change by the reindex delay. Prices come in the language and
+The counts and facets come from the search index and can lag a change by the reindex delay (a few
+seconds and the queue, or until the nightly rebuild if the job fails), so for that time they can
+include a product the items no longer show, and a query only that product matches answers `count: 1`
+with no items. The category counts of `shop.list_categories` come from the index too, and a
+sub-category under an unlisted middle category counts towards its listed ancestor's search but not
+towards that ancestor's `total_count`. Enabling the shop queues a rebuild. Prices come in the language and
 currency of the domain the request came to (a host maps domains with
 `config :phoenix_kit, :api_request_context, {Mod, :fun}`); `language` and `currency` inputs override.
 

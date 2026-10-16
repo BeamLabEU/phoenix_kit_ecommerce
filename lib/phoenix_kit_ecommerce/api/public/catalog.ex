@@ -15,7 +15,10 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
   what a caller can walk (a category inside a cycle of parents has no root and
   is in neither). The per-category product counts come from the search index
   and can lag a changed product by the re-index delay; the products themselves
-  are always read live.
+  are always read live. A category under an unlisted middle category is a root
+  of the tree, and its products count towards that category only, while a
+  search by the listed ancestor's id (`category_id`) still finds them: the
+  tree follows the storefront's flat navigation, the search follows the path.
   """
 
   alias PhoenixKitEcommerce, as: Shop
@@ -253,7 +256,9 @@ defmodule PhoenixKitEcommerce.API.Public.Catalog do
             "format" => %{
               "type" => "string",
               "enum" => ["text", "markdown"],
-              "description" => "How to write the description: plain text (default) or Markdown."
+              "description" =>
+                "How to write the description: plain text (default) or Markdown. Markdown is the " <>
+                  "seller's, with the links as they were written: sanitise it before rendering."
             }
           },
           Schemas.control_fields()

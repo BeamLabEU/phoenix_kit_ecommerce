@@ -8,6 +8,11 @@ defmodule PhoenixKitEcommerce.API.Context do
   value from the host hook falls back quietly, and the currency falls back to
   the shop's base currency.
 
+  The `url` and `image` of a card are made absolute with the request's
+  `base_url`, which core builds from the Host header unless the host app's
+  `:api_request_context` hook names the domains (the calls are POSTs, so no
+  shared cache holds a link made for another host).
+
   Money is converted from the stored base-currency amount with
   `PhoenixKitBilling.Currency.present/3` (the storefront's one conversion path)
   and written as a string with the currency's decimal places.
