@@ -472,7 +472,8 @@ defmodule PhoenixKitEcommerce.Migrations do
       default is read from `PhoenixKitWebAnalytics.Config.default_exclusions/0`
       when that module is loaded, else the 0.6.0 literal);
     * setting present and the pattern absent: append it on a new line;
-    * pattern already there: nothing.
+    * pattern already there, on a line of its own: nothing (a longer line that
+      merely contains it, such as `/shop/checkout/claim/*`, is not the pattern).
 
   The pattern ends in `*` on purpose: analytics matches a pattern as a prefix
   only then (`PhoenixKitWebAnalytics.Config.excluded?/2`). It is built with
@@ -509,7 +510,11 @@ defmodule PhoenixKitEcommerce.Migrations do
             INSERT INTO #{p}phoenix_kit_settings (key, value, module)
             VALUES ('#{@analytics_key}', #{default_sql} || chr(10) || claim_pattern, 'web_analytics')
             ON CONFLICT (key) DO NOTHING;
-          ELSIF position(claim_pattern in coalesce(current_value, '')) = 0 THEN
+          ELSIF NOT EXISTS (
+            SELECT 1
+            FROM unnest(regexp_split_to_array(coalesce(current_value, ''), E'\\r?\\n')) AS line
+            WHERE btrim(line) = claim_pattern
+          ) THEN
             UPDATE #{p}phoenix_kit_settings
             SET value = rtrim(coalesce(current_value, ''), chr(10) || chr(13) || chr(9) || ' ')
                         || chr(10) || claim_pattern

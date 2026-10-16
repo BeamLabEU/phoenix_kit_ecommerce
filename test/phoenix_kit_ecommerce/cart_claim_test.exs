@@ -96,6 +96,27 @@ defmodule PhoenixKitEcommerce.CartClaimTest do
       assert setting(@key) == "/admin*\n/live*\n/checkout/claim/*"
     end
 
+    test "a line that only contains the pattern is not the pattern" do
+      stub_analytics_table!()
+      {:ok, _} = PhoenixKit.Settings.update_setting(@key, "/admin*\n/shop/checkout/claim/*")
+
+      [step] = Migrations.claim_analytics_statements("public")
+      Repo.query!(step)
+
+      assert setting(@key) == "/admin*\n/shop/checkout/claim/*\n/checkout/claim/*"
+    end
+
+    test "the pattern on a line of its own is left alone, whatever the line ends or padding" do
+      stub_analytics_table!()
+      value = "/admin*\r\n  /checkout/claim/*  \n/live*"
+      {:ok, _} = PhoenixKit.Settings.update_setting(@key, value)
+
+      [step] = Migrations.claim_analytics_statements("public")
+      Repo.query!(step)
+
+      assert setting(@key) == value
+    end
+
     test "writes the analytics defaults plus the pattern when the setting has no row yet" do
       stub_analytics_table!()
       Repo.delete_all(from s in "phoenix_kit_settings", where: s.key == ^@key)
