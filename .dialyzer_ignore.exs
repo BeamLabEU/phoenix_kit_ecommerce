@@ -45,5 +45,9 @@
   {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex",
    "Call to missing or private function PhoenixKitCatalogue.Catalogue.update_items/2."},
   {"lib/phoenix_kit_ecommerce/api/settings.ex",
-   "Function PhoenixKit.API.Config.admin_enabled?/0 does not exist."}
+   "Function PhoenixKit.API.Config.admin_enabled?/0 does not exist."},
+  {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex",
+   "Call to missing or private function PhoenixKitCatalogue.Catalogue.broadcast_item_batch_change/3."},
+  {"lib/phoenix_kit_ecommerce/api/batch.ex",
+   "Function PhoenixKit.API.FlowConfig.confirm_batch_over/0 does not exist."}
 ]

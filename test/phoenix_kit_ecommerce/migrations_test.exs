@@ -237,6 +237,30 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     end
   end
 
+  # V4 and V5 are not released yet; once they are, an edit would reach new
+  # installs only. The V5 analytics step depends on what is loaded and on the
+  # route prefix, so the claims table is pinned on its own.
+  test "the SQL of V4 and of V5's claims table is pinned, in the public schema and under a prefix" do
+    digest = fn statements ->
+      statements
+      |> Enum.join("\n;;\n")
+      |> then(&:crypto.hash(:sha256, &1))
+      |> Base.encode16(case: :lower)
+    end
+
+    assert digest.(Migrations.search_index_statements("public")) ==
+             "86b4a3a7578607ec1abc77805e4b62d23b83ed9470f08e7d60f28f5a506f23f7"
+
+    assert digest.(Migrations.search_index_statements("tenant_x")) ==
+             "5a20e39102908f3163f46e76b77560315d35d3b0d3c6b3075d51b94f3f138b5a"
+
+    assert digest.(Migrations.claims_statements("public")) ==
+             "4a2b223e1313cb05bfe3109d8bcd5a124137d93d3b5b2a91361244aeca2fcba0"
+
+    assert digest.(Migrations.claims_statements("tenant_x")) ==
+             "e6cf38da4e73c6915247e0d1029571ae5f53eb0c91edd6e46283a160380a17ce"
+  end
+
   test "V3 carries the Shopify-default upgrade step, ahead of the marker" do
     stmts = Migrations.up_statements("public")
 

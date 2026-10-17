@@ -617,7 +617,7 @@ Rules that must hold:
   a product with no `shop_status` counts as `active`. Never a second copy.
   `get_prices` calls the result `shop_status_visible`: it does not look at
   the product's category, which the storefront also checks.
-- **Only `set_prices` has a `danger` function** (the price rule). The size of
+- **Only `set_prices` and `detach_images` have a `danger` function** (the price rule; a row that would leave a product with no picture). The size of
   a batch is core's rule (`api_confirm_batch_over`, applied to every admin
   write tool by the executor). The danger check, the plan of the call and the
   write each read the prices, so the handler closes the gaps: a call without a

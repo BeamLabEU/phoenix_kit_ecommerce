@@ -75,15 +75,29 @@ defmodule PhoenixKitEcommerce.Search.SubscriberTest do
     [a, b] = for _ <- 1..2, do: Ecto.UUID.generate()
 
     deliver(pid, {:category_updated, %{uuid: a}})
-    deliver(pid, {:category_deleted, b})
     deliver(pid, {:categories_bulk_parent_changed, [a, b], nil})
     deliver(pid, {:categories_bulk_status_changed, [a], "hidden"})
 
     assert jobs() == [
              {"SearchReindexWorker", %{"kind" => "category", "uuid" => a}},
-             {"SearchReindexWorker", %{"kind" => "category", "uuid" => b}},
              {"SearchRebuildWorker", %{}}
            ]
+  end
+
+  # The delete sets the products' category to NULL, so a subtree job would
+  # find no product to reindex.
+  test "a category delete rebuilds the index", %{pid: pid} do
+    deliver(pid, {:category_deleted, Ecto.UUID.generate()})
+
+    assert jobs() == [{"SearchRebuildWorker", %{}}]
+  end
+
+  # Billing announces a committed base-currency change this way; the index
+  # holds base-currency prices.
+  test "a currency change rebuilds the index", %{pid: pid} do
+    deliver(pid, {:currencies_changed, "EUR"})
+
+    assert jobs() == [{"SearchRebuildWorker", %{}}]
   end
 
   test "a catalogue item event enqueues that item; one without an id rebuilds", %{

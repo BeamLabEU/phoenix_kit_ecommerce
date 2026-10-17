@@ -63,7 +63,7 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
   def list_item do
     %{
       "type" => "object",
-      "required" => ["id", "title", "status"],
+      "required" => ["id"],
       "properties" => %{
         "id" => @string,
         "title" => @string,
@@ -87,7 +87,7 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
   @doc """
   The full card of `shop.get_products`: a list item plus description, tags,
   options and images. The stub of a discontinued product (`id`, `title` and
-  `status`, the three required fields) satisfies it too.
+  `status`) satisfies it too.
   """
   @spec card() :: map()
   def card do

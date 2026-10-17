@@ -1,7 +1,8 @@
 defmodule PhoenixKitEcommerce.Workers.ApiCartPruneWorker do
   @moduledoc """
-  Daily deletion of the carts the sweep abandoned: `api:` carts in status
-  `abandoned`, with or without lines, not touched for 30 days. Anyone can
+  Daily deletion of the carts the sweep abandoned and of the ones a buyer's
+  "add these items" choice merged away: `api:` carts in status `abandoned` or
+  `merged`, with or without lines, not touched for 30 days. Anyone can
   create such carts without signing in, so they must not pile up for good;
   they hold no address, e-mail or payment data. Lines and claims of a deleted
   cart go with it (foreign keys). Does nothing while the shop module is
@@ -59,7 +60,8 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartPruneWorker do
     where(
       query,
       [c],
-      c.status == "abandoned" and like(c.session_id, "api:%") and c.updated_at < ^cutoff
+      c.status in ["abandoned", "merged"] and like(c.session_id, "api:%") and
+        c.updated_at < ^cutoff
     )
   end
 end

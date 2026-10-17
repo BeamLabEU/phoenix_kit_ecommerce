@@ -1005,6 +1005,9 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloader do
     base = [
       receive_timeout: request.timeout,
       redirect: false,
+      # Req's default retries a 429/503 after the origin's `Retry-After`,
+      # uncapped: a hostile origin could park the caller for as long as it likes.
+      retry: false,
       headers: [
         {"user-agent", "PhoenixKit/1.0 (Image Downloader)"},
         {"accept", "image/*"}

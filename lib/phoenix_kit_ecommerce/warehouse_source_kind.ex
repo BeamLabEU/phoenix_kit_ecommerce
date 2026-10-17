@@ -125,6 +125,10 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
     end
   end
 
+  # A table named by string carries no `@schema_prefix`: it is taken from the
+  # same setting core's schemas take it from.
+  @schema_prefix Application.compile_env(:phoenix_kit, :prefix)
+
   # `unit` and the catalogue of each item, in one query. Read by table name:
   # the catalogue is an optional dependency, so its schema module is not
   # referenced here, and nothing is queried when it is not loaded.
@@ -134,6 +138,7 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
     if Code.ensure_loaded?(PhoenixKitCatalogue.Schemas.Item) do
       RepoHelper.repo().all(
         from(i in "phoenix_kit_cat_items",
+          prefix: ^@schema_prefix,
           where: i.uuid in type(^item_uuids, {:array, Ecto.UUID}),
           select: {
             type(i.uuid, Ecto.UUID),
