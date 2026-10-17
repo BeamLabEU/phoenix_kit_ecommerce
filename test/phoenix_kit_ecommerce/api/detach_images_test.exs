@@ -10,7 +10,9 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
   whose file is gone is still removed from the list). The second attaches
   real pictures through `ecommerce.attach_images` (HTTP through `Req.Test`,
   pictures drawn with ImageMagick, skipped where it is missing) to see what
-  happens to the stored file. `async: false`: it reads the shop-wide URL index.
+  happens to the stored file. `async: false`: `attach_images` reads the
+  shop-wide URL index, and the tests that move the world between the plan and
+  the write, or watch the queries, use telemetry handlers that are global.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
@@ -22,6 +24,7 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
   import ExUnit.CaptureLog, only: [with_log: 1]
 
   alias PhoenixKit.Modules.Storage
+  alias PhoenixKit.Modules.Storage.ResourceFolders
   alias PhoenixKit.Settings
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.API.DetachImages
@@ -508,9 +511,16 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
 
       first = draw(dir, "first.png", 21)
       second = draw(dir, "second.png", 22)
+      third = draw(dir, "third.png", 23)
 
       Req.Test.stub(@stub, fn conn ->
-        body = if conn.request_path == "/a.png", do: first, else: second
+        body =
+          case conn.request_path do
+            "/a.png" -> first
+            "/c.png" -> third
+            _ -> second
+          end
+
         conn |> Plug.Conn.put_resp_content_type("image/png") |> Plug.Conn.send_resp(200, body)
       end)
 
@@ -682,21 +692,168 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
       assert F.reload!(item).data["media_order"] == [kept, gone]
     end
 
-    test "a file that core fails to release fails the row and keeps every file", %{
+    test "an exception inside core's removal rolls the row back as a database error", %{
       catalogue: catalogue,
       ctx: ctx
     } do
       item = F.item!(catalogue)
       [kept, gone] = attach(item, ["/a.png", "/b.png"], ctx)
-      # a folder that is not a UUID: core's removal rule raises on the lookup of its link
+      # a folder that is not a UUID: core's removal rule raises on the lookup of its link,
+      # inside the nested transaction, which poisons the one around it
       set_item(item, data: Map.put(F.reload!(item).data, "files_folder_uuid", "not-a-uuid"))
 
-      {answer, _log} = with_log(fn -> detach([row(item, ids([gone]))], ctx) end)
+      {answer, log} = with_log(fn -> detach([row(item, ids([gone]))], ctx) end)
 
       assert {:ok, %{"results" => [result]}} = answer
       assert result["error"]["code"] == "validation_failed"
+      assert result["error"]["context"]["reason"] == "database_error"
+      assert log =~ "detaching a file failed"
       assert F.reload!(item).data["media_order"] == [kept, gone]
       assert status(gone) == "active"
+    end
+
+    # Core's removal of the files in `fail_for` is replaced by `failure`; every
+    # other file goes through core.
+    defp release_with(fail_for, failure) do
+      Application.put_env(:phoenix_kit_ecommerce, :api_detach_file, fn file, folder ->
+        if file in fail_for, do: failure.(file), else: ResourceFolders.detach(file, folder)
+      end)
+
+      on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :api_detach_file) end)
+    end
+
+    defp three(catalogue, ctx) do
+      item = F.item!(catalogue)
+      [a, b, c] = attach(item, ["/a.png", "/b.png", "/c.png"], ctx)
+      {item, a, b, c}
+    end
+
+    test "a file core refuses to release stays in the gallery, the others go", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      {item, a, b, c} = three(catalogue, ctx)
+      release_with([b], fn _file -> {:error, :boom} end)
+
+      {answer, log} = with_log(fn -> detach([row(item, ids([b, c]))], ctx) end)
+
+      assert {:ok, %{"results" => [result], "summary" => %{"updated" => 1}}} = answer
+      assert result["detached"] == 1
+      assert result["failed"] == [b]
+      assert log =~ "detaching a file failed"
+      assert F.reload!(item).data["media_order"] == [a, b]
+      assert status(b) == "active"
+      assert status(c) == "trashed"
+    end
+
+    test "when core refuses every file the row fails and nothing moves", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      {item, a, b, c} = three(catalogue, ctx)
+      release_with([b], fn _file -> {:error, :boom} end)
+
+      {answer, _log} = with_log(fn -> detach([row(item, ids([b]))], ctx) end)
+
+      assert {:ok, %{"results" => [result], "summary" => %{"error" => 1}}} = answer
+      assert result["error"]["code"] == "validation_failed"
+      assert result["error"]["message"] == "No picture could be detached."
+      assert result["error"]["context"]["images"] == [b]
+      refute Map.has_key?(result["error"]["context"], "reason")
+      assert F.reload!(item).data["media_order"] == [a, b, c]
+      assert status(b) == "active"
+    end
+
+    test "a file whose release raises fails the row and gives back the files already released",
+         %{catalogue: catalogue, ctx: ctx} do
+      {item, a, b, c} = three(catalogue, ctx)
+      [first, second] = Enum.sort([b, c])
+      release_with([second], fn _file -> raise "boom" end)
+
+      {answer, log} = with_log(fn -> detach([row(item, ids([b, c]))], ctx) end)
+
+      assert {:ok, %{"results" => [result]}} = answer
+      assert result["error"]["context"]["reason"] == "storage_error"
+      assert log =~ "detaching raised: RuntimeError"
+      refute log =~ "boom"
+      assert F.reload!(item).data["media_order"] == [a, b, c]
+      assert status(first) == "active"
+      assert status(second) == "active"
+    end
+
+    defp set_source(uuid, set) do
+      metadata = Map.merge(Storage.get_file(uuid).metadata, set)
+      Repo.update_all(from(f in Storage.File, where: f.uuid == ^uuid), set: [metadata: metadata])
+    end
+
+    test "every file of the gallery that came from the URL goes", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      [one, two] = attach(item, ["/a.png", "/b.png"], ctx)
+      set_source(two, %{"source_url" => @host <> "/a.png"})
+
+      assert {:ok, %{"results" => [result]}} =
+               detach([row(item, [%{"url" => @host <> "/a.png"}])], confirmed(ctx))
+
+      assert result["detached"] == 2
+      assert F.reload!(item).data["media_order"] == []
+      assert status(one) == "trashed"
+      assert status(two) == "trashed"
+    end
+
+    test "a URL a file also resolved to, kept as an alias, finds it", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      [kept, aliased] = attach(item, ["/a.png", "/b.png"], ctx)
+      set_source(aliased, %{"source_url_aliases" => [@host <> "/old.png"]})
+
+      assert {:ok, %{"results" => [result]}} =
+               detach([row(item, [%{"url" => @host <> "/old.png?v=2"}])], ctx)
+
+      assert result["detached"] == 1
+      assert F.reload!(item).data["media_order"] == [kept]
+      assert status(aliased) == "trashed"
+    end
+
+    test "files are locked in sorted order whatever order the call names them", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      {item, _a, b, c} = three(catalogue, ctx)
+      [low, high] = Enum.sort([b, c])
+
+      test = self()
+      id = {:lock_order, make_ref()}
+
+      :telemetry.attach(
+        id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, meta, _config ->
+          if meta.source == "phoenix_kit_files" and String.contains?(meta.query, "FOR UPDATE"),
+            do: send(test, {:locked, hd(meta.params)})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(id) end)
+
+      assert {:ok, %{"results" => [%{"detached" => 2}]}} =
+               detach([row(item, ids([high, low]))], ctx)
+
+      locked = receive_locked([])
+      assert locked |> Enum.map(&Ecto.UUID.cast!/1) |> Enum.dedup() == [low, high]
+    end
+
+    defp receive_locked(acc) do
+      receive do
+        {:locked, uuid} -> receive_locked([uuid | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
     end
   end
 end

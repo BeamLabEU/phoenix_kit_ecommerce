@@ -37,9 +37,13 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
 
   Core announces `{:phoenix_kit_file_trashed, uuid}` itself when
   `ResourceFolders.detach/2` trashes a file, and inside this tool's
-  transaction that is before the commit. A row that is rolled back afterwards
-  (the gallery could not be saved) has told subscribers of a file that is still
-  active; they see it again on the next reload. Only core can announce later.
+  transaction that is before the commit. A subscriber that re-reads the file
+  on the event can read it as still active, committed or not; core's
+  `FeaturedImage` does not look a settled lookup up again on its own, so a host
+  that refreshes it on this event can keep showing the stale picture until
+  something else prods it. A row that is rolled back afterwards (the gallery
+  could not be saved) has announced a file that is still active. Only core can
+  announce later.
   """
 
   @compile {:no_warn_undefined,
@@ -51,7 +55,6 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
 
   alias PhoenixKit.Modules.Storage.File, as: StorageFile
   alias PhoenixKit.Modules.Storage.ResourceFolders
-  alias PhoenixKit.RepoHelper
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.{Batch, CatalogueWrites, Gate, Meta, PlanSupport, Rows}
   alias PhoenixKitEcommerce.Services.ImageDownloader
@@ -155,7 +158,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
 
       uuids ->
         from(f in StorageFile, where: f.uuid in ^uuids, select: {f.uuid, f.metadata})
-        |> RepoHelper.repo().all()
+        |> PhoenixKit.Config.get_repo().all()
         |> Map.new(fn {uuid, metadata} -> {uuid, source_keys(metadata)} end)
     end
   end
@@ -351,18 +354,14 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
       "failed" => failed
     }
 
-    cond do
-      released != [] ->
-        write_gallery(row, released, extra, ctx)
-
-      failed != [] ->
-        Batch.fail(
-          row,
-          Rows.error(:validation_failed, "No picture could be detached.", %{"images" => failed})
-        )
-
-      true ->
-        %{row | plan: %{plan | changed?: false}, extra: Map.delete(extra, "failed")}
+    # The plan has something to remove, so no file released means some failed.
+    if released != [] do
+      write_gallery(row, released, extra, ctx)
+    else
+      Batch.fail(
+        row,
+        Rows.error(:validation_failed, "No picture could be detached.", %{"images" => failed})
+      )
     end
   end
 
@@ -373,7 +372,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   defp release(files, folder) do
     {released, failed} =
       Enum.reduce(files, {[], []}, fn file, {released, failed} ->
-        case ResourceFolders.detach(file, folder) do
+        case detach_file(file, folder) do
           {:ok, _outcome} ->
             {[file | released], failed}
 
@@ -384,6 +383,15 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
       end)
 
     {Enum.reverse(released), Enum.reverse(failed)}
+  end
+
+  # Core's removal of one file; `:api_detach_file` swaps it for a function of
+  # the same shape (a test seam, as `:api_image_download_opts` is for downloads).
+  defp detach_file(file, folder) do
+    Application.get_env(:phoenix_kit_ecommerce, :api_detach_file, &ResourceFolders.detach/2).(
+      file,
+      folder
+    )
   end
 
   defp write_gallery(%{item: item, plan: plan} = row, released, extra, ctx) do
