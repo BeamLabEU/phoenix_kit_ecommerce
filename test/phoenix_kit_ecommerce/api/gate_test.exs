@@ -18,6 +18,20 @@ defmodule PhoenixKitEcommerce.API.GateTest do
   alias PhoenixKitEcommerce.API.Gate
   alias PhoenixKitEcommerce.APIFixtures, as: F
 
+  test "catalogue authorization fails closed without an identifiable key owner" do
+    for ctx <- [
+          %{},
+          %{actor: nil},
+          %{actor: %{kind: :anonymous, user_uuid: Ecto.UUID.generate()}},
+          %{actor: %{kind: :key, user_uuid: nil}},
+          %{actor: %{kind: :key, user_uuid: "invalid"}},
+          %{actor: %{kind: :key, user_uuid: Ecto.UUID.generate()}}
+        ] do
+      assert {:error, :forbidden, _, %{required_permission: "catalogue"}} =
+               Gate.authorize_catalogue(ctx)
+    end
+  end
+
   @tag :no_catalogue
   test "without phoenix_kit_catalogue the shop has no catalogue to write" do
     assert {:error, :unsupported_source, detail, %{reason: "catalogue_missing"}} = Gate.check()

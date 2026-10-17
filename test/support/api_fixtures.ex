@@ -10,6 +10,8 @@ defmodule PhoenixKitEcommerce.APIFixtures do
   @compile {:no_warn_undefined,
             [PhoenixKitCatalogue.Catalogue, PhoenixKitCatalogue.Catalogue.AttributeSets]}
 
+  alias PhoenixKit.Users.Permissions
+  alias PhoenixKit.Users.Roles
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitEcommerce.ShopConfig
@@ -88,8 +90,20 @@ defmodule PhoenixKitEcommerce.APIFixtures do
     set
   end
 
-  @doc "A real user: the owner of the key, and the owner of stored files."
-  def user!, do: PhoenixKitEcommerce.DataCase.fixture_user()
+  @doc "A real user with catalogue access: the owner of the key and stored files."
+  def user! do
+    {:ok, _} = PhoenixKit.Settings.update_boolean_setting("catalogue_enabled", true)
+    user = PhoenixKitEcommerce.DataCase.fixture_user()
+
+    {:ok, role} =
+      Roles.create_role(%{
+        name: "EcomCatalogue#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, _} = Permissions.grant_permission(role.uuid, "catalogue")
+    {:ok, _} = Roles.assign_role(user, role.name)
+    user
+  end
 
   @doc "The handler context core's executor builds for a key call."
   def ctx(user, overrides \\ %{}) do

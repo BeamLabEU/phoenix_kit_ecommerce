@@ -578,6 +578,11 @@ returns `PhoenixKitEcommerce.API.tools/0`: `ecommerce.get_prices`,
 `ecommerce.detach_images`.
 Rules that must hold:
 
+- **Admin write handlers require the key owner's live `"catalogue"` permission**
+  as well as core's `shop.manage_catalog` scope check, matching the catalogue
+  editor. `API.Gate.authorize_catalogue/1` checks the owner with
+  `Scope.for_user(narrow: false)` before any write handler or dry run;
+  missing actors, revoked access and permission-layer failures deny the call.
 - **The write tools are offered only when core enforces the confirmation
   gate** (`Keys.active?/1` and `Flow.gate/1`, see
   `API.confirmation_available?/0`). A core that cannot hold a dangerous call

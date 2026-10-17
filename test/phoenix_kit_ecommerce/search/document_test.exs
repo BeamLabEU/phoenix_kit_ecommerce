@@ -177,6 +177,20 @@ defmodule PhoenixKitEcommerce.Search.DocumentTest do
     assert unpriced.on_sale == false
   end
 
+  test "non-finite stored prices do not break an index rebuild" do
+    for value <- ["NaN", "Infinity", "-Infinity"] do
+      row = Document.build(record(%{compare_at_price: Decimal.new(value)}), "en")
+      assert row.compare_at_price == nil
+      assert row.on_sale == false
+      assert row.discount_pct == nil
+
+      row = Document.build(record(%{price: Decimal.new(value)}), "en")
+      assert row.price == nil
+      assert row.on_sale == false
+      assert row.discount_pct == nil
+    end
+  end
+
   test "a product with no title in any language has no document" do
     assert Document.build(record(%{title: %{}}), "en") == nil
     assert Document.build(record(%{title: %{"en" => "   "}}), "en") == nil
