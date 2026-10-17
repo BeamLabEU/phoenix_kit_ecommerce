@@ -8,7 +8,8 @@ defmodule PhoenixKitEcommerce.API.SetAvailability do
   It has no `danger` function: no value it writes is dangerous by itself
   (publishing is refused without a price instead), and a batch with more rows
   than `api_confirm_batch_over` is held by core's executor for every admin
-  write tool.
+  write tool. Its dry run says so: `requires_confirmation` is that row
+  threshold alone.
   """
 
   alias PhoenixKitEcommerce.API.{AvailabilityPlan, Batch, Gate, Rows}
@@ -21,7 +22,8 @@ defmodule PhoenixKitEcommerce.API.SetAvailability do
   def run(input, ctx) do
     with {:ok, rows} <- plan_rows(input) do
       if Map.get(ctx, :dry_run?, false) do
-        {:preview, Batch.preview(rows), Batch.fingerprint(rows)}
+        {:preview, rows |> Batch.preview() |> Batch.with_confirmation(rows),
+         Batch.fingerprint(rows)}
       else
         {:ok, rows |> Batch.write(ctx, @tool) |> Batch.render()}
       end

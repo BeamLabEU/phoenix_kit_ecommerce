@@ -147,7 +147,8 @@ defmodule PhoenixKitEcommerce.API do
       title: "Set product availability",
       description:
         "Sets whether products are shown in the shop (visibility: draft, active, archived) and whether they are made to order. " <>
-          "A product without a price cannot be made active. A product that is not active in the catalogue stays hidden whatever its visibility." <>
+          "A product without a price cannot be made active. A product that is not active in the catalogue stays hidden whatever its visibility. " <>
+          "A dry run answers requires_confirmation (whether the real call would be held: a batch over the confirmation threshold is) and confirmation_rules; it never creates a confirmation code." <>
           shopify_note() <> @retry_note,
       input_schema: Schemas.set_availability_input(),
       output_schema: Schemas.batch_output(),
@@ -167,7 +168,8 @@ defmodule PhoenixKitEcommerce.API do
         title: "Attach product images",
         description:
           "Downloads pictures from public http(s) URLs (at most 10 MB each) and attaches them to products after the pictures they already have. " <>
-            "At most 20 pictures per call. Addresses on private networks are always refused. Mark one picture featured to make it the main one." <>
+            "At most 20 pictures per call. Addresses on private networks are always refused. Mark one picture featured to make it the main one. " <>
+            "A dry run answers requires_confirmation (whether the real call would be held: a batch over the confirmation threshold is) and confirmation_rules; it never creates a confirmation code." <>
             shopify_note() <> @retry_note,
         input_schema: Schemas.attach_images_input(),
         output_schema: Schemas.batch_output(),

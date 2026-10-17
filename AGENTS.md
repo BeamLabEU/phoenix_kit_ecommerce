@@ -651,10 +651,11 @@ Rules that must hold:
   be held:** `API.Batch.with_confirmation/3` adds `requires_confirmation`
   (`Batch.dangerous?/1`, the same function the `danger` check answers, or more
   rows than core's `api_confirm_batch_over`) and `confirmation_rules` (the
-  thresholds). A tool with no `danger` function leaves it out: core's row
-  threshold could hold it, and `false` would then be a lie. A dry run creates no
-  confirmation code. `API.Batch.ensure_not_newly_dangerous/3` is the shared
-  re-check of a call without a confirmation whose plan has become dangerous.
+  thresholds). Every write tool answers it: a tool with no `danger` function
+  (`set_availability`, `attach_images`) passes no rule, so the flag is core's
+  row threshold alone. A dry run creates no confirmation code.
+  `API.Batch.ensure_not_newly_dangerous/3` is the shared re-check of a call
+  without a confirmation whose plan has become dangerous.
 - **Prices are decimal strings with at most 2 decimals** (`API.Money`). A
   third decimal is refused, never rounded.
 - **`attach_images` always passes `private_networks: :forbid`** to the

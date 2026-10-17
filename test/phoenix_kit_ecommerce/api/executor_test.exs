@@ -272,6 +272,55 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
     end
   end
 
+  describe "the dry run of a tool with no danger rule" do
+    setup do
+      previous = Settings.get_setting("api_confirm_batch_over")
+      {:ok, _} = Settings.update_setting("api_confirm_batch_over", "2")
+      on_exit(fn -> Settings.update_setting("api_confirm_batch_over", previous || "50") end)
+    end
+
+    defp availability_rows(catalogue, count),
+      do:
+        for(
+          _ <- 1..count,
+          do: %{"ref" => %{"id" => F.item!(catalogue).uuid}, "visibility" => "archived"}
+        )
+
+    defp image_rows(catalogue, count) do
+      for _ <- 1..count,
+          do: %{
+            "ref" => %{"id" => F.item!(catalogue).uuid},
+            "images" => [%{"url" => "https://93.184.216.34/a.png"}]
+          }
+    end
+
+    for tool <- ["ecommerce.set_availability", "ecommerce.attach_images"] do
+      test "#{tool}: the preview says held exactly when the row threshold holds the real call", %{
+        catalogue: catalogue,
+        token: token
+      } do
+        tool = unquote(tool)
+        rows = if tool == "ecommerce.attach_images", do: &image_rows/2, else: &availability_rows/2
+
+        for {count, held?} <- [{2, false}, {3, true}] do
+          input = %{"items" => rows.(catalogue, count)}
+          dry = call(token, tool, Map.put(input, "dry_run", true))
+
+          assert %{"executed" => false, "dry_run" => true, "preview" => preview} = json(dry)
+          assert preview["requires_confirmation"] == held?
+          assert preview["confirmation_rules"] == %{"confirm_batch_over" => 2}
+          refute Map.has_key?(json(dry), "confirm_token")
+
+          # a call that goes through would fetch the pictures from the network: only the held one is sent
+          if held? do
+            assert %{"executed" => false, "status" => "confirmation_required"} =
+                     json(call(token, tool, input))
+          end
+        end
+      end
+    end
+  end
+
   # -- ecommerce.detach_images ------------------------------------------------
 
   describe "ecommerce.detach_images" do

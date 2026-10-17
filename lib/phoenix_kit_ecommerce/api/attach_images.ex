@@ -29,7 +29,8 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   stored URLs are reused, nothing is stored twice).
 
   With `ctx.dry_run?` the URLs are checked (scheme, host, resolution into a
-  private range) and nothing is fetched or stored.
+  private range) and nothing is fetched or stored. The tool has no `danger`
+  rule, so `requires_confirmation` of the preview is core's row threshold alone.
 
   The catalogue logs the attachment as an ordinary item update by the key's
   owner; the module adds its own entry, `shop.api_images_attached`, which
@@ -94,7 +95,8 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
       rows = input["items"] |> Batch.load(catalogue_uuid) |> Batch.plan(&plan_row(&1, shopify?))
 
       if Map.get(ctx, :dry_run?, false) do
-        {:preview, Batch.preview(rows), Batch.fingerprint(rows)}
+        {:preview, rows |> Batch.preview() |> Batch.with_confirmation(rows),
+         Batch.fingerprint(rows)}
       else
         {:ok, rows |> attach(ctx, catalogue_uuid) |> Batch.render()}
       end
