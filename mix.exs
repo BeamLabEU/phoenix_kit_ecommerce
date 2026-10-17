@@ -234,7 +234,7 @@ defmodule PhoenixKitEcommerce.MixProject do
       {:nimble_csv, "~> 1.2"},
 
       # HTTP client for downloading product images.
-      {:req, "~> 0.5"},
+      {:req, "~> 0.7"},
 
       # JSON encoding/decoding.
       {:jason, "~> 1.4"},
