@@ -2353,20 +2353,21 @@ defmodule PhoenixKitEcommerce.Web.Settings do
          Settings.update_setting(Map.fetch!(keys, name), Integer.to_string(number))}
       end)
 
-    if Enum.all?(written, &match?({_key, _number, {:ok, _}}, &1)) do
-      for {key, number, _result} <- written do
-        Activity.log("shop.api_cart_setting_updated",
-          actor_uuid: Activity.actor_uuid(socket),
-          actor_role: Activity.actor_role(socket),
-          resource_type: "setting",
-          metadata: %{"setting" => key, "value" => number}
-        )
-      end
+    # Each stored value is audited, also when a later write failed: the
+    # earlier ones are already in effect.
+    for {key, number, {:ok, _}} <- written do
+      Activity.log("shop.api_cart_setting_updated",
+        actor_uuid: Activity.actor_uuid(socket),
+        actor_role: Activity.actor_role(socket),
+        resource_type: "setting",
+        metadata: %{"setting" => key, "value" => number}
+      )
+    end
 
-      {:noreply,
-       socket
-       |> assign_api_cart_form()
-       |> put_flash(:info, gettext("Assistant cart settings updated"))}
+    socket = assign_api_cart_form(socket)
+
+    if Enum.all?(written, &match?({_key, _number, {:ok, _}}, &1)) do
+      {:noreply, put_flash(socket, :info, gettext("Assistant cart settings updated"))}
     else
       {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
     end

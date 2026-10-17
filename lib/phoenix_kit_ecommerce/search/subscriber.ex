@@ -143,8 +143,17 @@ defmodule PhoenixKitEcommerce.Search.Subscriber do
     {:noreply, state}
   end
 
+  # Deleting a category sets its products' and children's category to NULL, so
+  # the subtree job would find nothing left to reindex: rebuild instead.
   def handle_info({:category_deleted, uuid}, state) when is_binary(uuid) do
-    react(fn -> Jobs.enqueue_category(uuid) end)
+    react(fn -> Jobs.enqueue_rebuild(nil) end)
+    {:noreply, state}
+  end
+
+  # Billing announces this after a base-currency change commits (and after a
+  # rate edit, which a rebuild answers harmlessly: the rebuild job is unique).
+  def handle_info({:currencies_changed, _code}, state) do
+    react(fn -> Jobs.enqueue_rebuild(nil) end)
     {:noreply, state}
   end
 
@@ -271,7 +280,8 @@ defmodule PhoenixKitEcommerce.Search.Subscriber do
       [
         {:catalogue, &subscribe_catalogue/0},
         {:products, &Events.subscribe_products/0},
-        {:categories, &Events.subscribe_categories/0}
+        {:categories, &Events.subscribe_categories/0},
+        {:currencies, &Events.subscribe_currencies/0}
       ]
       |> Enum.reject(fn {name, _fun} -> MapSet.member?(state.subscribed, name) end)
 
@@ -280,7 +290,7 @@ defmodule PhoenixKitEcommerce.Search.Subscriber do
         name
       end
 
-    if MapSet.size(subscribed) < 3, do: Process.send_after(self(), :subscribe, @retry_ms)
+    if MapSet.size(subscribed) < 4, do: Process.send_after(self(), :subscribe, @retry_ms)
 
     %{state | subscribed: subscribed}
   end

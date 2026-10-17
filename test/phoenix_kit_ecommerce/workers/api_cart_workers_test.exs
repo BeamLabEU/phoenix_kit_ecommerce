@@ -81,7 +81,9 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
 
     Repo.aggregate(
       from(c in Cart,
-        where: c.status == "abandoned" and like(c.session_id, "api:%") and c.updated_at < ^cutoff
+        where:
+          c.status in ["abandoned", "merged"] and like(c.session_id, "api:%") and
+            c.updated_at < ^cutoff
       ),
       :count
     )
@@ -291,6 +293,19 @@ defmodule PhoenixKitEcommerce.Workers.ApiCartWorkersTest do
 
       refute exists?(Cart, old.uuid)
       refute exists?(CartClaim, claim.uuid)
+    end
+
+    # The "add these items" choice of the claim page merges the assistant's
+    # cart away and keeps its lines and its `api:` session.
+    test "deletes a merged api cart, and keeps a young one" do
+      old = cart!(api_id(), status: "merged", updated_at: days_ago(31))
+      young = cart!(api_id(), status: "merged", updated_at: days_ago(29))
+
+      assert {:ok, deleted} = ApiCartPruneWorker.prune()
+      assert deleted >= 1
+
+      refute exists?(Cart, old.uuid)
+      assert exists?(Cart, young.uuid)
     end
 
     test "deletes an abandoned api cart that has lines, with its lines" do

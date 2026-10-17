@@ -21,6 +21,8 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
 
+  import PhoenixKitEcommerce.API.PlanSupport, only: [ecommerce: 1]
+
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitEcommerce.API.{Batch, Gate, PricePlan, Rows}
   alias PhoenixKitEcommerce.API.Settings, as: ApiSettings
@@ -80,9 +82,32 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
            sets: sets(item, input, sets_by_item),
            shopify_enabled?: shopify?
          ) do
+      {:ok, %{changed?: true} = plan} -> require_currency(plan, item)
       {:ok, plan} -> {:ok, plan}
       {:error, errors} -> {:error, Rows.invalid(errors)}
     end
+  end
+
+  # An amount stored with no currency is read as whatever the base currency
+  # later becomes (the rule the Shopify sync keeps): a row that writes a price
+  # is refused while neither the item nor the shop names one.
+  defp require_currency(plan, item) do
+    if is_binary(ecommerce(item)["currency"]) or base_currency?() do
+      {:ok, plan}
+    else
+      {:error,
+       Rows.invalid([
+         %{
+           path: "",
+           message:
+             "the shop has no base currency and the product has none: set one before pricing"
+         }
+       ])}
+    end
+  end
+
+  defp base_currency? do
+    match?(%{code: code} when is_binary(code), PhoenixKitEcommerce.get_base_currency())
   end
 
   # The attribute sets of every product that has option prices in this call,

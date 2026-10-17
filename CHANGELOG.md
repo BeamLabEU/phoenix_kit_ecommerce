@@ -32,6 +32,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   price.
 - The `compat/` namespace is marked `@deprecated` with each replacement (#90).
 
+### Fixed
+
+- **Review of #93**: deleting one category now rebuilds the search index (its
+  products' category is set to NULL, so the subtree job found nothing), and a
+  committed currency change rebuilds it too (the index held old-base prices);
+  merged assistant carts are pruned with the abandoned ones; the pinned image
+  downloader no longer retries on a 429/503 (Req slept for an uncapped
+  `Retry-After`); `set_prices` refuses a row while neither the shop nor the
+  product has a currency; `set_availability` writes under the item lock and
+  re-plans the row, like `set_prices`; the list-item output schema requires only
+  `id` (the `fields` option drops the rest); the warehouse source kind queries
+  the catalogue table under the schema prefix; a partly written assistant-cart
+  settings form audits what was stored and shows the stored values.
+
 ## 0.5.24 - 2026-10-13
 
 ### Fixed

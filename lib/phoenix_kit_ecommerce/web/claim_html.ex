@@ -3,8 +3,9 @@ defmodule PhoenixKitEcommerce.Web.ClaimHTML do
   The checkout claim page: a bare card inside the host's root layout, in the
   language of the claim. One form posts back to the claim URL (`<.form>` adds
   the CSRF token); `offer` tells the server what the page showed (`none`, or the
-  uuid of the buyer's own cart) and `revision` tells it which lines were shown,
-  so a change in between, of either cart, is noticed.
+  uuid of the buyer's own cart) and `revision` tells it which lines of the
+  assistant's cart were shown, so a change to those lines in between is noticed.
+  The buyer's own cart is bound by its uuid only.
   """
 
   use PhoenixKitEcommerce.Web, :html

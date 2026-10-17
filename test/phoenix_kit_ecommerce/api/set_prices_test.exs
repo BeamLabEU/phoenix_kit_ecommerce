@@ -178,6 +178,45 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
     end
   end
 
+  describe "a shop with no base currency" do
+    setup do
+      PhoenixKit.Cache.clear(:billing_currencies)
+      Repo.delete_all(PhoenixKitBilling.Currency)
+      :ok
+    end
+
+    # An amount stored with no currency is read as whatever the base later
+    # becomes, which is the rule the Shopify sync keeps.
+    test "refuses a price for a product that names no currency either", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue, %{sku: "SP-NOCUR"})
+
+      assert {:ok, %{"results" => [%{"error" => error}], "summary" => %{"error" => 1}}} =
+               set_prices([%{"ref" => %{"sku" => "SP-NOCUR"}, "price" => "101.00"}], ctx)
+
+      assert error["code"] == "validation_failed"
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
+    end
+
+    test "prices a product that carries its own currency", %{catalogue: catalogue, ctx: ctx} do
+      item =
+        F.item!(catalogue, %{
+          sku: "SP-OWNCUR",
+          data: %{
+            "_primary_language" => "en",
+            "ecommerce" => %{"shop_status" => "active", "currency" => "USD"}
+          }
+        })
+
+      assert {:ok, %{"summary" => %{"updated" => 1}}} =
+               set_prices([%{"ref" => %{"sku" => "SP-OWNCUR"}, "price" => "101.00"}], ctx)
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("101.00"))
+    end
+  end
+
   describe "rows are independent" do
     test "a missing product, an ambiguous sku, a duplicate and a bad price do not stop the good row",
          %{catalogue: catalogue, ctx: ctx} do
