@@ -644,9 +644,12 @@ Rules that must hold:
   from that URL goes. At most 50 pictures per product and 500 per call; files
   are released in sorted order so two calls sharing files cannot lock them
   crosswise. **Known:** core announces `{:phoenix_kit_file_trashed, uuid}`
-  inside `ResourceFolders.detach/2`, before this transaction commits; a row
-  rolled back afterwards has announced a file that is still active (a
-  subscriber is right again on the next reload). Only core can announce later.
+  inside `ResourceFolders.detach/2`, before this transaction commits; a
+  subscriber that re-reads on the event can read the file as still active,
+  committed or not, and core's `FeaturedImage` does not look a settled lookup
+  up again on its own, so a host that refreshes it on this event can keep the
+  stale picture until something else prods it. A row rolled back afterwards
+  has announced a file that is still active. Only core can announce later.
 - **A dry run of a tool with a `danger` rule says whether the real call would
   be held:** `API.Batch.with_confirmation/3` adds `requires_confirmation`
   (`Batch.dangerous?/1`, the same function the `danger` check answers, or more

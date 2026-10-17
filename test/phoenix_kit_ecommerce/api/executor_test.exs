@@ -311,10 +311,17 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
           assert preview["confirmation_rules"] == %{"confirm_batch_over" => 2}
           refute Map.has_key?(json(dry), "confirm_token")
 
-          # a call that goes through would fetch the pictures from the network: only the held one is sent
-          if held? do
-            assert %{"executed" => false, "status" => "confirmation_required"} =
-                     json(call(token, tool, input))
+          # a call that goes through would fetch the pictures from the network: attach_images is sent only when held
+          cond do
+            held? ->
+              assert %{"executed" => false, "status" => "confirmation_required"} =
+                       json(call(token, tool, input))
+
+            tool == "ecommerce.set_availability" ->
+              assert %{"summary" => %{"updated" => 2}} = json(call(token, tool, input))
+
+            true ->
+              :ok
           end
         end
       end
