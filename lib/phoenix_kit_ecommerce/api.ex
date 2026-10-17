@@ -187,7 +187,7 @@ defmodule PhoenixKitEcommerce.API do
       title: "Detach product images",
       description:
         "Removes pictures from the galleries of products. Name each picture by its file id or by the URL it was attached from; only a picture the product's gallery has can be removed, another product's picture can not be reached this way, and a picture the product does not have is listed in not_attached and changes nothing, so repeating a call is safe. " <>
-          "A picture shared with another product stays with it; a picture nothing else holds is moved to the media trash, not deleted for good. Removing the main picture leaves the product without one, and the shop shows the first picture left. " <>
+          "At most 50 pictures per product and 500 per call. A picture shared with another product stays with it; a picture nothing else holds is moved to the media trash, not deleted for good. Removing the main picture leaves the product without one, and the shop shows the first picture left. " <>
           "A call that would leave a product with no picture at all is held for confirmation first. A dry run answers requires_confirmation and confirmation_rules, and never creates a confirmation code." <>
           shopify_note() <> @retry_note,
       input_schema: Schemas.detach_images_input(),

@@ -635,7 +635,18 @@ Rules that must hold:
   released and the gallery written in one transaction (a gallery that cannot be
   written rolls the releases back). Removing the featured picture clears the
   pointer, as the editor does. Its `danger` check is "a row would leave a
-  product with no picture"; removing the main picture alone is not held.
+  product with no picture"; removing the main picture alone is not held. The
+  danger check, the plan and the write each read the gallery, so the row lock
+  re-checks: a gallery (order and featured pointer) that is no longer the one
+  planned fails the row `changed_since_planned` and releases nothing. A URL is
+  matched against the files the product's own gallery names (any Storage
+  status), never the shop-wide one-file-per-URL index, and every gallery file
+  from that URL goes. At most 50 pictures per product and 500 per call; files
+  are released in sorted order so two calls sharing files cannot lock them
+  crosswise. **Known:** core announces `{:phoenix_kit_file_trashed, uuid}`
+  inside `ResourceFolders.detach/2`, before this transaction commits; a row
+  rolled back afterwards has announced a file that is still active (a
+  subscriber is right again on the next reload). Only core can announce later.
 - **A dry run of a tool with a `danger` rule says whether the real call would
   be held:** `API.Batch.with_confirmation/3` adds `requires_confirmation`
   (`Batch.dangerous?/1`, the same function the `danger` check answers, or more

@@ -7,6 +7,11 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   the featured pointer) can be removed; anything else is reported in
   `not_attached` and changes nothing, so a retry of a call that succeeded is
   `unchanged`, and another product's picture can not be reached by naming it.
+  A URL is looked up among the files the gallery names (their stored source
+  URL and the URLs that resolved to them), in whatever state Storage keeps
+  them, never in the shop-wide index: a duplicate the product holds is found,
+  and every file of the gallery that came from the URL goes. At most 50
+  pictures per product and 500 per call.
 
   A picture leaves the product by core's removal rule for a folder
   (`ResourceFolders.detach/2`, the one the catalogue's editor uses): a link is
@@ -22,6 +27,19 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   an attach followed by a detach. A batch over `api_confirm_batch_over` rows is
   held by core's executor for every admin write tool. With `ctx.dry_run?` the
   handler returns `{:preview, preview, fingerprint}` and writes nothing.
+
+  The danger check, the plan of the call and the write each read the gallery;
+  the product is read again with its row locked, and a row whose gallery (order
+  and featured pointer) is no longer the one it was planned from fails alone,
+  `changed_since_planned`, with nothing released: a removal judged harmless on
+  the old gallery could empty the new one without the confirmation that rule
+  asks for.
+
+  Core announces `{:phoenix_kit_file_trashed, uuid}` itself when
+  `ResourceFolders.detach/2` trashes a file, and inside this tool's
+  transaction that is before the commit. A row that is rolled back afterwards
+  (the gallery could not be saved) has told subscribers of a file that is still
+  active; they see it again on the next reload. Only core can announce later.
   """
 
   @compile {:no_warn_undefined,
@@ -29,15 +47,19 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
 
   require Logger
 
+  import Ecto.Query, only: [from: 2]
+
+  alias PhoenixKit.Modules.Storage.File, as: StorageFile
   alias PhoenixKit.Modules.Storage.ResourceFolders
+  alias PhoenixKit.RepoHelper
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitEcommerce.API.{Batch, CatalogueWrites, Gate, Meta, PlanSupport, Rows}
-  alias PhoenixKitEcommerce.Catalogue.Writer
   alias PhoenixKitEcommerce.Services.ImageDownloader
   alias PhoenixKitEcommerce.StorefrontCache
 
   @tool "ecommerce.detach_images"
   @max_images 50
+  @max_total 500
   @changed_message "A gallery changed while the call was being checked. Read the product again and repeat the call."
 
   @doc "The most pictures one product may name in a call."
@@ -78,47 +100,96 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   # -- planning ---------------------------------------------------------------
 
   defp plan_rows(input) do
-    with {:ok, catalogue_uuid} <- Gate.check(input) do
+    with {:ok, catalogue_uuid} <- Gate.check(input),
+         :ok <- check_total(input) do
       shopify? = PhoenixKitEcommerce.shopify_enabled?()
-      items = input["items"]
-      url_index = url_index(items)
+      loaded = Batch.load(input["items"], catalogue_uuid)
+      sources = gallery_sources(loaded)
 
       rows =
-        items
-        |> Batch.load(catalogue_uuid)
-        |> Batch.plan(&plan_row(&1, url_index, shopify?))
+        loaded
+        |> Batch.plan(&plan_row(&1, sources, shopify?))
         |> Enum.map(&show_split/1)
 
       {:ok, catalogue_uuid, rows}
     end
   end
 
-  # URL (query stripped) -> file uuid for the URLs of this call.
-  defp url_index(items) do
-    keys =
-      for item <- items,
-          %{"url" => url} <- Map.get(item, "images", []),
-          key = ImageDownloader.source_key(url),
-          uniq: true,
-          do: key
+  defp check_total(input) do
+    total = input["items"] |> Enum.map(&length(Map.get(&1, "images", []))) |> Enum.sum()
 
-    case keys do
-      [] -> %{}
-      keys -> Writer.build_reuse_index(keys).url_index
+    if total <= @max_total do
+      :ok
+    else
+      {:error, :validation_failed, "At most #{@max_total} pictures per call.",
+       %{
+         errors: [
+           %{
+             path: "items",
+             message: "has #{total} pictures in total",
+             limit: @max_total,
+             allowed: nil
+           }
+         ]
+       }}
     end
   end
 
-  defp plan_row(%{item: item, input: input}, url_index, shopify?) do
+  # file uuid -> the source URLs (query stripped) it answers to, for the files
+  # the galleries of the rows that name a URL hold: one read for the whole call,
+  # bounded by the galleries, and a URL can only ever resolve to a file of the
+  # gallery it is looked up in. Any status: a gallery may still name a file
+  # that has been trashed.
+  defp gallery_sources(rows) do
+    uuids =
+      for %{item: %{} = item, input: input} <- rows,
+          named_by_url?(input),
+          file <- gallery(item),
+          match?({:ok, _}, Ecto.UUID.cast(file)),
+          uniq: true,
+          do: file
+
+    case uuids do
+      [] ->
+        %{}
+
+      uuids ->
+        from(f in StorageFile, where: f.uuid in ^uuids, select: {f.uuid, f.metadata})
+        |> RepoHelper.repo().all()
+        |> Map.new(fn {uuid, metadata} -> {uuid, source_keys(metadata)} end)
+    end
+  end
+
+  defp named_by_url?(input),
+    do: input |> Map.get("images", []) |> Enum.any?(&match?(%{"url" => _}, &1))
+
+  defp source_keys(metadata) do
+    metadata = metadata || %{}
+
+    [metadata["source_url"] | List.wrap(metadata["source_url_aliases"])]
+    |> Enum.map(&ImageDownloader.source_key/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  # URL (query stripped) -> the files of this product's gallery that came from it.
+  defp url_index(item, sources) do
+    for file <- gallery(item), key <- Map.get(sources, file, []), reduce: %{} do
+      index -> Map.update(index, key, [file], &(&1 ++ [file]))
+    end
+  end
+
+  defp plan_row(%{item: item, input: input}, sources, shopify?) do
     images = Map.get(input, "images", [])
 
-    case wanted(images, url_index) do
+    case wanted(images, url_index(item, sources)) do
       {:ok, wanted} ->
         gallery = gallery(item)
         {remove, _not_attached} = split(wanted, gallery)
 
         {:ok,
          %{
-           from: %{media_order: media_order(item), featured: featured(item)},
+           from: gallery_state(item),
            changes: %{"images" => %{"remove" => length(remove)}},
            changed?: remove != [],
            dangerous?: remove != [] and gallery -- remove == [],
@@ -131,8 +202,8 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
     end
   end
 
-  # `[{label, file_uuid | nil}]`: what each named picture is called in the
-  # answer, and the file it is (none when no stored file came from that URL).
+  # `[{label, [file_uuid]}]`: what each named picture is called in the answer,
+  # and the files it is (none when no file of the gallery came from that URL).
   defp wanted(images, url_index) do
     images
     |> Enum.with_index()
@@ -147,7 +218,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   defp parse({%{"id" => id} = image, index}, _url_index)
        when is_binary(id) and map_size(image) == 1 do
     case Ecto.UUID.cast(id) do
-      {:ok, uuid} -> {:ok, {uuid, uuid}}
+      {:ok, uuid} -> {:ok, {uuid, [uuid]}}
       :error -> {:error, PlanSupport.error("images[#{index}].id", "must be a file UUID")}
     end
   end
@@ -155,7 +226,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   defp parse({%{"url" => url} = image, _index}, url_index)
        when is_binary(url) and map_size(image) == 1 do
     key = ImageDownloader.source_key(url)
-    {:ok, {key, Map.get(url_index, key)}}
+    {:ok, {key, Map.get(url_index, key, [])}}
   end
 
   defp parse({_image, index}, _url_index),
@@ -167,9 +238,11 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
     {held, other} =
       wanted
       |> Enum.uniq()
-      |> Enum.split_with(fn {_label, file} -> file in gallery end)
+      |> Enum.map(fn {label, files} -> {label, Enum.filter(files, &(&1 in gallery))} end)
+      |> Enum.split_with(fn {_label, files} -> files != [] end)
 
-    {Enum.uniq(for({_label, file} <- held, do: file)), for({label, _file} <- other, do: label)}
+    {held |> Enum.flat_map(fn {_label, files} -> files end) |> Enum.uniq(),
+     for({label, _files} <- other, do: label)}
   end
 
   defp show_split(%{plan: %{wanted: wanted}, item: item} = row) do
@@ -260,9 +333,17 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   defp gone(row),
     do: Batch.fail(row, Rows.error(:not_found, "The product is no longer in the shop catalogue."))
 
+  # The plan was judged on a gallery read earlier (the danger rule too): on
+  # any other gallery it does not hold, and nothing is released.
   defp detach_from(%{item: item, plan: plan} = row, ctx) do
+    if gallery_state(item) == plan.from,
+      do: release_and_write(row, ctx),
+      else: Batch.fail(row, Batch.changed_since_planned())
+  end
+
+  defp release_and_write(%{item: item, plan: plan} = row, ctx) do
     {remove, not_attached} = split(plan.wanted, gallery(item))
-    {released, failed} = release(remove, folder(item))
+    {released, failed} = release(Enum.sort(remove), folder(item))
 
     extra = %{
       "detached" => length(released),
@@ -272,7 +353,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
 
     cond do
       released != [] ->
-        write(row, released, extra, ctx)
+        write_gallery(row, released, extra, ctx)
 
       failed != [] ->
         Batch.fail(
@@ -285,9 +366,10 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
     end
   end
 
-  # Core's removal rule for each file. A file the folder does not hold (gone,
-  # or only named by the gallery) is released all the same: the gallery must
-  # stop naming it.
+  # Core's removal rule for each file, in a stable order: two calls that share
+  # files lock them in the same order and can not wait on each other. A file
+  # the folder does not hold (gone, or only named by the gallery) is released
+  # all the same: the gallery must stop naming it.
   defp release(files, folder) do
     {released, failed} =
       Enum.reduce(files, {[], []}, fn file, {released, failed} ->
@@ -304,7 +386,7 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
     {Enum.reverse(released), Enum.reverse(failed)}
   end
 
-  defp write(%{item: item, plan: plan} = row, released, extra, ctx) do
+  defp write_gallery(%{item: item, plan: plan} = row, released, extra, ctx) do
     order = media_order(item) -- released
 
     data = %{"media_order" => order}
@@ -338,6 +420,8 @@ defmodule PhoenixKitEcommerce.API.DetachImages do
   end
 
   # -- the gallery ------------------------------------------------------------
+
+  defp gallery_state(item), do: %{media_order: media_order(item), featured: featured(item)}
 
   # The pictures a product names: its featured picture and its order.
   defp gallery(item), do: Enum.uniq(List.wrap(featured(item)) ++ media_order(item))

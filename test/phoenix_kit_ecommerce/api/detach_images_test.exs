@@ -18,12 +18,17 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
   @moduletag :catalogue_api
   @moduletag :core_confirm
 
+  import Ecto.Query, only: [from: 2]
+  import ExUnit.CaptureLog, only: [with_log: 1]
+
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Settings
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitEcommerce.API.DetachImages
   alias PhoenixKitEcommerce.APICase
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.StorefrontCache
+  alias PhoenixKitEcommerce.Test.Repo
 
   @one "0192a7c0-0000-7000-8000-00000000000a"
   @two "0192a7c0-0000-7000-8000-00000000000b"
@@ -201,6 +206,154 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
         )
 
       assert entry.mode == "auto"
+    end
+  end
+
+  # Runs `fun` once, in the process that is writing, when the first product
+  # lock of the call is taken: a way to change the world between the plan and
+  # the write, deterministically.
+  defp at_lock(fun) do
+    id = {:at_lock, make_ref()}
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, meta, _config ->
+        if String.contains?(meta.query, "FOR SHARE") do
+          :telemetry.detach(id)
+          fun.()
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
+  end
+
+  defp set_item(item, set),
+    do: Repo.update_all(from(i in Item, where: i.uuid == ^item.uuid), set: set)
+
+  defp set_order(item, order),
+    do: set_item(item, data: Map.put(item.data, "media_order", order))
+
+  describe "a product that changes between the plan and the write" do
+    test "a gallery that changed is not written: the call was judged on the old one", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = item_with(catalogue, [@one, @two])
+      # another writer takes @two out after the plan: removing @one would now
+      # empty the gallery, which only a confirmed call may do
+      at_lock(fn -> set_order(item, [@one]) end)
+
+      assert {:ok, %{"results" => [result], "summary" => %{"error" => 1}}} =
+               detach([row(item, ids([@one]))], ctx)
+
+      assert result["error"]["code"] == "validation_failed"
+      assert result["error"]["context"]["reason"] == "changed_since_planned"
+      assert F.reload!(item).data["media_order"] == [@one]
+    end
+
+    test "a featured picture that moved is a changed gallery too", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = item_with(catalogue, [@one, @two], @one)
+
+      at_lock(fn ->
+        set_item(item, data: Map.put(item.data, "featured_image_uuid", @two))
+      end)
+
+      assert {:ok, %{"results" => [result]}} = detach([row(item, ids([@one]))], ctx)
+
+      assert result["error"]["context"]["reason"] == "changed_since_planned"
+      assert F.reload!(item).data["media_order"] == [@one, @two]
+    end
+
+    test "a product trashed after the plan answers not_found and is left alone", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = item_with(catalogue, [@one, @two])
+      at_lock(fn -> set_item(item, status: "deleted") end)
+
+      assert {:ok, %{"results" => [result]}} = detach([row(item, ids([@one]))], ctx)
+
+      assert result["error"]["code"] == "not_found"
+      assert F.reload!(item).data["media_order"] == [@one, @two]
+    end
+
+    test "the row that changed does not stop the next one", %{catalogue: catalogue, ctx: ctx} do
+      moved = item_with(catalogue, [@one, @two])
+      other = item_with(catalogue, [@one, @two])
+      at_lock(fn -> set_order(moved, [@one]) end)
+
+      assert {:ok, %{"results" => [first, second], "summary" => summary}} =
+               detach([row(moved, ids([@one])), row(other, ids([@one]))], ctx)
+
+      assert first["error"]["context"]["reason"] == "changed_since_planned"
+      assert second["action"] == "updated"
+      assert summary == %{"updated" => 1, "unchanged" => 0, "error" => 1}
+    end
+  end
+
+  describe "the size of a call" do
+    defp fake_rows(rows, images) do
+      for _ <- 1..rows do
+        %{
+          "ref" => %{"id" => Ecto.UUID.generate()},
+          "images" => ids(for _ <- 1..images, do: Ecto.UUID.generate())
+        }
+      end
+    end
+
+    test "at most 50 pictures per product", %{ctx: ctx} do
+      assert {:error, :validation_failed, _message, %{errors: [%{path: path}]}} =
+               detach(fake_rows(1, DetachImages.max_images() + 1), ctx)
+
+      assert path =~ "images"
+    end
+
+    test "at most 500 pictures per call, counted over all products", %{ctx: ctx} do
+      assert {:preview, _, _} = detach(fake_rows(10, 50), dry(ctx))
+
+      assert {:error, :validation_failed, _message, %{errors: [%{path: "items", limit: 500}]}} =
+               detach(fake_rows(10, 50) ++ fake_rows(1, 1), dry(ctx))
+
+      assert {:error, :validation_failed, _message, _} = detach(fake_rows(11, 50), ctx)
+      assert DetachImages.dangerous?(%{"items" => fake_rows(11, 50)}, ctx) == false
+    end
+
+    test "the stored pictures of all the galleries are read in one query", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      rows =
+        for _ <- 1..3,
+            do:
+              row(item_with(catalogue, [@one, @two]), [%{"url" => "https://93.184.216.34/a.png"}])
+
+      test = self()
+      id = {:count_file_reads, make_ref()}
+
+      :telemetry.attach(
+        id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, meta, _config ->
+          if meta.source == "phoenix_kit_files", do: send(test, :file_read)
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(id) end)
+
+      assert {:preview, _, _} = detach(rows, dry(ctx))
+      assert_received :file_read
+      refute_received :file_read
+
+      # nothing to look up when no row names a URL
+      assert {:preview, _, _} = detach([row(item_with(catalogue, [@one]), ids([@two]))], dry(ctx))
+      refute_received :file_read
     end
   end
 
@@ -471,6 +624,79 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
       assert result["not_attached"] == [foreign]
       assert F.reload!(theirs).data["media_order"] == [foreign]
       assert status(foreign) == "active"
+    end
+
+    test "a URL is matched against the product's own pictures, not the shop's first file for it",
+         %{catalogue: catalogue, ctx: ctx} do
+      theirs = F.item!(catalogue)
+      mine = F.item!(catalogue)
+      [older] = attach(theirs, ["/a.png"], ctx)
+      [newer] = attach(mine, ["/b.png"], ctx)
+      assert newer != older
+
+      # a duplicate of /a.png that an earlier run left: the same source URL on a newer file
+      file = Storage.get_file(newer)
+
+      Repo.update_all(
+        from(f in Storage.File, where: f.uuid == ^newer),
+        set: [metadata: Map.put(file.metadata, "source_url", @host <> "/a.png")]
+      )
+
+      assert {:ok, %{"results" => [result]}} =
+               detach([row(mine, [%{"url" => @host <> "/a.png"}])], confirmed(ctx))
+
+      assert result["detached"] == 1
+      assert result["not_attached"] == []
+      assert F.reload!(mine).data["media_order"] == []
+      assert F.reload!(theirs).data["media_order"] == [older]
+      assert status(older) == "active"
+      assert status(newer) == "trashed"
+    end
+
+    test "a picture whose file is already in the trash can still be taken out by URL", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      [kept, dead] = attach(item, ["/a.png", "/b.png"], ctx)
+      Repo.update_all(from(f in Storage.File, where: f.uuid == ^dead), set: [status: "trashed"])
+
+      assert {:ok, %{"results" => [%{"detached" => 1}]}} =
+               detach([row(item, [%{"url" => @host <> "/b.png"}])], ctx)
+
+      assert F.reload!(item).data["media_order"] == [kept]
+    end
+
+    test "a gallery that can not be saved gives the files back", %{catalogue: catalogue, ctx: ctx} do
+      item = F.item!(catalogue)
+      [kept, gone] = attach(item, ["/a.png", "/b.png"], ctx)
+      # a blank name fails the catalogue's validation of the write
+      set_item(item, name: "")
+
+      {answer, log} = with_log(fn -> detach([row(item, ids([gone]))], ctx) end)
+
+      assert {:ok, %{"results" => [result], "summary" => %{"error" => 1}}} = answer
+      assert result["error"]["context"]["reason"] == "database_error"
+      assert log =~ "saving the gallery failed"
+      assert status(gone) == "active"
+      assert F.reload!(item).data["media_order"] == [kept, gone]
+    end
+
+    test "a file that core fails to release fails the row and keeps every file", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      [kept, gone] = attach(item, ["/a.png", "/b.png"], ctx)
+      # a folder that is not a UUID: core's removal rule raises on the lookup of its link
+      set_item(item, data: Map.put(F.reload!(item).data, "files_folder_uuid", "not-a-uuid"))
+
+      {answer, _log} = with_log(fn -> detach([row(item, ids([gone]))], ctx) end)
+
+      assert {:ok, %{"results" => [result]}} = answer
+      assert result["error"]["code"] == "validation_failed"
+      assert F.reload!(item).data["media_order"] == [kept, gone]
+      assert status(gone) == "active"
     end
   end
 end

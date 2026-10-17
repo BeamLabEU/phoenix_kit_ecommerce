@@ -44,6 +44,9 @@ defmodule PhoenixKitEcommerce.API.CatalogueWrites do
   trash. The caller must only write fields whose rows `update_items` leaves
   alone outside the transaction: price and availability rows move no folder,
   which is what the catalogue asks a caller inside its transaction to be sure of.
+  The gallery writes of `attach_images` and `detach_images` (`data["media_order"]`
+  and the featured pointer, with the files released in the same transaction)
+  are inside it too.
   """
   @spec with_locked_items([struct()], (%{String.t() => struct()} -> result)) ::
           {:ok, result} | {:error, Rows.t()}

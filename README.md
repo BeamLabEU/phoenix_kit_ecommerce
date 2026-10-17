@@ -341,7 +341,8 @@ batch larger than core's `api_confirm_batch_over`. `detach_images` is held when
 a row would leave a product with no picture at all (the main picture alone is
 not held: replacing it is an attach followed by a detach); a picture shared
 with another product stays with it, and one nothing else holds goes to the
-media trash, not out of Storage. A dry run (`dry_run: true`) of a tool with such
+media trash, not out of Storage; at most 50 pictures per product and 500 per
+call. A dry run (`dry_run: true`) of a tool with such
 a rule (`set_prices`, `detach_images`) answers `requires_confirmation` (whether
 the real call would be held, by the tool's rule or the batch size) and
 `confirmation_rules` (the thresholds that applied); it never creates a

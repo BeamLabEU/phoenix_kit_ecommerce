@@ -180,6 +180,9 @@ defmodule PhoenixKitEcommerce.API.Batch do
     |> Map.put("confirmation_rules", rules)
   end
 
+  # `length(rows)` is core's count only while `items` is the one top-level
+  # list of the tool's input (core counts the longest); a second list would
+  # have to be counted here too.
   defp held?(rows, batch_over),
     do: dangerous?(rows) or (is_integer(batch_over) and length(rows) > batch_over)
 
@@ -319,18 +322,21 @@ defmodule PhoenixKitEcommerce.API.Batch do
         fail(row, Rows.error(:not_found, "The product no longer exists."))
 
       _changed ->
-        fail(
-          row,
-          Rows.error(
-            :validation_failed,
-            "The product changed while the call was being checked. Read it again and repeat the call.",
-            %{"reason" => "changed_since_planned"}
-          )
-        )
+        fail(row, changed_since_planned())
     end
   end
 
   defp still_planned(row, _locked, _planner), do: row
+
+  @doc "The row error of a product whose values are no longer the ones its row was planned from."
+  @spec changed_since_planned() :: Rows.t()
+  def changed_since_planned do
+    Rows.error(
+      :validation_failed,
+      "The product changed while the call was being checked. Read it again and repeat the call.",
+      %{"reason" => "changed_since_planned"}
+    )
+  end
 
   defp fetch_available(locked, item) do
     case Map.fetch(locked, item.uuid) do
