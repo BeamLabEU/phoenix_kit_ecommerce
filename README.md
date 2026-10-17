@@ -318,7 +318,7 @@ on the site's own checkout.
 ### Admin API tools
 
 On a `phoenix_kit` core that ships the admin API (the tool registry), this
-module offers four admin tools over REST, and over MCP where the core also
+module offers five admin tools over REST, and over MCP where the core also
 provides it, for an accounting system, a script or an AI agent. Shopify is not
 needed: on a shop without it, the API is how an outside system feeds the
 product list.
@@ -329,6 +329,7 @@ product list.
 | `ecommerce.set_prices` | price, compare-at price, option prices | `ecommerce.prices:write` |
 | `ecommerce.set_availability` | visibility, made to order | `ecommerce.availability:write` |
 | `ecommerce.attach_images` | pictures by URL, at most 20 per call | `ecommerce.images:write` |
+| `ecommerce.detach_images` | takes pictures out of a gallery, by file id or by the URL they came from | `ecommerce.images:write` |
 
 They work on the catalogue product source only; on the legacy source (or with
 a `phoenix_kit_catalogue` that predates the admin API) they answer
@@ -336,8 +337,15 @@ a `phoenix_kit_catalogue` that predates the admin API) they answer
 percent (an option price is measured against the product's current price;
 default 30, set on the E-Commerce settings page by a user who also
 holds core's `api` permission) is held for confirmation first, and so is any
-batch larger than core's `api_confirm_batch_over`. Keys, scopes and the switch
-are on core's Settings → API page.
+batch larger than core's `api_confirm_batch_over`. `detach_images` is held when
+a row would leave a product with no picture at all (the main picture alone is
+not held: replacing it is an attach followed by a detach); a picture shared
+with another product stays with it, and one nothing else holds goes to the
+media trash, not out of Storage. A dry run (`dry_run: true`) of a tool with such
+a rule (`set_prices`, `detach_images`) answers `requires_confirmation` (whether
+the real call would be held, by the tool's rule or the batch size) and
+`confirmation_rules` (the thresholds that applied); it never creates a
+confirmation code. Keys, scopes and the switch are on core's Settings → API page.
 
 A `validation_failed` answer with `context.reason` `database_error`,
 `storage_error` or `unexpected` is not a problem with the request and is worth

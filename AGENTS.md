@@ -574,7 +574,8 @@ different server) and turns events into Oban jobs; it never indexes inline.
 
 `PhoenixKitEcommerce.api_tools/0` (no `@impl`, like `notification_types/0`)
 returns `PhoenixKitEcommerce.API.tools/0`: `ecommerce.get_prices`,
-`ecommerce.set_prices`, `ecommerce.set_availability`, `ecommerce.attach_images`
+`ecommerce.set_prices`, `ecommerce.set_availability`, `ecommerce.attach_images`,
+`ecommerce.detach_images`.
 Rules that must hold:
 
 - **The write tools are offered only when core enforces the confirmation
@@ -586,7 +587,8 @@ Rules that must hold:
   what it exports, not by its version), `API.Refs`
   (`PhoenixKitCatalogue.API.resolve_refs/2`) and `API.CatalogueWrites`
   (`Catalogue.update_items/2`). Two more call sites reach the catalogue
-  directly: `AttachImages` (`Attachments.attach_files/3`) and `SetPrices`
+  directly: `AttachImages` (`Attachments.attach_files/3`), `DetachImages`
+  (`Catalogue.update_item/3` and core's `ResourceFolders.detach/2`) and `SetPrices`
   (`AttributeSets.resolve_for_items/2`); `Gate.catalogue_api_ready?/0` does not
   probe them. Anything the gate refuses answers `unsupported_source` and
   writes nothing.
@@ -623,6 +625,25 @@ Rules that must hold:
   become dangerous is refused, and `API.Batch.write_if_unchanged/4` locks the
   items, plans them again and writes only the rows whose current values are the
   ones they were planned from (the others fail alone, `changed_since_planned`).
+- **`detach_images` removes only what the product's gallery names** (its
+  `media_order` and featured pointer): a file id or a URL that is not in it
+  is reported in `not_attached` and changes nothing, which is also what makes
+  a retry `unchanged`. The file leaves the product by core's folder rule
+  (`ResourceFolders.detach/2`, the catalogue editor's remove button): a link
+  is dropped, a file homed in the product's folder moves to another product's
+  folder that holds it, else it is trashed (never hard deleted). The files are
+  released and the gallery written in one transaction (a gallery that cannot be
+  written rolls the releases back). Removing the featured picture clears the
+  pointer, as the editor does. Its `danger` check is "a row would leave a
+  product with no picture"; removing the main picture alone is not held.
+- **A dry run of a tool with a `danger` rule says whether the real call would
+  be held:** `API.Batch.with_confirmation/3` adds `requires_confirmation`
+  (`Batch.dangerous?/1`, the same function the `danger` check answers, or more
+  rows than core's `api_confirm_batch_over`) and `confirmation_rules` (the
+  thresholds). A tool with no `danger` function leaves it out: core's row
+  threshold could hold it, and `false` would then be a lie. A dry run creates no
+  confirmation code. `API.Batch.ensure_not_newly_dangerous/3` is the shared
+  re-check of a call without a confirmation whose plan has become dangerous.
 - **Prices are decimal strings with at most 2 decimals** (`API.Money`). A
   third decimal is refused, never rounded.
 - **`attach_images` always passes `private_networks: :forbid`** to the
@@ -659,12 +680,12 @@ Rules that must hold:
   `API.Batch.write_if_unchanged/4` and `API.AttachImages`), like the Shopify
   sync does. A dry run and an unchanged row leave it alone.
 - **Shopify is optional.** Nothing in the tools needs a product to be linked
-  to it; the descriptions of the three write tools and the row warning
+  to it; the descriptions of the four write tools and the row warning
   `shopify_sync_may_overwrite` mention the sync only while it is on. "Linked"
   is one rule, `ItemCommerce.shopify_linked?/1` (a Shopify handle or product
   id), shared with the settings of the product form. `set_availability`
-  warns on a visibility change and `attach_images` on a picture, because the
-  sync writes the shop status and replaces the picture order.
+  warns on a visibility change and `attach_images` and `detach_images` on a
+  picture, because the sync writes the shop status and replaces the picture order.
 - `api_confirm_price_change_pct` (default 30, `API.Settings`) is the one
   e-commerce setting of the API; it has no `shop_` prefix, it shares the
   `api_` prefix of core's other API settings (`api_confirm_batch_over`).
