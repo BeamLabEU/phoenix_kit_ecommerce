@@ -277,8 +277,8 @@ defmodule PhoenixKitEcommerce.MixProject do
     if is_binary(catalogue_path) and catalogue_path != "" and is_binary(entities_path) and
          entities_path != "" do
       [
-        {:phoenix_kit_catalogue, path: catalogue_path, only: :test},
-        {:phoenix_kit_entities, path: entities_path, only: :test}
+        {:phoenix_kit_catalogue, path: catalogue_path, only: :test, override: true},
+        {:phoenix_kit_entities, path: entities_path, only: :test, override: true}
       ]
     else
       []

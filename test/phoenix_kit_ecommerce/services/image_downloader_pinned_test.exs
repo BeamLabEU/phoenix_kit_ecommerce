@@ -119,6 +119,23 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPinnedTest do
 
   defp respond(:silent, _method, _mod, _socket, _test), do: Process.sleep(5_000)
 
+  defp respond(:trickle, _method, mod, socket, test) do
+    mod.send(socket, "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: 100\r\n\r\n")
+
+    :ok =
+      Enum.reduce_while(1..100, :ok, fn _, :ok ->
+        Process.sleep(50)
+
+        case mod.send(socket, "x") do
+          :ok -> {:cont, :ok}
+          {:error, _} -> {:halt, :ok}
+        end
+      end)
+
+    send(test, :trickle_finished)
+    mod.close(socket)
+  end
+
   defp png_head(body, extra) do
     [
       "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: ",
@@ -226,6 +243,18 @@ defmodule PhoenixKitEcommerce.Services.ImageDownloaderPinnedTest do
                  @loopback,
                  request
                )
+    end
+
+    test "a response that keeps trickling bytes cannot renew the deadline" do
+      port = start_origin(:trickle)
+      request = %{request() | timeout: 300}
+      started = System.monotonic_time(:millisecond)
+
+      assert {:error, :timeout} =
+               ImageDownloader.pinned_get("http://slow.test:#{port}/a", @loopback, request)
+
+      assert System.monotonic_time(:millisecond) - started < 2_000
+      assert_receive :trickle_finished, 2_000
     end
 
     test "a refused connection is a transport error" do

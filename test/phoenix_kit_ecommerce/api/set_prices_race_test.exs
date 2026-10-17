@@ -1,7 +1,8 @@
 defmodule PhoenixKitEcommerce.API.SetPricesRaceTest do
   @moduledoc """
   `ecommerce.set_prices` against a price that another writer changes while the
-  call is being written.
+  call is being written, and `ecommerce.set_availability` against a price
+  removed while a publish call waits for the item lock.
 
   The SQL sandbox wraps a test in one transaction, so two writers cannot meet
   there. This test runs both on real connections (`unboxed_run`, as the cart's
@@ -23,6 +24,7 @@ defmodule PhoenixKitEcommerce.API.SetPricesRaceTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitEcommerce.API.SetAvailability
   alias PhoenixKitEcommerce.API.SetPrices
   alias PhoenixKitEcommerce.APIFixtures, as: F
   alias PhoenixKitEcommerce.ShopConfig
@@ -73,15 +75,19 @@ defmodule PhoenixKitEcommerce.API.SetPricesRaceTest do
   # The editor: locks the row, moves the price, and holds the transaction open
   # until told to commit.
   defp editor_changes_price(item, price) do
+    editor_changes_item(item, base_price: price)
+  end
+
+  defp editor_changes_item(item, changes) do
     parent = self()
-    transaction = fn -> Repo.transaction(fn -> hold_row(item, price, parent) end) end
+    transaction = fn -> Repo.transaction(fn -> hold_row(item, changes, parent) end) end
 
     Task.async(fn -> unboxed(transaction) end)
   end
 
-  defp hold_row(item, price, parent) do
+  defp hold_row(item, changes, parent) do
     Repo.one(from(i in Item, where: i.uuid == ^item.uuid, lock: "FOR UPDATE", select: i.uuid))
-    Repo.update_all(from(i in Item, where: i.uuid == ^item.uuid), set: [base_price: price])
+    Repo.update_all(from(i in Item, where: i.uuid == ^item.uuid), set: changes)
     send(parent, :editor_holds_the_row)
 
     receive do
@@ -141,6 +147,33 @@ defmodule PhoenixKitEcommerce.API.SetPricesRaceTest do
              unboxed(fn -> SetPrices.run(input, ctx()) end)
 
     assert Decimal.equal?(price(item), Decimal.new("101.00"))
+  end
+
+  test "availability cannot publish a product whose price was removed while it waited", %{
+    item: item
+  } do
+    draft = put_in(item.data, ["ecommerce", "shop_status"], "draft")
+
+    unboxed(fn ->
+      Repo.update_all(from(i in Item, where: i.uuid == ^item.uuid), set: [data: draft])
+    end)
+
+    editor = editor_changes_item(item, base_price: nil)
+    assert_receive :editor_holds_the_row, 5_000
+
+    input = %{"items" => [%{"ref" => %{"id" => item.uuid}, "visibility" => "active"}]}
+    call = Task.async(fn -> unboxed(fn -> SetAvailability.run(input, ctx()) end) end)
+    await_lock_waiter(100)
+
+    send(editor.pid, :commit)
+    {:ok, :ok} = Task.await(editor, 10_000)
+
+    assert {:ok, %{"results" => [result], "summary" => %{"error" => 1, "updated" => 0}}} =
+             Task.await(call, 10_000)
+
+    assert result["error"]["context"]["reason"] == "changed_since_planned"
+    assert unboxed(fn -> F.reload!(item).data end) == draft
+    assert price(item) == nil
   end
 
   defp unboxed(fun), do: Sandbox.unboxed_run(Repo, fun)

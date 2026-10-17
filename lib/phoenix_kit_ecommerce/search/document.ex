@@ -24,6 +24,7 @@ defmodule PhoenixKitEcommerce.Search.Document do
   value labels C (`:text_c`); the description D (`:text_d`).
   """
 
+  alias PhoenixKitEcommerce.API.Money
   alias PhoenixKitEcommerce.API.PlainText
   alias PhoenixKitEcommerce.API.Record
   alias PhoenixKitEcommerce.PriceDisplay
@@ -138,7 +139,7 @@ defmodule PhoenixKitEcommerce.Search.Document do
     words |> Enum.reject(&(&1 in [nil, ""])) |> Enum.join(" ")
   end
 
-  defp decimal(%Decimal{} = value), do: value
+  defp decimal(%Decimal{} = value), do: Money.to_decimal(value)
   defp decimal(_other), do: nil
 
   defp blank_to_nil(value) when is_binary(value) do

@@ -8,6 +8,11 @@
   # ignore in phoenix_kit_staff / phoenix_kit_billing / phoenix_kit_catalogue
   # / phoenix_kit_projects.)
   {"lib/phoenix_kit_ecommerce/gettext.ex", :call_without_opaque},
+  # Scope.for_user/2 constructs cached_permissions as a MapSet; Dialyzer
+  # infers its concrete internals and cannot reconcile them with the opaque
+  # MapSet in Scope.can?/2's Scope.t() contract. Core suppresses the same
+  # mismatch in its own Scope.for_user callers. Keep the live permission check.
+  {"lib/phoenix_kit_ecommerce/api/gate.ex", :call_without_opaque},
   # `PhoenixKit.API.Tool` ships with the core that carries the shop API; a
   # released core older than that has no `Tool.new/1`, and the public tools are
   # simply not offered there. `@compile {:no_warn_undefined, ...}` silences the

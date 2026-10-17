@@ -331,13 +331,20 @@ product list.
 | `ecommerce.attach_images` | pictures by URL, at most 20 per call | `ecommerce.images:write` |
 | `ecommerce.detach_images` | takes pictures out of a gallery, by file id or by the URL they came from | `ecommerce.images:write` |
 
+The key owner needs `shop` to read prices, and both `shop.manage_catalog`
+and `catalogue` to use a write tool, including a dry run. Catalogue access
+is checked against the owner's current roles on every call; a confirmation
+does not preserve a permission that has since been revoked.
+
 They work on the catalogue product source only; on the legacy source (or with
 a `phoenix_kit_catalogue` that predates the admin API) they answer
 `unsupported_source`. A price move of more than `api_confirm_price_change_pct`
 percent (an option price is measured against the product's current price;
 default 30, set on the E-Commerce settings page by a user who also
 holds core's `api` permission) is held for confirmation first, and so is any
-batch larger than core's `api_confirm_batch_over`. `detach_images` is held when
+batch larger than core's `api_confirm_batch_over`. The price threshold checks
+the base price and each option modifier independently; their changes are not
+combined into a customer selection's total. `detach_images` is held when
 a row would leave a product with no picture at all (the main picture alone is
 not held: replacing it is an attach followed by a detach); a picture shared
 with another product stays with it, and one nothing else holds goes to the

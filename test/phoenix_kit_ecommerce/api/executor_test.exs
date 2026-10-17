@@ -74,9 +74,10 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
     end)
 
     {:ok, _} = Settings.update_boolean_setting("api_admin_enabled", true)
+    {:ok, _} = Settings.update_boolean_setting("catalogue_enabled", true)
     {:ok, _} = Settings.update_boolean_setting_with_module("shop_enabled", true, "shop")
 
-    owner = owner_with(["shop", "shop.manage_catalog"])
+    owner = owner_with(["shop", "shop.manage_catalog", "catalogue"])
     {_key, token} = issue_key(owner, @all)
 
     %{catalogue: F.shop_catalogue!(), owner: owner, token: token}
@@ -87,7 +88,18 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
   defp owner_with(permissions) do
     {:ok, role} = Roles.create_role(%{name: "EcomApi#{System.unique_integer([:positive])}"})
     for key <- ["api" | permissions], do: {:ok, _} = Permissions.grant_permission(role.uuid, key)
-    user = F.user!()
+    user = fixture_user()
+
+    # The first registration becomes Owner. Keep these permission tests
+    # independent of whether the test database already has another user.
+    for assigned <- Roles.get_user_role_records(user),
+        do: {:ok, _} = Roles.remove_role(user, assigned.name)
+
+    {:ok, user} =
+      user
+      |> Ecto.Changeset.change(confirmed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Repo.update()
+
     {:ok, _} = Roles.assign_role(user, role.name)
     user
   end
@@ -111,13 +123,76 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
     |> Auth.call(Auth.init(audience: :admin))
   end
 
-  defp call(token, tool, input), do: Executor.call(authed(token), :admin, tool, input)
+  defp call(token, tool, input) do
+    conn = authed(token)
+    if conn.halted, do: conn, else: Executor.call(conn, :admin, tool, input)
+  end
 
   defp json(conn), do: Jason.decode!(conn.resp_body)
 
   defp read_only_token(owner, scope) do
     {_key, token} = issue_key(owner, [scope])
     token
+  end
+
+  describe "catalogue authorization" do
+    test "all write tools refuse an owner without catalogue access, including dry runs", %{
+      catalogue: catalogue
+    } do
+      owner = owner_with(["shop", "shop.manage_catalog"])
+      refute Scope.can?(Scope.for_user(owner, narrow: false), "catalogue")
+      {_key, token} = issue_key(owner, @all)
+      item = F.item!(catalogue)
+
+      for {tool, attrs} <- [
+            {"ecommerce.set_prices", %{"price" => "110.00"}},
+            {"ecommerce.set_availability", %{"visibility" => "archived"}},
+            {"ecommerce.attach_images",
+             %{"images" => [%{"url" => "https://images.example.com/a.png"}]}},
+            {"ecommerce.detach_images", %{"images" => [%{"id" => Ecto.UUID.generate()}]}}
+          ],
+          dry_run? <- [false, true] do
+        input = %{
+          "items" => [Map.put(attrs, "ref", %{"id" => item.uuid})],
+          "dry_run" => dry_run?
+        }
+
+        conn = call(token, tool, input)
+        assert conn.status == 403, inspect({tool, json(conn)})
+        assert json(conn)["context"]["required_permission"] == "catalogue"
+      end
+
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
+      assert F.reload!(item).data == item.data
+    end
+
+    test "revoking catalogue permission invalidates a previously issued confirmation", %{
+      catalogue: catalogue,
+      owner: owner,
+      token: token
+    } do
+      item = F.item!(catalogue)
+      input = %{"items" => [%{"ref" => %{"id" => item.uuid}, "price" => "200.00"}]}
+      preview = call(token, "ecommerce.set_prices", input) |> json()
+      assert is_binary(preview["confirm_token"])
+
+      role =
+        Enum.find(Roles.get_user_role_records(owner), &String.starts_with?(&1.name, "EcomApi"))
+
+      :ok = Permissions.revoke_permission(role.uuid, "catalogue")
+      refute Scope.can?(Scope.for_user(owner, narrow: false), "catalogue")
+
+      conn =
+        call(
+          token,
+          "ecommerce.set_prices",
+          Map.put(input, "confirm_token", preview["confirm_token"])
+        )
+
+      assert conn.status == 403, inspect(json(conn))
+      assert json(conn)["context"]["required_permission"] == "catalogue"
+      assert Decimal.equal?(F.reload!(item).base_price, Decimal.new("100.00"))
+    end
   end
 
   # -- ecommerce.get_prices ---------------------------------------------------

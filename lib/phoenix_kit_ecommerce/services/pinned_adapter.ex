@@ -19,7 +19,7 @@ defmodule PhoenixKitEcommerce.Services.PinnedAdapter do
   origin is asked for and the name its certificate must carry are the same
   thing. Options (set on the request):
 
-    * `:receive_timeout` - socket receive timeout in milliseconds
+    * `:receive_timeout` - deadline for the whole response in milliseconds
       (default: 15_000)
     * `:connect_options` - `:timeout` (connect, default: 30_000) and
       `:transport_opts` (e.g. `cacerts`), as `Req.Finch` reads them
@@ -130,7 +130,8 @@ defmodule PhoenixKitEcommerce.Services.PinnedAdapter do
     case Mint.HTTP.request(conn, method, target(request.url), headers(request), body(request)) do
       {:ok, conn, ref} ->
         state = %{ref: ref, status: nil, response: nil, acc: {request, Req.Response.new()}}
-        await(conn, state, into, timeout)
+        deadline = if timeout == :infinity, do: :infinity, else: now_ms() + timeout
+        await(conn, state, into, deadline)
 
       {:error, _conn, error} ->
         {:error, error}
@@ -153,11 +154,23 @@ defmodule PhoenixKitEcommerce.Services.PinnedAdapter do
     raise ArgumentError, "the pinned adapter supports a binary or iodata request body only"
   end
 
-  defp await(conn, state, into, timeout) do
-    case Mint.HTTP.recv(conn, 0, timeout) do
+  defp now_ms, do: System.monotonic_time(:millisecond)
+
+  defp await(conn, state, into, deadline) do
+    remaining = if deadline == :infinity, do: :infinity, else: max(deadline - now_ms(), 0)
+
+    if remaining == 0 do
+      {:error, %Mint.TransportError{reason: :timeout}}
+    else
+      receive_response(conn, state, into, deadline, remaining)
+    end
+  end
+
+  defp receive_response(conn, state, into, deadline, remaining) do
+    case Mint.HTTP.recv(conn, 0, remaining) do
       {:ok, conn, responses} ->
         case consume(responses, state, into) do
-          {:more, state} -> await(conn, state, into, timeout)
+          {:more, state} -> await(conn, state, into, deadline)
           {:finished, acc} -> {:ok, acc}
         end
 

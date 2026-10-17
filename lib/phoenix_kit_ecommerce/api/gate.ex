@@ -14,12 +14,42 @@ defmodule PhoenixKitEcommerce.API.Gate do
   @compile {:no_warn_undefined,
             [PhoenixKitCatalogue, PhoenixKitCatalogue.API, PhoenixKitCatalogue.Catalogue]}
 
+  alias PhoenixKit.Users.Auth
+  alias PhoenixKit.Users.Auth.Scope
+  alias PhoenixKit.Users.Auth.User
   alias PhoenixKitEcommerce.ProductSource
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
 
   @type reason :: :catalogue_missing | :legacy_source | :catalogue_too_old | :no_shop_catalogue
 
   @type refusal :: {:error, :unsupported_source | :validation_failed, String.t(), map()}
+
+  @doc """
+  The write tools edit catalogue records, so the key owner needs the same
+  catalogue permission as the admin editor, in addition to the shop capability
+  enforced by core. Re-read the owner's roles without browser role narrowing;
+  a key or confirmation issued before a revocation must not preserve access.
+  """
+  @spec authorize_catalogue(map()) :: :ok | {:error, :forbidden, String.t(), map()}
+  def authorize_catalogue(ctx) do
+    with %{kind: :key, user_uuid: uuid} when is_binary(uuid) <- Map.get(ctx, :actor),
+         {:ok, uuid} <- Ecto.UUID.cast(uuid),
+         %User{} = user <- uuid |> Auth.get_user() |> Auth.ensure_active_user(),
+         true <- user |> Scope.for_user(narrow: false) |> Scope.can?("catalogue") do
+      :ok
+    else
+      _ -> catalogue_forbidden()
+    end
+  rescue
+    _ -> catalogue_forbidden()
+  catch
+    :exit, _ -> catalogue_forbidden()
+  end
+
+  defp catalogue_forbidden do
+    {:error, :forbidden, "The key owner needs catalogue access to edit catalogue products.",
+     %{required_permission: "catalogue"}}
+  end
 
   @doc """
   `{:ok, catalogue_uuid}` (the catalogue the shop reads), or the handler-ready

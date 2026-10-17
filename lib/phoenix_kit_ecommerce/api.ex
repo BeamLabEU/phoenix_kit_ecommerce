@@ -16,6 +16,10 @@ defmodule PhoenixKitEcommerce.API do
   for confirmation: a core that cannot would run a 90 % price cut on the
   first call.
 
+  Their registered handlers also require the key owner's live `catalogue`
+  permission, including for a dry run, matching the admin catalogue editor.
+  Core enforces the shop capability listed above.
+
   The tools write the catalogue source only; on the legacy source they answer
   `unsupported_source`. Shopify is optional: nothing here needs a product to
   be linked to it, and the descriptions mention the sync only while it is on.
@@ -26,6 +30,7 @@ defmodule PhoenixKitEcommerce.API do
   alias PhoenixKitEcommerce.API.{
     AttachImages,
     DetachImages,
+    Gate,
     GetPrices,
     Schemas,
     SetAvailability,
@@ -83,17 +88,21 @@ defmodule PhoenixKitEcommerce.API do
   @doc false
   defdelegate get_prices(input, ctx), to: GetPrices, as: :run
   @doc false
-  defdelegate set_prices(input, ctx), to: SetPrices, as: :run
+  def set_prices(input, ctx), do: authorized_write(input, ctx, &SetPrices.run/2)
   @doc false
   defdelegate set_prices_danger(input, ctx), to: SetPrices, as: :dangerous?
   @doc false
-  defdelegate set_availability(input, ctx), to: SetAvailability, as: :run
+  def set_availability(input, ctx), do: authorized_write(input, ctx, &SetAvailability.run/2)
   @doc false
-  defdelegate attach_images(input, ctx), to: AttachImages, as: :run
+  def attach_images(input, ctx), do: authorized_write(input, ctx, &AttachImages.run/2)
   @doc false
-  defdelegate detach_images(input, ctx), to: DetachImages, as: :run
+  def detach_images(input, ctx), do: authorized_write(input, ctx, &DetachImages.run/2)
   @doc false
   defdelegate detach_images_danger(input, ctx), to: DetachImages, as: :dangerous?
+
+  defp authorized_write(input, ctx, handler) do
+    with :ok <- Gate.authorize_catalogue(ctx), do: handler.(input, ctx)
+  end
 
   # -- definitions ------------------------------------------------------------
 
