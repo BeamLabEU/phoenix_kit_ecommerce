@@ -225,6 +225,53 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
     end
   end
 
+  describe "the dry run of a tool with a danger rule" do
+    test "creates no code, and the real call is held exactly when the preview said so", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      for {price, held?} <- [{"110.00", false}, {"0", true}, {"1000.00", true}, {"69.00", true}] do
+        item = F.item!(catalogue)
+        input = %{"items" => [%{"ref" => %{"id" => item.uuid}, "price" => price}]}
+
+        dry = call(token, "ecommerce.set_prices", Map.put(input, "dry_run", true))
+
+        assert dry.status == 200
+        assert %{"executed" => false, "dry_run" => true, "preview" => preview} = json(dry)
+        assert preview["requires_confirmation"] == held?
+        refute Map.has_key?(json(dry), "confirm_token")
+
+        real = call(token, "ecommerce.set_prices", input)
+
+        assert real.status == 200
+        assert json(real)["executed"] == false == held?, "price #{price}"
+      end
+    end
+
+    test "a batch over core's row threshold: the preview says held and the real call is", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      previous = Settings.get_setting("api_confirm_batch_over")
+      {:ok, _} = Settings.update_setting("api_confirm_batch_over", "2")
+      on_exit(fn -> Settings.update_setting("api_confirm_batch_over", previous || "50") end)
+
+      for count <- [2, 3] do
+        rows =
+          for _ <- 1..count,
+              do: %{"ref" => %{"id" => F.item!(catalogue).uuid}, "price" => "101.00"}
+
+        input = %{"items" => rows}
+        dry = call(token, "ecommerce.set_prices", Map.put(input, "dry_run", true))
+        held? = json(dry)["preview"]["requires_confirmation"]
+        assert held? == (count == 3)
+
+        real = call(token, "ecommerce.set_prices", input)
+        assert json(real)["executed"] == false == held?
+      end
+    end
+  end
+
   # -- ecommerce.set_availability ---------------------------------------------
 
   describe "ecommerce.set_availability" do

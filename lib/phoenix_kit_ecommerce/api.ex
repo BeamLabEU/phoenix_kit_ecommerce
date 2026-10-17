@@ -113,7 +113,8 @@ defmodule PhoenixKitEcommerce.API do
       description:
         "Sets the price, the compare-at price and the option prices of products. Give only what changes. " <>
           "Option prices are price_modifiers: option => value => amount, merged into the product's own; null removes one. A new option price needs the entities module enabled and the option in a set attached to the product. " <>
-          "A price move above the confirmation threshold is held for confirmation first; an option price is measured against the product's current price. A price set to zero is always held; any other first price is not. From a threshold of 100 percent on only increases are held, as a cut cannot exceed 100 percent." <>
+          "A price move above the confirmation threshold is held for confirmation first; an option price is measured against the product's current price. A price set to zero is always held; any other first price is not. From a threshold of 100 percent on only increases are held, as a cut cannot exceed 100 percent. " <>
+          "A dry run answers requires_confirmation (whether the real call would be held) and confirmation_rules (the thresholds that applied); it never creates a confirmation code." <>
           shopify_note() <> @retry_note,
       input_schema: Schemas.set_prices_input(),
       output_schema: Schemas.batch_output(),

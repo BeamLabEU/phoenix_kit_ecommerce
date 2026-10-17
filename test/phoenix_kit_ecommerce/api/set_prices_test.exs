@@ -370,6 +370,71 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
       assert length(list_activities()) == logged
     end
 
+    test "says whether the real call would be held, with the thresholds that applied", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      item = F.item!(catalogue)
+      dry = %{ctx | dry_run?: true}
+
+      preview = fn price ->
+        {:preview, preview, _} =
+          set_prices([%{"ref" => %{"id" => item.uuid}, "price" => price}], dry)
+
+        preview
+      end
+
+      assert %{"requires_confirmation" => false} = preview.("110.00")
+      assert %{"requires_confirmation" => true} = preview.("0")
+      assert %{"requires_confirmation" => true} = preview.("1000.00")
+      assert %{"requires_confirmation" => true} = preview.("69.99")
+
+      assert preview.("110.00")["confirmation_rules"] == %{
+               "max_price_change_pct" => 30,
+               "confirm_batch_over" => 50
+             }
+    end
+
+    test "the preview agrees with the danger check of the tool for every row it holds", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      small = F.item!(catalogue)
+      big = F.item!(catalogue)
+      dry = %{ctx | dry_run?: true}
+
+      for rows <- [
+            [%{"ref" => %{"id" => small.uuid}, "price" => "101.00"}],
+            [
+              %{"ref" => %{"id" => small.uuid}, "price" => "101.00"},
+              %{"ref" => %{"id" => big.uuid}, "price" => "500.00"}
+            ]
+          ] do
+        input = %{"items" => rows}
+        assert {:preview, preview, _} = set_prices(rows, dry)
+        assert preview["requires_confirmation"] == SetPrices.dangerous?(input, ctx)
+      end
+    end
+
+    test "a batch over core's row threshold is held whatever the prices do", %{
+      catalogue: catalogue,
+      ctx: ctx
+    } do
+      previous = Settings.get_setting("api_confirm_batch_over")
+      {:ok, _} = Settings.update_setting("api_confirm_batch_over", "2")
+      on_exit(fn -> Settings.update_setting("api_confirm_batch_over", previous || "50") end)
+
+      rows =
+        for _ <- 1..3, do: %{"ref" => %{"id" => F.item!(catalogue).uuid}, "price" => "101.00"}
+
+      assert {:preview, preview, _} = set_prices(rows, %{ctx | dry_run?: true})
+      assert preview["requires_confirmation"] == true
+      assert preview["confirmation_rules"]["confirm_batch_over"] == 2
+
+      assert {:preview, two, _} = set_prices(Enum.take(rows, 2), %{ctx | dry_run?: true})
+      assert two["requires_confirmation"] == false
+    end
+
     test "the fingerprint moves when a value the call reads changes in between", %{
       catalogue: catalogue,
       ctx: ctx

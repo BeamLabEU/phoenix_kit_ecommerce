@@ -15,7 +15,8 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
   current price. A batch with more rows than
   `api_confirm_batch_over` is held by core's executor for every admin write
   tool, so it is not asked here. With `ctx.dry_run?` the handler returns
-  `{:preview, preview, fingerprint}` and writes nothing.
+  `{:preview, preview, fingerprint}` and writes nothing; the preview says
+  whether the real call would be held (`Batch.with_confirmation/3`).
   """
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue.AttributeSets}
@@ -34,8 +35,14 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
     with {:ok, rows, planner} <- plan_rows(input) do
       cond do
         Map.get(ctx, :dry_run?, false) ->
-          {:preview, Batch.preview(rows, %{"largest_price_change_pct" => largest_pct(rows)}),
-           Batch.fingerprint(rows)}
+          preview =
+            rows
+            |> Batch.preview(%{"largest_price_change_pct" => largest_pct(rows)})
+            |> Batch.with_confirmation(rows, %{
+              "max_price_change_pct" => ApiSettings.price_change_pct()
+            })
+
+          {:preview, preview, Batch.fingerprint(rows)}
 
         unconfirmed_but_dangerous?(rows, ctx) ->
           {:error, :validation_failed, @changed_message,

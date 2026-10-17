@@ -17,6 +17,8 @@ defmodule PhoenixKitEcommerce.API.Batch do
   all of it.
   """
 
+  @compile {:no_warn_undefined, PhoenixKit.API.FlowConfig}
+
   require Logger
 
   alias PhoenixKitEcommerce.API.{CatalogueWrites, Fingerprint, Meta, Refs, Rows}
@@ -129,6 +131,36 @@ defmodule PhoenixKitEcommerce.API.Batch do
       %{plan: %{dangerous?: true}} -> true
       _row -> false
     end)
+  end
+
+  @doc """
+  Adds to a dry run's `preview` whether the real call would be held for
+  confirmation: `"requires_confirmation"`, true when `dangerous?/1` is (the
+  tool's own rule, the one its `danger` check answers) or when core's executor
+  holds the call for its length (more rows than `api_confirm_batch_over`).
+  `"confirmation_rules"` carries the thresholds that applied: `rules` of the
+  tool, and `"confirm_batch_over"` where core has the setting. A dry run only
+  reports; it never issues a confirmation code.
+  """
+  @spec with_confirmation(map(), [row()], map()) :: map()
+  def with_confirmation(preview, rows, rules \\ %{}) do
+    batch_over = confirm_batch_over()
+    rules = if batch_over, do: Map.put(rules, "confirm_batch_over", batch_over), else: rules
+
+    preview
+    |> Map.put("requires_confirmation", held?(rows, batch_over))
+    |> Map.put("confirmation_rules", rules)
+  end
+
+  defp held?(rows, batch_over),
+    do: dangerous?(rows) or (is_integer(batch_over) and length(rows) > batch_over)
+
+  # Core's `api_confirm_batch_over`; none on a core that has no such setting
+  # (the write tools are not offered there at all).
+  defp confirm_batch_over do
+    if Code.ensure_loaded?(PhoenixKit.API.FlowConfig) and
+         function_exported?(PhoenixKit.API.FlowConfig, :confirm_batch_over, 0),
+       do: PhoenixKit.API.FlowConfig.confirm_batch_over()
   end
 
   @doc "The value fingerprint of the rows that were planned."
