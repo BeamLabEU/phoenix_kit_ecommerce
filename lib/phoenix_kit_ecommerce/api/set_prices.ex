@@ -33,42 +33,24 @@ defmodule PhoenixKitEcommerce.API.SetPrices do
           {:ok, map()} | {:preview, map(), String.t()} | Gate.refusal()
   def run(input, ctx) do
     with {:ok, rows, planner} <- plan_rows(input) do
-      cond do
-        Map.get(ctx, :dry_run?, false) ->
-          preview =
-            rows
-            |> Batch.preview(%{"largest_price_change_pct" => largest_pct(rows)})
-            |> Batch.with_confirmation(rows, %{
-              "max_price_change_pct" => ApiSettings.price_change_pct()
-            })
-
-          {:preview, preview, Batch.fingerprint(rows)}
-
-        unconfirmed_but_dangerous?(rows, ctx) ->
-          {:error, :validation_failed, @changed_message,
-           %{
-             errors: [
-               %{
-                 path: "items",
-                 message: "changed while the call was checked",
-                 limit: nil,
-                 allowed: nil
-               }
-             ]
-           }}
-
-        true ->
-          {:ok, rows |> Batch.write_if_unchanged(ctx, @tool, planner) |> Batch.render()}
-      end
+      if Map.get(ctx, :dry_run?, false), do: preview(rows), else: write(rows, ctx, planner)
     end
   end
 
-  # The danger check ran on one read of the prices and this plan is another.
-  # A call that went through without a confirmation was judged on the first;
-  # if a price moved in between so that the same call is now dangerous, it
-  # must not be written as if it had been confirmed.
-  defp unconfirmed_but_dangerous?(rows, ctx),
-    do: is_nil(Map.get(ctx, :confirmation_uuid)) and Batch.dangerous?(rows)
+  defp preview(rows) do
+    preview =
+      rows
+      |> Batch.preview(%{"largest_price_change_pct" => largest_pct(rows)})
+      |> Batch.with_confirmation(rows, %{"max_price_change_pct" => ApiSettings.price_change_pct()})
+
+    {:preview, preview, Batch.fingerprint(rows)}
+  end
+
+  defp write(rows, ctx, planner) do
+    with :ok <- Batch.ensure_not_newly_dangerous(rows, ctx, @changed_message) do
+      {:ok, rows |> Batch.write_if_unchanged(ctx, @tool, planner) |> Batch.render()}
+    end
+  end
 
   @doc "The `danger` check of the tool: `true` when the call needs a confirmation."
   @spec dangerous?(map(), map()) :: boolean()

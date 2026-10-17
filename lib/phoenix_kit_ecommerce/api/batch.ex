@@ -21,6 +21,7 @@ defmodule PhoenixKitEcommerce.API.Batch do
 
   require Logger
 
+  alias PhoenixKit.API.FlowConfig
   alias PhoenixKitEcommerce.API.{CatalogueWrites, Fingerprint, Meta, Refs, Rows}
   alias PhoenixKitEcommerce.StorefrontCache
 
@@ -134,6 +135,33 @@ defmodule PhoenixKitEcommerce.API.Batch do
   end
 
   @doc """
+  The danger check ran on one read of the products and this plan is another.
+  A call that went through without a confirmation was judged on the first; if
+  something moved in between so that the same call is now dangerous, it must
+  not be written as if it had been confirmed. `:ok`, or the refusal to answer
+  with, carrying `message`.
+  """
+  @spec ensure_not_newly_dangerous([row()], map(), String.t()) ::
+          :ok | {:error, :validation_failed, String.t(), map()}
+  def ensure_not_newly_dangerous(rows, ctx, message) do
+    if is_nil(Map.get(ctx, :confirmation_uuid)) and dangerous?(rows) do
+      {:error, :validation_failed, message,
+       %{
+         errors: [
+           %{
+             path: "items",
+             message: "changed while the call was checked",
+             limit: nil,
+             allowed: nil
+           }
+         ]
+       }}
+    else
+      :ok
+    end
+  end
+
+  @doc """
   Adds to a dry run's `preview` whether the real call would be held for
   confirmation: `"requires_confirmation"`, true when `dangerous?/1` is (the
   tool's own rule, the one its `danger` check answers) or when core's executor
@@ -158,9 +186,8 @@ defmodule PhoenixKitEcommerce.API.Batch do
   # Core's `api_confirm_batch_over`; none on a core that has no such setting
   # (the write tools are not offered there at all).
   defp confirm_batch_over do
-    if Code.ensure_loaded?(PhoenixKit.API.FlowConfig) and
-         function_exported?(PhoenixKit.API.FlowConfig, :confirm_batch_over, 0),
-       do: PhoenixKit.API.FlowConfig.confirm_batch_over()
+    if Code.ensure_loaded?(FlowConfig) and function_exported?(FlowConfig, :confirm_batch_over, 0),
+      do: FlowConfig.confirm_batch_over()
   end
 
   @doc "The value fingerprint of the rows that were planned."
@@ -406,20 +433,27 @@ defmodule PhoenixKitEcommerce.API.Batch do
     do: %{"ref" => row.ref, "action" => "error", "error" => error}
 
   defp preview_row(%{plan: %{changed?: true} = plan, item: item} = row) do
-    %{
-      "ref" => row.ref,
-      "action" => "update",
-      "id" => item.uuid,
-      "changes" => plan.changes,
-      "warnings" => plan.warnings
-    }
+    Map.merge(
+      %{
+        "ref" => row.ref,
+        "action" => "update",
+        "id" => item.uuid,
+        "changes" => plan.changes,
+        "warnings" => plan.warnings
+      },
+      row.extra
+    )
   end
 
   defp preview_row(%{plan: plan, item: item} = row),
-    do: %{
-      "ref" => row.ref,
-      "action" => "unchanged",
-      "id" => item.uuid,
-      "warnings" => plan.warnings
-    }
+    do:
+      Map.merge(
+        %{
+          "ref" => row.ref,
+          "action" => "unchanged",
+          "id" => item.uuid,
+          "warnings" => plan.warnings
+        },
+        row.extra
+      )
 end

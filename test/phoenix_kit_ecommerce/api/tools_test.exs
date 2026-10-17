@@ -129,10 +129,10 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       names = [{Enum, :map, 2}] |> PhoenixKitEcommerce.API.tools() |> Enum.map(& &1.name)
 
       assert Enum.sort(names) ==
-               ~w(ecommerce.attach_images ecommerce.get_prices ecommerce.set_availability ecommerce.set_prices)
+               ~w(ecommerce.attach_images ecommerce.detach_images ecommerce.get_prices ecommerce.set_availability ecommerce.set_prices)
     end
 
-    test "all four tools are offered, with the documented scopes and permissions" do
+    test "all five tools are offered, with the documented scopes and permissions" do
       table =
         Map.new(tools(), fn {name, tool} ->
           {name, {tool.scope, tool.permission, tool.audience}}
@@ -145,6 +145,8 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
                "ecommerce.set_availability" =>
                  {"ecommerce.availability:write", "shop.manage_catalog", :admin},
                "ecommerce.attach_images" =>
+                 {"ecommerce.images:write", "shop.manage_catalog", :admin},
+               "ecommerce.detach_images" =>
                  {"ecommerce.images:write", "shop.manage_catalog", :admin}
              }
     end
@@ -157,7 +159,8 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       for name <- [
             "ecommerce.set_prices",
             "ecommerce.set_availability",
-            "ecommerce.attach_images"
+            "ecommerce.attach_images",
+            "ecommerce.detach_images"
           ],
           reason <- ["database_error", "storage_error", "unexpected"] do
         assert tools()[name].description =~ reason, "#{name} does not mention #{reason}"
@@ -195,6 +198,39 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
       refute tools["ecommerce.set_availability"].annotations.destructive
       assert tools["ecommerce.attach_images"].annotations.open_world
       refute tools["ecommerce.set_prices"].annotations.open_world
+    end
+
+    test "detach_images is destructive and idempotent, held when it would empty a gallery" do
+      tool = tools()["ecommerce.detach_images"]
+
+      assert tool.annotations.destructive
+      assert tool.annotations.idempotent
+      refute tool.annotations.open_world
+      assert tool.danger == {PhoenixKitEcommerce.API, :detach_images_danger}
+      assert tool.max_items == 500
+    end
+
+    test "detach_images accepts a picture by id or by url and refuses an unknown field" do
+      id = %{"id" => @uuid}
+      url = %{"url" => "https://cdn.example.com/a.png"}
+
+      assert {:ok, _} =
+               validate("ecommerce.detach_images", %{
+                 "items" => [Map.put(@row, "images", [id, url])]
+               })
+
+      assert {:error, _} =
+               validate("ecommerce.detach_images", %{
+                 "items" => [Map.put(@row, "images", [%{"id" => "nope"}])]
+               })
+
+      assert {:error, _} =
+               validate("ecommerce.detach_images", %{
+                 "items" => [Map.put(@row, "images", [%{"all" => true}])]
+               })
+
+      assert {:error, _} =
+               validate("ecommerce.detach_images", %{"items" => [Map.put(@row, "images", [])]})
     end
 
     test "attach_images is priced by its pictures when core has the cost field" do

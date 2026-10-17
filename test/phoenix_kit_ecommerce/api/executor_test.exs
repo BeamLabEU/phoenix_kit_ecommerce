@@ -272,6 +272,108 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
     end
   end
 
+  # -- ecommerce.detach_images ------------------------------------------------
+
+  describe "ecommerce.detach_images" do
+    @one "0192a7c0-0000-7000-8000-00000000000a"
+    @two "0192a7c0-0000-7000-8000-00000000000b"
+
+    defp gallery!(catalogue, order) do
+      F.item!(catalogue, %{
+        data: %{
+          "_primary_language" => "en",
+          "ecommerce" => %{"shop_status" => "active"},
+          "media_order" => order,
+          "featured_image_uuid" => List.first(order)
+        }
+      })
+    end
+
+    defp detach_input(item, ids),
+      do: %{
+        "items" => [%{"ref" => %{"id" => item.uuid}, "images" => Enum.map(ids, &%{"id" => &1})}]
+      }
+
+    test "removes a picture at once when one is left", %{catalogue: catalogue, token: token} do
+      item = gallery!(catalogue, [@one, @two])
+
+      conn = call(token, "ecommerce.detach_images", detach_input(item, [@one]))
+
+      assert conn.status == 200
+      assert %{"summary" => %{"updated" => 1}} = json(conn)
+      assert F.reload!(item).data["media_order"] == [@two]
+    end
+
+    test "a call that empties a gallery is previewed with a code, then applied with it", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      item = gallery!(catalogue, [@one])
+      input = detach_input(item, [@one])
+
+      first = call(token, "ecommerce.detach_images", input)
+
+      assert %{"executed" => false, "status" => "confirmation_required", "confirm_token" => code} =
+               json(first)
+
+      assert F.reload!(item).data["media_order"] == [@one]
+
+      confirmed = call(token, "ecommerce.detach_images", Map.put(input, "confirm_token", code))
+
+      assert %{"summary" => %{"updated" => 1}} = json(confirmed)
+      assert F.reload!(item).data["media_order"] == []
+    end
+
+    test "the dry run says whether the real call is held, and the real call agrees", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      for {ids, held?} <- [{[@one], false}, {[@one, @two], true}] do
+        item = gallery!(catalogue, [@one, @two])
+        input = detach_input(item, ids)
+
+        dry = call(token, "ecommerce.detach_images", Map.put(input, "dry_run", true))
+
+        assert %{"executed" => false, "dry_run" => true, "preview" => preview} = json(dry)
+        assert preview["requires_confirmation"] == held?
+        refute Map.has_key?(json(dry), "confirm_token")
+        assert F.reload!(item).data["media_order"] == [@one, @two]
+
+        real = call(token, "ecommerce.detach_images", input)
+        assert json(real)["executed"] == false == held?
+      end
+    end
+
+    test "refuses a malformed picture id with 422 and writes nothing", %{
+      catalogue: catalogue,
+      token: token
+    } do
+      item = gallery!(catalogue, [@one, @two])
+
+      conn =
+        call(token, "ecommerce.detach_images", %{
+          "items" => [%{"ref" => %{"id" => item.uuid}, "images" => [%{"id" => "nope"}]}]
+        })
+
+      assert conn.status == 422
+      assert F.reload!(item).data["media_order"] == [@one, @two]
+    end
+
+    test "refuses a key without the images scope with 403 and writes nothing", %{
+      catalogue: catalogue,
+      owner: owner
+    } do
+      item = gallery!(catalogue, [@one, @two])
+      token = read_only_token(owner, @prices)
+
+      conn = call(token, "ecommerce.detach_images", detach_input(item, [@one]))
+
+      assert conn.status == 403
+      assert json(conn)["context"]["required_scope"] == @images
+      assert F.reload!(item).data["media_order"] == [@one, @two]
+    end
+  end
+
   # -- ecommerce.set_availability ---------------------------------------------
 
   describe "ecommerce.set_availability" do

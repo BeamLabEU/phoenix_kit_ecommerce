@@ -7,7 +7,7 @@ defmodule PhoenixKitEcommerce.API.Schemas do
   handlers.
   """
 
-  alias PhoenixKitEcommerce.API.{AttachImages, AvailabilityPlan, Money}
+  alias PhoenixKitEcommerce.API.{AttachImages, AvailabilityPlan, DetachImages, Money}
 
   @max_rows 500
   @uuid "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -168,6 +168,47 @@ defmodule PhoenixKitEcommerce.API.Schemas do
                       "pattern" => "^https?://[^/@?#]*([/?#]|$)"
                     },
                     "featured" => %{"type" => "boolean"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  end
+
+  @doc "Input of `ecommerce.detach_images`."
+  @spec detach_images_input() :: map()
+  def detach_images_input do
+    %{
+      "type" => "object",
+      "additionalProperties" => false,
+      "required" => ["items"],
+      "properties" => %{
+        "catalogue_id" => catalogue_id(),
+        "items" => %{
+          "type" => "array",
+          "minItems" => 1,
+          "maxItems" => @max_rows,
+          "items" => %{
+            "type" => "object",
+            "additionalProperties" => false,
+            "required" => ["ref", "images"],
+            "properties" => %{
+              "ref" => ref(),
+              "images" => %{
+                "type" => "array",
+                "minItems" => 1,
+                "maxItems" => DetachImages.max_images(),
+                "items" => %{
+                  "type" => "object",
+                  "additionalProperties" => false,
+                  "description" =>
+                    "Exactly one of id (the picture's file UUID) or url (the URL it was attached from).",
+                  "properties" => %{
+                    "id" => %{"type" => "string", "pattern" => @uuid},
+                    "url" => %{"type" => "string", "minLength" => 1, "maxLength" => 2048}
                   }
                 }
               }

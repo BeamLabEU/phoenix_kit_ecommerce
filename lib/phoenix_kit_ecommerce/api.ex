@@ -10,8 +10,9 @@ defmodule PhoenixKitEcommerce.API do
   | `ecommerce.set_prices` | `ecommerce.prices:write` | `shop.manage_catalog` |
   | `ecommerce.set_availability` | `ecommerce.availability:write` | `shop.manage_catalog` |
   | `ecommerce.attach_images` | `ecommerce.images:write` | `shop.manage_catalog` |
+  | `ecommerce.detach_images` | `ecommerce.images:write` | `shop.manage_catalog` |
 
-  The three write tools are offered only when core can hold a dangerous call
+  The four write tools are offered only when core can hold a dangerous call
   for confirmation: a core that cannot would run a 90 % price cut on the
   first call.
 
@@ -21,7 +22,15 @@ defmodule PhoenixKitEcommerce.API do
   """
 
   alias PhoenixKit.API.Tool
-  alias PhoenixKitEcommerce.API.{AttachImages, GetPrices, Schemas, SetAvailability, SetPrices}
+
+  alias PhoenixKitEcommerce.API.{
+    AttachImages,
+    DetachImages,
+    GetPrices,
+    Schemas,
+    SetAvailability,
+    SetPrices
+  }
 
   @compile {:no_warn_undefined, [PhoenixKit.API.Tool, PhoenixKit.API.Keys, PhoenixKit.API.Flow]}
 
@@ -67,7 +76,7 @@ defmodule PhoenixKitEcommerce.API do
   def markers, do: @markers
 
   defp write_tools,
-    do: [set_prices_tool(), set_availability_tool(), attach_images_tool()]
+    do: [set_prices_tool(), set_availability_tool(), attach_images_tool(), detach_images_tool()]
 
   # -- handlers ---------------------------------------------------------------
 
@@ -81,6 +90,10 @@ defmodule PhoenixKitEcommerce.API do
   defdelegate set_availability(input, ctx), to: SetAvailability, as: :run
   @doc false
   defdelegate attach_images(input, ctx), to: AttachImages, as: :run
+  @doc false
+  defdelegate detach_images(input, ctx), to: DetachImages, as: :run
+  @doc false
+  defdelegate detach_images_danger(input, ctx), to: DetachImages, as: :dangerous?
 
   # -- definitions ------------------------------------------------------------
 
@@ -162,6 +175,27 @@ defmodule PhoenixKitEcommerce.API do
         annotations: %{idempotent: true, open_world: true},
         max_items: AttachImages.max_images()
       ] ++ cost_option()
+    )
+  end
+
+  defp detach_images_tool do
+    Tool.new!(
+      name: "ecommerce.detach_images",
+      audience: :admin,
+      scope: "ecommerce.images:write",
+      permission: "shop.manage_catalog",
+      title: "Detach product images",
+      description:
+        "Removes pictures from the galleries of products. Name each picture by its file id or by the URL it was attached from; only a picture the product's gallery has can be removed, another product's picture can not be reached this way, and a picture the product does not have is listed in not_attached and changes nothing, so repeating a call is safe. " <>
+          "A picture shared with another product stays with it; a picture nothing else holds is moved to the media trash, not deleted for good. Removing the main picture leaves the product without one, and the shop shows the first picture left. " <>
+          "A call that would leave a product with no picture at all is held for confirmation first. A dry run answers requires_confirmation and confirmation_rules, and never creates a confirmation code." <>
+          shopify_note() <> @retry_note,
+      input_schema: Schemas.detach_images_input(),
+      output_schema: Schemas.batch_output(),
+      handler: {__MODULE__, :detach_images},
+      annotations: %{destructive: true, idempotent: true},
+      danger: {__MODULE__, :detach_images_danger},
+      max_items: Schemas.max_rows()
     )
   end
 
