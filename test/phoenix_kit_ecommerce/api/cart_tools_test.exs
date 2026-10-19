@@ -136,7 +136,12 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
     items = tool.input_schema["properties"]["items"]
     assert items["maxItems"] == 50 and items["minItems"] == 1
     assert items["items"]["required"] == ["product_id"]
-    refute Map.has_key?(items["items"]["properties"]["quantity"], "type")
+    quantity = items["items"]["properties"]["quantity"]
+    refute Map.has_key?(quantity, "type")
+    refute Map.has_key?(quantity, "minimum")
+    refute Map.has_key?(quantity, "maximum")
+    assert quantity["description"] =~ "whole number from 0 to 99"
+    assert quantity["description"] =~ "quantity_invalid while the other lines apply"
   end
 
   test "set_cart_items costs one unit per ten lines, at most ten, whatever the input" do

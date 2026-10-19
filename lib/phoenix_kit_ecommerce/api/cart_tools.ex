@@ -239,7 +239,8 @@ defmodule PhoenixKitEcommerce.API.CartTools do
                 },
                 "quantity" => %{
                   "description" =>
-                    "Final quantity: a whole number from 0 to 99. 0 removes the line."
+                    "Final quantity: a whole number from 0 to 99; 0 removes the line. " <>
+                      "A line with any other value is refused on its own with quantity_invalid while the other lines apply."
                 }
               }
             }
