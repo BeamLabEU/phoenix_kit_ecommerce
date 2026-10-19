@@ -148,7 +148,34 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
       "items" => %{
         "type" => "object",
         "required" => ["code", "message"],
-        "properties" => %{"code" => @string, "message" => @string}
+        "properties" => %{
+          "code" => @string,
+          "message" => @string,
+          "key" => %{
+            "type" => "string",
+            "description" => "The option key an unknown_option_* warning is about."
+          },
+          "values" => %{
+            "type" => "array",
+            "items" => @string,
+            "description" => "The values of that key no product has (unknown_option_value)."
+          },
+          "valid_keys" => %{
+            "type" => "array",
+            "items" => @string,
+            "description" =>
+              "The option keys that exist, on the first unknown_option_key warning of a query."
+          },
+          "valid_values" => %{
+            "type" => "array",
+            "items" => @string,
+            "description" => "The values that exist for that key (unknown_option_value)."
+          },
+          "truncated" => %{
+            "type" => "boolean",
+            "description" => "true when valid_keys or valid_values lists only the first 100."
+          }
+        }
       }
     }
   end

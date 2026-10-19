@@ -453,6 +453,150 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     end
   end
 
+  describe "the cost of the options warnings" do
+    defp sql(fun) do
+      handler_id = {:search_sql, make_ref()}
+      test_pid = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:phoenix_kit_ecommerce, :test, :repo, :query],
+        fn _event, _measurements, metadata, _config -> send(test_pid, {:sql, metadata.query}) end,
+        nil
+      )
+
+      try do
+        fun.()
+      after
+        :telemetry.detach(handler_id)
+      end
+
+      drain_sql([])
+    end
+
+    defp drain_sql(acc) do
+      receive do
+        {:sql, query} -> drain_sql([query | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
+    end
+
+    defp vocabulary_reads(queries), do: Enum.count(queries, &(&1 =~ ~r/DISTINCT unnest/i))
+    defp probes(queries), do: Enum.count(queries, &(&1 =~ ~r/SELECT unnest\(/i))
+
+    test "a filter every pair of which exists probes the index and never reads the vocabulary" do
+      queries = sql(fn -> search!(%{"options" => %{"size" => ["large", "small"]}}) end)
+
+      assert probes(queries) == 1
+      assert vocabulary_reads(queries) == 0
+    end
+
+    test "a query without options does neither" do
+      queries = sql(fn -> search!(%{}) end)
+
+      assert probes(queries) == 0
+      assert vocabulary_reads(queries) == 0
+    end
+
+    test "an unknown pair reads the vocabulary once" do
+      queries = sql(fn -> search!(%{"options" => %{"sise" => ["x"], "size" => ["huge"]}}) end)
+
+      assert probes(queries) == 1
+      assert vocabulary_reads(queries) == 1
+    end
+
+    test "a batch reads the vocabulary once however many of its queries need it" do
+      queries =
+        sql(fn ->
+          out =
+            batch!(%{
+              "queries" => [
+                %{"options" => %{"nope" => ["x"]}},
+                %{"options" => %{"size" => ["huge"]}},
+                %{"options" => %{"size" => ["large"]}},
+                %{"options" => %{"nope" => ["y"]}}
+              ]
+            })
+
+          assert [first, second, third, fourth] = out["results"]
+
+          assert [%{"code" => "unknown_option_key", "valid_keys" => ["colour", "size"]}] =
+                   first["warnings"]
+
+          assert [%{"code" => "unknown_option_value", "valid_values" => ["large", "small"]}] =
+                   second["warnings"]
+
+          refute Map.has_key?(third, "warnings")
+
+          assert [%{"code" => "unknown_option_key", "valid_keys" => ["colour", "size"]}] =
+                   fourth["warnings"]
+        end)
+
+      assert probes(queries) == 4
+      assert vocabulary_reads(queries) == 1
+    end
+
+    test "the memo of a batch does not outlive it" do
+      batch!(%{"queries" => [%{"options" => %{"nope" => ["x"]}}]})
+
+      assert Process.get({Search, :vocabulary}) == nil
+      assert vocabulary_reads(sql(fn -> search!(%{"options" => %{"nope" => ["x"]}}) end)) == 1
+    end
+
+    test "valid_keys is listed once per query, on the first unknown key" do
+      out = search!(%{"options" => %{"aaa" => ["x"], "bbb" => ["x"], "ccc" => ["x"]}})
+
+      assert [first, second, third] = out["warnings"]
+      assert first["key"] == "aaa" and first["valid_keys"] == ["colour", "size"]
+      assert second["key"] == "bbb" and third["key"] == "ccc"
+      refute Map.has_key?(second, "valid_keys")
+      refute Map.has_key?(third, "valid_keys")
+      assert second["message"] =~ "first unknown_option_key warning"
+
+      assert {:ok, _} = Validator.validate(Search.search_output_schema(), out)
+    end
+
+    test "a language whose index holds no options says so, once, with no key list" do
+      enable_languages!(["en-US", "de-DE"])
+      out = search!(%{"options" => %{"aaa" => ["x"], "bbb" => ["x"]}}, language: "de")
+
+      assert [%{"code" => "option_index_empty", "message" => message} = warning] = out["warnings"]
+      assert message =~ "no product options"
+      refute Map.has_key?(warning, "valid_keys")
+    end
+
+    test "the lists are cut at 100 and the warning says so" do
+      many =
+        legacy_product!(%{"en" => "Option Heavy"}, %{
+          metadata: %{
+            "_option_values" =>
+              Map.new(1..105, &{"k#{String.pad_leading("#{&1}", 3, "0")}", ["v"]})
+              |> Map.put("many", for(n <- 1..105, do: "w#{String.pad_leading("#{n}", 3, "0")}"))
+          }
+        })
+
+      {:ok, _} = Indexer.reindex_items([many.uuid])
+
+      out = search!(%{"options" => %{"nope" => ["x"], "many" => ["absent"]}})
+
+      assert [values, keys] = out["warnings"]
+      assert keys["code"] == "unknown_option_key"
+      assert length(keys["valid_keys"]) == 100
+      assert keys["truncated"] == true
+      assert values["code"] == "unknown_option_value"
+      assert length(values["valid_values"]) == 100
+      assert values["truncated"] == true
+    end
+
+    test "a list under the cap is not marked truncated" do
+      out = search!(%{"options" => %{"nope" => ["x"], "size" => ["huge"]}})
+
+      assert [%{"valid_keys" => _}, %{"valid_values" => _}] = out["warnings"]
+      refute Enum.any?(out["warnings"], &Map.has_key?(&1, "truncated"))
+    end
+  end
+
   describe "facets: false" do
     test "leaves the facet block out and keeps the rest of the answer", t do
       full = search!(%{"q" => "vase"})

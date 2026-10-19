@@ -218,8 +218,34 @@ defmodule PhoenixKitEcommerce.Search.Query do
   end
 
   @doc """
+  The `key:value` pairs of `pairs` that no product of `language` holds: one
+  index probe (the GIN index on the pairs) per pair, each stopping at its first
+  row, so what it costs does not grow with the catalogue.
+  """
+  @spec missing_option_pairs(String.t(), [String.t()]) :: [String.t()]
+  def missing_option_pairs(_language, []), do: []
+
+  def missing_option_pairs(language, pairs) when is_binary(language) and is_list(pairs) do
+    held =
+      from(e in Entry,
+        where:
+          e.language == ^language and
+            fragment("? @> ARRAY[?]::text[]", e.option_pairs, parent_as(:pair).pair)
+      )
+
+    from(p in fragment("SELECT unnest(?::text[]) AS pair", ^pairs),
+      as: :pair,
+      where: not exists(held),
+      select: p.pair
+    )
+    |> RepoHelper.repo().all()
+  end
+
+  @doc """
   The option keys and values the index holds in one language, sorted:
-  `%{"size" => ["large", "small"]}`. What an `options` filter can match.
+  `%{"size" => ["large", "small"]}`. What an `options` filter can match. It
+  reads every row of the language (the GIN index cannot help), so a caller
+  asks for it only once a filter has matched nothing.
   """
   @spec option_vocabulary(String.t()) :: %{String.t() => [String.t()]}
   def option_vocabulary(language) when is_binary(language) do

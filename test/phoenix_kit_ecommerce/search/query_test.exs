@@ -396,6 +396,16 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert Query.option_vocabulary("de") == %{}
   end
 
+  test "missing_option_pairs names the pairs no product of the language holds" do
+    assert "en"
+           |> Query.missing_option_pairs(["size:large", "size:huge", "nope:x", "colour:red"])
+           |> Enum.sort() == ["nope:x", "size:huge"]
+
+    assert Query.missing_option_pairs("en", []) == []
+    assert Query.missing_option_pairs("en", ["size:large"]) == []
+    assert Query.missing_option_pairs("de", ["size:large"]) == ["size:large"]
+  end
+
   test "option facets are ordered by key, then by count (highest first), then by value" do
     cup =
       legacy_product!(%{"en" => "Small Cup"}, %{
