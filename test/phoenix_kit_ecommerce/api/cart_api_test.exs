@@ -1087,6 +1087,19 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       end
     end
 
+    test "get_checkout_link offers no idempotency_key either (core with :replay)", %{p1: p1} do
+      if CartTools.replay_available?() do
+        token = new_cart_token()
+        {200, _, _} = write(token, [{p1, 1}])
+
+        assert {422, %{"code" => "validation_failed"}, _} =
+                 call("shop.get_checkout_link", %{
+                   "cart_token" => token,
+                   "idempotency_key" => "checkout-link-0123456789"
+                 })
+      end
+    end
+
     defp stored_responses do
       %{rows: rows} = Repo.query!("SELECT response::text FROM phoenix_kit_api_idempotency")
       for [response] <- rows, is_binary(response), do: response

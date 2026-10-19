@@ -106,10 +106,11 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   @doc """
   The seven cart tools, in a fixed order. `shop.clear_cart` (the only `danger`
   tool) is left out unless `gate?` is true; the default asks `gate_available?/0`.
-  `shop.create_cart` declares `replay: false` (it has no cart to key a replay by,
-  so core must not offer it an `idempotency_key`) only when `replay?` is true; the
-  default asks `replay_available?/0`, because a core without the field refuses
-  the tool.
+  `shop.create_cart` (it has no cart to key a replay by) and `shop.get_checkout_link`
+  (its answer carries a credential, so core never stores it for replay) declare
+  `replay: false`, so core offers neither an `idempotency_key`, only when `replay?`
+  is true; the default asks `replay_available?/0`, because a core without the field
+  refuses the tool.
   """
   @spec tools(boolean(), boolean()) :: [struct()]
   def tools(gate? \\ gate_available?(), replay? \\ replay_available?()) do
@@ -121,7 +122,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
         clear_cart(),
         get_shipping_options(),
         set_shipping(),
-        get_checkout_link()
+        get_checkout_link(replay?)
       ]
 
       specs = if gate?, do: all, else: Enum.reject(all, &(not is_nil(&1[:danger])))
@@ -332,14 +333,14 @@ defmodule PhoenixKitEcommerce.API.CartTools do
     ]
   end
 
-  defp get_checkout_link do
+  defp get_checkout_link(replay?) do
     [
       name: "shop.get_checkout_link",
       audience: :public,
       title: "Checkout link",
       description:
         "Returns a one-time link where the buyer reviews the cart and continues to checkout on the site. Payment and personal details never pass through this API. " <>
-          "The link expires (see expires_in_seconds); asking again replaces the earlier link. Opening the link changes nothing; the cart is locked when the buyer confirms on the page, and a change made to the cart after the page was shown makes the page ask the buyer again.",
+          "Each call issues a new link and replaces the earlier one; the link expires (see expires_in_seconds). Opening the link changes nothing; the cart is locked when the buyer confirms on the page, and a change made to the cart after the page was shown makes the page ask the buyer again.",
       input_schema: object(["cart_token"], %{"cart_token" => @token}),
       output_schema: %{
         "type" => "object",
@@ -351,7 +352,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       },
       handler: {@handlers, :get_checkout_link},
       annotations: %{read_only: false, destructive: false, idempotent: false, open_world: false}
-    ]
+    ] ++ if(replay?, do: [replay: false], else: [])
   end
 
   # An object schema with the shared control fields (`language`, `currency`)
