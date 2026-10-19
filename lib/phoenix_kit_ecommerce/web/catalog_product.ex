@@ -813,10 +813,17 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               column a phone gets stacks them gallery -> buy box ->
               description: the description sits under the picture on a wide
               screen without pushing "Add to Cart" off the first screen on a
-              narrow one (what #44 fixed). --%>
-        <div class="grid grid-cols-1 md:grid-cols-[65fr_35fr] gap-6 lg:gap-10 md:items-start">
+              narrow one (what #44 fixed).
+
+              The columns are `minmax(0, ..fr)`, not a bare `65fr`: a bare fr
+              track has an automatic minimum of its content, and the thumbnail
+              strip (one 64px button per picture) made the gallery column as
+              wide as the whole strip, squeezing the buy box and pushing the
+              page sideways on products with many pictures. `min-w-0` on the
+              gallery keeps the strip scrolling inside its column. --%>
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,65fr)_minmax(0,35fr)] gap-6 lg:gap-10 md:items-start">
           <%!-- Product Images --%>
-          <div class="space-y-4 md:col-start-1 md:row-start-1">
+          <div id="product-gallery" class="min-w-0 space-y-4 md:col-start-1 md:row-start-1">
             <%!-- Main Image --%>
             <div class="aspect-square bg-base-200 rounded-lg overflow-hidden">
               <%= if @selected_image do %>
@@ -836,7 +843,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <%!-- Thumbnails from Storage --%>
             <% display_images = get_display_images(@product) %>
             <%= if display_images != [] do %>
-              <div class="flex gap-2 overflow-x-auto py-2">
+              <div
+                id="product-thumbnails"
+                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-[9.5rem] md:overflow-y-auto"
+              >
                 <%= for image_uuid <- display_images do %>
                   <% thumb_url = get_storage_image_url(image_uuid, "thumbnail") %>
                   <% large_url = get_storage_image_url(image_uuid, "large") %>
@@ -864,7 +874,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
             <%!-- Legacy URL-based thumbnails (only show if no Storage images) --%>
             <%= if has_multiple_images?(@product) and get_display_images(@product) == [] do %>
-              <div class="flex gap-2 overflow-x-auto py-2">
+              <div
+                id="product-thumbnails"
+                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-[9.5rem] md:overflow-y-auto"
+              >
                 <%= for {image, _idx} <- Enum.with_index(@product.images || []) do %>
                   <% url = image_url(image) %>
                   <%= if url do %>
