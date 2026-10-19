@@ -193,6 +193,47 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     end
   end
 
+  describe "the price shop.get_products quotes for an option value" do
+    test "is the unit price the cart charges, for an option of the global schema" do
+      {:ok, _} =
+        PhoenixKitEcommerce.Options.update_global_options([
+          %{
+            "key" => "finish",
+            "label" => "Finish",
+            "type" => "select",
+            "options" => ["Matt", "Gloss"],
+            "affects_price" => true,
+            "modifier_type" => "percent",
+            "price_modifiers" => %{"Matt" => "0", "Gloss" => "20"}
+          }
+        ])
+
+      vase = product!(%{"metadata" => %{"_option_values" => %{"finish" => ["Matt", "Gloss"]}}})
+
+      assert {200, %{"results" => [%{"product" => %{"options" => [finish]}}]}, _} =
+               call("shop.get_products", %{"ids" => [vase.uuid]})
+
+      assert finish["affects_price"] == true
+
+      for {value_key, quoted} <- [{"matt", "10.00"}, {"gloss", "12.00"}] do
+        token = new_cart_token()
+
+        line = %{
+          "product_id" => vase.uuid,
+          "quantity" => 1,
+          "options" => [%{"attribute_key" => "finish", "value_key" => value_key}]
+        }
+
+        assert {200, %{"cart" => %{"lines" => [%{"unit_price" => charged}]}}, _} =
+                 call("shop.set_cart_items", %{"cart_token" => token, "items" => [line]})
+
+        card_price = Enum.find(finish["values"], &(&1["key"] == value_key))["price"]
+        assert card_price == %{"amount" => quoted, "currency" => "USD"}
+        assert charged == card_price
+      end
+    end
+  end
+
   describe "every cart tool and a token the server did not issue" do
     test "is cart_not_found over HTTP, never a 500", %{p1: p1} do
       carts_before = Repo.aggregate(Cart, :count)

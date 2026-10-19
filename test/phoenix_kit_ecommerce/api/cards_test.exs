@@ -190,6 +190,20 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
       })
     end
 
+    defp finish_option do
+      %{
+        "key" => "finish",
+        "label" => "Finish",
+        "type" => "select",
+        "options" => ["Matt", "Gloss"],
+        "affects_price" => true,
+        "modifier_type" => "percent",
+        "price_modifiers" => %{"Matt" => "0", "Gloss" => "20"}
+      }
+    end
+
+    defp global_finish!, do: {:ok, _} = Options.update_global_options([finish_option()])
+
     defp option(card, key), do: Enum.find(card["options"], &(&1["key"] == key))
 
     test "an option that affects the price gives each value the product's price with it chosen",
@@ -259,20 +273,9 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
       assert [%{"price" => %{"amount" => "30.00"}} | _] = option(card, "size")["values"]
     end
 
-    test "an option the card does not flag as price-affecting quotes nothing, whatever the schema says",
+    test "a global option with modifiers prices its values although the product carries none",
          %{context: context} do
-      {:ok, _} =
-        Options.update_global_options([
-          %{
-            "key" => "finish",
-            "label" => "Finish",
-            "type" => "select",
-            "options" => ["Matt", "Gloss"],
-            "affects_price" => true,
-            "modifier_type" => "percent",
-            "price_modifiers" => %{"Matt" => "0", "Gloss" => "20"}
-          }
-        ])
+      global_finish!()
 
       {product, _root, _leaf} =
         priced_vase(%{
@@ -281,9 +284,76 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
 
       card = Cards.card(record(product), context)
 
+      assert %{"affects_price" => true, "values" => values} = option(card, "finish")
+
+      assert Map.new(values, &{&1["key"], &1["price"]}) == %{
+               "gloss" => %{"amount" => "24.00", "currency" => "USD"},
+               "matt" => %{"amount" => "20.00", "currency" => "USD"}
+             }
+
+      # What the cart charges for the same choice.
+      assert Shop.calculate_product_price(product, %{"finish" => "Gloss"}) == Decimal.new("24.00")
+      assert Enum.all?(option(card, "size")["values"], &Map.has_key?(&1, "price"))
+    end
+
+    test "a category option with modifiers prices its values too", %{context: context} do
+      {product, _root, leaf} =
+        priced_vase(%{"_option_values" => %{"finish" => ["Matt", "Gloss"]}})
+
+      {:ok, _} = Options.update_category_options(leaf, [finish_option()])
+
+      card = Cards.card(record(product), context)
+
+      assert %{"affects_price" => true, "values" => values} = option(card, "finish")
+
+      assert Map.new(values, &{&1["key"], &1["price"]}) == %{
+               "gloss" => %{"amount" => "24.00", "currency" => "USD"},
+               "matt" => %{"amount" => "20.00", "currency" => "USD"}
+             }
+    end
+
+    test "a global option whose modifiers are all zero is not price-affecting", %{
+      context: context
+    } do
+      {:ok, _} =
+        Options.update_global_options([
+          %{finish_option() | "price_modifiers" => %{"Matt" => "0", "Gloss" => "0"}}
+        ])
+
+      {product, _root, _leaf} =
+        priced_vase(%{"_option_values" => %{"finish" => ["Matt", "Gloss"]}})
+
+      card = Cards.card(record(product), context)
+
       assert %{"affects_price" => false, "values" => values} = option(card, "finish")
       refute Enum.any?(values, &Map.has_key?(&1, "price"))
-      assert Enum.all?(option(card, "size")["values"], &Map.has_key?(&1, "price"))
+    end
+
+    test "a global option the product has no values for is not announced or priced",
+         %{context: context} do
+      global_finish!()
+      {product, _root, _leaf} = priced_vase()
+
+      card = Cards.card(record(product), context)
+
+      assert option(card, "finish") == nil
+      assert option(card, "size")["affects_price"] == true
+    end
+
+    test "a card built from a lookup that read no schemas prices the same",
+         %{context: context} do
+      global_finish!()
+
+      {product, _root, _leaf} =
+        priced_vase(%{"_option_values" => %{"finish" => ["Matt", "Gloss"]}})
+
+      record = record(product)
+      lookup = Cards.lookup([record], keys: ["id"])
+
+      assert Cards.card(record, context, lookup: lookup) == Cards.card(record, context)
+
+      assert %{"affects_price" => true} =
+               option(Cards.card(record, context, lookup: lookup), "finish")
     end
 
     test "a product priced on request quotes no price per value", %{context: context} do
@@ -298,7 +368,15 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     test "the card's schema describes the price as money" do
       value = Schemas.card()["properties"]["options"]["items"]["properties"]["values"]["items"]
 
-      assert value["properties"]["price"] == Schemas.money()
+      price = value["properties"]["price"]
+
+      assert Map.delete(price, "description") == Schemas.money()
+      assert price["description"] =~ "only this value chosen"
+
+      assert Schemas.card()["properties"]["options"]["items"]["properties"]["affects_price"][
+               "description"
+             ] =~ "global or category"
+
       assert value["required"] == ["key", "label"]
     end
   end

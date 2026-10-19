@@ -106,7 +106,12 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
           "properties" => %{
             "key" => @string,
             "label" => @string,
-            "affects_price" => @boolean,
+            "affects_price" => %{
+              "type" => "boolean",
+              "description" =>
+                "True when a value of this option changes the price the cart charges " <>
+                  "(a price modifier on the product, or on the global or category option)."
+            },
             "values" => %{
               "type" => "array",
               "items" => %{
@@ -115,7 +120,16 @@ defmodule PhoenixKitEcommerce.API.Public.Schemas do
                 "properties" => %{
                   "key" => @string,
                   "label" => @string,
-                  "price" => money()
+                  "price" =>
+                    Map.put(
+                      money(),
+                      "description",
+                      "The product's price with only this value chosen, in the response currency at the " <>
+                        "current rate (a cart keeps the rate it froze). Not a difference, and not additive " <>
+                        "across options: a product with several price-affecting options is priced by the " <>
+                        "cart, or by adding the modifiers when all are fixed. A reference price: with " <>
+                        "several required options one value alone cannot be carted (option_required)."
+                    )
                 }
               }
             }

@@ -227,14 +227,20 @@ defmodule PhoenixKitEcommerce.API.Cards do
       else: Translations.get(product, :description, language)
   end
 
+  # The options a card announces, each value priced with the product's own price
+  # function, the one the cart charges by (`Options.calculate_final_price/4` over
+  # `Options.get_price_affecting_specs_for_product/2`): an option changes the
+  # price when the product says so (`affects_price` of `OptionKeys.extract/1`) or
+  # when its schema does, a global or category option with modifiers included.
   defp options(product, context, lookup) do
     options = OptionKeys.extract(product)
-    quote? = Enum.any?(options, & &1.affects_price) and not PriceDisplay.on_request?(product)
-    specs = if quote?, do: price_specs(product, lookup), else: []
 
-    Enum.map(options, fn option ->
-      option(option, product, context, if(option.affects_price, do: specs, else: []))
-    end)
+    specs =
+      if options == [] or PriceDisplay.on_request?(product),
+        do: [],
+        else: price_specs(product, lookup)
+
+    Enum.map(options, &option(&1, product, context, specs))
   end
 
   defp price_specs(product, lookup) do
@@ -245,24 +251,34 @@ defmodule PhoenixKitEcommerce.API.Cards do
   end
 
   defp option(option, product, context, specs) do
+    prices = Map.new(option.values, &{&1.key, value_price(&1, option, product, specs)})
+    affects_price? = option.affects_price or Enum.any?(prices, &differs?(&1, product))
+
     %{
       "key" => option.key,
       "label" => option.label,
-      "affects_price" => option.affects_price,
-      "values" => Enum.map(option.values, &value(&1, option, product, context, specs))
+      "affects_price" => affects_price?,
+      "values" => Enum.map(option.values, &value(&1, prices, affects_price?, context))
     }
   end
 
+  defp differs?({_key, nil}, _product), do: false
+
+  defp differs?({_key, price}, product),
+    do: Decimal.compare(price, product.price || 0) != :eq
+
   # `price` is the product's price with this value chosen and no other option:
   # a percent modifier or an override has no delta that adds up, a price does.
-  defp value(value, option, product, context, specs) do
+  defp value(value, prices, true, context) do
     base = %{"key" => value.key, "label" => value.label}
 
-    case value_price(value, option, product, specs) do
+    case Map.fetch!(prices, value.key) do
       nil -> base
       price -> Map.put(base, "price", Context.money(context, price))
     end
   end
+
+  defp value(value, _prices, false, _context), do: %{"key" => value.key, "label" => value.label}
 
   defp value_price(_value, _option, _product, []), do: nil
 

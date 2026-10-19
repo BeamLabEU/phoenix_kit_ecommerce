@@ -207,7 +207,7 @@ search and product tools to anonymous callers (the cart tools, which write, are 
 |---|---|
 | `shop.search_products` | Search by words, category branch, price, options, vendor and sale status; facets (left out with `facets: false`); exact count; cursor paging |
 | `shop.search_products_batch` | Up to 20 searches in one call (one rate-limit unit each) |
-| `shop.get_products` | Full cards for up to 50 ids (one rate-limit unit per ten ids; an option that changes the price quotes each value); a discontinued product is a three-field stub; hidden or unknown ids are `not_found` |
+| `shop.get_products` | Full cards for up to 50 ids (one rate-limit unit per ten ids; an option that changes the price, by a product, global or category modifier, quotes each value as the product's price with only that value chosen); a discontinued product is a three-field stub; hidden or unknown ids are `not_found` |
 | `shop.list_categories` | The active categories as a tree with product counts |
 | `shop.similar_products` | Products in the same category or sharing an option value or tag |
 
@@ -244,7 +244,7 @@ on the site's own checkout.
 | Tool | What it does |
 |---|---|
 | `shop.create_cart` | Returns a cart token; writes nothing |
-| `shop.get_cart` | The cart: lines, totals, shipping choice and a `revision` |
+| `shop.get_cart` | The cart: lines (each option with its keys and its `attribute_label` and `value_label` in the request's language), totals, shipping choice and a `revision` |
 | `shop.set_cart_items` | Sets lines to final quantities in one transaction, per-line errors, `expected_revision`, `dry_run` |
 | `shop.clear_cart` | Empties the cart; asks for confirmation when it has lines (offered only when core carries the confirmation gate) |
 | `shop.get_shipping_options` | Shipping methods for a country |
