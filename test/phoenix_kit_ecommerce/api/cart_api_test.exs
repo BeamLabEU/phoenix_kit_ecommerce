@@ -121,6 +121,78 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
     end
   end
 
+  describe "option labels on the lines" do
+    setup do
+      cup =
+        product!(%{
+          "metadata" => %{
+            "_option_values" => %{"cup_color" => ["Red Gold"]},
+            "_option_labels" => %{"cup_color" => "Cup colour"}
+          }
+        })
+
+      %{cup: cup}
+    end
+
+    defp cup_line(cup) do
+      %{
+        "product_id" => cup.uuid,
+        "quantity" => 1,
+        "options" => [%{"attribute_key" => "cup_color", "value_key" => "red-gold"}]
+      }
+    end
+
+    test "set_cart_items and get_cart name the option and the value beside their keys, in every language",
+         %{cup: cup} do
+      :ok = PhoenixKitEcommerce.SearchFixtures.enable_languages!(["en", "de", "fr"])
+      token = new_cart_token()
+
+      expected = [
+        %{
+          "attribute_key" => "cup_color",
+          "value_key" => "red-gold",
+          "attribute_label" => "Cup colour",
+          "value_label" => "Red Gold"
+        }
+      ]
+
+      for language <- ["en", "de", "fr"] do
+        assert {200, %{"cart" => %{"lines" => [%{"options" => ^expected}]}}, _} =
+                 call("shop.set_cart_items", %{
+                   "cart_token" => token,
+                   "items" => [cup_line(cup)],
+                   "language" => language
+                 })
+
+        assert {200, %{"lines" => [%{"options" => ^expected}]}, _} =
+                 call("shop.get_cart", %{"cart_token" => token, "language" => language})
+      end
+    end
+
+    test "a line whose product was deleted still reads with labels, never bare keys", %{cup: cup} do
+      token = new_cart_token()
+
+      {200, _, _} =
+        call("shop.set_cart_items", %{"cart_token" => token, "items" => [cup_line(cup)]})
+
+      {:ok, _} = Shop.delete_product(cup)
+
+      assert {200, %{"lines" => [%{"status" => "unavailable", "options" => [option]}]}, _} =
+               call("shop.get_cart", %{"cart_token" => token})
+
+      assert option["attribute_label"] == "Cup Color"
+      assert option["value_label"] == "Red Gold"
+    end
+
+    test "the output schema of the cart describes them" do
+      schema = Enum.find(CartTools.tools(), &(&1.name == "shop.get_cart")).output_schema
+      options = schema["properties"]["lines"]["items"]["properties"]["options"]
+
+      assert options["items"]["properties"] |> Map.keys() |> Enum.sort() ==
+               ["attribute_key", "attribute_label", "value_key", "value_label"]
+    end
+  end
+
   describe "every cart tool and a token the server did not issue" do
     test "is cart_not_found over HTTP, never a 500", %{p1: p1} do
       carts_before = Repo.aggregate(Cart, :count)

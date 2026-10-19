@@ -66,7 +66,27 @@ defmodule PhoenixKitEcommerce.API.CartTools do
           "properties" => %{
             "product_id" => %{"type" => "string"},
             "title" => %{"type" => "string"},
-            "options" => %{"type" => "array"},
+            "options" => %{
+              "type" => "array",
+              "description" =>
+                "The chosen options: the keys to send back, and the labels to show a buyer, in the language of the request.",
+              "items" => %{
+                "type" => "object",
+                "required" => ["attribute_key", "value_key", "attribute_label", "value_label"],
+                "properties" => %{
+                  "attribute_key" => %{"type" => "string"},
+                  "value_key" => %{"type" => "string"},
+                  "attribute_label" => %{
+                    "type" => "string",
+                    "description" => "The option's name, e.g. \"Size\"."
+                  },
+                  "value_label" => %{
+                    "type" => "string",
+                    "description" => "What the value is shown as, e.g. \"5 inches (13 cm)\"."
+                  }
+                }
+              }
+            },
             "quantity" => %{"type" => "integer"},
             "unit_price" => @money,
             "line_total" => @money,
