@@ -85,14 +85,16 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
     assert danger |> Map.delete("shop.clear_cart") |> Map.values() |> Enum.all?(&is_nil/1)
   end
 
-  test "set_cart_items caps a request at 50 lines and the schema allows a bad quantity through to the line check" do
+  test "set_cart_items caps a request at 50 lines and types the quantity as the writer bounds it" do
     tool = Enum.find(CartTools.tools(), &(&1.name == "shop.set_cart_items"))
 
     assert tool.max_items == 50
     items = tool.input_schema["properties"]["items"]
     assert items["maxItems"] == 50 and items["minItems"] == 1
     assert items["items"]["required"] == ["product_id"]
-    refute Map.has_key?(items["items"]["properties"]["quantity"], "type")
+
+    assert %{"type" => "integer", "minimum" => 0, "maximum" => 99} =
+             items["items"]["properties"]["quantity"]
   end
 
   test "set_cart_items costs one unit per ten lines, at most ten, whatever the input" do
