@@ -188,6 +188,63 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
     end
   end
 
+  describe "a line whose item no longer offers the value" do
+    setup t do
+      token = new_token!()
+      set_line(token, t.item, "de-DE")
+      %{token: token}
+    end
+
+    test "keeps the label snapshot it was added with, in the cart tools", t do
+      [set | _] = AttributeSets.list_sets()
+
+      :ok = AttributeSets.set_attachment_selection(t.item.uuid, set.uuid, ["10-inches-25-cm"])
+
+      for language <- ["en-US", "de-DE"] do
+        {200, body, _} =
+          call_tool("shop.get_cart", %{"cart_token" => t.token, "language" => language})
+
+        assert %{
+                 "value_key" => "5-inches-13-cm",
+                 "attribute_label" => "Size",
+                 "value_label" => "5 Zoll (13 cm)"
+               } = only_option(%{"cart" => body})
+      end
+    end
+
+    test "keeps it on the claim page", t do
+      [set | _] = AttributeSets.list_sets()
+      :ok = AttributeSets.set_attachment_selection(t.item.uuid, set.uuid, ["10-inches-25-cm"])
+
+      html = claim_html(t.conn, t.token, "de-DE")
+
+      assert html =~ "5 Zoll (13 cm)"
+      refute html =~ "5-inches-13-cm"
+    end
+
+    test "keeps the snapshot after the item is deleted, as an unavailable line", t do
+      {:ok, _} = Catalogue.permanently_delete_item(Catalogue.get_item!(t.item.uuid))
+
+      {200, body, _} = call_tool("shop.get_cart", %{"cart_token" => t.token})
+
+      assert %{"lines" => [%{"status" => "unavailable", "options" => [option]}]} = body
+      assert option["value_label"] == "5 Zoll (13 cm)"
+      assert option["attribute_label"] == "Size"
+
+      html = claim_html(t.conn, t.token, "en-US")
+      assert html =~ "5 Zoll (13 cm)"
+      refute html =~ "5-inches-13-cm"
+    end
+  end
+
+  defp claim_html(conn, token, language) do
+    {:ok, hash} = CartToken.verify(token)
+    {:ok, cart} = CartStore.resolve(hash)
+    {:ok, %{token: raw}} = Claims.issue(cart, hash, language)
+
+    conn |> get(Claims.path(raw)) |> html_response(200)
+  end
+
   test "get_products quotes the price of each size in the request's language and currency", t do
     {200, body, _} =
       call_tool("shop.get_products", %{

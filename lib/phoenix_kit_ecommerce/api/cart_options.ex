@@ -200,14 +200,15 @@ defmodule PhoenixKitEcommerce.API.CartOptions do
 
   A line whose product is gone (`nil`), or no longer offers that option or value,
   keeps what it can: the option's name from its key (`Options.humanize_key/1`) and
-  the value as the line stored it in `selected_specs` (the label of the language it
-  was added in on a legacy product, the value key on a catalogue one), else the key.
+  the value as the line shows it, `stored` (`SelectedSpecs.labels/1`: the label
+  snapshot taken when a catalogue line was added, or the label a legacy line was
+  added under), else the key.
   """
   @spec labelled([option()], Product.t() | map() | nil, %{String.t() => String.t()} | nil) ::
           [labelled()]
-  def labelled(options, product, selected_specs \\ %{}) do
+  def labelled(options, product, stored \\ %{}) do
     offered = if product, do: OptionKeys.extract(product), else: []
-    stored = stored_values(selected_specs)
+    stored = stored_values(stored)
 
     Enum.map(options, fn %{attribute_key: key, value_key: value_key} = option ->
       found = Enum.find(offered, &(&1.key == key))

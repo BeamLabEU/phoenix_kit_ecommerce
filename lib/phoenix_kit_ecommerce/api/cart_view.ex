@@ -25,6 +25,7 @@ defmodule PhoenixKitEcommerce.API.CartView do
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.SelectedSpecs
   alias PhoenixKitEcommerce.ShippingMethod
 
   @doc """
@@ -273,7 +274,9 @@ defmodule PhoenixKitEcommerce.API.CartView do
   end
 
   defp labelled(%CartItem{} = item, product) do
-    item |> CartOptions.from_item(product) |> CartOptions.labelled(product, item.selected_specs)
+    item
+    |> CartOptions.from_item(product)
+    |> CartOptions.labelled(product, SelectedSpecs.labels(item))
   end
 
   defp line(%CartItem{} = item, %Cart{} = cart, records) do
