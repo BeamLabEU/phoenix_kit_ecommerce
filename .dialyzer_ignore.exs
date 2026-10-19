@@ -54,5 +54,12 @@
   {"lib/phoenix_kit_ecommerce/api/catalogue_writes.ex",
    "Call to missing or private function PhoenixKitCatalogue.Catalogue.broadcast_item_batch_change/3."},
   {"lib/phoenix_kit_ecommerce/api/batch.ex",
-   "Function PhoenixKit.API.FlowConfig.confirm_batch_over/0 does not exist."}
+   "Function PhoenixKit.API.FlowConfig.confirm_batch_over/0 does not exist."},
+  # `Routes.canonical_absolute_or_nil/2` (a page link on the domain of its
+  # language) is in the core that carries the canonical URL helpers; a released
+  # core older than that has no such function and `Context.absolute/3` keeps the
+  # request's host there. Remove this entry when the minimum core requirement in
+  # mix.exs carries it; dialyzer then reports it as an unnecessary skip.
+  {"lib/phoenix_kit_ecommerce/api/context.ex",
+   "Call to missing or private function PhoenixKit.Utils.Routes.canonical_absolute_or_nil/2."}
 ]
