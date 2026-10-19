@@ -86,21 +86,29 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
     %{conn: conn, item: item}
   end
 
-  defp set_line(token, item, language) do
-    {200, body, _} =
-      call_tool("shop.set_cart_items", %{
-        "cart_token" => token,
-        "language" => language,
-        "items" => [
-          %{
-            "product_id" => item.uuid,
-            "quantity" => 1,
-            "options" => [%{"attribute_key" => "size", "value_key" => "5-inches-13-cm"}]
-          }
-        ]
-      })
-
+  defp set_line(token, item, language, extra \\ %{}) do
+    {200, body, _} = write_line(token, item, language, extra)
     body
+  end
+
+  defp write_line(token, item, language, extra) do
+    call_tool(
+      "shop.set_cart_items",
+      Map.merge(
+        %{
+          "cart_token" => token,
+          "language" => language,
+          "items" => [
+            %{
+              "product_id" => item.uuid,
+              "quantity" => 1,
+              "options" => [%{"attribute_key" => "size", "value_key" => "5-inches-13-cm"}]
+            }
+          ]
+        },
+        extra
+      )
+    )
   end
 
   defp only_option(%{"cart" => %{"lines" => [%{"options" => [option]}]}}), do: option
@@ -164,6 +172,19 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
       assert text =~ label
       assert text =~ "Size"
       refute html =~ "5-inches-13-cm"
+    end
+  end
+
+  test "the 409 revision_mismatch cart is labelled in the request's language", t do
+    token = new_token!()
+    set_line(token, t.item, "en-US")
+
+    for {language, label} <- @labels do
+      {409, %{"code" => "revision_mismatch", "context" => %{"cart" => cart}}, _} =
+        write_line(token, t.item, language, %{"expected_revision" => "deadbeefdeadbeef"})
+
+      assert %{"attribute_label" => "Size", "value_label" => ^label} =
+               only_option(%{"cart" => cart})
     end
   end
 
