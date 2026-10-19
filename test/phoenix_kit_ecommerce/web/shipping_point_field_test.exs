@@ -107,6 +107,33 @@ defmodule PhoenixKitEcommerce.Web.ShippingPointFieldTest do
       refute_received {:stub_called, :list_pickup_points, _}
     end
 
+    test "a big city lists the first 50 branches, says so, and leaves out a branch with no id",
+         %{conn: conn} do
+      many =
+        [%PickupPoint{id: nil, number: "0", name: "Ghost", address: "nowhere"}] ++
+          for n <- 1..60, do: %PickupPoint{id: "b-#{n}", number: "#{n}", name: "Branch #{n}"}
+
+      stub(%{localities: &city_search/1, points: many})
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+      choose_provider(view)
+      pick_city(view)
+
+      assert has_element?(view, "#shipping-locality-option-sender_point-0", "Branch 1")
+      assert has_element?(view, "#shipping-locality-option-sender_point-49", "Branch 50")
+      refute has_element?(view, "#shipping-locality-option-sender_point-50")
+      refute has_element?(view, "#shipping-locality-results-sender_point", "Ghost")
+      assert has_element?(view, "#shipping-locality-truncated-sender_point", "50")
+    end
+
+    test "a list that fits is not marked as cut", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+      choose_provider(view)
+      pick_city(view)
+
+      assert has_element?(view, "#shipping-locality-option-sender_point-1")
+      refute has_element?(view, "#shipping-locality-truncated-sender_point")
+    end
+
     test "the words typed narrow the list", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
       choose_provider(view)

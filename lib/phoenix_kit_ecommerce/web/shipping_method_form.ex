@@ -11,7 +11,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.Shipping
-  alias PhoenixKitEcommerce.Shipping.{Locality, MethodParams}
+  alias PhoenixKitEcommerce.Shipping.{Codec, Locality, MethodParams, PickupPoint}
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.ShippingProviderState, as: ProviderState
@@ -98,8 +98,8 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     {:noreply, assign_form_errors(socket, changeset)}
   end
 
-  def handle_event("toggle_countries", _params, socket) do
-    {:noreply, assign(socket, :countries_open, not socket.assigns.countries_open)}
+  def handle_event("open_countries", _params, socket) do
+    {:noreply, assign(socket, :countries_open, true)}
   end
 
   def handle_event("search_locality", params, socket) do
@@ -199,9 +199,20 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   # admin theme as one horizontal strip, and needs Ctrl to pick several. With no
   # box ticked the form posts nothing, which would leave the old list in
   # place: the blank entry makes "none" a value.
+  #
+  # A stored code is shown as the form will store it (upcased, once each), and
+  # one with no row of its own (`UK`, a country the data dropped) gets a row,
+  # ticked. Without that row the browser would post nothing for it and the save
+  # would widen the list to "every country".
   defp country_list(assigns) do
-    selected = assigns.field.value |> List.wrap() |> Enum.reject(&(&1 in [nil, ""]))
-    assigns = assign(assigns, :selected, selected)
+    selected = assigns.field.value |> List.wrap() |> Codec.countries()
+    known = MapSet.new(assigns.options, fn {_name, code} -> code end)
+    extra = for code <- selected, not MapSet.member?(known, code), do: {code, code}
+
+    assigns =
+      assigns
+      |> assign(:selected, selected)
+      |> assign(:rows, assigns.options ++ extra)
 
     ~H"""
     <div class="fieldset w-full">
@@ -212,7 +223,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
         class="max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2"
       >
         <label
-          :for={{name, code} <- @options}
+          :for={{name, code} <- @rows}
           class="flex items-center gap-3 rounded px-2 py-1 cursor-pointer hover:bg-base-200"
         >
           <input
@@ -232,6 +243,13 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
         class="text-xs font-medium mt-1"
       >
         {gettext("Selected: %{countries}", countries: Enum.join(@selected, ", "))}
+      </p>
+      <p
+        :for={error <- @field.errors}
+        id={@field.id <> "-error"}
+        class="text-xs text-error mt-1"
+      >
+        {PhoenixKitWeb.Components.Core.Input.translate_error(error)}
       </p>
       <p class="label text-xs text-base-content/60">{@hint}</p>
     </div>
@@ -264,7 +282,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
   defp chosen_countries(form) do
     (List.wrap(form[:countries].value) ++ List.wrap(form[:excluded_countries].value))
-    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Codec.countries()
   end
 
   defp countries_set?(method), do: method.countries != [] or method.excluded_countries != []
@@ -472,7 +490,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
                 <button
                   type="button"
                   id="shipping-method-countries-toggle"
-                  phx-click="toggle_countries"
+                  phx-click="open_countries"
                   class="btn btn-ghost btn-sm"
                 >
                   <.icon name="hero-globe-alt" class="w-4 h-4" /> {gettext("Limit by country")}
@@ -881,7 +899,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
     fn ->
       if city && ctx.service,
-        do: Shipping.list_pickup_points(ctx, city, text),
+        do: ctx |> Shipping.list_pickup_points(city, text) |> usable_points(),
         else: {:ok, []}
     end
   end
@@ -890,6 +908,13 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     ctx = provider_context(socket.assigns.sp)
     fn -> Shipping.search_localities(ctx, query) end
   end
+
+  # A point with no id could not be chosen, so it is left out, as in the
+  # shopper's picker. The card cuts a long list.
+  defp usable_points({:ok, points}),
+    do: {:ok, for(%PickupPoint{id: id} = point <- points, is_binary(id) and id != "", do: point)}
+
+  defp usable_points(other), do: other
 
   defp locality_from_setting(%{"id" => id, "name" => name}) when is_binary(id) and id != "",
     do: %Locality{id: id, name: name}

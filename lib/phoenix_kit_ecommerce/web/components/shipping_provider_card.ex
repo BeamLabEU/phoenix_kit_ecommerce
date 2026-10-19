@@ -355,7 +355,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
           :if={is_list(@results) and @results != []}
           class="menu menu-sm bg-base-200 rounded-box w-full max-h-64 overflow-y-auto flex-nowrap"
         >
-          <li :for={{item, index} <- Enum.with_index(locality_list(@results))}>
+          <li :for={{item, index} <- Enum.with_index(shown_results(@field, @results))}>
             <button
               type="button"
               id={"shipping-locality-option-#{@field.key}-#{index}"}
@@ -372,6 +372,15 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
             </button>
           </li>
         </ul>
+        <p
+          :if={cut?(@field, @results)}
+          id={"shipping-locality-truncated-#{@field.key}"}
+          class="text-xs text-base-content/60 mt-1"
+        >
+          {gettext("Only the first %{count} points are shown. Narrow the search to see others.",
+            count: max_points()
+          )}
+        </p>
       </div>
 
       <p :if={@field.help} class="text-sm text-base-content/60 mt-1">{@field.help}</p>
@@ -485,6 +494,22 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
 
   defp selected?(%{"id" => id, "name" => name}), do: id not in [nil, ""] and name not in [nil, ""]
   defp selected?(_other), do: false
+
+  @max_points 50
+
+  @doc "How many branches a point list shows (the shopper's picker shows as many)."
+  @spec max_points() :: pos_integer()
+  def max_points, do: @max_points
+
+  defp shown_results(%Field{type: :pickup_point}, results),
+    do: results |> locality_list() |> Enum.take(@max_points)
+
+  defp shown_results(_field, results), do: locality_list(results)
+
+  defp cut?(%Field{type: :pickup_point}, results),
+    do: length(locality_list(results)) > @max_points
+
+  defp cut?(_field, _results), do: false
 
   defp locality_list(results) when is_list(results), do: results
   defp locality_list(_other), do: []

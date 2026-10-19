@@ -280,13 +280,18 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   end
 
   defp normalize_country_list(changeset, field) do
-    case get_change(changeset, field) do
-      entries when is_list(entries) ->
+    case fetch_change(changeset, field) do
+      {:ok, entries} when is_list(entries) ->
         codes = entries |> Codec.countries() |> Enum.filter(&CountryData.get_country/1)
 
         if codes == [] and Enum.any?(entries, &(not blank_entry?(&1))),
           do: add_error(changeset, field, "has no valid country code"),
           else: put_change(changeset, field, codes)
+
+      # The columns accept NULL, but a NULL list breaks `country_ok?/2` and the
+      # methods list: nothing means the empty list, which is "every country".
+      {:ok, nil} ->
+        put_change(changeset, field, [])
 
       _ ->
         changeset

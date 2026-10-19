@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.ShippingMethod
+  alias PhoenixKitEcommerce.Test.Repo, as: TestRepo
   alias PhoenixKitEcommerce.Test.Shipping.{CountryProvider, StubProvider}
 
   @form "#shipping-method-form"
@@ -115,6 +116,30 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
         })
 
       assert %{excluded_countries: [_]} = errors_on(changeset)
+    end
+
+    test "a list set to nil is stored as the empty list, not as NULL" do
+      method = method!(%{"countries" => ["UA"], "excluded_countries" => ["RU"]})
+
+      assert {:ok, updated} =
+               Shop.update_shipping_method(method, %{
+                 "countries" => nil,
+                 "excluded_countries" => nil
+               })
+
+      assert updated.countries == []
+      assert updated.excluded_countries == []
+      assert Shop.get_shipping_method!(method.uuid).countries == []
+    end
+
+    test "an update that does not mention the lists leaves them as they are" do
+      method = method!(%{"countries" => ["UA"], "excluded_countries" => ["RU"]})
+
+      assert {:ok, _} = Shop.update_shipping_method(method, %{"name" => "Renamed"})
+
+      reloaded = Shop.get_shipping_method!(method.uuid)
+      assert reloaded.countries == ["UA"]
+      assert reloaded.excluded_countries == ["RU"]
     end
 
     test "are an error when an update would turn the list into 'all countries'" do
@@ -365,7 +390,73 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
       assert Shop.get_shipping_method!(method.uuid).countries == []
     end
 
-    test "a method saved without opening the lists keeps its countries", %{conn: conn} do
+    test "a stored code the country data does not know stays on screen and is never widened",
+         %{conn: conn} do
+      method = method!(%{"countries" => ["UA"]})
+
+      # Rows written outside the form (an import, a script) can hold a code that
+      # has no checkbox, such as `UK`.
+      method
+      |> Ecto.Changeset.change(countries: ["UK"])
+      |> TestRepo.update!()
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      assert has_element?(view, "#shipping_method_countries input[value='UK'][checked]")
+
+      # Saving something else must not turn the list into "every country".
+      view
+      |> form(@form, shipping_method: %{name: "Renamed"})
+      |> render_submit()
+
+      reloaded = Shop.get_shipping_method!(method.uuid)
+      assert reloaded.name == "Renamed"
+      assert reloaded.countries == ["UK"]
+
+      # Unticking it is a decision of the admin, and it is allowed.
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      view
+      |> form(@form, shipping_method: %{countries: [""]})
+      |> render_submit()
+
+      assert Shop.get_shipping_method!(method.uuid).countries == []
+    end
+
+    test "a list made only of wrong codes shows its error under the list", %{conn: conn} do
+      method = method!(%{"countries" => ["UA"]})
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      # Not what the browser posts, but what a crafted or stale post looks like.
+      html =
+        view
+        |> element(@form)
+        |> render_submit(%{"shipping_method" => %{"countries" => ["", "XX"]}})
+
+      assert has_element?(view, "#shipping_method_countries-error")
+      assert html =~ "has no valid country code"
+      assert Shop.get_shipping_method!(method.uuid).countries == ["UA"]
+    end
+
+    test "a stored lower case code is shown ticked and saved upcased", %{conn: conn} do
+      method = method!(%{"countries" => ["UA"]})
+
+      method
+      |> Ecto.Changeset.change(countries: ["ua"])
+      |> TestRepo.update!()
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      assert has_element?(view, "#shipping_method_countries input[value='UA'][checked]")
+      refute has_element?(view, "#shipping_method_countries input[value='ua']")
+
+      view |> form(@form, shipping_method: %{name: "Renamed"}) |> render_submit()
+
+      assert Shop.get_shipping_method!(method.uuid).countries == ["UA"]
+    end
+
+    test "a method with stored countries saved from the form keeps them", %{conn: conn} do
       method = method!(%{"countries" => ["UA"]})
       Application.put_env(:phoenix_kit_ecommerce, :shipping_country_provider, [])
 
