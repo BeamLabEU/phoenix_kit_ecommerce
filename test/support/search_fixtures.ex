@@ -52,15 +52,16 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
   @doc """
   Points core's `:canonical_host_resolver` at `PhoenixKitEcommerce.Test.CanonicalHostStub`
   (`de` and `fr` have a domain of their own, every other language none) for the
-  rest of the test.
+  rest of the test. `fun` is `:host_counted` to count the calls in the process
+  dictionary (`:resolver_calls`).
   """
-  def put_canonical_host_resolver! do
+  def put_canonical_host_resolver!(fun \\ :host) do
     previous = Application.fetch_env(:phoenix_kit, :canonical_host_resolver)
 
     Application.put_env(
       :phoenix_kit,
       :canonical_host_resolver,
-      {PhoenixKitEcommerce.Test.CanonicalHostStub, :host}
+      {PhoenixKitEcommerce.Test.CanonicalHostStub, fun}
     )
 
     ExUnit.Callbacks.on_exit(fn ->

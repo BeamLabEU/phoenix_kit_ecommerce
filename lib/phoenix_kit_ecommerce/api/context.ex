@@ -20,11 +20,7 @@ defmodule PhoenixKitEcommerce.API.Context do
   and written as a string with the currency's decimal places.
   """
 
-  @compile {:no_warn_undefined,
-            [
-              {PhoenixKit.Utils.Routes, :canonical_origin, 1},
-              {PhoenixKit.Utils.Routes, :canonical_absolute, 2}
-            ]}
+  @compile {:no_warn_undefined, [{PhoenixKit.Utils.Routes, :canonical_absolute_or_nil, 2}]}
 
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
@@ -143,32 +139,29 @@ defmodule PhoenixKitEcommerce.API.Context do
   `absolute/2` for a path built for a page in `language` (`Shop.product_url/2`
   and the like).
 
-  A language that has a domain of its own (core's `Routes.canonical_origin/1`,
-  from the host's `:canonical_host_resolver`) is linked on that domain, and the
-  language segment goes: the domain is the language. Core removes only the
-  segment of that language, straight after the mount prefix; the storefront
-  builds it from the base code (`Shop.url_locale/1`), so `en-US` and `en-GB`
-  share `/en` and need no `:segment` option. A language without a domain, a
-  URL, `nil`, and a core that has no such helpers all give `absolute/2`: the
-  request's own host, the path as it is.
+  A language that has a domain of its own (core's
+  `Routes.canonical_absolute_or_nil/2`, from the host's
+  `:canonical_host_resolver`) is linked on that domain, and the language
+  segment goes: the domain is the language. Core removes only the segment of
+  that language, straight after the mount prefix; the storefront builds it from
+  the base code (`Shop.url_locale/1`), so `en-US` and `en-GB` share `/en` and
+  need no `:segment` option. A language without a domain, a URL, `nil`, and a
+  core that has no such helper all give `absolute/2`: the request's own host,
+  the path as it is. The resolver is asked once per link, with the language as
+  given (`de-AT`), so it decides which dialects share a domain.
   """
   @spec absolute(t(), String.t() | nil, String.t()) :: String.t() | nil
   def absolute(context, "/" <> _rest = path, language) do
-    if canonical_origin(language) do
-      Routes.canonical_absolute(path, language)
-    else
-      absolute(context, path)
-    end
+    language_domain_url(path, language) || absolute(context, path)
   end
 
   def absolute(context, other, _language), do: absolute(context, other)
 
-  # The functions are not in a core older than the helpers (hence
-  # `no_warn_undefined`), so they are only reached once both are exported.
-  defp canonical_origin(language) do
-    if Code.ensure_loaded?(Routes) and function_exported?(Routes, :canonical_origin, 1) and
-         function_exported?(Routes, :canonical_absolute, 2) do
-      Routes.canonical_origin(language)
+  # The function is not in a core older than the helper (hence
+  # `no_warn_undefined`), so it is only reached once it is exported.
+  defp language_domain_url(path, language) do
+    if Code.ensure_loaded?(Routes) and function_exported?(Routes, :canonical_absolute_or_nil, 2) do
+      Routes.canonical_absolute_or_nil(path, language)
     end
   end
 

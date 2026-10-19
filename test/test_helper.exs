@@ -373,19 +373,18 @@ api_exclude =
   end
 
 # The API links a page of a language that has a domain on that domain through
-# core's `Routes.canonical_origin/1` and `canonical_absolute/2`. A core without
-# them keeps the request's host; the tests of each side run on their own core.
+# core's `Routes.canonical_absolute_or_nil/2`. A core without it keeps the
+# request's host; the tests of each side run on their own core.
 canonical_urls? =
   Code.ensure_loaded?(PhoenixKit.Utils.Routes) and
-    function_exported?(PhoenixKit.Utils.Routes, :canonical_origin, 1) and
-    function_exported?(PhoenixKit.Utils.Routes, :canonical_absolute, 2)
+    function_exported?(PhoenixKit.Utils.Routes, :canonical_absolute_or_nil, 2)
 
 canonical_urls_exclude =
   if canonical_urls? do
     [:core_without_canonical_urls]
   else
     Logger.info(
-      "[test_helper] PhoenixKit.Utils.Routes.canonical_origin/1 not available - " <>
+      "[test_helper] PhoenixKit.Utils.Routes.canonical_absolute_or_nil/2 not available - " <>
         "language-domain API link tests excluded. They run once `phoenix_kit` resolves to a " <>
         "core with it."
     )

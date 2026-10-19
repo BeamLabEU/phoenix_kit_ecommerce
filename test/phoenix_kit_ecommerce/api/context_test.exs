@@ -264,6 +264,21 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
     end
 
     @tag :requires_core_canonical_urls
+    test "the resolver is asked once per link, with a domain or without" do
+      put_canonical_host_resolver!(:host_counted)
+      context = build!()
+
+      for {path, language} <- [
+            {"/de/shop/product/vase", "de-DE"},
+            {"/uk/shop/product/vase", "uk-UA"}
+          ] do
+        Process.put(:resolver_calls, 0)
+        Context.absolute(context, path, language)
+        assert Process.get(:resolver_calls) == 1
+      end
+    end
+
+    @tag :requires_core_canonical_urls
     test "a URL and nil are left alone whatever the resolver says" do
       put_canonical_host_resolver!()
       context = build!()

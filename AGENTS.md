@@ -322,7 +322,7 @@ Repo-local aliases:
   handler has a test that checks the `url` of its items on such a domain.
   A product or category `url` goes through `API.Context.absolute/3` with the
   answer's language, which puts a language with a domain of its own on that
-  domain (core's `Routes.canonical_absolute/2`); `absolute/2` keeps the
+  domain (core's `Routes.canonical_absolute_or_nil/2`, one resolver call); `absolute/2` keeps the
   request's host.
 - **One lock order for "the active cart of this identity".**
   `Shop.lock_cart_identity!/2` takes the user key, then the session key
