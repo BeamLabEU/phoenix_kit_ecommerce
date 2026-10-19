@@ -64,23 +64,25 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
                "Each call issues a new link"
     end
 
+    @tag :core_replay
     test "on a core that can give up replay, neither is offered an idempotency_key" do
-      if CartTools.replay_available?() do
-        for name <- @no_replay do
-          tool = tool_named(name, true)
+      assert CartTools.replay_available?()
 
-          assert tool.replay == false, name
-          refute ControlFields.replay_tool?(tool), name
-          refute Map.has_key?(ControlFields.properties(tool), "idempotency_key"), name
-        end
+      for name <- @no_replay do
+        tool = tool_named(name, true)
+
+        assert tool.replay == false, name
+        refute ControlFields.replay_tool?(tool), name
+        refute Map.has_key?(ControlFields.properties(tool), "idempotency_key"), name
       end
     end
 
+    @tag :core_replay
     test "the other write tools keep their idempotency_key" do
-      if CartTools.replay_available?() do
-        for name <- ~w(shop.set_cart_items shop.clear_cart shop.set_shipping) do
-          assert ControlFields.replay_tool?(tool_named(name, true)), name
-        end
+      assert CartTools.replay_available?()
+
+      for name <- ~w(shop.set_cart_items shop.clear_cart shop.set_shipping) do
+        assert ControlFields.replay_tool?(tool_named(name, true)), name
       end
     end
 

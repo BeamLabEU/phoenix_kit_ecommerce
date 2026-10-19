@@ -1119,26 +1119,26 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       refute first == second
     end
 
+    @tag :core_replay
     test "create_cart offers no idempotency_key, so one in the body is refused (core with :replay)" do
-      if CartTools.replay_available?() do
-        key = "create-cart-0123456789"
+      assert CartTools.replay_available?()
+      key = "create-cart-0123456789"
 
-        assert {422, %{"code" => "validation_failed"}, _} =
-                 call("shop.create_cart", %{"idempotency_key" => key})
-      end
+      assert {422, %{"code" => "validation_failed"}, _} =
+               call("shop.create_cart", %{"idempotency_key" => key})
     end
 
+    @tag :core_replay
     test "get_checkout_link offers no idempotency_key either (core with :replay)", %{p1: p1} do
-      if CartTools.replay_available?() do
-        token = new_cart_token()
-        {200, _, _} = write(token, [{p1, 1}])
+      assert CartTools.replay_available?()
+      token = new_cart_token()
+      {200, _, _} = write(token, [{p1, 1}])
 
-        assert {422, %{"code" => "validation_failed"}, _} =
-                 call("shop.get_checkout_link", %{
-                   "cart_token" => token,
-                   "idempotency_key" => "checkout-link-0123456789"
-                 })
-      end
+      assert {422, %{"code" => "validation_failed"}, _} =
+               call("shop.get_checkout_link", %{
+                 "cart_token" => token,
+                 "idempotency_key" => "checkout-link-0123456789"
+               })
     end
 
     defp stored_responses do
