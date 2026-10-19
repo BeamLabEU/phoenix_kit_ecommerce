@@ -258,7 +258,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
       "key" => option.key,
       "label" => option.label,
       "affects_price" => affects_price?,
-      "values" => Enum.map(option.values, &value(&1, prices, affects_price?, context))
+      "values" => Enum.map(option.values, &value_entry(&1, prices, affects_price?, context))
     }
   end
 
@@ -269,7 +269,7 @@ defmodule PhoenixKitEcommerce.API.Cards do
 
   # `price` is the product's price with this value chosen and no other option:
   # a percent modifier or an override has no delta that adds up, a price does.
-  defp value(value, prices, true, context) do
+  defp value_entry(value, prices, true, context) do
     base = %{"key" => value.key, "label" => value.label}
 
     case Map.fetch!(prices, value.key) do
@@ -278,7 +278,8 @@ defmodule PhoenixKitEcommerce.API.Cards do
     end
   end
 
-  defp value(value, _prices, false, _context), do: %{"key" => value.key, "label" => value.label}
+  defp value_entry(value, _prices, false, _context),
+    do: %{"key" => value.key, "label" => value.label}
 
   defp value_price(_value, _option, _product, []), do: nil
 

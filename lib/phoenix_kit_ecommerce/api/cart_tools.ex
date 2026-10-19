@@ -108,9 +108,9 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   tool) is left out unless `gate?` is true; the default asks `gate_available?/0`.
   `shop.create_cart` (it has no cart to key a replay by) and `shop.get_checkout_link`
   (its answer carries a credential, so core never stores it for replay) declare
-  `replay: false`, so core offers neither an `idempotency_key`, only when `replay?`
-  is true; the default asks `replay_available?/0`, because a core without the field
-  refuses the tool.
+  `replay: false`, so core offers neither an `idempotency_key`. They declare it only
+  when `replay?` is true; the default asks `replay_available?/0`, because a core
+  without the field refuses the tool.
   """
   @spec tools(boolean(), boolean()) :: [struct()]
   def tools(gate? \\ gate_available?(), replay? \\ replay_available?()) do
@@ -163,8 +163,8 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       audience: :public,
       title: "Create a cart",
       description:
-        "Returns a new cart token. Nothing is stored until the first shop.set_cart_items, so an unused token costs nothing. " <>
-          "Not idempotent: every call returns a new token; a retry after a timeout is harmless, nothing is stored until the first shop.set_cart_items. " <>
+        "Returns a new cart token. Nothing is stored until the first shop.set_cart_items, so an unused token costs nothing and a retry after a timeout is harmless. " <>
+          "Not idempotent: every call returns a new token. " <>
           "Keep the token secret: whoever holds it can read and change the cart.",
       input_schema: object([], %{}),
       output_schema: %{
