@@ -819,8 +819,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               track has an automatic minimum of its content, and the thumbnail
               strip (one 64px button per picture) made the gallery column as
               wide as the whole strip, squeezing the buy box and pushing the
-              page sideways on products with many pictures. `min-w-0` on the
-              gallery keeps the strip scrolling inside its column. --%>
+              page sideways on products with many pictures. Without that
+              floor the buy box column can be narrow (about 240px at the
+              start of the md band), so its title breaks long words and its
+              price row wraps. From md up the thumbnail strip wraps and is
+              capped at 12rem: two full rows and a peek of the third, so
+              there is a hint that it scrolls. --%>
         <div class="grid grid-cols-1 md:grid-cols-[minmax(0,65fr)_minmax(0,35fr)] gap-6 lg:gap-10 md:items-start">
           <%!-- Product Images --%>
           <div id="product-gallery" class="min-w-0 space-y-4 md:col-start-1 md:row-start-1">
@@ -845,7 +849,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <%= if display_images != [] do %>
               <div
                 id="product-thumbnails"
-                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-[9.5rem] md:overflow-y-auto"
+                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-48 md:overflow-y-auto"
               >
                 <%= for image_uuid <- display_images do %>
                   <% thumb_url = get_storage_image_url(image_uuid, "thumbnail") %>
@@ -876,7 +880,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             <%= if has_multiple_images?(@product) and get_display_images(@product) == [] do %>
               <div
                 id="product-thumbnails"
-                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-[9.5rem] md:overflow-y-auto"
+                class="flex gap-2 overflow-x-auto py-2 md:flex-wrap md:max-h-48 md:overflow-y-auto"
               >
                 <%= for {image, _idx} <- Enum.with_index(@product.images || []) do %>
                   <% url = image_url(image) %>
@@ -911,7 +915,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
               <%!-- Heading only: the admin edit link lives in the shop bar
                     above, so an admin sees the same title layout a shopper
                     does. --%>
-              <h1 class="text-3xl font-bold mb-2">{@localized_title}</h1>
+              <h1 class="text-3xl font-bold mb-2 break-words">{@localized_title}</h1>
 
               <%= if @product.vendor do %>
                 <p class="text-base-content/60">{gettext("by %{vendor}", vendor: @product.vendor)}</p>
@@ -919,7 +923,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
             </div>
 
             <%!-- Price --%>
-            <div class="flex items-baseline gap-3">
+            <div class="flex flex-wrap items-baseline gap-x-3">
               <%= if @price_affecting_specs != [] do %>
                 <%!-- Has price-affecting specs - show calculated price --%>
                 <span class="text-3xl font-bold text-primary">

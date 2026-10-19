@@ -6,9 +6,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductGalleryLayoutTest do
   `65fr` column has an automatic minimum of its content, so the strip of
   64px thumbnails (one per picture, `flex-shrink-0`) made the column as wide
   as the whole strip: the buy box shrank to a sliver and the page scrolled
-  sideways. A rendered test cannot measure pixels, so this pins the three
-  classes that keep the strip inside its column; the layout itself was
-  measured in a browser (see the PR description).
+  sideways. A rendered test cannot measure pixels, so this pins the classes
+  that keep the strip inside its column (the track definition and the
+  strip's wrapping and height cap), and the two that let the narrower buy
+  box cope (a breaking title and a wrapping price row).
 
   Needs `phoenix_kit_catalogue` loaded — excluded via `test_helper.exs`
   whenever the optional dependency isn't present. `async: false`: flips the
@@ -76,8 +77,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductGalleryLayoutTest do
     {:ok, view, _html} = live(conn, "/shop/product/many-pictures")
 
     # One thumbnail per picture: the layout below is meant for this many.
-    assert view |> element("#product-thumbnails") |> render() |> count_buttons() ==
-             @picture_count
+    assert has_element?(view, "#product-thumbnails button:nth-child(#{@picture_count})")
+    refute has_element?(view, "#product-thumbnails button:nth-child(#{@picture_count + 1})")
 
     # The columns have no content-sized minimum, so the strip cannot widen them.
     assert has_element?(view, ~s{div[class*="minmax(0,65fr)"][class*="minmax(0,35fr)"]})
@@ -85,12 +86,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductGalleryLayoutTest do
     # The gallery may shrink below the strip's width.
     assert has_element?(view, ~s{#product-gallery[class~="min-w-0"]})
 
-    # Wide screens wrap the strip into at most two rows and scroll the rest;
+    # Wide screens wrap the strip and cap its height, scrolling the rest;
     # narrow ones keep one row that scrolls sideways.
     assert has_element?(view, ~s{#product-thumbnails[class~="overflow-x-auto"]})
     assert has_element?(view, ~s{#product-thumbnails[class~="md:flex-wrap"]})
+    assert has_element?(view, ~s{#product-thumbnails[class~="md:max-h-48"]})
     assert has_element?(view, ~s{#product-thumbnails[class~="md:overflow-y-auto"]})
-  end
 
-  defp count_buttons(html), do: html |> String.split("<button") |> length() |> Kernel.-(1)
+    # The buy box column can be narrow: long title words break, the price row wraps.
+    assert has_element?(view, ~s{h1[class~="break-words"]})
+    assert has_element?(view, ~s{div[class~="flex-wrap"][class~="items-baseline"]})
+  end
 end
