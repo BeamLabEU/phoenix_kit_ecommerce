@@ -40,6 +40,8 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   @max_queries 20
   @batch_default_limit 10
   @batch_card_budget 200
+  # The most keys, or values of one key, a warning lists as valid.
+  @valid_listed 100
 
   # --- handlers --------------------------------------------------------------
 
@@ -184,6 +186,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
 
     items = Enum.map(listed, &Cards.list_item(&1, context, keys: keys, lookup: lookup))
 
+    warnings = warnings ++ unknown_option_warnings(params, context.language)
     warnings = if result.truncated?, do: warnings ++ [facets_truncated()], else: warnings
 
     %{
@@ -200,6 +203,54 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
 
   defp item_keys(fields) when is_list(fields), do: Enum.uniq(["id" | fields])
   defp item_keys(_none), do: nil
+
+  # A key or value the index never saw makes the filter match nothing (a key),
+  # or nothing for that value (a value): say so, with what is valid, so that a
+  # typo reads differently from an empty result.
+  defp unknown_option_warnings(%{options: options}, language) when map_size(options) > 0 do
+    vocabulary = Query.option_vocabulary(language)
+
+    options
+    |> Enum.sort_by(fn {key, _values} -> key end)
+    |> Enum.flat_map(fn {key, values} -> unknown_option(key, values, vocabulary) end)
+  end
+
+  defp unknown_option_warnings(_params, _language), do: []
+
+  defp unknown_option(key, values, vocabulary) do
+    case Map.fetch(vocabulary, key) do
+      :error ->
+        [
+          %{
+            "code" => "unknown_option_key",
+            "message" =>
+              "No product has the option #{inspect(key)}, so this filter matches nothing. " <>
+                "Use a key from valid_keys.",
+            "key" => key,
+            "valid_keys" => vocabulary |> Map.keys() |> Enum.sort() |> Enum.take(@valid_listed)
+          }
+        ]
+
+      {:ok, known} ->
+        case Enum.reject(values, &(&1 in known)) do
+          [] ->
+            []
+
+          unknown ->
+            [
+              %{
+                "code" => "unknown_option_value",
+                "message" =>
+                  "No product has these values of the option #{inspect(key)}. " <>
+                    "Use values from valid_values.",
+                "key" => key,
+                "values" => unknown,
+                "valid_values" => Enum.take(known, @valid_listed)
+              }
+            ]
+        end
+    end
+  end
 
   defp facets_truncated do
     %{
@@ -309,7 +360,8 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
         "type" => "object",
         "description" =>
           "Option filters: attribute key to a list of value keys, as in the facets. " <>
-            "Values of one key are alternatives; several keys must all match.",
+            "Values of one key are alternatives; several keys must all match. " <>
+            "A key or value no product has adds a warning that lists the valid ones.",
         "additionalProperties" => %{
           "type" => "array",
           "minItems" => 1,

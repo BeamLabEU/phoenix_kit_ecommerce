@@ -217,6 +217,28 @@ defmodule PhoenixKitEcommerce.Search.Query do
     |> Map.new()
   end
 
+  @doc """
+  The option keys and values the index holds in one language, sorted:
+  `%{"size" => ["large", "small"]}`. What an `options` filter can match.
+  """
+  @spec option_vocabulary(String.t()) :: %{String.t() => [String.t()]}
+  def option_vocabulary(language) when is_binary(language) do
+    from(e in Entry,
+      where: e.language == ^language,
+      distinct: true,
+      select: fragment("unnest(?)", e.option_pairs)
+    )
+    |> RepoHelper.repo().all()
+    |> Enum.flat_map(fn pair ->
+      case String.split(pair, ":", parts: 2) do
+        [key, value] -> [{key, value}]
+        _malformed -> []
+      end
+    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(fn {key, values} -> {key, Enum.sort(values)} end)
+  end
+
   @doc "The index row of one product in one language, or `nil`. `item_uuid` must be a valid UUID."
   @spec entry(String.t(), String.t()) :: Entry.t() | nil
   def entry(item_uuid, language) when is_binary(item_uuid) and is_binary(language) do

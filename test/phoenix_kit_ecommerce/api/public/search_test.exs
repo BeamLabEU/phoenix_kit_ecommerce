@@ -225,6 +225,55 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
                filtered(%{"options" => %{"size" => ["small"], "colour" => ["red"]}})
     end
 
+    test "options: an unknown key or value is named in a warning with the valid ones", t do
+      out = search!(%{"options" => %{"sise" => ["large"], "size" => ["large", "huge"]}})
+
+      assert out["count"] == 0
+      assert item_ids(out) == []
+
+      assert [
+               %{
+                 "code" => "unknown_option_key",
+                 "key" => "sise",
+                 "valid_keys" => ["colour", "size"]
+               },
+               %{
+                 "code" => "unknown_option_value",
+                 "key" => "size",
+                 "values" => ["huge"],
+                 "valid_values" => ["large", "small"]
+               }
+             ] = warnings = out["warnings"]
+
+      assert Enum.all?(warnings, &is_binary(&1["message"]))
+      assert {:ok, _} = Validator.validate(Search.search_output_schema(), out)
+
+      # A typo among alternatives still finds the rest.
+      out = search!(%{"options" => %{"size" => ["large", "huge"]}})
+      assert item_ids(out) == [t.a]
+      assert [%{"code" => "unknown_option_value", "values" => ["huge"]}] = out["warnings"]
+    end
+
+    test "options: known keys and values, an empty result among them included, add no warning" do
+      assert {[], 0} = filtered(%{"options" => %{"size" => ["small"], "colour" => ["red"]}})
+      refute Map.has_key?(search!(%{"options" => %{"size" => ["small"]}}), "warnings")
+      refute Map.has_key?(search!(%{}), "warnings")
+    end
+
+    test "options: the valid keys are those of the answer's language, and the batch warns per query" do
+      out =
+        batch!(%{
+          "queries" => [
+            %{"options" => %{"nope" => ["x"]}},
+            %{"options" => %{"size" => ["small"]}}
+          ]
+        })
+
+      assert [first, second] = out["results"]
+      assert [%{"code" => "unknown_option_key", "key" => "nope"}] = first["warnings"]
+      refute Map.has_key?(second, "warnings")
+    end
+
     test "vendor matches whatever the case", t do
       assert {[id], 1} = filtered(%{"vendor" => "acme"})
       assert id == t.a
