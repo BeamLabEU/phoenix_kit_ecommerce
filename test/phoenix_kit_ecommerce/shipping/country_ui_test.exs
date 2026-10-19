@@ -429,14 +429,65 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
       {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
 
       # Not what the browser posts, but what a crafted or stale post looks like.
-      html =
-        view
-        |> element(@form)
-        |> render_submit(%{"shipping_method" => %{"countries" => ["", "XX"]}})
+      view
+      |> element(@form)
+      |> render_submit(%{"shipping_method" => %{"countries" => ["", "XX"]}})
 
-      assert has_element?(view, "#shipping_method_countries-error")
-      assert html =~ "has no valid country code"
+      assert has_element?(view, "#shipping_method_countries-error", "has no valid country code")
       assert Shop.get_shipping_method!(method.uuid).countries == ["UA"]
+    end
+
+    test "a stored value that is not a two-letter code is shown ticked and kept", %{conn: conn} do
+      method = method!(%{"countries" => ["UA"]})
+
+      method
+      |> Ecto.Changeset.change(countries: ["USA", "Ukraine"])
+      |> TestRepo.update!()
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      assert has_element?(view, "#shipping_method_countries input[value='USA'][checked]")
+      assert has_element?(view, "#shipping_method_countries input[value='Ukraine'][checked]")
+
+      view |> form(@form, shipping_method: %{name: "Renamed"}) |> render_submit()
+
+      assert Shop.get_shipping_method!(method.uuid).countries == ["USA", "Ukraine"]
+    end
+
+    test "a stored code outside a limited provider's countries gets one row, ticked, by name",
+         %{conn: conn} do
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_country_provider, ["UA", "PL"])
+      method = provider_method!(["PL"])
+
+      method
+      |> Ecto.Changeset.change(countries: ["de"])
+      |> TestRepo.update!()
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      # `element/2` + `render/1` raises when more than one row matches.
+      assert view |> element("#shipping_method_countries input[value='DE']") |> render() =~
+               "checked"
+
+      refute has_element?(view, "#shipping_method_countries input[value='de']")
+      assert has_element?(view, "#shipping_method_countries label", "Germany")
+      assert has_element?(view, "#shipping_method_countries input[value='UA']")
+      refute has_element?(view, "#shipping_method_countries input[value='FR']")
+    end
+
+    test "the button that opens the lists never closes them", %{conn: conn} do
+      method = method!(%{"name" => "Open once"})
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_country_provider, [])
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+      refute has_element?(view, "#shipping-method-countries")
+
+      view |> element("button[phx-click=open_countries]") |> render_click()
+      assert has_element?(view, "#shipping-method-countries")
+
+      # A second click can arrive before the first diff removes the button.
+      render_hook(view, "open_countries", %{})
+      assert has_element?(view, "#shipping-method-countries")
     end
 
     test "a stored lower case code is shown ticked and saved upcased", %{conn: conn} do

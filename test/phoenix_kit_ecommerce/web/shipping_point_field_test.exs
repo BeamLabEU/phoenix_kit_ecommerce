@@ -110,7 +110,10 @@ defmodule PhoenixKitEcommerce.Web.ShippingPointFieldTest do
     test "a big city lists the first 50 branches, says so, and leaves out a branch with no id",
          %{conn: conn} do
       many =
-        [%PickupPoint{id: nil, number: "0", name: "Ghost", address: "nowhere"}] ++
+        [
+          %PickupPoint{id: nil, number: "0", name: "Ghost", address: "nowhere"},
+          %PickupPoint{id: "b-x", number: "0", name: nil, address: "Nameless street"}
+        ] ++
           for n <- 1..60, do: %PickupPoint{id: "b-#{n}", number: "#{n}", name: "Branch #{n}"}
 
       stub(%{localities: &city_search/1, points: many})
@@ -122,7 +125,20 @@ defmodule PhoenixKitEcommerce.Web.ShippingPointFieldTest do
       assert has_element?(view, "#shipping-locality-option-sender_point-49", "Branch 50")
       refute has_element?(view, "#shipping-locality-option-sender_point-50")
       refute has_element?(view, "#shipping-locality-results-sender_point", "Ghost")
+      refute has_element?(view, "#shipping-locality-results-sender_point", "Nameless street")
       assert has_element?(view, "#shipping-locality-truncated-sender_point", "50")
+    end
+
+    test "exactly 50 branches fit and are not marked as cut", %{conn: conn} do
+      fifty = for n <- 1..50, do: %PickupPoint{id: "b-#{n}", number: "#{n}", name: "Branch #{n}"}
+
+      stub(%{localities: &city_search/1, points: fifty})
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+      choose_provider(view)
+      pick_city(view)
+
+      assert has_element?(view, "#shipping-locality-option-sender_point-49", "Branch 50")
+      refute has_element?(view, "#shipping-locality-truncated-sender_point")
     end
 
     test "a list that fits is not marked as cut", %{conn: conn} do

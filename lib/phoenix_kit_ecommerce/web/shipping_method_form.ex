@@ -200,19 +200,22 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   # box ticked the form posts nothing, which would leave the old list in
   # place: the blank entry makes "none" a value.
   #
-  # A stored code is shown as the form will store it (upcased, once each), and
-  # one with no row of its own (`UK`, a country the data dropped) gets a row,
-  # ticked. Without that row the browser would post nothing for it and the save
-  # would widen the list to "every country".
+  # A stored code is shown as the form will store it (upcased, once each). A
+  # stored value with no row of its own (`UK`, `USA`, a country name, a country
+  # the data dropped) gets a ticked row, listed first. Without that row the
+  # browser would post nothing for it and the save would widen the list to
+  # "every country".
   defp country_list(assigns) do
-    selected = assigns.field.value |> List.wrap() |> Codec.countries()
+    stored = for value <- List.wrap(assigns.field.value), is_binary(value), do: String.trim(value)
+    odd = for value <- stored, value != "", is_nil(Codec.country(value)), uniq: true, do: value
+    selected = Codec.countries(stored) ++ odd
     known = MapSet.new(assigns.options, fn {_name, code} -> code end)
     extra = for code <- selected, not MapSet.member?(known, code), do: {code, code}
 
     assigns =
       assigns
       |> assign(:selected, selected)
-      |> assign(:rows, assigns.options ++ extra)
+      |> assign(:rows, extra ++ assigns.options)
 
     ~H"""
     <div class="fieldset w-full">
@@ -909,21 +912,27 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     fn -> Shipping.search_localities(ctx, query) end
   end
 
-  # A point with no id could not be chosen, so it is left out, as in the
-  # shopper's picker. The card cuts a long list.
-  defp usable_points({:ok, points}),
-    do: {:ok, for(%PickupPoint{id: id} = point <- points, is_binary(id) and id != "", do: point)}
-
+  # A point with no id or no name could not be chosen: the setting stores both,
+  # and the shopper's picker is more lenient (it titles a point by its number).
+  # Such a point is left out. The card cuts a long list.
+  defp usable_points({:ok, points}), do: {:ok, Enum.filter(points, &usable_point?/1)}
   defp usable_points(other), do: other
+
+  defp usable_point?(%PickupPoint{id: id, name: name}),
+    do: present?(id) and present?(name)
+
+  defp usable_point?(_other), do: false
+
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
   defp locality_from_setting(%{"id" => id, "name" => name}) when is_binary(id) and id != "",
     do: %Locality{id: id, name: name}
 
   defp locality_from_setting(_other), do: nil
 
-  # The branch the sender hands parcels over at is the same whichever service
-  # the shop sells: the chosen one when it ships to points, else the first
-  # service that does.
+  # The branches are listed for the service the shop sells when that one ships
+  # to points, else for the first service that does. Nothing is asked of the
+  # carrier when no service ships to points.
   defp point_service(%{sp: sp, services: services}) do
     pickup = Enum.filter(services, &(&1.destination == :pickup_point))
 
