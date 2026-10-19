@@ -19,9 +19,10 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
 
   Every order tool needs the key owner to hold `shop.manage_orders`: orders
   carry the buyers' data and the totals, so reading them is not left to
-  everyone who only holds `shop`. Core checks the permission on every call, so
-  `contacts?/1`, which looks only at the scope of the key, is reached only by
-  an owner who holds it (all three scopes are declared by tools that need it).
+  everyone who only holds `shop`. On every call core drops from a key the scopes
+  whose tools' permission the owner no longer holds, so `contacts?/1`, which
+  looks only at the scope of the key, is reached only by an owner who holds it
+  (all three scopes are declared by tools that need it).
 
   The tools are offered only with a billing that keeps the revision and the
   mark of an order (`PhoenixKitBilling.put_order_sync/2`); without it an order

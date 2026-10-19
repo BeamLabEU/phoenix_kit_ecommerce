@@ -374,10 +374,10 @@ system (an accounting or fulfilment system) take the orders:
 
 `set_order_sync` is a write tool like the others of this module and is offered only where core can hold a call for confirmation.
 
-The key owner needs the `shop.manage_orders` permission for every order tool:
+The key owner needs the `shop.manage_orders` permission for every order scope:
 `ecommerce.orders:read`, `ecommerce.orders:sync` and `ecommerce.orders:customer`
-(`shop` alone is not enough to read orders). The
-order tools answer only with the buyer's `id` and `type` unless the key holds
+(`shop` alone is not enough to read orders).
+The order tools answer only with the buyer's `id` and `type` unless the key holds
 `ecommerce.orders:customer`, which adds name, phone, email, company, tax id and
 address, the buyer's delivery address in `shipping.destination` (`postcode` and
 `address`, `nil` without the scope; the city `city`/`city_ref` and the pickup

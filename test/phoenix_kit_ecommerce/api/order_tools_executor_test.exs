@@ -161,8 +161,7 @@ defmodule PhoenixKitEcommerce.API.OrderToolsExecutorTest do
     end
 
     test "a key whose owner lost manage_orders is refused the read tools and gets no contacts",
-         %{} do
-      owner = owner_with(["shop", "shop.manage_orders"])
+         %{owner: owner} do
       order = order!()
       token = token_for(owner, [@read, @customer])
 
