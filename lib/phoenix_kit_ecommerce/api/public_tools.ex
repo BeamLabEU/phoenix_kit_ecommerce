@@ -103,7 +103,7 @@ defmodule PhoenixKitEcommerce.API.PublicTools do
         title: "Get product details",
         description:
           "Get the full card of up to 50 products by id: title, description, price and sale price, " <>
-            "options with their keys, tags, images and category path. A product that is no longer " <>
+            "options with their keys (and, for an option that changes the price, the price of each value), tags, images and category path. A product that is no longer " <>
             "sold returns only its id, title and status \"discontinued\"; an id that does not exist " <>
             "or is not for sale returns not_found. Every ten ids count as one request against the rate limit.",
         input_schema: Catalog.get_products_input_schema(),

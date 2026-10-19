@@ -4,7 +4,8 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
   source, where a value's key (`5-inches-13-cm`) and what it is shown as
   (`5 inches (13 cm)`, `5 Zoll (13 cm)`) differ and the label depends on the
   language: the cart tools answer both, in the language of the request, and the
-  claim page shows the label of the claim's language, never the key.
+  claim page shows the label of the claim's language, never the key. The same
+  item prices the option, so `shop.get_products` quotes each value.
 
   Needs `phoenix_kit_catalogue` loaded (`:catalogue`). `async: false`: flips the
   process-wide `shop_product_source` key.
@@ -164,5 +165,23 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
       assert text =~ "Size"
       refute html =~ "5-inches-13-cm"
     end
+  end
+
+  test "get_products quotes the price of each size in the request's language and currency", t do
+    {200, body, _} =
+      call_tool("shop.get_products", %{
+        "ids" => [t.item.uuid],
+        "language" => "de-DE",
+        "currency" => "EUR"
+      })
+
+    assert %{"results" => [%{"product" => %{"options" => [size]}}]} = body
+
+    assert size["affects_price"] == true
+
+    assert Map.new(size["values"], &{&1["key"], {&1["label"], &1["price"]}}) == %{
+             "5-inches-13-cm" => {"5 Zoll (13 cm)", %{"amount" => "18.18", "currency" => "EUR"}},
+             "10-inches-25-cm" => {"10 Zoll (25 cm)", %{"amount" => "31.82", "currency" => "EUR"}}
+           }
   end
 end
