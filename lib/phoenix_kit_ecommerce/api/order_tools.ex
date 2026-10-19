@@ -5,8 +5,8 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
 
   | Tool | Scope | Permission |
   |---|---|---|
-  | `ecommerce.list_orders` | `ecommerce.orders:read` | `shop` |
-  | `ecommerce.get_orders` | `ecommerce.orders:read` | `shop` |
+  | `ecommerce.list_orders` | `ecommerce.orders:read` | `shop.manage_orders` |
+  | `ecommerce.get_orders` | `ecommerce.orders:read` | `shop.manage_orders` |
   | `ecommerce.get_order_customers` | `ecommerce.orders:customer` | `shop.manage_orders` |
   | `ecommerce.set_order_sync` | `ecommerce.orders:sync` | `shop.manage_orders` |
 
@@ -16,6 +16,12 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
   `ecommerce.orders:customer`. A key is given a scope through the
   tools that declare it, so `ecommerce.get_order_customers` is the tool that
   declares this one.
+
+  Every order tool needs the key owner to hold `shop.manage_orders`: orders
+  carry the buyers' data and the totals, so reading them is not left to
+  everyone who only holds `shop`. Core checks the permission on every call, so
+  `contacts?/1`, which looks only at the scope of the key, is reached only by
+  an owner who holds it (all three scopes are declared by tools that need it).
 
   The tools are offered only with a billing that keeps the revision and the
   mark of an order (`PhoenixKitBilling.put_order_sync/2`); without it an order
@@ -91,7 +97,7 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
       name: "ecommerce.list_orders",
       audience: :admin,
       scope: "ecommerce.orders:read",
-      permission: "shop",
+      permission: "shop.manage_orders",
       title: "List orders",
       description:
         "Lists orders in the order of their last change, by cursor. " <>
@@ -121,7 +127,7 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
       name: "ecommerce.get_orders",
       audience: :admin,
       scope: "ecommerce.orders:read",
-      permission: "shop",
+      permission: "shop.manage_orders",
       title: "Get orders",
       description:
         "Reads orders by reference, an order id or an order number, at most #{@max_refs} per call. " <>

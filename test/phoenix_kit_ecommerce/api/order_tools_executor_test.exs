@@ -116,18 +116,18 @@ defmodule PhoenixKitEcommerce.API.OrderToolsExecutorTest do
       for scope <- [@read, @sync, @customer], do: assert(scope in allowed, scope)
     end
 
-    test "an owner without manage_orders can read orders but not mark them or see buyers" do
+    test "an owner without manage_orders can be given no order scope at all" do
       reader = owner_with(["shop"])
       allowed = Keys.allowed_scopes_for(reader)
 
-      assert @read in allowed
-      refute @sync in allowed
-      refute @customer in allowed
+      for scope <- [@read, @sync, @customer], do: refute(scope in allowed, scope)
 
       scope = Scope.for_user(reader, narrow: false)
 
-      assert {:error, :invalid_scopes} =
-               Keys.create_key(reader, scope, %{name: "too much", scopes: [@read, @customer]})
+      for scopes <- [[@read], [@read, @customer], [@sync]] do
+        assert {:error, :invalid_scopes} =
+                 Keys.create_key(reader, scope, %{name: "too much", scopes: scopes})
+      end
     end
   end
 
@@ -158,6 +158,31 @@ defmodule PhoenixKitEcommerce.API.OrderToolsExecutorTest do
 
       assert %{"results" => [%{"order" => %{"customer" => %{"last_name" => "Petrenko"}}}]} =
                json(conn)
+    end
+
+    test "a key whose owner lost manage_orders is refused the read tools and gets no contacts",
+         %{} do
+      owner = owner_with(["shop", "shop.manage_orders"])
+      order = order!()
+      token = token_for(owner, [@read, @customer])
+
+      conn = call(token, "ecommerce.get_orders", %{"refs" => [%{"id" => order.uuid}]})
+      assert conn.status == 200
+      assert conn.resp_body =~ "Petrenko"
+
+      [role | _] = Roles.get_user_role_records(owner)
+      :ok = Permissions.revoke_permission(role.uuid, "shop.manage_orders")
+
+      for {tool, input} <- [
+            {"ecommerce.get_orders", %{"refs" => [%{"id" => order.uuid}]}},
+            {"ecommerce.list_orders", %{"updated_since" => "2000-01-01T00:00:00Z"}}
+          ] do
+        conn = call(token, tool, input)
+
+        assert conn.status == 403, tool
+        assert json(conn)["context"]["required_scope"] == @read
+        refute conn.resp_body =~ "Petrenko"
+      end
     end
 
     test "get_order_customers is refused to a key without the customer scope", %{owner: owner} do

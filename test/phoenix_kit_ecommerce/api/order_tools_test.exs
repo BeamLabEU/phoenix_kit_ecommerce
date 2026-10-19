@@ -67,8 +67,8 @@ defmodule PhoenixKitEcommerce.API.OrderToolsTest do
         )
 
       assert table == %{
-               "ecommerce.list_orders" => {@read, "shop", true},
-               "ecommerce.get_orders" => {@read, "shop", true},
+               "ecommerce.list_orders" => {@read, "shop.manage_orders", true},
+               "ecommerce.get_orders" => {@read, "shop.manage_orders", true},
                "ecommerce.get_order_customers" => {@customer, "shop.manage_orders", true},
                "ecommerce.set_order_sync" => {@sync, "shop.manage_orders", false}
              }

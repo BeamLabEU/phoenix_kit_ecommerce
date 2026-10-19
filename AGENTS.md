@@ -723,7 +723,9 @@ Rules that must hold:
   only through its `:contacts` option, so a caller that sends the order to the
   external system passes `contacts: true` on purpose. A scope is granted
   through the tools that declare it (core's `Keys.allowed_scopes_for/1`), which
-  is why `ecommerce.get_order_customers` exists. `set_order_sync` is an admin
+  is why `ecommerce.get_order_customers` exists. All four order tools declare
+  `shop.manage_orders`, so `contacts?/1` (scope only) is reached only by an
+  owner who holds it; core checks the permission on every call. `set_order_sync` is an admin
   write like the others: a batch above `api_confirm_batch_over` is held for
   confirmation by core, and the handler answers a dry run with a preview and
   no write. The order feed leaves out `draft` orders unless `statuses` names them.
