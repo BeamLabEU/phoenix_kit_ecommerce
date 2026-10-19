@@ -8,12 +8,10 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   (`API.Public.Schemas.control_fields/0`): core closes every schema and adds
   neither. Schemas use only what core's validator checks (`type`, `required`,
   `properties`, `additionalProperties`, `minItems`, `maxItems`, `minLength`,
-  `maxLength`, `minimum`, `maximum`, `pattern`, `items`), because an agent is told by them. The
-  `quantity` of a line is an integer from 0 to 99, as the writer enforces, so
-  a quantity outside that is refused with the whole request (422, path
-  `items[n].quantity`); a line without a quantity is still its own
-  `quantity_invalid` error, and the writer keeps checking the quantity for a
-  caller that does not go through the schema.
+  `maxLength`, `pattern`, `items`), because an agent is told by them. The
+  `quantity` of a line has deliberately no `type`: a bad quantity is a per-line
+  error with the allowed range, not a refusal of the whole request, and the
+  handler checks it.
 
   `tools/0` is `[]` against a core without the tool registry, the way
   `PhoenixKitEcommerce.API.PublicTools.tools/0` is. It fails closed without
@@ -207,7 +205,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
         "Sets the named lines to their FINAL quantities (a new line is added, an existing one is set, 0 removes it); lines you do not name stay. " <>
           "Up to 50 lines per call, and a cart holds at most 50 different lines (a new line beyond that is a validation_failed line error with reason cart_lines_limit). A line is identified by product_id and options; options are {attribute_key, value_key} pairs " <>
           "(product details list the keys). A bad line gets its own error and never stops the others: " <>
-          "not_found, not_on_sale, option_required, option_invalid, quantity_invalid (a line without a quantity; a quantity that is not a whole number from 0 to 99 is refused with the whole request), duplicate_line, validation_failed. " <>
+          "not_found, not_on_sale, option_required, option_invalid, quantity_invalid (a whole number from 0 to 99), duplicate_line, validation_failed. " <>
           "Send expected_revision from your last read to be told if the cart changed meanwhile (409 revision_mismatch, with what changed). " <>
           "The cart's currency is fixed by its first write.",
       input_schema:
@@ -240,9 +238,6 @@ defmodule PhoenixKitEcommerce.API.CartTools do
                   }
                 },
                 "quantity" => %{
-                  "type" => "integer",
-                  "minimum" => 0,
-                  "maximum" => 99,
                   "description" =>
                     "Final quantity: a whole number from 0 to 99. 0 removes the line."
                 }

@@ -317,14 +317,14 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert {200,
               %{
                 "results" => [
-                  %{"error" => %{"code" => "not_found"}},
+                  %{"error" => %{"code" => "quantity_invalid"}},
                   %{"action" => "created"}
                 ]
               }, _} =
                call("shop.set_cart_items", %{
                  "cart_token" => token,
                  "items" => [
-                   %{"product_id" => Ecto.UUID.generate(), "quantity" => 1},
+                   %{"product_id" => p1.uuid, "quantity" => "3"},
                    %{"product_id" => product!().uuid, "quantity" => 1}
                  ]
                })
@@ -343,34 +343,6 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
 
       assert {422, %{"code" => "validation_failed"}, _} =
                call("shop.set_cart_items", %{"cart_token" => token, "items" => []})
-    end
-
-    test "a quantity that is not a whole number from 0 to 99 is a 422 naming the line", %{p1: p1} do
-      token = new_cart_token()
-
-      for quantity <- ["3", -1, 100, 2.5, nil, true] do
-        assert {422, %{"code" => "validation_failed", "context" => %{"errors" => [error]}}, _} =
-                 call("shop.set_cart_items", %{
-                   "cart_token" => token,
-                   "items" => [
-                     %{"product_id" => p1.uuid, "quantity" => 1},
-                     %{"product_id" => p1.uuid, "quantity" => quantity}
-                   ]
-                 })
-
-        assert error["path"] == "items[1].quantity", inspect(quantity)
-      end
-
-      # Nothing was written by the refused requests; 0 and 99 are inside the bounds.
-      assert {200, %{"lines" => []}, _} = call("shop.get_cart", %{"cart_token" => token})
-
-      for quantity <- [0, 99] do
-        assert {200, %{"results" => [_]}, _} =
-                 call("shop.set_cart_items", %{
-                   "cart_token" => token,
-                   "items" => [%{"product_id" => p1.uuid, "quantity" => quantity}]
-                 })
-      end
     end
 
     test "51 lines are refused as a whole, 50 are accepted", %{p1: p1} do
@@ -1562,14 +1534,8 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       assert %{"results" => [%{"action" => "error", "error" => %{"code" => "quantity_invalid"}}]} =
                mcp_ok("shop_set_cart_items", %{
                  "cart_token" => token,
-                 "items" => [%{"product_id" => p1.uuid}]
+                 "items" => [%{"product_id" => p1.uuid, "quantity" => "3"}]
                })
-
-      mcp_error(
-        "shop_set_cart_items",
-        %{"cart_token" => token, "items" => [%{"product_id" => p1.uuid, "quantity" => "3"}]},
-        "validation_failed"
-      )
 
       mcp_error(
         "shop_set_cart_items",
