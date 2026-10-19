@@ -69,7 +69,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
             "options" => %{
               "type" => "array",
               "description" =>
-                "The chosen options: the keys to send back, and the labels to show a buyer, in the language of the request.",
+                "The chosen options: the keys to send back, and the labels to show a buyer, in the language of the request (for a value the product no longer offers, the label the line was added under).",
               "items" => %{
                 "type" => "object",
                 "required" => ["attribute_key", "value_key", "attribute_label", "value_label"],

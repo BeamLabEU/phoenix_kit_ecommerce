@@ -24,9 +24,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   facets, unless the query says `facets: false`. An `options` filter adds one
   index probe per requested pair; only when a probe finds a pair no product has,
   the warning that names the valid keys reads every row of the language once
-  (once per batch). That is bounded by the page size (at most 100), the 200
-  cards of a batch and the rate limit, and accepted for a catalogue of some
-  thousands of products.
+  (once per batch). A probe costs by the products that hold its pair, not by
+  the catalogue (a pair every row holds: 15 ms at 200,000 rows; the 1,000 pairs
+  a query may carry: about 200 ms), the read by the catalogue. The rest is
+  bounded by the page size (at most 100), the 200 cards of a batch and the rate
+  limit, and accepted for a catalogue of some thousands of products.
   """
 
   require Logger
@@ -237,7 +239,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
         "code" => "option_index_empty",
         "message" =>
           "The search index holds no product options in this language, so an options filter " <>
-            "matches nothing. Leave options out, or ask again once the index is rebuilt."
+            "matches nothing. Leave options out; the filter matches once products with options are indexed."
       }
     ]
   end

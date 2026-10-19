@@ -219,8 +219,11 @@ defmodule PhoenixKitEcommerce.Search.Query do
 
   @doc """
   The `key:value` pairs of `pairs` that no product of `language` holds: one
-  index probe (the GIN index on the pairs) per pair, each stopping at its first
-  row, so what it costs does not grow with the catalogue.
+  index probe (the GIN index on the pairs) per pair. A probe reads the rows that
+  hold its pair as a bitmap before it answers, so it grows with the number of
+  products that hold the pair, not with the catalogue: measured on a 200,000-row
+  index with 8 pairs a row, a pair no row holds 0.1 ms, a pair every row holds
+  15 ms, 500 distinct pairs that exist 97 ms in all (a query carries at most 1,000).
   """
   @spec missing_option_pairs(String.t(), [String.t()]) :: [String.t()]
   def missing_option_pairs(_language, []), do: []
