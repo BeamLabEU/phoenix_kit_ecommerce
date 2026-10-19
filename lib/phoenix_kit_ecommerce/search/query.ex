@@ -48,6 +48,8 @@ defmodule PhoenixKitEcommerce.Search.Query do
       `:discount_desc`, `:newest`; anything else raises `FunctionClauseError`.
     * `limit` - a positive integer, `offset` - a non-negative integer (a
       negative offset raises `Postgrex.Error`).
+    * `facets` - `false` skips the facets (their pass over up to 5000 rows
+      is not run, `facets` is `nil` and `truncated?` is `false`). Default `true`.
 
   `language` is the code exactly as it is indexed (`"de"` finds no `"de-DE"`
   rows). It is not normalized here.
@@ -94,7 +96,8 @@ defmodule PhoenixKitEcommerce.Search.Query do
     made_to_order: nil,
     sort: :relevance,
     limit: 20,
-    offset: 0
+    offset: 0,
+    facets: true
   }
 
   @type params :: %{
@@ -108,14 +111,15 @@ defmodule PhoenixKitEcommerce.Search.Query do
           optional(:made_to_order) => boolean() | nil,
           optional(:sort) => :relevance | :price_asc | :price_desc | :discount_desc | :newest,
           optional(:limit) => pos_integer(),
-          optional(:offset) => non_neg_integer()
+          optional(:offset) => non_neg_integer(),
+          optional(:facets) => boolean()
         }
 
   @type result :: %{
           ids: [String.t()],
           count: non_neg_integer(),
           mode: :browse | :fulltext | :typo,
-          facets: map(),
+          facets: map() | nil,
           truncated?: boolean(),
           refused?: boolean()
         }
@@ -142,14 +146,14 @@ defmodule PhoenixKitEcommerce.Search.Query do
       |> select([e], e.item_uuid)
       |> RepoHelper.repo().all()
 
-    facets = facets(matched)
+    facets = if params.facets, do: facets(matched)
 
     %{
       ids: ids,
       count: count,
       mode: if(mode == :refused, do: :fulltext, else: mode),
       facets: facets,
-      truncated?: count > @facet_cap,
+      truncated?: params.facets and count > @facet_cap,
       refused?: mode == :refused
     }
   end

@@ -21,7 +21,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   batch, and only for the fields asked for (`fields`), so a page of any size
   runs a fixed handful of queries beside the search itself. Every search, each
   cursor page included, also reads the matched rows (up to 5000) for the
-  facets. That is bounded by the page size (at most 100), the 200 cards of a
+  facets, unless the query says `facets: false`. That is bounded by the page size (at most 100), the 200 cards of a
   batch and the rate limit, and accepted for a catalogue of some thousands of
   products.
   """
@@ -189,11 +189,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
     %{
       "count" => result.count,
       "items" => items,
-      "facets" => facets(result.facets, context, categories),
       "match_mode" => Atom.to_string(result.mode),
       "language" => context.language,
       "currency" => context.currency.code
     }
+    |> put_unless_nil("facets", result.facets && facets(result.facets, context, categories))
     |> put_unless_nil("next_cursor", Query.next_cursor(params.offset, params.limit, result.count))
     |> put_unless_empty("warnings", warnings)
   end
@@ -340,6 +340,11 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
         "maxItems" => length(Cards.list_fields()),
         "items" => %{"type" => "string", "enum" => Cards.list_fields()},
         "description" => "Item fields to return; id is always returned."
+      },
+      "facets" => %{
+        "type" => "boolean",
+        "description" =>
+          "false: leave the facets out of the answer (a much smaller answer when you only need the items). Default true."
       }
     }
   end
@@ -390,7 +395,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
   def search_output_schema do
     %{
       "type" => "object",
-      "required" => ["count", "items", "facets", "match_mode"],
+      "required" => ["count", "items", "match_mode"],
       "properties" => block_properties()
     }
   end
@@ -434,7 +439,7 @@ defmodule PhoenixKitEcommerce.API.Public.Search do
         "description" => "How many products match, over all pages."
       },
       "items" => %{"type" => "array", "items" => Schemas.list_item()},
-      "facets" => %{"type" => "object"},
+      "facets" => %{"type" => "object", "description" => "Left out when facets is false."},
       "match_mode" => %{"type" => "string", "enum" => ["browse", "fulltext", "typo"]},
       "language" => %{"type" => "string"},
       "currency" => %{"type" => "string"},

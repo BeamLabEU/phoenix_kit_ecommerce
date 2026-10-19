@@ -404,6 +404,78 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
     end
   end
 
+  describe "facets: false" do
+    test "leaves the facet block out and keeps the rest of the answer", t do
+      full = search!(%{"q" => "vase"})
+      lean = search!(%{"q" => "vase", "facets" => false})
+
+      assert Map.has_key?(full, "facets")
+      refute Map.has_key?(lean, "facets")
+      assert Map.delete(full, "facets") == lean
+      assert item_ids(lean) |> Enum.sort() == Enum.sort([t.a, t.c, t.e])
+    end
+
+    test "true is the default" do
+      assert search!(%{"facets" => true}) == search!(%{})
+    end
+
+    test "does not read the matched rows for the facets" do
+      search!(%{})
+      with_facets = count_queries(fn -> search!(%{"limit" => 1}) end)
+      without = count_queries(fn -> search!(%{"limit" => 1, "facets" => false}) end)
+
+      assert without == with_facets - 1
+    end
+
+    test "limit 1 without facets is a small answer" do
+      full = search!(%{"limit" => 1}) |> JSON.encode!() |> byte_size()
+      lean = search!(%{"limit" => 1, "facets" => false}) |> JSON.encode!() |> byte_size()
+
+      assert lean < full
+      assert lean < 3_000
+    end
+
+    test "the answer satisfies the output schema" do
+      assert {:ok, _} =
+               Validator.validate(
+                 Search.search_output_schema(),
+                 search!(%{"limit" => 1, "facets" => false})
+               )
+    end
+
+    test "is refused when it is not a boolean" do
+      assert {:error, :validation_failed, _, %{errors: [%{path: "facets"}]}} =
+               Search.search_products(%{"facets" => "no"}, ctx())
+
+      assert {:error, [%{path: "facets"}]} =
+               Validator.validate(Search.search_input_schema(), %{"facets" => "no"})
+    end
+
+    test "the batch honours it per query", t do
+      out =
+        batch!(%{
+          "queries" => [
+            %{"q" => "vase", "facets" => false},
+            %{"q" => "vase"},
+            %{"category_id" => t.bowls, "facets" => false}
+          ]
+        })
+
+      assert [lean, full, bowls] = out["results"]
+      refute Map.has_key?(lean, "facets")
+      assert Map.has_key?(full, "facets")
+      refute Map.has_key?(bowls, "facets")
+      assert lean["count"] == 3 and bowls["count"] == 1
+
+      assert {:ok, _} = Validator.validate(Search.batch_output_schema(), out)
+
+      assert {:ok, _} =
+               Validator.validate(Search.batch_input_schema(), %{
+                 "queries" => [%{"facets" => false}]
+               })
+    end
+  end
+
   test "the answer is plain JSON and satisfies its own output schema" do
     out = search!(%{"q" => "vase", "limit" => 2})
 
