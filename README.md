@@ -228,6 +228,12 @@ sub-category under an unlisted middle category counts towards its listed ancesto
 towards that ancestor's `total_count`. Enabling the shop queues a rebuild; enabling a language does not, so call `PhoenixKitEcommerce.Search.Jobs.enqueue_rebuild/0` or wait for the nightly one (03:40). Prices come in the language and
 currency of the domain the request came to (a host maps domains with
 `config :phoenix_kit, :api_request_context, {Mod, :fun}`); `language` and `currency` inputs override.
+The `url` of a product or a category is on the domain of the language of the answer when the host
+maps that language to a domain with `config :phoenix_kit, :canonical_host_resolver, {Mod, :fun}`
+(no locale segment: the domain is the language), so asking in German from the English domain still
+links the German domain. A language with no domain of its own keeps the request's host and its
+locale segment, and so does a core older than `PhoenixKit.Utils.Routes.canonical_origin/1`. Image
+URLs and the cart claim link always use the request's host.
 
 Search reads `phoenix_kit_shop_search_index`, kept fresh by `PhoenixKitEcommerce.Search.Subscriber`
 (catalogue and shop PubSub events, through Oban jobs on the `shop_search` queue) and rebuilt every

@@ -11,15 +11,24 @@ defmodule PhoenixKitEcommerce.API.Context do
   The `url` and `image` of a card are made absolute with the request's
   `base_url`, which core builds from the Host header unless the host app's
   `:api_request_context` hook names the domains (the calls are POSTs, so no
-  shared cache holds a link made for another host).
+  shared cache holds a link made for another host). The `url` of a product or
+  a category in a language that has a domain of its own (the host's
+  `:canonical_host_resolver`) is on that domain instead (`absolute/3`).
 
   Money is converted from the stored base-currency amount with
   `PhoenixKitBilling.Currency.present/3` (the storefront's one conversion path)
   and written as a string with the currency's decimal places.
   """
 
+  @compile {:no_warn_undefined,
+            [
+              {PhoenixKit.Utils.Routes, :canonical_origin, 1},
+              {PhoenixKit.Utils.Routes, :canonical_absolute, 2}
+            ]}
+
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce.Translations
@@ -129,6 +138,39 @@ defmodule PhoenixKitEcommerce.API.Context do
   def absolute(_context, ""), do: nil
   def absolute(%__MODULE__{base_url: base_url}, "/" <> _rest = path), do: base_url <> path
   def absolute(_context, other), do: other
+
+  @doc """
+  `absolute/2` for a path built for a page in `language` (`Shop.product_url/2`
+  and the like).
+
+  A language that has a domain of its own (core's `Routes.canonical_origin/1`,
+  from the host's `:canonical_host_resolver`) is linked on that domain, and the
+  language segment goes: the domain is the language. Core removes only the
+  segment of that language, straight after the mount prefix; the storefront
+  builds it from the base code (`Shop.url_locale/1`), so `en-US` and `en-GB`
+  share `/en` and need no `:segment` option. A language without a domain, a
+  URL, `nil`, and a core that has no such helpers all give `absolute/2`: the
+  request's own host, the path as it is.
+  """
+  @spec absolute(t(), String.t() | nil, String.t()) :: String.t() | nil
+  def absolute(context, "/" <> _rest = path, language) do
+    if canonical_origin(language) do
+      Routes.canonical_absolute(path, language)
+    else
+      absolute(context, path)
+    end
+  end
+
+  def absolute(context, other, _language), do: absolute(context, other)
+
+  # The functions are not in a core older than the helpers (hence
+  # `no_warn_undefined`), so they are only reached once both are exported.
+  defp canonical_origin(language) do
+    if Code.ensure_loaded?(Routes) and function_exported?(Routes, :canonical_origin, 1) and
+         function_exported?(Routes, :canonical_absolute, 2) do
+      Routes.canonical_origin(language)
+    end
+  end
 
   # --- language --------------------------------------------------------------
 
