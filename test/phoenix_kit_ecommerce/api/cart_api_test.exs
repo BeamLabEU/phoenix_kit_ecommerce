@@ -1106,6 +1106,15 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       refute first == second
     end
 
+    test "create_cart offers no idempotency_key, so one in the body is refused (core with :replay)" do
+      if CartTools.replay_available?() do
+        key = "create-cart-0123456789"
+
+        assert {422, %{"code" => "validation_failed"}, _} =
+                 call("shop.create_cart", %{"idempotency_key" => key})
+      end
+    end
+
     defp stored_responses do
       %{rows: rows} = Repo.query!("SELECT response::text FROM phoenix_kit_api_idempotency")
       for [response] <- rows, is_binary(response), do: response

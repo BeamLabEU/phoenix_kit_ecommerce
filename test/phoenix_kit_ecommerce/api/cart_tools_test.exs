@@ -9,12 +9,14 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
   # at run time only and the tools are matched as plain maps.
   @compile {:no_warn_undefined,
             [
+              PhoenixKit.API.ControlFields,
               PhoenixKit.API.Executor,
               PhoenixKit.API.Registry,
               PhoenixKit.API.ToolLint,
               {PhoenixKit.ModuleRegistry, :all_api_tools, 0}
             ]}
 
+  alias PhoenixKit.API.ControlFields
   alias PhoenixKit.API.Executor
   alias PhoenixKit.API.Registry
   alias PhoenixKit.API.ToolLint
@@ -44,6 +46,48 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
     for %{handler: {module, fun}} <- CartTools.tools() do
       assert Code.ensure_loaded?(module) and function_exported?(module, fun, 2),
              "#{inspect(module)}.#{fun}/2 is missing"
+    end
+  end
+
+  describe "shop.create_cart and the idempotency key" do
+    defp create_cart_tool(replay?),
+      do: Enum.find(CartTools.tools(true, replay?), &(&1.name == "shop.create_cart"))
+
+    test "says it is not idempotent and, on a core that can, is offered no idempotency_key" do
+      tool = create_cart_tool(CartTools.replay_available?())
+
+      assert tool.description =~ "Not idempotent"
+
+      if CartTools.replay_available?() do
+        assert tool.replay == false
+        refute ControlFields.replay_tool?(tool)
+        refute Map.has_key?(ControlFields.properties(tool), "idempotency_key")
+      end
+    end
+
+    test "the other write tools keep their idempotency_key" do
+      if CartTools.replay_available?() do
+        for name <-
+              ~w(shop.set_cart_items shop.clear_cart shop.set_shipping shop.get_checkout_link) do
+          tool = Enum.find(CartTools.tools(true), &(&1.name == name))
+          assert ControlFields.replay_tool?(tool), name
+        end
+      end
+    end
+
+    test "replay_available? follows the core's exported marker, not a version" do
+      core_can? =
+        Code.ensure_loaded?(ControlFields) and
+          function_exported?(ControlFields, :replay_tool?, 1)
+
+      assert CartTools.replay_available?() == core_can?
+    end
+
+    test "a core that does not know :replay still gets the tool, without the field" do
+      tool = create_cart_tool(false)
+
+      assert tool
+      assert Map.get(tool, :replay, true) == true
     end
   end
 

@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   alias PhoenixKitEcommerce.API.Public.Schemas
   alias PhoenixKitEcommerce.API.PublicTools
 
-  @compile {:no_warn_undefined, PhoenixKit.API.Tool}
+  @compile {:no_warn_undefined, [PhoenixKit.API.Tool, PhoenixKit.API.ControlFields]}
 
   @handlers PhoenixKitEcommerce.API.CartHandlers
 
@@ -108,12 +108,16 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   @doc """
   The seven cart tools, in a fixed order. `shop.clear_cart` (the only `danger`
   tool) is left out unless `gate?` is true; the default asks `gate_available?/0`.
+  `shop.create_cart` declares `replay: false` (it has no cart to key a replay by,
+  so core must not offer it an `idempotency_key`) only when `replay?` is true; the
+  default asks `replay_available?/0`, because a core without the field refuses
+  the tool.
   """
-  @spec tools(boolean()) :: [struct()]
-  def tools(gate? \\ gate_available?()) do
+  @spec tools(boolean(), boolean()) :: [struct()]
+  def tools(gate? \\ gate_available?(), replay? \\ replay_available?()) do
     if Code.ensure_loaded?(Tool) do
       all = [
-        create_cart(),
+        create_cart(replay?),
         get_cart(),
         set_cart_items(),
         clear_cart(),
@@ -143,13 +147,25 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       function_exported?(PhoenixKit.API.Keys, :active?, 1)
   end
 
-  defp create_cart do
+  @doc """
+  True when the loaded core lets a tool give up replay (`:replay` of
+  `PhoenixKit.API.Tool`), judged by the exported marker function
+  `PhoenixKit.API.ControlFields.replay_tool?/1`, not by a version number.
+  """
+  @spec replay_available?() :: boolean()
+  def replay_available? do
+    Code.ensure_loaded?(PhoenixKit.API.ControlFields) and
+      function_exported?(PhoenixKit.API.ControlFields, :replay_tool?, 1)
+  end
+
+  defp create_cart(replay?) do
     [
       name: "shop.create_cart",
       audience: :public,
       title: "Create a cart",
       description:
         "Returns a new cart token. Nothing is stored until the first shop.set_cart_items, so an unused token costs nothing. " <>
+          "Not idempotent: every call returns a new token; a retry after a timeout is harmless, nothing is stored until the first shop.set_cart_items. " <>
           "Keep the token secret: whoever holds it can read and change the cart.",
       input_schema: object([], %{}),
       output_schema: %{
@@ -164,7 +180,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
       },
       handler: {@handlers, :create_cart},
       annotations: %{read_only: false, destructive: false, idempotent: false, open_world: false}
-    ]
+    ] ++ if(replay?, do: [replay: false], else: [])
   end
 
   defp get_cart do
