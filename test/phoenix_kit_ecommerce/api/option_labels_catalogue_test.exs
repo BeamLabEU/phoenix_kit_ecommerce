@@ -24,6 +24,8 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
+  alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.API.CartHandlers
   alias PhoenixKitEcommerce.API.CartStore
   alias PhoenixKitEcommerce.API.CartToken
   alias PhoenixKitEcommerce.API.CartView
@@ -185,6 +187,67 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
 
       assert %{"attribute_label" => "Size", "value_label" => ^label} =
                only_option(%{"cart" => cart})
+    end
+  end
+
+  describe "clear_cart and set_shipping answer the cart in the request's language" do
+    setup t do
+      token = new_token!()
+      set_line(token, t.item, "en-US")
+
+      {:ok, method} =
+        Shop.create_shipping_method(%{
+          "name" => "Post #{System.unique_integer([:positive])}",
+          "price" => Decimal.new("4.00"),
+          "active" => true,
+          "countries" => ["DE"]
+        })
+
+      %{token: token, method: method}
+    end
+
+    defp shipping(t, language, extra \\ %{}) do
+      call_tool(
+        "shop.set_shipping",
+        Map.merge(
+          %{
+            "cart_token" => t.token,
+            "country" => "DE",
+            "method_id" => t.method.uuid,
+            "language" => language
+          },
+          extra
+        )
+      )
+    end
+
+    test "the dry run of clear_cart", t do
+      for {language, label} <- @labels do
+        ctx = ctx_for(t.token, %{language: language, dry_run?: true})
+
+        assert {:preview, %{cart: %{lines: [%{options: [option]}]}}, _} =
+                 CartHandlers.clear_cart(%{"cart_token" => t.token}, ctx)
+
+        assert %{attribute_label: "Size", value_label: ^label} = option
+      end
+    end
+
+    test "the preview of set_shipping", t do
+      for {language, label} <- @labels do
+        {200, %{"preview" => %{"cart" => cart}}, _} = shipping(t, language, %{"dry_run" => true})
+
+        assert %{"attribute_label" => "Size", "value_label" => ^label} =
+                 only_option(%{"cart" => cart})
+      end
+    end
+
+    test "the write of set_shipping", t do
+      for {language, label} <- @labels do
+        {200, body, _} = shipping(t, language)
+
+        assert %{"attribute_label" => "Size", "value_label" => ^label} =
+                 only_option(%{"cart" => body})
+      end
     end
   end
 

@@ -439,6 +439,12 @@ defmodule PhoenixKitEcommerce.Search.QueryTest do
     assert length(over.ids) == 1
     # counted over the capped 5 000 rows, not over all 5 001
     assert over.facets.on_sale == 5_000
+
+    # Without facets nothing was cut, so nothing is reported as cut.
+    lean = run(%{limit: 1, facets: false}, "xx")
+    assert lean.count == 5_001
+    assert lean.facets == nil
+    refute lean.truncated?
   end
 
   defp insert_rows!(from, to) do
