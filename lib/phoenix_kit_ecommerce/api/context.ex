@@ -144,8 +144,7 @@ defmodule PhoenixKitEcommerce.API.Context do
   `:canonical_host_resolver`) is linked on that domain, and the language
   segment goes: the domain is the language. Core removes only the segment of
   that language, straight after the mount prefix; the storefront builds it from
-  the base code (`Shop.url_locale/1`), so `en-US` and `en-GB` share `/en` and
-  need no `:segment` option. A language without a domain, a URL, `nil`, and a
+  the base code (`Shop.url_locale/1`), so `en-US` and `en-GB` share `/en`. A language without a domain, a URL, `nil`, and a
   core that has no such helper all give `absolute/2`: the request's own host,
   the path as it is. The resolver is asked once per link, with the language as
   given (`de-AT`), so it decides which dialects share a domain.

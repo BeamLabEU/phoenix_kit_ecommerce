@@ -1118,6 +1118,12 @@ and `:requires_pg_trgm` (a database without the `pg_trgm` extension). To run the
 API tests, point `PHOENIX_KIT_PATH` at a core checkout that carries the shop API;
 against a released core without it they show up in the `excluded` count.
 
+Two tags split the language-domain API links by core: `:requires_core_canonical_urls`
+(excluded when core lacks `Routes.canonical_absolute_or_nil/2`) and its inverse
+`:core_without_canonical_urls` (excluded when core has it; it runs only on an older
+core and pins the request's-host fallback, so it is not a skipped test). Run both
+sides, a core with the helper and a released one, as `test/test_helper.exs` says.
+
 The admin API's tests need a core with the tool registry, a catalogue with the
 admin API and `phoenix_kit_warehouse` with source kinds, none of which this
 package declares as a requirement. Their families (`:core_api`, `:core_confirm`,

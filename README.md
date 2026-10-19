@@ -231,7 +231,9 @@ currency of the domain the request came to (a host maps domains with
 The `url` of a product or a category is on the domain of the language of the answer when the host
 maps that language to a domain with `config :phoenix_kit, :canonical_host_resolver, {Mod, :fun}`
 (no locale segment: the domain is the language), so asking in German from the English domain still
-links the German domain. A language with no domain of its own keeps the request's host and its
+links the German domain. The resolver receives the language as the answer holds it (`de-DE`, `de-AT`,
+not the base code `de`), so it decides which dialects share a domain; a resolver that knows only base
+codes gives no domain for a dialect and those links keep the request's host. A language with no domain of its own keeps the request's host and its
 locale segment, and so does a core older than `PhoenixKit.Utils.Routes.canonical_absolute_or_nil/2`. Image
 URLs and the cart claim link always use the request's host.
 
