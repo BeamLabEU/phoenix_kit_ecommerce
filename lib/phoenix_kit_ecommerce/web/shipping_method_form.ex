@@ -238,17 +238,17 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     """
   end
 
-  # Where the country lists are shown. A provider that delivers to a single
-  # country leaves nothing to choose, so they are out of the way; a provider
-  # that serves several countries has them open, limited to its countries;
-  # for a fixed price or a table (any country) they are one click away. Lists
-  # already filled in are always shown, so that stored values stay visible.
+  # Where the country lists are shown. Lists already filled in, or opened
+  # once, stay shown: a list that vanishes is not posted, and the old value
+  # would stay behind. Otherwise, a provider that delivers to a single country
+  # leaves nothing to choose, so they are out of the way; a provider that
+  # serves several countries has them open, limited to its countries; for a
+  # fixed price or a table (any country) they are one click away.
   defp countries_mode(assigns) do
-    chosen = chosen_countries(assigns.form)
-
     cond do
-      chosen == [] and match?([_], assigns.provider_countries) -> :hidden
-      chosen != [] or assigns.countries_open or length(assigns.provider_countries) > 1 -> :open
+      chosen_countries(assigns.form) != [] or assigns.countries_open -> :open
+      match?([_], assigns.provider_countries) -> :hidden
+      length(assigns.provider_countries) > 1 -> :open
       true -> :collapsed
     end
   end
@@ -723,9 +723,9 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     end
   end
 
-  defp provider_context(state, service \\ nil) do
-    service = service || state.service
+  defp provider_context(state), do: provider_context(state, state.service)
 
+  defp provider_context(state, service) do
     Shipping.context(nil,
       provider: state.provider,
       settings: state.settings,

@@ -515,10 +515,16 @@ defmodule PhoenixKitEcommerce do
 
   Taken from the shop's own settings, never guessed: the company country
   (Settings → Organization), then `shop_default_tax_country`, then the one
-  country every active shipping method is limited to (when they all share
-  the same single country, any other default would leave the buyer with no
-  method to pick), then the first of `country_select_priority`. When none
-  of them says anything, `"EE"` — the default checkout has always started on.
+  country the active shipping methods serve (`checkout_countries/0` comes
+  down to a single country: a method's own list, narrowed by the countries
+  of its shipping provider, less the excluded ones; with only that country
+  served, any other default would leave the buyer with no method to pick),
+  then the first of `country_select_priority`. When none of them says
+  anything, `"EE"` — the default checkout has always started on.
+
+  The company country and the tax country come first, so a shop whose
+  methods serve a single country but whose company or tax country is another
+  one still starts there.
   """
   @spec default_checkout_country() :: String.t()
   def default_checkout_country do

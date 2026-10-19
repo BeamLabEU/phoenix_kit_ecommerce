@@ -9,7 +9,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingPointFieldTest do
 
   alias PhoenixKit.Integrations.Providers
   alias PhoenixKitEcommerce, as: Shop
-  alias PhoenixKitEcommerce.Shipping.{Field, Locality, PickupPoint}
+  alias PhoenixKitEcommerce.Shipping.{Field, Locality, PickupPoint, Service}
   alias PhoenixKitEcommerce.Test.Shipping.{PointFieldProvider, StubProvider}
 
   @form "#shipping-method-form"
@@ -89,6 +89,22 @@ defmodule PhoenixKitEcommerce.Web.ShippingPointFieldTest do
 
       assert has_element?(view, "#shipping-locality-option-sender_point-0", "Branch 1")
       assert_received {:stub_called, :list_pickup_points, [_, "branch", nil]}
+    end
+
+    test "nothing is asked of the carrier when no service ships to points", %{conn: conn} do
+      stub(%{
+        localities: &city_search/1,
+        points: &points/3,
+        services: [%Service{key: "courier", label: "Courier", destination: :address}]
+      })
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/new")
+      choose_provider(view)
+      pick_city(view)
+
+      assert has_element?(view, "#shipping-locality-selected-sender_city", "Springfield")
+      refute has_element?(view, "#shipping-locality-option-sender_point-0")
+      refute_received {:stub_called, :list_pickup_points, _}
     end
 
     test "the words typed narrow the list", %{conn: conn} do

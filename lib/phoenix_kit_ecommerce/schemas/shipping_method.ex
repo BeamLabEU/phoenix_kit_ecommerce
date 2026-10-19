@@ -34,6 +34,7 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKit.Utils.CountryData
   alias PhoenixKit.Utils.Slug
   alias PhoenixKitEcommerce.LocalizedSlug
   alias PhoenixKitEcommerce.Shipping.{Codec, MethodConfig, MethodParams}
@@ -269,14 +270,31 @@ defmodule PhoenixKitEcommerce.ShippingMethod do
     min_ok and max_ok
   end
 
-  # Each code is stored upcased and once; what is not an ISO 3166-1 alpha-2
-  # code is dropped. The admin form submits a blank entry with the lists, so
-  # that a list can be emptied: that blank is dropped here as well.
+  # Each code is stored upcased and once; what is not a known ISO 3166-1
+  # alpha-2 code is dropped. The admin form submits a blank entry with the
+  # lists, so that a list can be emptied: that blank is dropped here as well.
+  # A list made only of wrong codes is an error, not an empty list: empty
+  # means "every country".
   defp normalize_countries(changeset) do
-    Enum.reduce([:countries, :excluded_countries], changeset, fn field, acc ->
-      update_change(acc, field, &Codec.countries/1)
-    end)
+    Enum.reduce([:countries, :excluded_countries], changeset, &normalize_country_list(&2, &1))
   end
+
+  defp normalize_country_list(changeset, field) do
+    case get_change(changeset, field) do
+      entries when is_list(entries) ->
+        codes = entries |> Codec.countries() |> Enum.filter(&CountryData.get_country/1)
+
+        if codes == [] and Enum.any?(entries, &(not blank_entry?(&1))),
+          do: add_error(changeset, field, "has no valid country code"),
+          else: put_change(changeset, field, codes)
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp blank_entry?(entry) when is_binary(entry), do: String.trim(entry) == ""
+  defp blank_entry?(entry), do: is_nil(entry)
 
   defp country_ok?(%{countries: [], excluded_countries: []}, _country), do: true
 

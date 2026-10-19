@@ -80,6 +80,51 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
       assert Ecto.Changeset.get_field(changeset, :excluded_countries) == ["RU"]
     end
 
+    test "keep only the countries the country data knows" do
+      changeset =
+        ShippingMethod.changeset(%ShippingMethod{}, %{
+          "name" => "Known",
+          "price" => "1",
+          "countries" => ["XX", "uk", "EU", "gb", "UA"],
+          "excluded_countries" => ["xk", "De"]
+        })
+
+      assert Ecto.Changeset.get_field(changeset, :countries) == ["GB", "UA"]
+      assert Ecto.Changeset.get_field(changeset, :excluded_countries) == ["DE"]
+      assert changeset.valid?
+    end
+
+    test "are an error when every code in them is wrong, never 'all countries'" do
+      for codes <- [["USA"], ["XX"], ["UK", "EU"], ["", "usa", " "]] do
+        changeset =
+          ShippingMethod.changeset(%ShippingMethod{}, %{
+            "name" => "Wrong",
+            "price" => "1",
+            "countries" => codes
+          })
+
+        refute changeset.valid?, "expected #{inspect(codes)} to be refused"
+        assert %{countries: [_]} = errors_on(changeset)
+      end
+
+      changeset =
+        ShippingMethod.changeset(%ShippingMethod{}, %{
+          "name" => "Wrong",
+          "price" => "1",
+          "excluded_countries" => ["EU"]
+        })
+
+      assert %{excluded_countries: [_]} = errors_on(changeset)
+    end
+
+    test "are an error when an update would turn the list into 'all countries'" do
+      method = method!(%{"countries" => ["UA"]})
+
+      assert {:error, changeset} = Shop.update_shipping_method(method, %{"countries" => ["USA"]})
+      assert %{countries: [_]} = errors_on(changeset)
+      assert Shop.get_shipping_method!(method.uuid).countries == ["UA"]
+    end
+
     test "can be emptied: the blank entry of the form clears a list" do
       method = method!(%{"countries" => ["UA", "PL"], "excluded_countries" => ["RU"]})
 
@@ -297,6 +342,27 @@ defmodule PhoenixKitEcommerce.Shipping.CountryUiTest do
       reloaded = Shop.get_shipping_method!(method.uuid)
       assert reloaded.countries == []
       assert reloaded.excluded_countries == []
+    end
+
+    test "unticking the last country of a single-country provider's method clears it",
+         %{conn: conn} do
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_country_provider, ["UA"])
+      method = provider_method!(["PL"])
+
+      {:ok, view, _html} = live(conn, "/en/admin/shop/shipping/#{method.uuid}/edit")
+
+      view
+      |> form(@form, shipping_method: %{countries: [""], excluded_countries: [""]})
+      |> render_change()
+
+      # The lists stay, so that the browser still posts the emptied ones.
+      assert has_element?(view, "#shipping-method-countries")
+
+      view
+      |> form(@form, shipping_method: %{countries: [""], excluded_countries: [""]})
+      |> render_submit()
+
+      assert Shop.get_shipping_method!(method.uuid).countries == []
     end
 
     test "a method saved without opening the lists keeps its countries", %{conn: conn} do
