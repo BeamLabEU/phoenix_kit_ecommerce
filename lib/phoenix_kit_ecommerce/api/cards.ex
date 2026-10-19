@@ -251,7 +251,8 @@ defmodule PhoenixKitEcommerce.API.Cards do
   end
 
   defp option(option, product, context, specs) do
-    prices = Map.new(option.values, &{&1.key, value_price(&1, option, product, specs)})
+    keys = raw_keys(option, product, specs)
+    prices = Map.new(option.values, &{&1.key, value_price(&1, keys, specs, product)})
     affects_price? = option.affects_price or Enum.any?(prices, &differs?(&1, product))
 
     %{
@@ -281,27 +282,33 @@ defmodule PhoenixKitEcommerce.API.Cards do
   defp value_entry(value, _prices, false, _context),
     do: %{"key" => value.key, "label" => value.label}
 
-  defp value_price(_value, _option, _product, []), do: nil
+  defp value_price(_value, _keys, [], _product), do: nil
 
-  defp value_price(value, option, product, specs) do
-    Enum.find_value(specs, fn %{"key" => raw_key} = spec ->
-      with true <- OptionKeys.neutral_key(raw_key) == option.key,
-           raw when is_binary(raw) <- raw_value(spec, value.key, product) do
+  defp value_price(value, keys, specs, product) do
+    Enum.find_value(keys, fn {raw_key, raw_by_key} ->
+      with raw when is_binary(raw) <- Map.get(raw_by_key, value.key) do
         Options.calculate_final_price(specs, %{raw_key => raw}, product.price, product.metadata)
-      else
-        _other -> nil
       end
     end)
   end
 
-  defp raw_value(%{"key" => raw_key, "options" => raw_values}, value_key, product)
-       when is_list(raw_values) do
-    Enum.find(raw_values, fn raw ->
-      is_binary(raw) and OptionKeys.product_value_key(product, raw_key, raw) == value_key
-    end)
-  end
+  # For each spec of this option, the stored value by the key the card announces
+  # for it, built once per option: working a key back to its stored value one
+  # value at a time is quadratic, and slugifies on every step on the Legacy
+  # source. The first stored value wins when two share a key, as `extract/1`.
+  defp raw_keys(option, product, specs) do
+    for %{"key" => raw_key, "options" => raw_values} <- specs,
+        is_list(raw_values),
+        OptionKeys.neutral_key(raw_key) == option.key do
+      raw_by_key =
+        raw_values
+        |> Enum.filter(&is_binary/1)
+        |> Enum.reverse()
+        |> Map.new(&{OptionKeys.product_value_key(product, raw_key, &1), &1})
 
-  defp raw_value(_spec, _value_key, _product), do: nil
+      {raw_key, raw_by_key}
+    end
+  end
 
   defp images(product, context, lookup) do
     stored = Enum.map(image_uuids(product), &CardLookup.url(lookup, &1, "medium"))

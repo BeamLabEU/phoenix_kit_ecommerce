@@ -206,6 +206,21 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
 
     defp option(card, key), do: Enum.find(card["options"], &(&1["key"] == key))
 
+    # A Legacy product: no value labels or slugs, so every key is a slugified label.
+    defp many_sizes(count) do
+      values = for n <- 1..count, do: "Size #{n}"
+
+      {product, _root, _leaf} =
+        priced_vase(%{
+          "_option_values" => %{"size" => values},
+          "_price_modifiers" => %{
+            "size" => Map.new(Enum.with_index(values, 1), fn {v, n} -> {v, "#{n}.00"} end)
+          }
+        })
+
+      {product, values}
+    end
+
     test "an option that affects the price gives each value the product's price with it chosen",
          %{context: context} do
       {product, _root, _leaf} = priced_vase()
@@ -338,6 +353,81 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
 
       assert option(card, "finish") == nil
       assert option(card, "size")["affects_price"] == true
+    end
+
+    test "many values of a priced option are priced by the cart's own sum, one by one",
+         %{context: context} do
+      {product, values} = many_sizes(60)
+
+      card = Cards.card(record(product), context)
+      announced = option(card, "size")["values"]
+
+      assert length(announced) == 60
+
+      for {value, index} <- Enum.with_index(values, 1) do
+        entry = Enum.find(announced, &(&1["label"] == value))
+        expected = Shop.calculate_product_price(product, %{"size" => value})
+
+        assert entry["price"]["amount"] == Decimal.to_string(expected, :normal)
+        assert expected == Decimal.add(Decimal.new("20.00"), index)
+      end
+    end
+
+    test "pricing the values of an option slugifies each value a bounded number of times",
+         %{context: context} do
+      {product, _values} = many_sizes(60)
+      record = record(product)
+      mfa = {PhoenixKit.Utils.Slug, :slugify, 2}
+
+      :erlang.trace_pattern(mfa, true, [:call_count])
+
+      try do
+        Cards.card(record, context)
+        {:call_count, calls} = :erlang.trace_info(mfa, :call_count)
+
+        # About two a value (the announced key, the stored value's key). Working
+        # a key back to its stored value one value at a time is 60 x 60.
+        assert calls <= 5 * 60
+      after
+        :erlang.trace_pattern(mfa, false, [:call_count])
+      end
+    end
+
+    test "values keyed by the catalogue's own keys are priced the same way", %{context: context} do
+      keys = for n <- 1..60, do: "v#{n}"
+
+      {product, _root, _leaf} =
+        priced_vase(%{
+          "_option_values" => %{"size" => keys},
+          "_value_labels" => %{"size" => Map.new(keys, &{&1, "Size #{&1}"})},
+          "_price_modifiers" => %{
+            "size" => Map.new(Enum.with_index(keys, 1), fn {key, n} -> {key, "#{n}.00"} end)
+          }
+        })
+
+      announced = option(Cards.card(record(product), context), "size")["values"]
+
+      assert length(announced) == 60
+      assert Enum.all?(announced, &Map.has_key?(&1, "price"))
+
+      for %{"key" => key, "price" => %{"amount" => amount}} <- announced do
+        expected = Shop.calculate_product_price(product, %{"size" => key})
+        assert amount == Decimal.to_string(expected, :normal)
+      end
+    end
+
+    test "two stored values that share a key are priced as the first, which is the one announced",
+         %{context: context} do
+      {product, _root, _leaf} =
+        priced_vase(%{
+          "_option_values" => %{"size" => ["A b", "a-b"]},
+          "_price_modifiers" => %{"size" => %{"A b" => "5.00", "a-b" => "9.00"}}
+        })
+
+      assert %{"values" => [%{"label" => "A b", "price" => price}]} =
+               option(Cards.card(record(product), context), "size")
+
+      assert price == %{"amount" => "25.00", "currency" => "USD"}
     end
 
     test "a card built from a lookup that read no schemas prices the same",
