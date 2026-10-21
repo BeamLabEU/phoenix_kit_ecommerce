@@ -451,6 +451,21 @@ mcp_exclude =
     [:mcp]
   end
 
+# The tests of `replay: false` (a tool that gives up the idempotency key) need a
+# core that exports `ControlFields.replay_tool?/1`. They are excluded, and so
+# counted, on a core without it; the run never reports them as passed.
+replay_exclude =
+  if PhoenixKitEcommerce.API.CartTools.replay_available?() do
+    []
+  else
+    Logger.info(
+      "[test_helper] PhoenixKit.API.ControlFields.replay_tool?/1 not available - " <>
+        "the replay: false tests (:core_replay) excluded."
+    )
+
+    [:core_replay]
+  end
+
 ExUnit.start(
   exclude:
     i18n_exclude ++
