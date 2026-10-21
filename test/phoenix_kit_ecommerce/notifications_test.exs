@@ -102,6 +102,31 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
     end
   end
 
+  describe "order_placed/2 when the buyer is a shop operator" do
+    test "the operator who placed the order gets both the admin and the customer message" do
+      buyer = create_admin_user()
+      confirm_user!(buyer)
+
+      assert :ok = ShopNotifications.order_placed(placed_order("ORD-SELF-1", buyer.uuid))
+
+      texts = notification_texts_for(buyer.uuid)
+      assert Enum.any?(texts, &(&1 =~ "New order ORD-SELF-1"))
+      assert Enum.any?(texts, &(&1 =~ "Your order ORD-SELF-1 is confirmed"))
+    end
+
+    test "a buyer without shop access gets only the customer message" do
+      operator = create_admin_user()
+      buyer = fixture_user()
+      confirm_user!(buyer)
+
+      assert :ok = ShopNotifications.order_placed(placed_order("ORD-SELF-2", buyer.uuid))
+
+      assert [text] = notification_texts_for(buyer.uuid)
+      assert text =~ "Your order ORD-SELF-2 is confirmed"
+      assert Enum.any?(notification_texts_for(operator.uuid), &(&1 =~ "New order ORD-SELF-2"))
+    end
+  end
+
   describe "cart signals" do
     setup do
       # toggles default OFF; each test enables what it needs. The cart
@@ -350,16 +375,32 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
   end
 
   # The fields `order_placed/2` reads, without going through checkout; a guest
-  # order, so no buyer account.
-  defp placed_order(order_number) do
+  # order (no buyer account) unless `user_uuid` is given.
+  defp placed_order(order_number, user_uuid \\ nil) do
     %{
       uuid: Ecto.UUID.generate(),
-      user_uuid: nil,
+      user_uuid: user_uuid,
       order_number: order_number,
       metadata: %{},
       total: Decimal.new("10.00"),
       currency: "USD"
     }
+  end
+
+  # The customer notification goes only to a confirmed account.
+  defp confirm_user!(user) do
+    user
+    |> Ecto.Changeset.change(confirmed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+    |> Repo.update!()
+  end
+
+  defp notification_texts_for(user_uuid) do
+    from(n in "phoenix_kit_notifications",
+      where: n.recipient_uuid == type(^user_uuid, Ecto.UUID),
+      select: n.metadata
+    )
+    |> Repo.all()
+    |> Enum.map(& &1["notification_text"])
   end
 
   # Builds a real cart (owned by a freshly registered user, so

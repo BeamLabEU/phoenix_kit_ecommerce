@@ -259,11 +259,12 @@ defmodule PhoenixKitEcommerce.Notifications do
   defp cart_totals(_), do: ""
 
   defp notify_admins_of_order(order) do
+    # A buyer who is also a shop operator stays in the list: the order still
+    # needs confirming on the Billing page, and their own "Your order ... is
+    # confirmed" message (customer-facing copy, a customer link) does not
+    # say so. `admin_recipients/1` only ever holds operators, so a buyer
+    # without shop access is not in it.
     recipients = admin_recipients("shop.manage_carts")
-
-    # Never notify the buyer in the ADMIN fan-out; they get their own
-    # message with customer-facing copy and a link they can open.
-    recipients = Enum.reject(recipients, &(&1 == order.user_uuid))
 
     # `metadata["shipping_skipped"]` is stamped by
     # `PhoenixKitEcommerce.build_order_attrs/5` when the order converted
