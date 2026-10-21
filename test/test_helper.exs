@@ -477,5 +477,6 @@ ExUnit.start(
       user_menu_exclude ++
       billing_user_menu_exclude ++
       billing_order_sync_exclude ++
-      api_exclude ++ trigram_exclude ++ analytics_exclude ++ mcp_exclude
+      api_exclude ++
+      canonical_urls_exclude ++ trigram_exclude ++ analytics_exclude ++ mcp_exclude
 )
