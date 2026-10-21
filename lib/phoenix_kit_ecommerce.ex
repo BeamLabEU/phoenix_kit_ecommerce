@@ -4235,6 +4235,13 @@ defmodule PhoenixKitEcommerce do
     if chosen in config.services, do: chosen, else: config.service
   end
 
+  # The shopper chose a service the method has stopped allowing (the admin
+  # unticked it): the cart falls back to the default service.
+  defp stale_service_choice?(%Cart{metadata: metadata}, method) do
+    chosen = CartQuote.service(metadata)
+    not is_nil(chosen) and chosen not in ShippingMethod.shipping_config(method).services
+  end
+
   @doc """
   The shopper chooses the service of the cart's calculated method among those
   the method allows (and the provider offers for the country of the cart).
@@ -4248,7 +4255,9 @@ defmodule PhoenixKitEcommerce do
 
   Returns `{:ok, cart}` (reloaded, with items), or `{:error, reason}`:
   `:no_method`, `:not_calculated`, `:unknown_service` (not allowed, or not
-  offered by the provider), `:cart_not_active`, `:cart_not_found`.
+  offered by the provider), `:cart_not_active`, `:cart_not_found`, or the
+  reason the provider's services could not be listed (`:unsupported_destination`
+  for a country it does not serve, a timeout...).
   """
   @spec set_cart_shipping_service(Cart.t(), String.t()) :: {:ok, Cart.t()} | {:error, term()}
   def set_cart_shipping_service(%Cart{} = cart, key) when is_binary(key) do
@@ -4291,19 +4300,27 @@ defmodule PhoenixKitEcommerce do
   defp service_chosen_metadata(cart, method, offered, %ShippingService{key: key} = service) do
     metadata = cart.metadata || %{}
     current_key = effective_service_key(cart, method)
+    stale? = stale_service_choice?(cart, method)
 
-    if key == current_key do
-      metadata
-    else
-      current = Enum.find(offered, &(&1.key == current_key))
+    cond do
+      CartQuote.service(metadata) == key ->
+        metadata
 
-      destination =
-        metadata |> CartQuote.destination() |> CartQuote.carry_destination(current, service)
+      key == current_key and not stale? ->
+        CartQuote.put_service(metadata, key)
 
-      metadata
-      |> CartQuote.put_service(key)
-      |> CartQuote.put_destination(destination)
-      |> CartQuote.drop_quote()
+      true ->
+        # A choice the method no longer allows is a service the destination was
+        # not picked for either.
+        current = if stale?, do: nil, else: Enum.find(offered, &(&1.key == current_key))
+
+        destination =
+          metadata |> CartQuote.destination() |> CartQuote.carry_destination(current, service)
+
+        metadata
+        |> CartQuote.put_service(key)
+        |> CartQuote.put_destination(destination)
+        |> CartQuote.drop_quote()
     end
   end
 
@@ -4603,13 +4620,24 @@ defmodule PhoenixKitEcommerce do
     %RateRequest{
       service: effective_service_key(cart, method),
       origin: config.settings,
-      destination: cart_shipping_destination(cart) || %Destination{},
+      destination: request_destination(cart, method),
       parcels: pack_parcels(items),
       declared_value: declared_value,
       cod_amount: if(cart_cash_on_delivery?(cart), do: declared_value),
       currency: cart_base_currency(cart),
       country: ShippingCodec.country(cart.shipping_country)
     }
+  end
+
+  # The place picked for a service the method no longer allows means nothing to
+  # the default service the cart fell back to: only the locality is kept, so the
+  # shopper is asked again.
+  defp request_destination(cart, method) do
+    destination = cart_shipping_destination(cart)
+
+    if stale_service_choice?(cart, method),
+      do: CartQuote.carry_destination(destination, nil, nil) || %Destination{},
+      else: destination || %Destination{}
   end
 
   # The exact base amount of the lines (their own `base_unit_price`), not the
@@ -7441,8 +7469,8 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  # Only a method with something to choose from lists its services; the
-  # lookup is the cached one the service in effect has just made.
+  # Only a method with something to choose from lists its services (the
+  # provider's list is cached per service in effect, so this may ask again).
   defp snapshot_choices(_cart, _method, nil), do: []
 
   defp snapshot_choices(cart, method, _service_result) do

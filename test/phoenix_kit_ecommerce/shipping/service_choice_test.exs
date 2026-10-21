@@ -187,7 +187,29 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
 
       assert CartQuote.service(cart.metadata) == "courier"
       assert Shop.cart_shipping_service_key(cart) == "branch"
-      assert request_service!(cart) == "branch"
+      assert Shop.shipping_quote_snapshot(cart).service.key == "branch"
+    end
+
+    test "a place picked for a service the method stopped allowing is asked for again" do
+      method = method!()
+      cart = cart_with!(method)
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+
+      set_block!(method, %{"services" => ["branch", "courier"]})
+      cart = reload(cart)
+
+      assert Shop.cart_shipping_service_key(cart) == "branch"
+      assert Shop.shipping_quote_status(cart) == :needs_destination
+      assert {:error, :needs_destination} = Shop.build_cart_rate_request(cart)
+
+      # Choosing a service on offer replaces the stale choice and its place.
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "branch")
+
+      assert CartQuote.service(cart.metadata) == "branch"
+      assert Shop.cart_shipping_destination(cart) == %Destination{locality: @locality}
     end
 
     test "a single-service method of the older shape works as it did" do
@@ -244,6 +266,17 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
 
       {:ok, cart} = Shop.set_cart_shipping_service(cart, "branch")
 
+      assert Shop.shipping_quote_status(cart) == :ok
+    end
+
+    test "choosing the default stores it explicitly and keeps the quote" do
+      cart = cart_with!(method!())
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "branch")
+
+      assert reload(cart).metadata["shipping_service"] == "branch"
       assert Shop.shipping_quote_status(cart) == :ok
     end
 
@@ -402,6 +435,22 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       {:ok, cart} = Shop.set_cart_shipping_destination(cart, address())
 
       {:ok, cart} = Shop.set_cart_shipping(cart, method!(%{"services" => ["courier"]}), "US")
+
+      assert CartQuote.service(cart.metadata) == nil
+      assert Shop.cart_shipping_destination(cart) == nil
+    end
+
+    test "the same provider and default service but other allowed services clear them" do
+      cart = cart_with!(method!(%{"services" => ["branch", "locker"]}))
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+
+      {:ok, cart} =
+        Shop.set_cart_shipping(
+          cart,
+          method!(%{"services" => ["branch", "locker", "courier"]}),
+          "US"
+        )
 
       assert CartQuote.service(cart.metadata) == nil
       assert Shop.cart_shipping_destination(cart) == nil
