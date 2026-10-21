@@ -22,9 +22,17 @@
   # reported.
   {"lib/phoenix_kit_ecommerce/api/public_tools.ex",
    "Function PhoenixKit.API.Tool.new/1 does not exist."},
-  # The cart store names `PhoenixKit.API.RateLimit` too (same reason).
+  # The cart store names `PhoenixKit.API.RateLimit` too (same reason). The module
+  # is loaded on a core with the public API but `check_new_rows/1` is newer than
+  # it, so dialyzer reports a call to a missing function, not a missing module.
   {"lib/phoenix_kit_ecommerce/api/cart_store.ex",
-   "Function PhoenixKit.API.RateLimit.check_new_rows/1 does not exist."},
+   "Call to missing or private function PhoenixKit.API.RateLimit.check_new_rows/1."},
+  # `API.Context.absolute/3` calls `Routes.canonical_absolute_or_nil/2` behind
+  # `function_exported?/3`; a released core does not have it (the compiler is
+  # silenced by `no_warn_undefined`, dialyzer is not). Drop it once the minimum
+  # core requirement carries the helper.
+  {"lib/phoenix_kit_ecommerce/api/context.ex",
+   "Call to missing or private function PhoenixKit.Utils.Routes.canonical_absolute_or_nil/2."},
   # `PhoenixKitWebAnalytics.Config` is an optional dependency: the claim-path
   # exclusion step of the migration reads its default list when it is loaded.
   {"lib/phoenix_kit_ecommerce/migrations.ex",
