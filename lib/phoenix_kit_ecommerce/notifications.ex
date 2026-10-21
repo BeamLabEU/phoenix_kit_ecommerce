@@ -37,6 +37,8 @@ defmodule PhoenixKitEcommerce.Notifications do
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKitBilling, as: Billing
+  alias PhoenixKitBilling.Paths, as: BillingPaths
   alias PhoenixKitEcommerce.Translations
 
   @order_action "shop.order_placed"
@@ -274,8 +276,17 @@ defmodule PhoenixKitEcommerce.Notifications do
       action: @order_action,
       text: "New order #{order.order_number} — #{order_total(order)}#{suffix}",
       icon: "hero-shopping-bag",
-      link: Routes.path("/admin/shop/carts")
+      link: order_admin_link(order)
     })
+  end
+
+  # An order is confirmed on its Billing page, so that is where the operator
+  # is sent. With Billing switched off that page does not exist, and the
+  # carts list stays the landing spot.
+  defp order_admin_link(order) do
+    if Billing.enabled?(),
+      do: BillingPaths.order_detail(order.uuid),
+      else: Routes.path("/admin/shop/carts")
   end
 
   # Only a real, confirmed account gets an in-app notification: guest

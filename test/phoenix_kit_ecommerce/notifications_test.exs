@@ -6,8 +6,10 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
+  alias PhoenixKit.Settings
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
 
@@ -70,6 +72,33 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       # Import logs predate the user_uuid column; there is nobody to tell.
       assert :ok = ShopNotifications.import_completed(%{user_uuid: nil}, %{created: 1})
       assert :ok = ShopNotifications.import_failed(%{user_uuid: nil}, :boom)
+    end
+  end
+
+  describe "order_placed/2 admin notification link" do
+    setup do
+      create_admin_user()
+      :ok
+    end
+
+    test "leads to the order's Billing page while Billing is enabled" do
+      Settings.update_boolean_setting_with_module("billing_enabled", true, "billing")
+      order = placed_order("ORD-LINK-ON")
+
+      assert :ok = ShopNotifications.order_placed(order)
+
+      assert links = notification_links_mentioning("New order ORD-LINK-ON")
+      assert Enum.uniq(links) == [Routes.path("/admin/billing/orders/#{order.uuid}")]
+    end
+
+    test "stays on the carts list while Billing is disabled" do
+      Settings.update_boolean_setting_with_module("billing_enabled", false, "billing")
+      order = placed_order("ORD-LINK-OFF")
+
+      assert :ok = ShopNotifications.order_placed(order)
+
+      assert links = notification_links_mentioning("New order ORD-LINK-OFF")
+      assert Enum.uniq(links) == [Routes.path("/admin/shop/carts")]
     end
   end
 
@@ -318,6 +347,19 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
       assert length(results) == 8
       assert Enum.count(results, & &1) == 1
     end
+  end
+
+  # The fields `order_placed/2` reads, without going through checkout; a guest
+  # order, so no buyer account.
+  defp placed_order(order_number) do
+    %{
+      uuid: Ecto.UUID.generate(),
+      user_uuid: nil,
+      order_number: order_number,
+      metadata: %{},
+      total: Decimal.new("10.00"),
+      currency: "USD"
+    }
   end
 
   # Builds a real cart (owned by a freshly registered user, so
