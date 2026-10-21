@@ -90,10 +90,15 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
             </p>
           </div>
 
-          <div :if={@calculated? and @provider_known?} id="shipping-services" class="fieldset w-full">
-            <span class="label-text font-medium mb-1">
+          <fieldset
+            :if={@calculated? and @provider_known?}
+            id="shipping-services"
+            class="fieldset w-full"
+            aria-describedby="shipping-services-hint"
+          >
+            <legend class="label-text font-medium mb-1">
               {gettext("Services offered to the buyer")}
-            </span>
+            </legend>
             <input type="hidden" name={"#{prefix()}[services][]"} value="" />
             <label
               :for={{label, key} <- @service_options}
@@ -109,7 +114,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
               />
               <span class="select-none">{label}</span>
             </label>
-            <p class="text-sm text-base-content/60 mt-1">
+            <p id="shipping-services-hint" class="text-sm text-base-content/60 mt-1">
               {gettext(
                 "The buyer chooses one of them at checkout. With one service ticked there is nothing to choose."
               )}
@@ -141,7 +146,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
                 "The carrier's services could not be loaded. Reload the page to try again; the saved service is kept."
               )}
             </p>
-          </div>
+          </fieldset>
         </div>
 
         <div

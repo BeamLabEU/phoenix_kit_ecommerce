@@ -1519,6 +1519,38 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
       assert has_element?(view, ps("address-form"))
     end
 
+    test "the city and point lookups are for the service chosen", %{conn: conn} do
+      test_pid = self()
+
+      services = [
+        %Service{key: "branch", label: "Branch", destination: :pickup_point, lookup: :search},
+        %Service{key: "locker", label: "Locker", destination: :pickup_point, lookup: :search}
+      ]
+
+      stub!(%{
+        services: services,
+        localities: fn _query, ctx ->
+          send(test_pid, {:searched_for, ctx.service})
+          {:ok, [@springfield]}
+        end
+      })
+
+      {conn, _cart, _method} = cart_session(conn, services: ["branch", "locker"])
+      {:ok, view, _html} = live(conn, "/cart")
+
+      view |> element(ps("service-locker")) |> render_click()
+      settle(view)
+
+      view |> form(ps("locality-form"), %{"q" => "Spr"}) |> render_change()
+      settle(view)
+      assert_received {:searched_for, "locker"}
+
+      view |> element(ps("locality-option-L1")) |> render_click()
+      settle(view)
+
+      assert_received {:stub_called, :list_pickup_points, [%Locality{id: "L1"}, "locker", nil]}
+    end
+
     test "an event for a service that is not on offer stores nothing", %{conn: conn} do
       {conn, cart, _method} = cart_session(conn, services: ["branch", "courier"])
       {:ok, _view, _html} = live(conn, "/cart")

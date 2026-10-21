@@ -119,7 +119,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
      socket
      |> assign(@editor_state)
      |> assign(
-       service_key: nil,
+       method_hash: nil,
        service: nil,
        editing: nil,
        quote_state: :idle,
@@ -151,13 +151,13 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
     %{method: method, snapshot: snapshot} = socket.assigns
     key = :erlang.phash2({method.uuid, method.metadata, service_key(snapshot)})
 
-    if socket.assigns.service_key == key do
+    if socket.assigns.method_hash == key do
       socket
     else
       socket
       |> cancel_lookups()
       |> assign(@editor_state)
-      |> assign(service_key: key, editing: nil, quote_state: :idle, auto_key: nil, auto_streak: 0)
+      |> assign(method_hash: key, editing: nil, quote_state: :idle, auto_key: nil, auto_streak: 0)
     end
   end
 
@@ -342,13 +342,14 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   defp run_lookup(socket, :localities) do
     %{method: method, locale: locale, locality_query: text, cart: cart} = socket.assigns
     query = String.trim(text)
+    context_opts = lookup_context_opts(socket)
 
     socket
     |> put_lookup(:localities, at: System.monotonic_time(:millisecond), pending: false)
     |> assign(localities_state: :loading, localities_error: nil)
     |> start_async(:localities, fn ->
       method
-      |> Shipping.context(locale: locale, country: cart.shipping_country)
+      |> Shipping.context([locale: locale, country: cart.shipping_country] ++ context_opts)
       |> Shipping.search_localities(query)
     end)
   end
@@ -359,17 +360,27 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
     %{method: method, locale: locale, locality: locality, point_query: query, cart: cart} =
       socket.assigns
 
+    context_opts = lookup_context_opts(socket)
+
     socket
     |> put_lookup(:points, at: System.monotonic_time(:millisecond), pending: false)
     |> assign(points_state: :loading, points_error: nil)
     |> start_async(:points, fn ->
       method
-      |> Shipping.context(locale: locale, country: cart.shipping_country)
+      |> Shipping.context([locale: locale, country: cart.shipping_country] ++ context_opts)
       |> Shipping.list_pickup_points(locality, query,
         parcels: Shop.cart_parcels(cart),
         declared_value: Shop.cart_declared_value(cart)
       )
     end)
+  end
+
+  # The lookups are for the service the shopper chose, not the method's default.
+  defp lookup_context_opts(socket) do
+    case service_key(socket.assigns.snapshot) do
+      nil -> []
+      key -> [service: key]
+    end
   end
 
   # What came back while another, newer request was waiting is asked again.
@@ -553,8 +564,10 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   def handle_event("choose_service", %{"service" => key}, socket) when is_binary(key) do
     %{snapshot: snapshot} = socket.assigns
 
+    # Not throttled: it asks the carrier nothing, and a click that is dropped
+    # leaves the browser's radio on a service the server never took.
     if key != service_key(snapshot) and Enum.any?(snapshot.choices, &(&1.key == key)),
-      do: throttled(socket, &choose_service(&1, key)),
+      do: choose_service(socket, key),
       else: {:noreply, socket}
   end
 
