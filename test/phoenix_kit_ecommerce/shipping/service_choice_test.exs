@@ -212,6 +212,43 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert Shop.cart_shipping_destination(cart) == %Destination{locality: @locality}
     end
 
+    test "a new place picked after the service went stale prices the service in effect" do
+      for remaining <- [["branch", "courier"], ["branch"]] do
+        method = method!()
+        cart = cart_with!(method)
+        {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+        {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("OLD"))
+        set_block!(method, %{"services" => remaining})
+
+        {:ok, cart} = Shop.set_cart_shipping_destination(reload(cart), branch("NEW"))
+
+        assert CartQuote.service(cart.metadata) == nil
+        assert Shop.shipping_quote_status(cart) == :missing
+        assert {:ok, cart} = Shop.quote_cart_shipping(cart)
+        assert Shop.shipping_quote_status(cart) == :ok
+        assert Shop.cart_shipping_service_key(cart) == "branch"
+      end
+    end
+
+    test "an order made from a stale choice does not record the old place" do
+      method = method!(%{"services" => ["branch", "locker"]})
+      cart = cart_with!(method)
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("OLD"))
+      set_block!(method, %{"services" => ["branch"]})
+      cart = reload(cart)
+
+      assert {:error, :shipping_quote_required} =
+               Shop.convert_cart_to_order(cart, billing_data: complete_billing("US"))
+
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("NEW"))
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: complete_billing("US"))
+
+      assert order.metadata["shipping_provider"]["service"] == "branch"
+      assert order.metadata["shipping_destination"]["pickup_point"]["id"] == "NEW"
+    end
+
     test "a single-service method of the older shape works as it did" do
       method = method!()
       {:ok, method} = Shop.update_shipping_method(method, %{metadata: legacy_metadata(method)})

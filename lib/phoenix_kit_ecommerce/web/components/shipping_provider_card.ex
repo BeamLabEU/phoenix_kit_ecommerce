@@ -96,7 +96,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingProviderCard do
             class="fieldset w-full"
             aria-describedby="shipping-services-hint"
           >
-            <legend class="label-text font-medium mb-1">
+            <legend class="fieldset-legend font-medium">
               {gettext("Services offered to the buyer")}
             </legend>
             <input type="hidden" name={"#{prefix()}[services][]"} value="" />

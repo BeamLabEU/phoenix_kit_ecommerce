@@ -4205,6 +4205,7 @@ defmodule PhoenixKitEcommerce do
           (locked.metadata || %{})
           |> CartQuote.put_destination(destination)
           |> CartQuote.drop_quote()
+          |> drop_stale_service(locked)
 
         locked
         |> write_cart_metadata!(metadata)
@@ -4212,6 +4213,20 @@ defmodule PhoenixKitEcommerce do
       end)
 
     broadcast_shipping_change(result)
+  end
+
+  # A destination picked now is for the service in effect, so a stale choice
+  # (a service the method no longer allows) must not keep cutting it down.
+  defp drop_stale_service(metadata, %Cart{} = cart) do
+    case cart_selected_method(cart) do
+      nil ->
+        metadata
+
+      method ->
+        if stale_service_choice?(%Cart{cart | metadata: metadata}, method),
+          do: CartQuote.put_service(metadata, nil),
+          else: metadata
+    end
   end
 
   @doc """
@@ -4640,12 +4655,15 @@ defmodule PhoenixKitEcommerce do
   # The place picked for a service the method no longer allows means nothing to
   # the default service the cart fell back to: only the locality is kept, so the
   # shopper is asked again.
-  defp request_destination(cart, method) do
+  defp request_destination(cart, method),
+    do: destination_in_effect(cart, method) || %Destination{}
+
+  defp destination_in_effect(cart, method) do
     destination = cart_shipping_destination(cart)
 
     if stale_service_choice?(cart, method),
-      do: CartQuote.carry_destination(destination, nil, nil) || %Destination{},
-      else: destination || %Destination{}
+      do: CartQuote.locality_only(destination),
+      else: destination
   end
 
   # The exact base amount of the lines (their own `base_unit_price`), not the
@@ -6050,7 +6068,7 @@ defmodule PhoenixKitEcommerce do
   defp shipping_order_metadata(%Cart{shipping_method: %ShippingMethod{} = method} = cart) do
     if ShippingMethod.calculated?(method) and items_require_shipping?(cart.items) do
       config = ShippingMethod.shipping_config(method)
-      destination = cart_shipping_destination(cart)
+      destination = destination_in_effect(cart, method)
 
       %{
         "shipping_provider" => %{

@@ -151,8 +151,12 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuote do
 
   defp same_place?(_from, _to), do: false
 
-  defp locality_only(%Destination{locality: nil}), do: nil
-  defp locality_only(%Destination{locality: locality}), do: %Destination{locality: locality}
+  @doc "A destination cut down to its locality, `nil` when there is none."
+  @spec locality_only(Destination.t() | nil) :: Destination.t() | nil
+  def locality_only(%Destination{locality: %Locality{} = locality}),
+    do: %Destination{locality: locality}
+
+  def locality_only(_destination), do: nil
 
   @doc "The stored quote entry, or `nil` when there is none (or it is unreadable)."
   @spec stored(term()) :: stored() | nil
