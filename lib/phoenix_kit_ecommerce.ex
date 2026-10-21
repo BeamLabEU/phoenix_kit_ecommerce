@@ -4218,14 +4218,12 @@ defmodule PhoenixKitEcommerce do
   # A destination picked now is for the service in effect, so a stale choice
   # (a service the method no longer allows) must not keep cutting it down.
   defp drop_stale_service(metadata, %Cart{} = cart) do
-    case cart_selected_method(cart) do
-      nil ->
-        metadata
-
-      method ->
-        if stale_service_choice?(%Cart{cart | metadata: metadata}, method),
-          do: CartQuote.put_service(metadata, nil),
-          else: metadata
+    with chosen when not is_nil(chosen) <- CartQuote.service(metadata),
+         %ShippingMethod{} = method <- cart_selected_method(cart),
+         true <- chosen not in ShippingMethod.shipping_config(method).services do
+      CartQuote.put_service(metadata, nil)
+    else
+      _ -> metadata
     end
   end
 

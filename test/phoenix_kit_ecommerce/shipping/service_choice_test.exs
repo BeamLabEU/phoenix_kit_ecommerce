@@ -249,6 +249,24 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert order.metadata["shipping_destination"]["pickup_point"]["id"] == "NEW"
     end
 
+    test "the order of a stale choice whose service in effect needs no place has only the locality" do
+      services = [%Service{key: "nodest", label: "No place", destination: :none} | @services]
+      StubProvider.put(%{services: services})
+
+      method = method!(%{"services" => ["nodest", "locker", "branch"]})
+      cart = cart_with!(method)
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("OLD"))
+      set_block!(method, %{"services" => ["nodest", "branch"]})
+
+      {:ok, cart} = Shop.quote_cart_shipping(reload(cart))
+      {:ok, order} = Shop.convert_cart_to_order(cart, billing_data: complete_billing("US"))
+
+      assert order.metadata["shipping_provider"]["service"] == "nodest"
+      assert order.metadata["shipping_destination"]["locality"]["name"] == "Kyiv"
+      assert order.metadata["shipping_destination"]["pickup_point"] == nil
+    end
+
     test "a single-service method of the older shape works as it did" do
       method = method!()
       {:ok, method} = Shop.update_shipping_method(method, %{metadata: legacy_metadata(method)})
@@ -323,8 +341,10 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
       assert_receive {:shipping_selected, _}
 
-      assert {:ok, _cart} = Shop.set_cart_shipping_service(cart, "locker")
+      assert {:ok, same} = Shop.set_cart_shipping_service(cart, "locker")
       refute_receive {:shipping_selected, _}, 100
+      assert same.metadata == cart.metadata
+      assert Decimal.equal?(same.shipping_amount, cart.shipping_amount)
     end
 
     test "broadcasts the change" do
