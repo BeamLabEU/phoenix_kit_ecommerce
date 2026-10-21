@@ -564,9 +564,10 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   def handle_event("choose_service", %{"service" => key}, socket) when is_binary(key) do
     %{snapshot: snapshot} = socket.assigns
 
-    # Not throttled: it asks the carrier nothing, and a click that is dropped
-    # leaves the browser's radio on a service the server never took.
-    if key != service_key(snapshot) and Enum.any?(snapshot.choices, &(&1.key == key)),
+    # Not throttled and not compared with the service shown: it asks the
+    # carrier nothing, a click that is dropped leaves the browser's radio on a
+    # service the server never took, and choosing the one in effect is cheap.
+    if Enum.any?(snapshot.choices, &(&1.key == key)),
       do: choose_service(socket, key),
       else: {:noreply, socket}
   end

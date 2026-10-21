@@ -1551,6 +1551,43 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
       assert_received {:stub_called, :list_pickup_points, [%Locality{id: "L1"}, "locker", nil]}
     end
 
+    test "a cart whose chosen service the admin removed can pick a new place", %{conn: conn} do
+      stub!(%{
+        services: [
+          %Service{key: "branch", label: "Branch", destination: :pickup_point, lookup: :search},
+          %Service{key: "locker", label: "Locker", destination: :pickup_point, lookup: :search}
+        ]
+      })
+
+      {conn, cart, method} = cart_session(conn, services: ["branch", "locker"])
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+
+      {:ok, cart} =
+        Shop.set_cart_shipping_destination(cart, %Destination{
+          locality: @springfield,
+          pickup_point: %PickupPoint{id: "P9", name: "Locker 9"}
+        })
+
+      block = Map.put(method.metadata["shipping_provider"], "services", ["branch"])
+      metadata = Map.put(method.metadata, "shipping_provider", block)
+      {:ok, _method} = Shop.update_shipping_method(method, %{metadata: metadata})
+
+      {:ok, view, _html} = live(conn, "/cart")
+      settle(view)
+
+      # One service is left: nothing to choose, and the old place is refused.
+      refute has_element?(view, ps("service-choice"))
+      assert has_element?(view, ps("editor"))
+      refute has_element?(view, ps("quote-price"))
+
+      view |> element(ps("point-P1")) |> render_click()
+      settle(view)
+
+      assert has_element?(view, ps("destination-summary"), "Branch 1")
+      assert has_element?(view, ps("quote-price"), "100")
+      assert reload(cart).metadata["shipping_service"] == nil
+    end
+
     test "an event for a service that is not on offer stores nothing", %{conn: conn} do
       {conn, cart, _method} = cart_session(conn, services: ["branch", "courier"])
       {:ok, _view, _html} = live(conn, "/cart")
@@ -1564,7 +1601,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
           snapshot: %{service: branch, choices: [branch, courier]}
         })
 
-      for service <- ["teleport", "branch", "", 5] do
+      for service <- ["teleport", "", 5] do
         assert {:noreply, %Phoenix.LiveView.Socket{}} =
                  ShippingDestinationPicker.handle_event(
                    "choose_service",
