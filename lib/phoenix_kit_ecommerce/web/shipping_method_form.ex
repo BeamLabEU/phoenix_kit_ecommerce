@@ -317,7 +317,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
             provider_options={provider_select_options(@provider_options, @sp.provider)}
             provider_known?={@provider_known?}
             countries={@provider_countries}
-            service_options={service_select_options(@services, @sp.service, @services_status)}
+            service_options={service_checkbox_options(@services, @sp.services, @services_status)}
             services_status={@services_status}
             pay_on_delivery={@pay_on_delivery}
             fields={@provider_fields}
@@ -559,25 +559,17 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
       else: options ++ [{gettext("%{provider} (not installed)", provider: provider), provider}]
   end
 
-  # The saved service is always offered as the current value. It is called
-  # unavailable only when the carrier answered and does not list it: while the
-  # list loads or the carrier is down nothing is known about it.
-  defp service_select_options(services, service, status) do
+  # The saved services are always offered, ticked. One is called unavailable
+  # only when the carrier answered and does not list it: while the list loads
+  # or the carrier is down nothing is known about it.
+  defp service_checkbox_options(services, selected, status) do
     options = Enum.map(services, &{&1.label || &1.key, &1.key})
 
-    cond do
-      service in ["", nil] ->
-        options
+    missing = Enum.reject(selected, fn key -> Enum.any?(options, &(elem(&1, 1) == key)) end)
 
-      Enum.any?(options, &(elem(&1, 1) == service)) ->
-        options
-
-      status == :ok and options != [] ->
-        options ++ [{gettext("%{service} (unavailable)", service: service), service}]
-
-      true ->
-        options ++ [{service, service}]
-    end
+    if status == :ok and options != [],
+      do: options ++ Enum.map(missing, &{gettext("%{service} (unavailable)", service: &1), &1}),
+      else: options ++ Enum.map(missing, &{&1, &1})
   end
 
   # Folds the posted provider card into the state and reloads what depends on
@@ -605,7 +597,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
     Shipping.context(nil,
       provider: state.provider,
       settings: state.settings,
-      service: if(state.service == "", do: nil, else: state.service),
+      service: List.first(state.services),
       timeout: @lookup_timeout
     )
   end
@@ -670,7 +662,7 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
           socket
           |> assign(:services, services)
           |> assign(:services_status, :ok)
-          |> update(:sp, &pick_service(&1, services))
+          |> update(:sp, &pick_services(&1, services))
 
         {:error, _reason} ->
           assign(socket, :services_status, :error)
@@ -682,13 +674,13 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
 
   defp finish_services(socket, {:exit, _reason}), do: assign(socket, :services_status, :error)
 
-  # No service chosen yet: the first one the provider offers.
-  defp pick_service(%{provider: provider, service: ""} = state, [%{key: key} | _])
+  # No service ticked yet: every one the provider offers.
+  defp pick_services(%{provider: provider, services: []} = state, [_ | _] = services)
        when provider != "fixed" do
-    %{state | service: key}
+    %{state | services: Enum.map(services, & &1.key)}
   end
 
-  defp pick_service(state, _services), do: state
+  defp pick_services(state, _services), do: state
 
   defp integration_status(%{provider: provider} = ctx)
        when is_atom(provider) and provider != nil do
