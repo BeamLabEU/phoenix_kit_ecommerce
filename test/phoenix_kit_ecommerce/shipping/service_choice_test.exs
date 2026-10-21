@@ -280,6 +280,16 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert Shop.shipping_quote_status(cart) == :ok
     end
 
+    test "tells nobody when the service is already the one in effect" do
+      cart = cart_with!(method!())
+      Events.subscribe_to_session_cart(cart.session_id)
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "locker")
+      assert_receive {:shipping_selected, _}
+
+      assert {:ok, _cart} = Shop.set_cart_shipping_service(cart, "locker")
+      refute_receive {:shipping_selected, _}, 100
+    end
+
     test "broadcasts the change" do
       cart = cart_with!(method!())
       Events.subscribe_to_session_cart(cart.session_id)

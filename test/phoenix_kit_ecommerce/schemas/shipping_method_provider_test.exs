@@ -307,6 +307,17 @@ defmodule PhoenixKitEcommerce.Schemas.ShippingMethodProviderTest do
       assert cs.valid?
     end
 
+    test "no service ticked is accepted while the carrier cannot list its services" do
+      StubProvider.put(%{mode: :crash})
+
+      capture_log(fn ->
+        cs = changeset(stub(%{"service" => "", "services" => [""]}))
+
+        assert cs.valid?
+        refute Map.has_key?(block(cs), "services")
+      end)
+    end
+
     test "a missing required setting is an error" do
       cs = changeset(stub(%{"settings" => %{}}))
 

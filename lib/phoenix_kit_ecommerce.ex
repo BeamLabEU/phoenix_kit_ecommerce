@@ -4250,8 +4250,10 @@ defmodule PhoenixKitEcommerce do
   recalculated. The destination stays where it means the same to the new
   service, otherwise only its locality does (see
   `PhoenixKitEcommerce.Shipping.CartQuote.carry_destination/3`). Choosing the
-  service that is already in effect changes nothing. The carrier is not asked
-  here; see `quote_cart_shipping/2`.
+  service that is already in effect changes nothing and tells nobody. The
+  carrier is not asked here (see `quote_cart_shipping/2`), but the provider's
+  service list is read inside the transaction, under the cart lock, like the
+  checks of the destination (it is cached and bounded by a short timeout).
 
   Returns `{:ok, cart}` (reloaded, with items), or `{:error, reason}`:
   `:no_method`, `:not_calculated`, `:unknown_service` (not allowed, or not
@@ -4270,14 +4272,19 @@ defmodule PhoenixKitEcommerce do
 
         case choose_shipping_service(locked, key) do
           {:ok, metadata} ->
-            locked |> write_cart_metadata!(metadata) |> recalculate_cart_totals!()
+            changed? = metadata != (locked.metadata || %{})
+            {changed?, locked |> write_cart_metadata!(metadata) |> recalculate_cart_totals!()}
 
           {:error, reason} ->
             repo().rollback(reason)
         end
       end)
 
-    broadcast_shipping_change(result)
+    case result do
+      {:ok, {true, updated_cart}} -> broadcast_shipping_change({:ok, updated_cart})
+      {:ok, {false, updated_cart}} -> {:ok, updated_cart}
+      error -> error
+    end
   end
 
   # `{:ok, metadata}` of the locked cart with the service chosen.
@@ -4330,7 +4337,7 @@ defmodule PhoenixKitEcommerce do
   defp allowed_shipping_services(method, country) do
     allowed = ShippingMethod.shipping_config(method).services
 
-    with {:ok, offered} <- offered_services(method, country, nil) do
+    with {:ok, offered} <- offered_without_credentials(method, country) do
       {:ok, only_allowed(complete_offer(method, country, allowed, offered), allowed)}
     end
   end
@@ -4339,7 +4346,7 @@ defmodule PhoenixKitEcommerce do
     if all_offered?(allowed, offered) or not credentialed_provider?(method) do
       offered
     else
-      case offered_services(method, country, :stored) do
+      case offered_with_credentials(method, country) do
         {:ok, more} -> more
         {:error, _reason} -> offered
       end
@@ -4356,13 +4363,13 @@ defmodule PhoenixKitEcommerce do
 
   defp only_allowed(offered, allowed), do: Enum.filter(offered, &(&1.key in allowed))
 
-  defp offered_services(method, country, :stored) do
+  defp offered_with_credentials(method, country) do
     method
     |> Shipping.context(country: country, timeout: @shipping_lookup_timeout)
     |> Shipping.services()
   end
 
-  defp offered_services(method, country, nil) do
+  defp offered_without_credentials(method, country) do
     method
     |> Shipping.context(credentials: nil, country: country, timeout: @shipping_lookup_timeout)
     |> Shipping.services()

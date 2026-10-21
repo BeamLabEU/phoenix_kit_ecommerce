@@ -26,6 +26,9 @@ defmodule PhoenixKitEcommerce.Shipping.MethodParams do
     * a provider whose `services/1` fails is accepted as is, because an outage
       of the carrier must not stop the admin from saving a method
     * so is one that lists no services at all
+    * so, for the same reason, is a method with no service ticked while the
+      provider cannot list its services (a new method has none ticked then):
+      "at least one" is checked only against an answer of the carrier
     * a service the credential-less list does not know is accepted when the
       provider has an `integration/0`, since its credentials may unlock more
       services than we can see here
