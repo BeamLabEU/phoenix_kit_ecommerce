@@ -4263,27 +4263,28 @@ defmodule PhoenixKitEcommerce do
   """
   @spec set_cart_shipping_service(Cart.t(), String.t()) :: {:ok, Cart.t()} | {:error, term()}
   def set_cart_shipping_service(%Cart{} = cart, key) when is_binary(key) do
-    result =
-      repo().transaction(fn ->
-        locked =
-          cart.uuid
-          |> lock_active_cart!()
-          |> repo().preload([:items, :shipping_method], force: true)
-
-        case choose_shipping_service(locked, key) do
-          {:ok, metadata} ->
-            changed? = metadata != (locked.metadata || %{})
-            {changed?, locked |> write_cart_metadata!(metadata) |> recalculate_cart_totals!()}
-
-          {:error, reason} ->
-            repo().rollback(reason)
-        end
-      end)
-
-    case result do
+    case repo().transaction(fn -> store_shipping_service(cart.uuid, key) end) do
       {:ok, {true, updated_cart}} -> broadcast_shipping_change({:ok, updated_cart})
-      {:ok, {false, updated_cart}} -> {:ok, updated_cart}
+      {:ok, {false, unchanged_cart}} -> {:ok, unchanged_cart}
       error -> error
+    end
+  end
+
+  # `{changed?, cart}`, inside the transaction.
+  defp store_shipping_service(cart_uuid, key) do
+    locked =
+      cart_uuid
+      |> lock_active_cart!()
+      |> repo().preload([:items, :shipping_method], force: true)
+
+    case choose_shipping_service(locked, key) do
+      {:ok, metadata} ->
+        if metadata == (locked.metadata || %{}),
+          do: {false, locked},
+          else: {true, locked |> write_cart_metadata!(metadata) |> recalculate_cart_totals!()}
+
+      {:error, reason} ->
+        repo().rollback(reason)
     end
   end
 
