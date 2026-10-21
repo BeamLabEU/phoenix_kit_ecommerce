@@ -3923,8 +3923,9 @@ defmodule PhoenixKitEcommerce do
   Sets shipping method for cart.
 
   The quote of a calculated method never carries over to another method. The
-  destination does only when the new method has the same provider and service
-  (a destination picked for one carrier means nothing to another).
+  destination and the service the shopper chose do only when the new method
+  has the same provider and the same allowed services (a destination picked
+  for one carrier means nothing to another).
   """
   def set_cart_shipping(%Cart{} = cart, %ShippingMethod{} = method, country) do
     # This initial value is immediately overwritten by `recalculate_cart_totals!/1`
@@ -4213,6 +4214,143 @@ defmodule PhoenixKitEcommerce do
     broadcast_shipping_change(result)
   end
 
+  @doc """
+  The key of the service that prices and delivers the cart's calculated
+  shipping: the one the shopper chose when the method still allows it, else
+  the default service of the method. `nil` for a cart without a calculated
+  method.
+  """
+  @spec cart_shipping_service_key(Cart.t()) :: String.t() | nil
+  def cart_shipping_service_key(%Cart{} = cart) do
+    case cart_selected_method(cart) do
+      nil -> nil
+      method -> if ShippingMethod.calculated?(method), do: effective_service_key(cart, method)
+    end
+  end
+
+  defp effective_service_key(%Cart{metadata: metadata}, method) do
+    config = ShippingMethod.shipping_config(method)
+    chosen = CartQuote.service(metadata)
+
+    if chosen in config.services, do: chosen, else: config.service
+  end
+
+  @doc """
+  The shopper chooses the service of the cart's calculated method among those
+  the method allows (and the provider offers for the country of the cart).
+
+  The stored quote is dropped (it was for another service) and the totals are
+  recalculated. The destination stays where it means the same to the new
+  service, otherwise only its locality does (see
+  `PhoenixKitEcommerce.Shipping.CartQuote.carry_destination/3`). Choosing the
+  service that is already in effect changes nothing. The carrier is not asked
+  here; see `quote_cart_shipping/2`.
+
+  Returns `{:ok, cart}` (reloaded, with items), or `{:error, reason}`:
+  `:no_method`, `:not_calculated`, `:unknown_service` (not allowed, or not
+  offered by the provider), `:cart_not_active`, `:cart_not_found`.
+  """
+  @spec set_cart_shipping_service(Cart.t(), String.t()) :: {:ok, Cart.t()} | {:error, term()}
+  def set_cart_shipping_service(%Cart{} = cart, key) when is_binary(key) do
+    result =
+      repo().transaction(fn ->
+        locked =
+          cart.uuid
+          |> lock_active_cart!()
+          |> repo().preload([:items, :shipping_method], force: true)
+
+        case choose_shipping_service(locked, key) do
+          {:ok, metadata} ->
+            locked |> write_cart_metadata!(metadata) |> recalculate_cart_totals!()
+
+          {:error, reason} ->
+            repo().rollback(reason)
+        end
+      end)
+
+    broadcast_shipping_change(result)
+  end
+
+  # `{:ok, metadata}` of the locked cart with the service chosen.
+  defp choose_shipping_service(cart, key) do
+    method = cart_selected_method(cart)
+
+    with :ok <- check_calculated_method(method),
+         {:ok, offered} <- allowed_shipping_services(method, cart.shipping_country),
+         %ShippingService{} = service <-
+           Enum.find(offered, &(&1.key == key)) || {:error, :unknown_service} do
+      {:ok, service_chosen_metadata(cart, method, offered, service)}
+    end
+  end
+
+  defp check_calculated_method(nil), do: {:error, :no_method}
+
+  defp check_calculated_method(method),
+    do: if(ShippingMethod.calculated?(method), do: :ok, else: {:error, :not_calculated})
+
+  defp service_chosen_metadata(cart, method, offered, %ShippingService{key: key} = service) do
+    metadata = cart.metadata || %{}
+    current_key = effective_service_key(cart, method)
+
+    if key == current_key do
+      metadata
+    else
+      current = Enum.find(offered, &(&1.key == current_key))
+
+      destination =
+        metadata |> CartQuote.destination() |> CartQuote.carry_destination(current, service)
+
+      metadata
+      |> CartQuote.put_service(key)
+      |> CartQuote.put_destination(destination)
+      |> CartQuote.drop_quote()
+    end
+  end
+
+  # The services of the method the provider offers for the country, in the
+  # provider's order. A provider that lists some of them only with credentials
+  # is asked again with them.
+  defp allowed_shipping_services(method, country) do
+    allowed = ShippingMethod.shipping_config(method).services
+
+    with {:ok, offered} <- offered_services(method, country, nil) do
+      {:ok, only_allowed(complete_offer(method, country, allowed, offered), allowed)}
+    end
+  end
+
+  defp complete_offer(method, country, allowed, offered) do
+    if all_offered?(allowed, offered) or not credentialed_provider?(method) do
+      offered
+    else
+      case offered_services(method, country, :stored) do
+        {:ok, more} -> more
+        {:error, _reason} -> offered
+      end
+    end
+  end
+
+  defp all_offered?(allowed, offered),
+    do: Enum.all?(allowed, fn key -> Enum.any?(offered, &(&1.key == key)) end)
+
+  defp credentialed_provider?(method) do
+    provider = Shipping.context(method, credentials: nil).provider
+    not is_nil(provider) and function_exported?(provider, :integration, 0)
+  end
+
+  defp only_allowed(offered, allowed), do: Enum.filter(offered, &(&1.key in allowed))
+
+  defp offered_services(method, country, :stored) do
+    method
+    |> Shipping.context(country: country, timeout: @shipping_lookup_timeout)
+    |> Shipping.services()
+  end
+
+  defp offered_services(method, country, nil) do
+    method
+    |> Shipping.context(credentials: nil, country: country, timeout: @shipping_lookup_timeout)
+    |> Shipping.services()
+  end
+
   defp cast_shipping_destination(%Destination{} = destination),
     do: CartQuote.sanitize_destination(destination)
 
@@ -4302,15 +4440,18 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp shipping_context_options(%RateRequest{currency: currency, country: country}, opts) do
+  defp shipping_context_options(
+         %RateRequest{currency: currency, country: country, service: service},
+         opts
+       ) do
     locale = if opts[:locale], do: [locale: opts[:locale]], else: []
 
     context_opts =
-      opts |> Keyword.get(:context_opts, []) |> Keyword.drop([:currency, :country])
+      opts |> Keyword.get(:context_opts, []) |> Keyword.drop([:currency, :country, :service])
 
-    # The currency and the country of the request always win: the quote is
-    # read in the one and asked for the other.
-    [currency: currency, country: country] ++ context_opts ++ locale
+    # The currency, the country and the service of the request always win:
+    # the quote is read in the one and asked for the other.
+    [currency: currency, country: country, service: service] ++ context_opts ++ locale
   end
 
   defp persist_cart_quote(cart_uuid, request_hash, provider, answer) do
@@ -4460,7 +4601,7 @@ defmodule PhoenixKitEcommerce do
     declared_value = items_base_subtotal(cart, items)
 
     %RateRequest{
-      service: config.service,
+      service: effective_service_key(cart, method),
       origin: config.settings,
       destination: cart_shipping_destination(cart) || %Destination{},
       parcels: pack_parcels(items),
@@ -4533,7 +4674,7 @@ defmodule PhoenixKitEcommerce do
   # The services are looked up for the country of the request: a provider that
   # does not deliver there has none, and the cart is `:unavailable`.
   defp lookup_shipping_service(nil, method, request),
-    do: shipping_service(method, request.country)
+    do: shipping_service(method, request.country, request.service)
 
   defp lookup_shipping_service(lookup, method, _request), do: lookup.(method)
 
@@ -4576,19 +4717,27 @@ defmodule PhoenixKitEcommerce do
     do: Shipping.fits_point?(point, request.parcels, request.declared_value)
 
   # `{:ok, service | nil, context}` (`nil`: the provider has no services to
-  # choose from) or `{:error, reason}`.
-  defp shipping_service(method, country) do
+  # choose from) or `{:error, reason}`. `service` is the key of the service in
+  # effect for the cart.
+  defp shipping_service(method, country, service) do
     context =
       Shipping.context(method,
         credentials: nil,
         country: country,
+        service: service,
         timeout: @shipping_lookup_timeout
       )
 
     case find_shipping_service(context) do
       {:error, :unknown_service} = error ->
         if function_exported?(context.provider, :integration, 0) do
-          context = Shipping.context(method, country: country, timeout: @shipping_lookup_timeout)
+          context =
+            Shipping.context(method,
+              country: country,
+              service: service,
+              timeout: @shipping_lookup_timeout
+            )
+
           find_shipping_service(context)
         else
           error
@@ -4686,31 +4835,32 @@ defmodule PhoenixKitEcommerce do
   end
 
   # What the metadata keeps after the method changed from `previous_uuid` to
-  # `method`: nothing of the old quote, and the destination only if the new
-  # method goes through the same provider and service.
+  # `method`: nothing of the old quote, and the destination and the service
+  # the shopper chose only if the new method goes through the same provider
+  # and offers the same services.
   defp method_switch_metadata(metadata, previous_uuid, %ShippingMethod{} = method) do
     cond do
       not CartQuote.any?(metadata) or previous_uuid == method.uuid -> metadata
-      same_shipping_service?(previous_uuid, method) -> CartQuote.drop_quote(metadata)
+      same_shipping_services?(previous_uuid, method) -> CartQuote.drop_quote(metadata)
       true -> CartQuote.drop_all(metadata)
     end
   end
 
-  defp same_shipping_service?(nil, _method), do: true
+  defp same_shipping_services?(nil, _method), do: true
 
-  defp same_shipping_service?(previous_uuid, method) do
+  defp same_shipping_services?(previous_uuid, method) do
     case repo().get_by(ShippingMethod, uuid: previous_uuid) do
       nil ->
         true
 
       previous ->
-        shipping_service_key(previous) == shipping_service_key(method)
+        shipping_services_key(previous) == shipping_services_key(method)
     end
   end
 
-  defp shipping_service_key(method) do
+  defp shipping_services_key(method) do
     config = ShippingMethod.shipping_config(method)
-    {config.provider, config.service}
+    {config.provider, config.services}
   end
 
   # The cart comes back with the metadata of the row as it is now, not the
@@ -5867,7 +6017,10 @@ defmodule PhoenixKitEcommerce do
       destination = cart_shipping_destination(cart)
 
       %{
-        "shipping_provider" => %{"provider" => config.provider, "service" => config.service},
+        "shipping_provider" => %{
+          "provider" => config.provider,
+          "service" => effective_service_key(cart, method)
+        },
         "shipping_parcels" => cart |> cart_parcels() |> Enum.map(&Parcel.to_map/1)
       }
       |> put_present("shipping_destination", destination && Destination.to_map(destination))
@@ -7192,9 +7345,14 @@ defmodule PhoenixKitEcommerce do
     * `entry` - `cart_shipping_quote/1`
     * `presented` - `present_shipping_method/2` (`nil` without a method)
     * `blocks?` - `shipping_quote_blocks_checkout?/1`
-    * `service` - the `PhoenixKitEcommerce.Shipping.Service` of a selected
-      calculated method (a service that asks for nothing when the provider
-      lists none), else `nil`
+    * `service` - the `PhoenixKitEcommerce.Shipping.Service` in effect for a
+      selected calculated method (the one the shopper chose, else the default
+      of the method; a service that asks for nothing when the provider lists
+      none), else `nil`
+    * `choices` - the services of the method the shopper may choose from (see
+      `set_cart_shipping_service/2`), in the provider's order; `[]` when there
+      is nothing to choose from, or they cannot be listed. The shop offers a
+      choice when there are two or more
     * `service_error` - why the services cannot be listed (`nil` when they can)
     * `transient?` - the service listing failed in a way that may pass (a
       timeout, a crash) rather than for good (the provider or the service is
@@ -7218,6 +7376,7 @@ defmodule PhoenixKitEcommerce do
           presented: map() | nil,
           blocks?: boolean(),
           service: ShippingService.t() | nil,
+          choices: [ShippingService.t()],
           service_error: term(),
           transient?: boolean()
         }
@@ -7234,6 +7393,7 @@ defmodule PhoenixKitEcommerce do
       presented: nil,
       blocks?: false,
       service: nil,
+      choices: [],
       service_error: nil,
       transient?: false
     }
@@ -7251,6 +7411,7 @@ defmodule PhoenixKitEcommerce do
       presented: present_state(cart, method, state),
       blocks?: status in @blocking_shipping_statuses,
       service: service,
+      choices: snapshot_choices(cart, method, service_result),
       service_error: service_error,
       transient?:
         service_error not in [nil, :unknown_provider, :unknown_service] and
@@ -7273,8 +7434,21 @@ defmodule PhoenixKitEcommerce do
         {{:missing, nil, nil}, nil}
 
       true ->
-        result = shipping_service(method, cart.shipping_country)
+        result =
+          shipping_service(method, cart.shipping_country, effective_service_key(cart, method))
+
         {cart_quote_state(cart, method, items, fn _method -> result end), result}
+    end
+  end
+
+  # Only a method with something to choose from lists its services; the
+  # lookup is the cached one the service in effect has just made.
+  defp snapshot_choices(_cart, _method, nil), do: []
+
+  defp snapshot_choices(cart, method, _service_result) do
+    case allowed_shipping_services(method, cart.shipping_country) do
+      {:ok, [_, _ | _] = services} -> services
+      _ -> []
     end
   end
 
