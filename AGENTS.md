@@ -895,9 +895,14 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   and into the order's `shipping_provider.service`. Never read
   `shipping_config(method).service` for a cart: use the service in effect.
   A choice the admin has since unticked is stale: until a destination is
-  stored (which drops it) or another service is chosen, the destination counts
-  only as its locality (`request_destination/2`, `destination_in_effect/2`), so
-  the shopper is asked for a place again.
+  stored (which records the service now in effect) or another service is chosen,
+  the destination counts only as its locality (`request_destination/2`,
+  `destination_in_effect/2`), so the shopper is asked for a place again.
+  Saving a nonempty destination records
+  its service even when the shopper used the default without clicking its radio:
+  changing the default must not reinterpret an existing pickup point. A legacy
+  destination without a recorded service requires confirmation once, since its
+  historical default is unknown.
 - The limits of a chosen pickup point (weight, size, value) are re-checked
   against the cart whenever its shipping status is worked out
   (`check_destination`): a point that no longer takes the parcels makes the
