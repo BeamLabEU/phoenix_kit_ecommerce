@@ -61,6 +61,23 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
     :ok
   end
 
+  defp flush_stub_calls do
+    receive do
+      {:stub_called, _operation, _args} -> flush_stub_calls()
+    after
+      0 -> :ok
+    end
+  end
+
+  defp stub_service_calls(count \\ 0) do
+    receive do
+      {:stub_called, :services, _args} -> stub_service_calls(count + 1)
+      {:stub_called, _operation, _args} -> stub_service_calls(count)
+    after
+      0 -> count
+    end
+  end
+
   defp product! do
     {:ok, product} =
       Shop.create_product(%{
@@ -480,6 +497,19 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert snapshot.service == nil
       assert snapshot.service_error == :unknown_service
       assert Enum.map(snapshot.choices, & &1.key) == ["branch", "locker"]
+    end
+
+    test "a service list that cannot be had is asked of the carrier once, not again for the choices" do
+      cart = cart_with!(method!())
+      {:ok, cart} = Shop.set_cart_shipping_service(cart, "courier")
+      StubProvider.put(%{services: @services, modes: %{services: :crash}})
+      flush_stub_calls()
+
+      snapshot = Shop.shipping_quote_snapshot(cart)
+
+      assert {:provider_crashed, _message} = snapshot.service_error
+      assert snapshot.choices == []
+      assert stub_service_calls() == 1
     end
 
     test "a default the provider does not offer leaves the one allowed service to choose" do

@@ -7633,6 +7633,12 @@ defmodule PhoenixKitEcommerce do
   # by the pricing and the order).
   defp snapshot_choices(_cart, _method, nil), do: []
 
+  # A listing that failed for any other reason is not asked a second time: the
+  # carrier that just timed out would be waited on again for nothing, and there
+  # is no service list to choose from anyway.
+  defp snapshot_choices(_cart, _method, {:error, reason}) when reason != :unknown_service,
+    do: []
+
   defp snapshot_choices(cart, method, service_result) do
     case allowed_shipping_services(method, cart.shipping_country) do
       {:ok, [_, _ | _] = services} -> services
