@@ -229,6 +229,52 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert Shop.cart_shipping_destination(cart) == %Destination{locality: @locality}
     end
 
+    test "a destination picked for the default remembers its service when the admin removes it" do
+      method = method!()
+      cart = cart_with!(method)
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("OLD"))
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      set_block!(method, %{"services" => ["locker", "courier"]})
+      cart = reload(cart)
+
+      assert Shop.cart_shipping_service_key(cart) == "locker"
+      assert Shop.shipping_quote_status(cart) == :needs_destination
+      assert {:error, :needs_destination} = Shop.build_cart_rate_request(cart)
+
+      assert {:error, :shipping_quote_required} =
+               Shop.convert_cart_to_order(cart, billing_data: complete_billing("US"))
+    end
+
+    test "a destination keeps its service when the admin changes only the default" do
+      method = method!()
+      cart = cart_with!(method)
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+
+      set_block!(method, %{"service" => "locker"})
+
+      assert Shop.cart_shipping_service_key(reload(cart)) == "branch"
+    end
+
+    test "a legacy destination without a recorded service needs confirmation once" do
+      cart = cart_with!(method!())
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("OLD"))
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      cart =
+        cart
+        |> Ecto.Changeset.change(metadata: CartQuote.put_service(cart.metadata, nil))
+        |> Repo.update!()
+
+      assert Shop.shipping_quote_status(cart) == :needs_destination
+      assert {:error, :needs_destination} = Shop.build_cart_rate_request(cart)
+
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("CONFIRMED"))
+      assert Shop.cart_shipping_service_key(cart) == "branch"
+      assert {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+    end
+
     test "a new place picked after the service went stale prices the service in effect" do
       for remaining <- [["branch", "courier"], ["branch"]] do
         method = method!()
@@ -239,7 +285,7 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
 
         {:ok, cart} = Shop.set_cart_shipping_destination(reload(cart), branch("NEW"))
 
-        assert CartQuote.service(cart.metadata) == nil
+        assert CartQuote.service(cart.metadata) == "branch"
         assert Shop.shipping_quote_status(cart) == :missing
         assert {:ok, cart} = Shop.quote_cart_shipping(cart)
         assert Shop.shipping_quote_status(cart) == :ok
@@ -535,6 +581,23 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
   end
 
   describe "changing the method" do
+    test "different defaults clear a destination saved before service choices were recorded" do
+      cart = cart_with!(method!())
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch())
+
+      cart =
+        cart
+        |> Ecto.Changeset.change(metadata: CartQuote.put_service(cart.metadata, nil))
+        |> Repo.update!()
+
+      other = set_block!(method!(), %{"service" => "locker"})
+
+      {:ok, cart} = Shop.set_cart_shipping(cart, other, "US")
+
+      assert Shop.cart_shipping_destination(cart) == nil
+      assert Shop.shipping_quote_status(cart) == :needs_destination
+    end
+
     test "the same provider and services keeps the choice and the destination" do
       method = method!()
       cart = cart_with!(method)

@@ -4049,8 +4049,8 @@ defmodule PhoenixKitEcommerce do
 
   The quote of a calculated method never carries over to another method. The
   destination and the service the shopper chose do only when the new method
-  has the same provider and the same allowed services (a destination picked
-  for one carrier means nothing to another).
+  has the same provider, default and allowed services (a destination picked
+  for one carrier or service means nothing to another).
   """
   def set_cart_shipping(%Cart{} = cart, %ShippingMethod{} = method, country) do
     # This initial value is immediately overwritten by `recalculate_cart_totals!/1`
@@ -4300,7 +4300,9 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Sets (or, with `nil`, removes) the destination of the cart's calculated
   shipping, drops the stored quote - it was for another destination - and
-  recalculates the totals.
+  recalculates the totals. A nonempty destination also records the service
+  in effect, so changing the method's default cannot reinterpret that place
+  as belonging to another service.
 
   Takes a `PhoenixKitEcommerce.Shipping.Destination` or its map form. The
   carrier is not asked here; see `quote_cart_shipping/2`.
@@ -4330,7 +4332,7 @@ defmodule PhoenixKitEcommerce do
           (locked.metadata || %{})
           |> CartQuote.put_destination(destination)
           |> CartQuote.drop_quote()
-          |> drop_stale_service(locked)
+          |> remember_destination_service(locked)
 
         locked
         |> write_cart_metadata!(metadata)
@@ -4340,13 +4342,13 @@ defmodule PhoenixKitEcommerce do
     broadcast_shipping_change(result)
   end
 
-  # A destination picked now is for the service in effect, so a stale choice
-  # (a service the method no longer allows) must not keep cutting it down.
-  defp drop_stale_service(metadata, %Cart{} = cart) do
-    with chosen when not is_nil(chosen) <- CartQuote.service(metadata),
+  # A place belongs to the service in effect when it was picked, including
+  # the default. This also replaces a choice the method no longer allows.
+  defp remember_destination_service(metadata, %Cart{} = cart) do
+    with %Destination{} <- CartQuote.destination(metadata),
          %ShippingMethod{} = method <- cart_selected_method(cart),
-         true <- chosen not in ShippingMethod.shipping_config(method).services do
-      CartQuote.put_service(metadata, nil)
+         true <- ShippingMethod.calculated?(method) do
+      CartQuote.put_service(metadata, effective_service_key(cart, method))
     else
       _ -> metadata
     end
@@ -4373,11 +4375,14 @@ defmodule PhoenixKitEcommerce do
     if chosen in config.services, do: chosen, else: config.service
   end
 
-  # The shopper chose a service the method has stopped allowing (the admin
-  # unticked it): the cart falls back to the default service.
+  # A removed service falls back to the default. A legacy destination without
+  # a recorded service also needs confirmation: its historical default cannot
+  # be inferred from the method as it is now.
   defp stale_service_choice?(%Cart{metadata: metadata}, method) do
-    chosen = CartQuote.service(metadata)
-    not is_nil(chosen) and chosen not in ShippingMethod.shipping_config(method).services
+    case CartQuote.service(metadata) do
+      nil -> not CartQuote.empty_destination?(CartQuote.destination(metadata))
+      chosen -> chosen not in ShippingMethod.shipping_config(method).services
+    end
   end
 
   @doc """
@@ -5016,7 +5021,7 @@ defmodule PhoenixKitEcommerce do
   # What the metadata keeps after the method changed from `previous_uuid` to
   # `method`: nothing of the old quote, and the destination and the service
   # the shopper chose only if the new method goes through the same provider
-  # and offers the same services.
+  # and offers the same default and allowed services.
   defp method_switch_metadata(metadata, previous_uuid, %ShippingMethod{} = method) do
     cond do
       not CartQuote.any?(metadata) or previous_uuid == method.uuid -> metadata
@@ -5039,7 +5044,7 @@ defmodule PhoenixKitEcommerce do
 
   defp shipping_services_key(method) do
     config = ShippingMethod.shipping_config(method)
-    {config.provider, config.services}
+    {config.provider, config.service, config.services}
   end
 
   # The cart comes back with the metadata of the row as it is now, not the
