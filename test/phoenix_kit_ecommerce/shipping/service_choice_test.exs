@@ -481,6 +481,27 @@ defmodule PhoenixKitEcommerce.Shipping.ServiceChoiceTest do
       assert snapshot.service_error == :unknown_service
       assert Enum.map(snapshot.choices, & &1.key) == ["branch", "locker"]
     end
+
+    test "a default the provider does not offer leaves the one allowed service to choose" do
+      StubProvider.put(%{services: Enum.filter(@services, &(&1.key == "courier"))})
+      cart = cart_with!(method!(%{"services" => ["branch", "courier"]}))
+
+      snapshot = Shop.shipping_quote_snapshot(cart)
+
+      assert snapshot.service == nil
+      assert snapshot.service_error == :unknown_service
+      assert Enum.map(snapshot.choices, & &1.key) == ["courier"]
+
+      assert {:ok, cart} = Shop.set_cart_shipping_service(cart, "courier")
+
+      snapshot = Shop.shipping_quote_snapshot(cart)
+
+      assert snapshot.service.key == "courier"
+      assert snapshot.service_error == nil
+      assert snapshot.status != :unavailable
+      assert snapshot.choices == []
+      assert Shop.cart_shipping_service_key(cart) == "courier"
+    end
   end
 
   describe "changing the method" do

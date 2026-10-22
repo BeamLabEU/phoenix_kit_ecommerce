@@ -4388,7 +4388,9 @@ defmodule PhoenixKitEcommerce do
   recalculated. The destination stays where it means the same to the new
   service, otherwise only its locality does (see
   `PhoenixKitEcommerce.Shipping.CartQuote.carry_destination/3`). Choosing the
-  service that is already in effect changes nothing and tells nobody. The
+  service that is already in effect changes nothing and tells nobody, unless
+  the cart stores no choice yet and the service is the method's default: then
+  the choice is stored and the change is announced. The
   carrier is not asked here (see `quote_cart_shipping/2`), but the provider's
   service list is read inside the transaction, under the cart lock, like the
   checks of the destination (it is cached and bounded by a short timeout).
@@ -7624,11 +7626,17 @@ defmodule PhoenixKitEcommerce do
 
   # Only a method with something to choose from lists its services (the
   # provider's list is cached per service in effect, so this may ask again).
+  # When the service in effect is not offered for the country, even a single
+  # remaining service is listed: it is the shopper's way out, and choosing it
+  # stores it, so the price and the order follow the service the cart really
+  # has (the service in effect is never swapped silently, it is read offline
+  # by the pricing and the order).
   defp snapshot_choices(_cart, _method, nil), do: []
 
-  defp snapshot_choices(cart, method, _service_result) do
+  defp snapshot_choices(cart, method, service_result) do
     case allowed_shipping_services(method, cart.shipping_country) do
       {:ok, [_, _ | _] = services} -> services
+      {:ok, [_ | _] = services} when service_result == {:error, :unknown_service} -> services
       _ -> []
     end
   end

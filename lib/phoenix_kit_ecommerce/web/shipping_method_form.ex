@@ -936,10 +936,10 @@ defmodule PhoenixKitEcommerce.Web.ShippingMethodForm do
   defp locality_from_setting(_other), do: nil
 
   # The branches are listed for the first ticked service that ships to
-  # points (the order of the ticks is the order of preference), else for the
-  # first offered service that does: the sender's branch does not depend on
-  # what the shop sells. Nothing is asked of the carrier when no service ships
-  # to points.
+  # points (ticked services are kept in the provider's order, the admin does
+  # not rank them), else for the first offered service that does: the
+  # sender's branch does not depend on what the shop sells. Nothing is asked
+  # of the carrier when no service ships to points.
   defp point_service(%{sp: sp, services: services}) do
     keys = for %{destination: :pickup_point, key: key} <- services, do: key
     Enum.find(sp.services, &(&1 in keys)) || List.first(keys)
