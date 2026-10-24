@@ -15,3 +15,20 @@ from arbitrary process termination. No change to that contract is needed.
 
 The PR remains a draft and is not merged or modified by this review.
 Validation results are recorded in `FOLLOW_UP.md`.
+
+## Post-merge recheck — 2026-10-24
+
+Reviewed the complete merged `407e1d5` version against `88a98ad`, including
+the subsequent throw/exit handling and page integration tests. No new
+functional finding. The earlier draft review above does not describe those
+later additions.
+
+Confirmed product-photo priority, empty-image fallback, callback argument
+order, Legacy/catalogue identity, missing-function recovery, ordinary
+exception/throw/exit handling, and the cart and checkout rendering sites.
+The callback is synchronous and trusted host code; the documented quick, pure
+URL-builder contract remains necessary. Repeated warnings are a nit, not a
+reason to introduce shared state for this resolver.
+
+See [the recheck](../2026-10-24-merged-prs-recheck/CODEX_REVIEW.md) for the
+complete scope and final validation.

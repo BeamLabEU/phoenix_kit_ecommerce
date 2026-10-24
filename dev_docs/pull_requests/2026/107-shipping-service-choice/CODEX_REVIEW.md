@@ -68,3 +68,13 @@ The documented bounded provider service lookup under the cart lock is unchanged.
 ## Validation
 
 See `FOLLOW_UP.md` for the final gate and suite results.
+
+## Recheck — 2026-10-24
+
+Rechecked against `88a98ad`. Destination saves still remember the effective
+service, stale selections still require a new destination, and method switching
+compares the default as well as the provider and allowed services. Checked
+request hashes, provider lookup contexts, order snapshots, and the earlier
+outage fix that avoids a second failed service listing. No new finding.
+The current full suite and gate results are in
+[the merged-PR recheck](../2026-10-24-merged-prs-recheck/CODEX_REVIEW.md).

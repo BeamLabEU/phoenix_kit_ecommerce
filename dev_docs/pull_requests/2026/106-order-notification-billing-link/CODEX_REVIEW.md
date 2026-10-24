@@ -24,3 +24,10 @@ Existing tests retain disabled-Billing, operator-buyers, and customer-only behav
 ## Validation
 
 See `FOLLOW_UP.md` for the final gate and suite results.
+
+## Recheck — 2026-10-24
+
+Rechecked against `88a98ad`. The recipient grouping and per-group links remain
+intact, including Owner/wildcard recipients and the carts fallback. No new
+finding. The current full suite and gate results are in
+[the merged-PR recheck](../2026-10-24-merged-prs-recheck/CODEX_REVIEW.md).
