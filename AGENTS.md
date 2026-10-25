@@ -1032,7 +1032,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V5. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V6. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -1068,6 +1068,10 @@ language, `expires_at`, `used_at`, `superseded_at`) and, when the analytics
 module's events table exists, appends `<url_prefix>/checkout/claim/*` to
 `web_analytics_exclude_paths` (the trailing `*` matters: analytics matches any
 other pattern as an exact path). `down/1` keeps the table and the setting.
+V6 adds the base-currency columns core's V186 added (`base_currency` and
+`exchange_rate` on `phoenix_kit_shop_carts`, `base_unit_price` on
+`phoenix_kit_shop_cart_items`) with `ADD COLUMN IF NOT EXISTS`, so the chain
+builds the shop tables without core. No backfill; `down/1` keeps the columns.
 
 Rules for the chain, all of which have been broken at least once:
 

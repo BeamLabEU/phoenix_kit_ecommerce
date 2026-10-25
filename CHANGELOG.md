@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- **Migration V6**: adds `phoenix_kit_shop_carts.base_currency` / `.exchange_rate`
+  and `phoenix_kit_shop_cart_items.base_unit_price` (`ADD COLUMN IF NOT EXISTS`),
+  the columns core's V186 added, so the module's chain builds every shop table
+  without core's. A no-op on existing installs. A builds-alone test checks it
+  against core's chain (runs once the module resolves the next core release).
+
 ## 0.7.0 - 2026-10-24
 
 ### Added
