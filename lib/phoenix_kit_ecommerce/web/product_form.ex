@@ -46,7 +46,13 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
   @impl true
-  def mount(_params, _session, socket) do
+  # The page needs `shop.manage_catalog`, not just the base key: core's tab mapping
+  # refuses it too where the page has a tab, but the check does not rely on it.
+  def mount(params, session, socket) do
+    Authz.authorize_mount(socket, :manage_catalog, fn -> do_mount(params, session, socket) end)
+  end
+
+  defp do_mount(_params, _session, socket) do
     {:ok, socket |> new_product_trail() |> assign(:return_to, nil)}
   end
 
