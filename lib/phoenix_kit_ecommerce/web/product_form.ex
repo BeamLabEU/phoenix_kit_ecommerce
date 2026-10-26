@@ -22,6 +22,9 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                  )
 
   if @ai_translate? do
+    # Before the Embed, whose hook enqueues translations without a permission
+    # check: this one refuses the modal's events once manage_catalog is gone.
+    on_mount({PhoenixKitEcommerce.Web.Authz, {:gate_ai_translate, :manage_catalog}})
     use PhoenixKitAI.Components.AITranslate.Embed
     @behaviour PhoenixKitAI.Components.AITranslate.FormBinding
     # NB: no `import` here — imports are lexically scoped to this block and

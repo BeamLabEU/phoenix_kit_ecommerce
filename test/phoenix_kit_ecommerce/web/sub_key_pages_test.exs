@@ -32,7 +32,8 @@ defmodule PhoenixKitEcommerce.Web.SubKeyPagesTest do
     {"/en/admin/shop/settings/import-configs", "run_imports"},
     {"/en/admin/shop/imports", "run_imports"},
     {"/en/admin/shop/imports/#{@missing}", "run_imports"},
-    {"/en/admin/shop/shopify-sync", "run_imports"}
+    {"/en/admin/shop/shopify-sync", "run_imports"},
+    {"/en/admin/shop/test", "manage_catalog"}
   ]
 
   describe "a scope without the page's sub-key is refused at mount" do

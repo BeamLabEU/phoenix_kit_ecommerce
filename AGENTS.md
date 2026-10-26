@@ -285,7 +285,11 @@ Repo-local aliases:
   to nothing and core falls back to the base key), and the page's own
   `Authz.authorize_mount/3` in `mount/3` (every page, tab or not). Every
   mutating admin event handler re-checks its capability through `Web.Authz`
-  against the socket's current scope (fail-closed on a missing scope). The public `handle_event/3` clause matches the
+  against the socket's current scope (fail-closed on a missing scope).
+  The AI-translate modal's events are handled by `phoenix_kit_ai`'s
+  `AITranslate.Embed` hook, which checks no permission, so a form using it
+  declares `on_mount({Web.Authz, {:gate_ai_translate, capability}})` BEFORE
+  `use ...AITranslate.Embed` (hooks run in attach order). The public `handle_event/3` clause matches the
   event name and delegates through `Authz.authorize/3` to a private
   `gated_event/3` clause holding the original body — keeping the body in its
   own clause is what stops the wrapper adding a nesting level to 47 handlers.

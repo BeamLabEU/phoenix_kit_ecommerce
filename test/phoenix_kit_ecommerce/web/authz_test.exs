@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.Web.AuthzTest do
   use PhoenixKitEcommerce.LiveCase, async: false
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Test.Repo, as: TestRepo
   alias PhoenixKitEcommerce.Web.Authz
 
   defp scope_with(permissions) do
@@ -206,6 +207,27 @@ defmodule PhoenixKitEcommerce.Web.AuthzTest do
 
       assert {:ok, _view, html} = live(conn, "/en/admin/shop/carts")
       assert html =~ "Carts" or html =~ "carts"
+    end
+  end
+
+  describe "the product form's AI-translate modal" do
+    # `AITranslate.Embed` handles these events in a lifecycle hook that checks
+    # no permission; `Authz`'s gate runs first and re-checks the live scope.
+    @tag :integration
+    test "a crafted ai_translate_lang after manage_catalog is revoked is refused", %{conn: conn} do
+      product = product_fixture()
+      jobs = fn -> TestRepo.aggregate(Oban.Job, :count) end
+      before = jobs.()
+
+      view = mount_then_narrow(conn, "/en/admin/shop/products/#{product.uuid}/edit", ["shop"])
+
+      for event <- ~w(ai_toggle_modal ai_generate_prompt) do
+        assert render_click(view, event, %{}) =~ "permission"
+      end
+
+      html = render_click(view, "ai_translate_lang", %{"lang" => "*"})
+      assert html =~ "permission"
+      assert jobs.() == before
     end
   end
 end
