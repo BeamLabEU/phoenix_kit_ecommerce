@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.MixProject do
   use Mix.Project
 
-  @version "0.7.0"
+  @version "0.8.0"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_ecommerce"
 
   def project do
@@ -146,7 +146,7 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `form_fields/0`, none of which exist in 0.19.x - there the checkout
       # page is an `UndefinedFunctionError` the moment a shopper opens it,
       # not a compile error.
-      pk_dep(:phoenix_kit_billing, "~> 0.20"),
+      pk_dep(:phoenix_kit_billing, "~> 0.24"),
       # Optional: only the AI-translate UI/adapter use it, and both compile out
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).
@@ -177,11 +177,11 @@ defmodule PhoenixKitEcommerce.MixProject do
       # feature-detects the engine, so an older one degrades to "sweep
       # unavailable" rather than crashing — but `~> 0.24` is what makes the
       # sweep exist at all.
-      pk_dep(:phoenix_kit_ai, "~> 0.24", optional: true),
+      pk_dep(:phoenix_kit_ai, "~> 0.27", optional: true),
       # Optional: only the "Stock tracking" switch uses it. Without it the
       # switch is shown disabled with a pointer to Modules -> Not installed
       # (see `PhoenixKitEcommerce.StockTracking`).
-      pk_dep(:phoenix_kit_warehouse, "~> 0.5", optional: true),
+      pk_dep(:phoenix_kit_warehouse, "~> 0.7", optional: true),
       # No declared dependency on `phoenix_kit_catalogue`, though this app
       # DOES call into `PhoenixKitCatalogue` directly (the ProductSource
       # catalogue adapter, `Catalogue.Writer`, and the Shopify-sync 6a
@@ -198,7 +198,7 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `feature/shop-extensions` branch — so a `~>` floor here could
       # only be inaccurate, and every one of those call sites is
       # unreachable unless a host resolves that exact branch. Add
-      # `pk_dep(:phoenix_kit_catalogue, "~> <floor>", optional: true)`
+      # `pk_dep(:phoenix_kit_catalogue, "~> 0.50", optional: true)`
       # once a release carries the API.
       #
       # `catalogue_test_deps/0` below is the narrow exception: a

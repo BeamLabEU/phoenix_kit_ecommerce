@@ -119,8 +119,10 @@ defmodule PhoenixKitEcommerce.DependencyFloorTest do
              Regex.run(~r/:phoenix_kit_billing,\s*"([^"]+)"/, File.read!("mix.exs"))
 
     refute Version.match?("0.19.0", requirement)
-    assert Version.match?("0.20.0", requirement)
-    assert Version.match?("0.21.0", requirement)
+    # 0.24 is the first billing whose own chain creates its tables (core 3.0 does not)
+    refute Version.match?("0.23.0", requirement)
+    assert Version.match?("0.24.0", requirement)
+    assert Version.match?("0.25.0", requirement)
   end
 
   test "mint is a declared requirement, because PinnedAdapter calls it directly" do

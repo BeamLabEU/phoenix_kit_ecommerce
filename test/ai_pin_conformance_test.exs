@@ -38,13 +38,14 @@ defmodule PhoenixKitEcommerce.AIPinConformanceTest do
   later engine and break `mix deps.get` for hosts, which is exactly the
   trap `CorePinConformanceTest` documents.
 
-  The floor is 0.24 now: the sweep worker runs on the engine's shared
-  `PhoenixKitAI.TranslationSweep`, first shipped in 0.24.0. The worker
+  The floor is 0.27 now: ai's own chain creates its tables from 0.27.0 (core 3.0
+  creates none). Before that it was 0.24, where the sweep worker's shared
+  `PhoenixKitAI.TranslationSweep` first shipped. The worker
   feature-detects it, so an older engine degrades to "sweep unavailable"
   rather than crashing — the floor is what makes the sweep exist at all.
   """
 
-  # Every phoenix_kit_ai release published before 0.24.0, plus 1.0.0: a
+  # Every phoenix_kit_ai release published before 0.27.0, plus 1.0.0: a
   # major this module has never been verified against must not be admitted
   # silently either.
   @must_reject [
@@ -64,12 +65,16 @@ defmodule PhoenixKitEcommerce.AIPinConformanceTest do
     "0.21.0",
     "0.22.0",
     "0.23.2",
+    "0.24.0",
+    "0.25.0",
+    "0.26.1",
     "1.0.0"
   ]
 
-  # 0.24.0 is the floor; everything above it in the 0.x line stays admitted
+  # 0.27.0 is the floor (the first ai whose own chain creates its tables, which
+  # core 3.0 no longer does); everything above it in the 0.x line stays admitted
   # forever — the two-segment invariant.
-  @must_admit ["0.24.0", "0.24.1", "0.25.0", "0.29.9"]
+  @must_admit ["0.27.0", "0.27.1", "0.28.0", "0.29.9"]
 
   test "the :phoenix_kit_ai requirement admits only engines carrying the shared sweep" do
     requirement = ai_requirement()
