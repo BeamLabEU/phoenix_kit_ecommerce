@@ -1096,10 +1096,12 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       {200, link, _} = call("shop.get_checkout_link", %{"cart_token" => token})
       {200, ordinary, _} = write(token, [{p1, 2}])
 
-      for credential <- [created, link] do
+      # `shop.get_checkout_link` declares its `url` as a credential (`credentials: ["url"]`);
+      # the cart token of the created cart is caught by core's `_token` rule alone.
+      for {credential, keys} <- [{created, []}, {link, ["url"]}] do
         body = Jason.encode!(credential)
-        assert Idempotency.credential_bearing?(body), body
-        refute Idempotency.storable?(body), body
+        assert Idempotency.credential_bearing?(body, keys), body
+        refute Idempotency.storable?(body, keys), body
       end
 
       assert Idempotency.storable?(Jason.encode!(ordinary))

@@ -41,6 +41,10 @@ defmodule PhoenixKitEcommerce.TranslationPipelineSeamTest do
   end
 
   setup do
+    # The AI task guard refuses `ai.translation` while the AI module, which
+    # declares it, is switched off.
+    {:ok, _} = PhoenixKitAI.enable_system()
+
     Application.put_env(:phoenix_kit_ai, :req_options, plug: {Req.Test, __MODULE__}, retry: false)
 
     {:ok, _} =

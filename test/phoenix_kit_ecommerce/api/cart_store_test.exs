@@ -276,19 +276,6 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
       assert count_carts("api:" <> second_hash) == 0
     end
 
-    test "the deprecated key of the per-network limit still applies when the new one is unset", %{
-      hash: hash
-    } do
-      # Core's fallback (until 3.0.0): a limit whose new key holds no number reads its old key.
-      put_setting!("api_public_cart_rows_per_ip_hour", 1)
-      ctx = ctx()
-      second = new_token!()
-      {:ok, second_hash} = CartToken.verify(second)
-
-      assert {:ok, _cart, :created} = write(hash, ctx)
-      assert {:error, :rate_limited, _retry} = write(second_hash, ctx)
-    end
-
     test "the same charge counts against the global limit, whatever the network", %{hash: hash} do
       put_setting!(new_rows_key(:global_hour), 1)
       second = new_token!()

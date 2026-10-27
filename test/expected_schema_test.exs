@@ -33,7 +33,11 @@ defmodule PhoenixKitEcommerce.Integration.ExpectedSchemaTest do
     Application.put_env(:phoenix_kit, :repo, Repo)
 
     schema = "pkes_" <> Integer.to_string(System.unique_integer([:positive]))
-    {:ok, tables} = ModuleChainCheck.build_alone(Repo, @migrations, schema)
+
+    {:ok, tables} =
+      ModuleChainCheck.build_alone(Repo, @migrations, schema,
+        after: [PhoenixKitBilling.Migrations]
+      )
 
     :ok = Sandbox.checkout(Repo)
 
@@ -134,7 +138,9 @@ defmodule PhoenixKitEcommerce.Integration.ExpectedSchemaTest do
     Repo.query!(~s(ALTER TABLE "#{schema}"."#{table}" DROP COLUMN "#{column}"))
 
     id = "column:#{table}.#{column}"
-    assert [%{kind: :missing, module: @app, object_id: ^id}] = schema |> verify() |> module_findings()
+
+    assert [%{kind: :missing, module: @app, object_id: ^id}] =
+             schema |> verify() |> module_findings()
 
     {:ok, _report} = Repair.repair(prefix: schema, repo: Repo, module_manifests: @modules)
 

@@ -22,6 +22,6 @@ defmodule PhoenixKitEcommerce.Integration.MigrationsBuildAloneTest do
   @moduletag timeout: :timer.minutes(3)
 
   test "the chain builds the shop tables without core" do
-    assert :ok = ModuleChainCheck.check(Repo, Migrations)
+    assert :ok = ModuleChainCheck.check(Repo, Migrations, after: [PhoenixKitBilling.Migrations])
   end
 end

@@ -29,22 +29,15 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
     # exit from anything below it (a GenServer call into a dead mailer, say)
     # unwinds past `rescue` and needs the `catch` clause. The original bug
     # shipped from precisely this kind of unexercised path.
-    def get_active_template_by_name(_name), do: %{name: "register", id: 1}
-    def render_template(_template, _variables, _locale), do: throw(:mailer_gone)
-    def track_usage(_template), do: :ok
+    def intercept_before_send(_email, _opts), do: throw(:mailer_gone)
   end
 
   defmodule RaisingProvider do
     @moduledoc false
-    # Stands in for the real failure seen in production: an active database
-    # template whose render answers in a shape the caller mis-reads. Any raise
-    # on the send path reproduces the same collapse.
-    def get_active_template_by_name(_name), do: %{name: "register", id: 1}
-
-    def render_template(_template, _variables, _locale),
-      do: raise(KeyError, key: :text, term: %{})
-
-    def track_usage(_template), do: :ok
+    # Stands in for the real failure seen in production: the mail path
+    # answering in a shape the caller mis-reads. Any raise on the send path
+    # reproduces the same collapse.
+    def intercept_before_send(_email, _opts), do: raise(KeyError, key: :text, term: %{})
   end
 
   defp lang do
@@ -152,7 +145,7 @@ defmodule PhoenixKitEcommerce.CheckoutSurvivesEmailFailureTest do
     # The thrown value AND where it came from: `inspect/1` on the value alone
     # gives an operator `:mailer_gone` and no way to find the sender.
     assert log =~ "(throw) :mailer_gone"
-    assert log =~ "PhoenixKit.Email.Content.resolve/5"
+    assert log =~ "PhoenixKit.Mailer"
   end
 
   # A user holding "shop.manage_carts" through the "Admin" system role — the

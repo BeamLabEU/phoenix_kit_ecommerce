@@ -94,18 +94,14 @@ repo_available =
       # re-applies any newly-shipped Vxxx migrations on every boot.
       PhoenixKit.Migration.ensure_current(TestRepo, log: false)
 
-      # ...then the module-owned chain on top. V1 was purely adoptive over
-      # core's baseline, so skipping it changed nothing; V2 is not — it
-      # drops the `DEFAULT 'USD'` core declares on the four `currency`
-      # columns, and a test database that never ran it would still hand
-      # out "USD" behind the schemas' backs. `up/1` needs an
-      # `Ecto.Migration` runner, so the statements are executed directly —
-      # that is exactly what `up_statements/1` exists for, and every one of
-      # them is idempotent.
-      Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
+      # ...then ai's chain (prompts and endpoints for the translation tools; an
+      # optional dependency that is present in the test build)...
+      if Code.ensure_loaded?(PhoenixKitAI.Migrations),
+        do: Enum.each(PhoenixKitAI.Migrations.up_statements(), &TestRepo.query!/1)
 
-      # ...and billing's own chain, because this module reads and writes
-      # billing's schemas directly (checkout converts a cart through them).
+      # ...then billing's own chain, first: this module's tables reference
+      # billing's (core 3.0 creates neither), and checkout converts a cart
+      # through its schemas directly.
       # `phoenix_kit_currencies` is created by CORE's migrations, but
       # billing (floor raised to "~> 0.11" for per-domain-currency) OWNS
       # extending it — `rounding_rule`, `rate_updated_at`, the partial
@@ -114,6 +110,16 @@ repo_available =
       # `undefined_column: rounding_rule` on every currency read, since
       # core's schema never grows that column itself.
       Enum.each(PhoenixKitBilling.Migrations.up_statements(), &TestRepo.query!/1)
+
+      # ...and the module-owned chain on top. V1 was purely adoptive over
+      # core's baseline, so skipping it changed nothing; V2 is not — it
+      # drops the `DEFAULT 'USD'` core declares on the four `currency`
+      # columns, and a test database that never ran it would still hand
+      # out "USD" behind the schemas' backs. `up/1` needs an
+      # `Ecto.Migration` runner, so the statements are executed directly —
+      # that is exactly what `up_statements/1` exists for, and every one of
+      # them is idempotent.
+      Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
       # ...and, when the test-only catalogue bridge is resolved (see
       # mix.exs's `catalogue_test_deps/0`), the entities and catalogue
