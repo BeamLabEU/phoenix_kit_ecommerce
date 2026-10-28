@@ -7,7 +7,9 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.NamePrefix
+  alias PhoenixKitEcommerce.OnlinePayment
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Web.Components.ShippingDisplay
@@ -27,7 +29,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKit.Users.Auth
 
   @impl true
-  def mount(%{"uuid" => uuid}, session, socket) do
+  def mount(%{"uuid" => uuid} = params, session, socket) do
     # Without this the page renders English whatever the locale — see
     # Helpers.put_content_locale/1.
     _ = Helpers.put_content_locale_from(socket)
@@ -40,18 +42,31 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     shop_session_id =
       if session["shop_session_trusted"] == true, do: session["shop_session_id"]
 
+    # Subscribed BEFORE the order is read: a payment recorded in between would
+    # otherwise be missed and the page would wait for a message that is gone.
+    # The access check below still decides who sees what; a message reaching
+    # a page that then redirects is dropped with it.
+    if connected?(socket), do: Billing.Events.subscribe_orders()
+
     case Billing.get_order_by_uuid(uuid) do
       nil ->
         {:ok, redirect_with_error(socket, gettext("Order not found"))}
 
       order ->
-        handle_order_access(socket, order, user, shop_session_id)
+        handle_order_access(socket, order, user, shop_session_id, params["payment"])
     end
   end
 
-  defp handle_order_access(socket, order, user, shop_session_id) do
+  defp handle_order_access(socket, order, user, shop_session_id, payment_hint) do
     if has_order_access?(order, user, shop_session_id) do
-      {:ok, setup_order_assigns(socket, order)}
+      # A paid-up order page must update the moment billing records the
+      # payment, which can come after the shopper is back (the provider's
+      # webhook is separate from their return).
+      {:ok,
+       socket
+       |> setup_order_assigns(order)
+       |> assign(:payment_hint, payment_hint)
+       |> assign_awaiting(order)}
     else
       {:ok, redirect_with_error(socket, gettext("You don't have access to this order"))}
     end
@@ -168,30 +183,124 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> push_navigate(to: Helpers.page_path(socket.assigns, "/shop"))
   end
 
-  # This page takes no events; one pushed at it anyway is ignored.
+  defp assign_awaiting(socket, order) do
+    awaiting? = OnlinePayment.awaiting?(order)
+
+    socket
+    |> assign(:awaiting_payment, awaiting?)
+    |> assign(:page_title, page_title(order, awaiting?))
+  end
+
+  defp page_title(_order, true), do: gettext("Awaiting payment")
+
+  defp page_title(%{status: status}, _) when status in ~w(cancelled refunded),
+    do: gettext("Order Details")
+
+  defp page_title(_order, false), do: gettext("Order Confirmed")
+
+  # "Pay now": the order exists, only the payment is (re)started. Open to
+  # whoever may see this page, which is who placed the order.
   @impl true
+  def handle_event("pay_now", _params, %{assigns: %{awaiting_payment: true}} = socket) do
+    case OnlinePayment.start(socket.assigns.order, socket.assigns,
+           origin: OnlinePayment.origin(socket)
+         ) do
+      {:ok, url} ->
+        {:noreply, redirect(socket, external: url)}
+
+      :paid ->
+        {:noreply, refresh_order(socket)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(:payment_hint, "failed")
+         |> assign(:payment_error, Errors.message(reason))}
+    end
+  end
+
+  # This page takes no other events; one pushed at it anyway is ignored.
   def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
+  @impl true
+  def handle_info({event, %{uuid: uuid}}, %{assigns: %{order: %{uuid: uuid}}} = socket)
+      when event in [:order_paid, :order_confirmed, :order_updated, :order_cancelled] do
+    {:noreply, refresh_order(socket)}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp refresh_order(socket) do
+    case Billing.get_order_by_uuid(socket.assigns.order.uuid) do
+      nil ->
+        socket
+
+      order ->
+        socket |> assign(:order, order) |> assign_awaiting(order)
+    end
+  end
 
   @impl true
   def render(assigns) do
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
       <div class="p-6 max-w-3xl mx-auto">
-        <%!-- Success Header --%>
-        <div class="text-center mb-8">
-          <div class="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <.icon name="hero-check-circle" class="w-12 h-12 text-success" />
-          </div>
-          <h1 class="text-3xl font-bold mb-2">{gettext("Order Confirmed!")}</h1>
-          <p class="text-base-content/60">
-            {gettext("Thank you for your order. We've received your order and will process it shortly.")}
-          </p>
-          <%= if @order.metadata["shipping_skipped"] do %>
-            <div id="shipping-pending-notice" class="alert alert-info mt-4">
-              {gettext("We will contact you to arrange shipping and confirm your order details.")}
+        <%!-- Header: an online order that is still unpaid is not "confirmed" --%>
+        <%= if @awaiting_payment do %>
+          <div id="awaiting-payment" class="text-center mb-8">
+            <div class="w-20 h-20 bg-warning/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <.icon name="hero-credit-card" class="w-12 h-12 text-warning" />
             </div>
+            <h1 class="text-3xl font-bold mb-2">{gettext("Awaiting payment")}</h1>
+            <p :if={@payment_hint == "success"} id="payment-processing" class="text-base-content/60">
+              {gettext(
+                "Thank you! Your payment is being processed. This page updates as soon as it is confirmed."
+              )}
+            </p>
+            <p :if={@payment_hint != "success"} class="text-base-content/60">
+              {gettext("Your order is saved and will be processed as soon as it is paid.")}
+            </p>
+            <div :if={@payment_hint == "failed"} id="payment-start-failed" class="alert alert-error mt-4">
+              {assigns[:payment_error] || Errors.message(:payment_start_failed)}
+            </div>
+            <div :if={@payment_hint == "cancelled"} id="payment-cancelled" class="alert alert-warning mt-4">
+              {gettext("The payment was not completed. You can pay now or come back to this page later.")}
+            </div>
+            <button
+              id="pay-now-button"
+              type="button"
+              phx-click="pay_now"
+              phx-disable-with={gettext("Starting payment...")}
+              class="btn btn-primary mt-4"
+            >
+              <.icon name="hero-credit-card" class="w-5 h-5 mr-2" /> {gettext("Pay now")}
+            </button>
+          </div>
+        <% else %>
+          <%= if @order.status in ~w(cancelled refunded) do %>
+            <div id="order-closed" class="text-center mb-8">
+              <div class="w-20 h-20 bg-base-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                <.icon name="hero-x-circle" class="w-12 h-12 text-base-content/60" />
+              </div>
+              <h1 class="text-3xl font-bold mb-2">{StatusLabels.order(@order.status)}</h1>
+            </div>
+          <% else %>
+          <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <.icon name="hero-check-circle" class="w-12 h-12 text-success" />
+            </div>
+            <h1 class="text-3xl font-bold mb-2">{gettext("Order Confirmed!")}</h1>
+            <p class="text-base-content/60">
+              {gettext("Thank you for your order. We've received your order and will process it shortly.")}
+            </p>
+            <%= if @order.metadata["shipping_skipped"] do %>
+              <div id="shipping-pending-notice" class="alert alert-info mt-4">
+                {gettext("We will contact you to arrange shipping and confirm your order details.")}
+              </div>
+            <% end %>
+          </div>
           <% end %>
-        </div>
+        <% end %>
 
         <%!-- Guest Order Email Confirmation Reminder --%>
         <%= if @is_guest_order do %>
@@ -388,7 +497,13 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="font-medium">{gettext("Order Status")}</h3>
-                <p class="text-sm text-base-content/60">{gettext("Your order is being processed")}</p>
+                <p class="text-sm text-base-content/60">
+                  <%= if @awaiting_payment do %>
+                    {gettext("Waiting for payment")}
+                  <% else %>
+                    {gettext("Your order is being processed")}
+                  <% end %>
+                </p>
               </div>
               <div id="order-status-badge" class="badge badge-warning badge-lg capitalize">{StatusLabels.order(@order.status)}</div>
             </div>

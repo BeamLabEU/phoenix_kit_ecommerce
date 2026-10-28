@@ -21,6 +21,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ItemImage
   alias PhoenixKitEcommerce.NamePrefix
+  alias PhoenixKitEcommerce.OnlinePayment
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.SelectedSpecs
   alias PhoenixKitEcommerce.Shipping.CartQuote
@@ -1205,10 +1206,28 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     )
   end
 
+  # An online order goes straight to the provider's page. When that cannot be
+  # started the order still exists: the shopper lands on its page, which says
+  # so and offers "Pay now" again.
+  defp pay_online(order, socket) do
+    case OnlinePayment.start(order, socket.assigns, origin: OnlinePayment.origin(socket)) do
+      {:ok, url} -> redirect(socket, external: url)
+      :paid -> push_navigate(socket, to: order_page(socket, order))
+      {:error, _reason} -> push_navigate(socket, to: order_page(socket, order, payment: "failed"))
+    end
+  end
+
+  defp order_page(socket, order, query \\ []),
+    do: Helpers.page_path(socket.assigns, "/checkout/complete/#{order.uuid}", query)
+
   defp handle_order_result({:ok, order}, socket) do
-    socket
-    |> assign(:processing, false)
-    |> push_navigate(to: Helpers.page_path(socket.assigns, "/checkout/complete/#{order.uuid}"))
+    socket = assign(socket, :processing, false)
+
+    if OnlinePayment.awaiting?(order) do
+      pay_online(order, socket)
+    else
+      push_navigate(socket, to: order_page(socket, order))
+    end
   end
 
   # A second click on "Confirm Order" lands here: the first one already made
