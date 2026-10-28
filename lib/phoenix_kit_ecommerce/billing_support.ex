@@ -6,60 +6,54 @@ defmodule PhoenixKitEcommerce.BillingSupport do
   `BillingProfile.fields_changeset/3` and an attribute of the same name to
   `BillingProfileFields.billing_profile_fields/1`. This package's billing
   requirement is lower than that, so the checkout asks the installed billing
-  rather than assuming: with the option, billing validates the phone and marks
-  the input; without it, the checkout validates the phone itself and the input
-  is left unmarked.
+  whether the component declares the attribute, and passes it only then. The
+  phone check itself never depends on this: the checkout and the order
+  conversion require the phone on their own whenever the setting is on, so a
+  wrong answer here can only cost the input its required mark.
 
   The attribute is passed to the component as a dynamic attribute list
-  (`phone_attrs/0`), never written in the template: a literal
-  `require_phone` against a billing that does not declare it is a compile-time
-  warning, and this package compiles with warnings as errors.
+  (`phone_attrs/1`), never written in the template: a literal `require_phone`
+  against a billing that does not declare it is a compile-time warning, and
+  this package compiles with warnings as errors.
 
   The `:billing_require_phone_support` application env (`true` or `false`)
   overrides the probe; tests use it to run both shapes against one billing.
+
+  Remove this module (and the `{@phone_attrs}` pass-through in the checkout)
+  when the minimum billing requirement reaches the release that has
+  `require_phone`.
   """
 
   alias PhoenixKitBilling.Web.Components.BillingProfileFields
 
-  @doc "Whether the installed billing knows the `require_phone` option."
+  @doc "Whether the installed billing's fields component declares `require_phone`."
   @spec supported?() :: boolean()
   def supported? do
     case Application.get_env(:phoenix_kit_ecommerce, :billing_require_phone_support) do
       override when is_boolean(override) -> override
-      _ -> component_declares_require_phone?()
+      _ -> declares_require_phone?(BillingProfileFields)
     end
   end
 
   @doc """
-  Dynamic attributes for the billing fields component: `require_phone: true`
-  when the shop requires a phone and billing can mark the input, else none.
+  Whether `component_module`'s `billing_profile_fields/1` declares a
+  `require_phone` attribute.
   """
-  @spec phone_attrs() :: [require_phone: true] | []
-  def phone_attrs do
-    if PhoenixKitEcommerce.require_phone_at_checkout?() and supported?(),
-      do: [require_phone: true],
-      else: []
+  @spec declares_require_phone?(module()) :: boolean()
+  def declares_require_phone?(component_module) do
+    component_module.__components__()
+    |> Map.get(:billing_profile_fields, %{})
+    |> Map.get(:attrs, [])
+    |> Enum.any?(&(&1.name == :require_phone))
   end
 
   @doc """
-  Requires the phone on the changeset when the shop asks for it and billing
-  did not already do so through `fields_changeset/3`.
+  Dynamic attributes for the billing fields component: `require_phone: true`
+  when the shop requires a phone (`required?`) and billing can mark the input,
+  else none.
   """
-  @spec require_phone(Ecto.Changeset.t()) :: Ecto.Changeset.t()
-  def require_phone(changeset) do
-    if PhoenixKitEcommerce.require_phone_at_checkout?() and not supported?(),
-      do: Ecto.Changeset.validate_required(changeset, [:phone]),
-      else: changeset
-  end
-
-  defp component_declares_require_phone? do
-    Code.ensure_loaded?(BillingProfileFields) and
-      function_exported?(BillingProfileFields, :__components__, 0) and
-      BillingProfileFields.__components__()
-      |> Map.get(:billing_profile_fields, %{})
-      |> Map.get(:attrs, [])
-      |> Enum.any?(&(&1.name == :require_phone))
-  rescue
-    _ -> false
+  @spec phone_attrs(boolean()) :: [require_phone: true] | []
+  def phone_attrs(required?) do
+    if required? and supported?(), do: [require_phone: true], else: []
   end
 end

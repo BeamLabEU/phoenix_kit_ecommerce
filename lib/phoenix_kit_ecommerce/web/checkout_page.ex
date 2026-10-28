@@ -470,7 +470,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:billing_form, to_form(changeset, as: :billing))
     |> assign(:require_billing_address, Shop.cart_requires_shipping?(socket.assigns.cart))
-    |> assign(:billing_phone_attrs, BillingSupport.phone_attrs())
+    |> assign(:billing_phone_attrs, BillingSupport.phone_attrs(Shop.require_phone_at_checkout?()))
     |> assign(
       :subdivision_label,
       CountryData.get_subdivision_label(socket.assigns.billing_data["country"])
@@ -503,6 +503,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # without hidden errors blocking the form.
   defp billing_changeset(socket) do
     %{billing_data: data, billing_type: type, cart: cart} = socket.assigns
+    phone? = Shop.require_phone_at_checkout?()
 
     params =
       data
@@ -514,12 +515,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> BillingProfile.fields_changeset(params,
       require_email: true,
       require_address: Shop.cart_requires_shipping?(cart),
-      require_phone: Shop.require_phone_at_checkout?()
+      require_phone: phone?
     )
-    |> BillingSupport.require_phone()
+    |> require_phone(phone?)
     |> keep_blank_country(data["country"])
     |> Ecto.Changeset.validate_required([:country])
   end
+
+  # The shop's own check, whatever the installed billing does with the option:
+  # Ecto adds no second error to a field that already has one.
+  defp require_phone(changeset, true), do: Ecto.Changeset.validate_required(changeset, [:phone])
+  defp require_phone(changeset, false), do: changeset
 
   # `cast/3` turns a blank param into the schema default, and a billing
   # profile's country defaults to "EE" - so a shopper who has not picked a
@@ -557,7 +563,11 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp clean_for_type(data, "company"), do: Map.drop(data, @individual_only_fields)
   defp clean_for_type(data, _individual), do: Map.drop(data, @company_only_fields)
 
-  defp billing_incomplete_message(cart) do
+  defp billing_incomplete_message(_cart, ["phone"]) do
+    gettext("Please add a phone number - this shop needs one to place an order")
+  end
+
+  defp billing_incomplete_message(cart, _missing) do
     if Shop.cart_requires_shipping?(cart) do
       gettext("Please complete the billing address - a physical order needs one")
     else
@@ -1282,7 +1292,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # failing generically. A saved profile that fails here (billing never
   # required profiles to carry an address) is prefilled into the form for
   # completion.
-  defp handle_order_result({:error, {:billing_incomplete, _missing}}, socket) do
+  defp handle_order_result({:error, {:billing_incomplete, missing}}, socket) do
     socket = assign(socket, :processing, false)
 
     socket =
@@ -1295,7 +1305,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:step, :billing)
     |> assign(:use_new_profile, true)
-    |> put_flash(:error, billing_incomplete_message(socket.assigns.cart))
+    |> put_flash(:error, billing_incomplete_message(socket.assigns.cart, missing))
   end
 
   defp handle_order_result({:error, reason}, socket)

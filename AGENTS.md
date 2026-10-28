@@ -820,6 +820,14 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
   `enforce_product_currency?/0`.
+- `shop_require_phone_at_checkout` — require a phone number at checkout
+  (default: `false`). Read through `require_phone_at_checkout?/0`. The checkout
+  form requires it, and `convert_cart_to_order` refuses details without one
+  (`{:billing_incomplete, ["phone"]}`), a saved profile included: a profile was
+  never required to carry a phone, and a crafted `confirm_order` skips the
+  form. Billing's own `require_phone` option is only an extra: the shop's check
+  does not depend on it (`BillingSupport` probes it for the input's required
+  mark and goes when the minimum billing has the option).
 
 **Admin API**
 

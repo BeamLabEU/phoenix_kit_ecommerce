@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
   use PhoenixKitEcommerce.LiveCase, async: false
 
   alias PhoenixKit.Settings
+  alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.BillingSupport
   alias PhoenixKitEcommerce.DataCase
@@ -35,7 +36,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
 
   test "the setting is off by default" do
     refute Shop.require_phone_at_checkout?()
-    assert BillingSupport.phone_attrs() == []
+    assert BillingSupport.phone_attrs(Shop.require_phone_at_checkout?()) == []
   end
 
   describe "setting off" do
@@ -92,6 +93,96 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
           assert has_element?(view, "#checkout-billing-phone[required]")
         end
       end
+    end
+  end
+
+  describe "a saved profile without a phone" do
+    setup %{conn: conn} do
+      user = DataCase.fixture_user()
+
+      {:ok, profile} =
+        Billing.create_billing_profile(user, %{
+          "first_name" => "Saved",
+          "last_name" => "Person",
+          "email" => "saved@example.com",
+          "country" => "EE"
+        })
+
+      {:ok, with_phone} =
+        Billing.create_billing_profile(user, %{
+          "first_name" => "Phoned",
+          "last_name" => "Person",
+          "email" => "phoned@example.com",
+          "country" => "EE",
+          "phone" => @phone
+        })
+
+      {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, cart} = Shop.add_to_cart(cart, digital_product(), 1)
+      conn = put_test_scope(conn, fake_scope(user_uuid: user.uuid, email: user.email))
+
+      {:ok, conn: conn, user: user, cart: cart, profile: profile, with_phone: with_phone}
+    end
+
+    test "is refused by the order conversion when the phone is required", ctx do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+
+      assert {:error, {:billing_incomplete, ["phone"]}} =
+               Shop.convert_cart_to_order(ctx.cart,
+                 user_uuid: ctx.user.uuid,
+                 billing_profile_uuid: ctx.profile.uuid
+               )
+
+      assert Shop.get_cart!(ctx.cart.uuid).status == "active"
+    end
+
+    test "and so are billing details without one", ctx do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+
+      data = %{
+        "email" => "x@example.com",
+        "first_name" => "Ann",
+        "country" => "EE",
+        "phone" => " "
+      }
+
+      assert {:error, {:billing_incomplete, ["phone"]}} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: data)
+    end
+
+    test "converts when the setting is off", ctx do
+      assert {:ok, _order} =
+               Shop.convert_cart_to_order(ctx.cart,
+                 user_uuid: ctx.user.uuid,
+                 billing_profile_uuid: ctx.profile.uuid
+               )
+    end
+
+    test "a profile with a phone converts when the phone is required", ctx do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+
+      assert {:ok, _order} =
+               Shop.convert_cart_to_order(ctx.cart,
+                 user_uuid: ctx.user.uuid,
+                 billing_profile_uuid: ctx.with_phone.uuid
+               )
+    end
+
+    test "sends the shopper back to an editable form that asks for the phone",
+         %{conn: conn} = ctx do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+      Billing.update_billing_profile(ctx.with_phone, %{"is_default" => false})
+      Billing.update_billing_profile(ctx.profile, %{"is_default" => true})
+
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      html = view |> element("button[phx-click='confirm_order']") |> render_click()
+
+      assert html =~ "Please add a phone number"
+      assert has_element?(view, @form)
+      assert has_element?(view, "#checkout-billing-first_name[value='Saved']")
+      assert has_element?(view, "#checkout-billing-phone.input-error")
+      assert Shop.get_cart!(ctx.cart.uuid).status == "active"
     end
   end
 
