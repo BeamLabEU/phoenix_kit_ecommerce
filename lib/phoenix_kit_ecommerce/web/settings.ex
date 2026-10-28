@@ -1269,7 +1269,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             <%!-- Show Categories in Shop --%>
             <.setting_toggle
               title={gettext("Show Categories in Shop")}
-              description={gettext("Display category cards above products in the main shop page")}
+              description={gettext(
+                "Show the categories on the main shop page, as cards or as a row of buttons (see Category block style)"
+              )}
               checked={@sidebar_show_categories}
               event="toggle_sidebar_categories"
             />
@@ -2044,7 +2046,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
           actor_uuid: Activity.actor_uuid(socket),
           actor_role: Activity.actor_role(socket),
           resource_type: "setting",
-          metadata: %{"sidebar_enabled" => value_str}
+          metadata: %{"sidebar_enabled" => new_value}
         )
 
         {:noreply,
@@ -2065,6 +2067,11 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   # Only the two values the storefront reads (`Helpers.category_display/0`);
   # anything else the client sends is refused rather than stored.
+  defp gated_event("update_category_display_mode", %{"mode" => mode}, socket)
+       when mode in ~w(cards buttons) and mode == socket.assigns.category_display_mode do
+    {:noreply, socket}
+  end
+
   defp gated_event("update_category_display_mode", %{"mode" => mode}, socket)
        when mode in ~w(cards buttons) do
     case Settings.update_setting("shop_category_display", mode) do

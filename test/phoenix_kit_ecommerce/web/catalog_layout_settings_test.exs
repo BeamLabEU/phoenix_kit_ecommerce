@@ -25,9 +25,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
   @category_wide_grid "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
 
   @aside "aside"
-  @with_sidebar ~s(div[class~="lg:grid-cols-4"][class~="gap-8"])
-  @narrow_column ~s(div[class~="lg:col-span-3"])
+  @aside_exact ~s(aside[class="lg:col-span-1 hidden lg:block"])
+  @with_sidebar ~s(div[class="grid grid-cols-1 lg:grid-cols-4 gap-8"])
+  @without_sidebar ~s(div[class="grid grid-cols-1 gap-8"])
+  @narrow_column ~s(div[class="lg:col-span-3"])
   @phone_only ~s(div[class~="lg:hidden"])
+  @helper_row ~s(div[class="lg:hidden mb-4"])
+  @helper_drawer ~s(div[class="lg:hidden mb-6"])
+  @drawer_wide ~s(div[class="mb-6 max-w-md"])
+  @chips_row ~s(nav#category-chips[class="flex flex-wrap gap-2"])
   @filters_button "button[phx-click='toggle_mobile_filters']"
   @chips "#category-chips"
   # Product cards are links too; the category cards are the ones with a 7rem picture.
@@ -51,28 +57,38 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
 
   describe "defaults" do
     test "the shop page keeps its sidebar, its cards and its phone-only helpers", %{conn: conn} do
-      {:ok, view, html} = live(conn, "/shop")
+      {:ok, view, _html} = live(conn, "/shop")
 
-      assert has_element?(view, @aside)
+      assert has_element?(view, @aside_exact)
       assert has_element?(view, @with_sidebar)
+      refute has_element?(view, @without_sidebar)
       assert has_element?(view, @narrow_column)
-      assert html =~ ~s(class="#{@shop_grid}")
+      assert has_element?(view, ~s(div[class="#{@shop_grid}"]))
       assert has_element?(view, @category_cards)
-      assert has_element?(view, "#{@phone_only} details")
-      assert has_element?(view, "#{@phone_only} #{@filters_button}")
+      assert has_element?(view, "#{@helper_row} details")
+      assert has_element?(view, "#{@helper_row} #{@filters_button}")
       refute has_element?(view, @chips)
+
+      view |> element(@filters_button) |> render_click()
+      assert has_element?(view, @helper_drawer)
+      refute has_element?(view, @drawer_wide)
     end
 
     test "the category page keeps its sidebar and phone-only helpers", %{conn: conn, alpha: alpha} do
-      {:ok, view, html} = live(conn, Shop.category_url(alpha, "en"))
+      {:ok, view, _html} = live(conn, Shop.category_url(alpha, "en"))
 
-      assert has_element?(view, @aside)
+      assert has_element?(view, @aside_exact)
       assert has_element?(view, @with_sidebar)
+      refute has_element?(view, @without_sidebar)
       assert has_element?(view, @narrow_column)
-      assert html =~ ~s(class="#{@category_grid}")
-      assert has_element?(view, "#{@phone_only} details")
-      assert has_element?(view, "#{@phone_only} #{@filters_button}")
+      assert has_element?(view, ~s(div[class="#{@category_grid}"]))
+      assert has_element?(view, "#{@helper_row} details")
+      assert has_element?(view, "#{@helper_row} #{@filters_button}")
       refute has_element?(view, @chips)
+
+      view |> element(@filters_button) |> render_click()
+      assert has_element?(view, @helper_drawer)
+      refute has_element?(view, @drawer_wide)
     end
   end
 
@@ -83,12 +99,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
     end
 
     test "the shop page drops the aside and spans the full width", %{conn: conn} do
-      {:ok, view, html} = live(conn, "/shop")
+      {:ok, view, _html} = live(conn, "/shop")
 
       refute has_element?(view, @aside)
       refute has_element?(view, @with_sidebar)
+      assert has_element?(view, @without_sidebar)
       refute has_element?(view, @narrow_column)
-      assert html =~ ~s(class="#{@shop_wide_grid}")
+      assert has_element?(view, ~s(div[class="#{@shop_wide_grid}"]))
     end
 
     test "the filters button and the category list stay at every width", %{conn: conn} do
@@ -100,21 +117,29 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
       refute has_element?(view, "#{@phone_only} details")
     end
 
-    test "the filters drawer opens at every width", %{conn: conn} do
+    test "the filters drawer opens at every width, with a sensible width and aria-expanded",
+         %{conn: conn} do
       {:ok, view, _html} = live(conn, "/shop")
 
+      assert has_element?(view, "#{@filters_button}[aria-expanded='false']")
+
       view |> element(@filters_button) |> render_click()
+
+      assert has_element?(view, "#{@filters_button}[aria-expanded='true']")
+      assert has_element?(view, @drawer_wide)
+      refute has_element?(view, @helper_drawer)
 
       assert has_element?(view, ~s(form[phx-submit="filter_search"]))
       refute has_element?(view, "#{@phone_only} form[phx-submit='filter_search']")
     end
 
     test "the category page drops the aside too", %{conn: conn, alpha: alpha} do
-      {:ok, view, html} = live(conn, Shop.category_url(alpha, "en"))
+      {:ok, view, _html} = live(conn, Shop.category_url(alpha, "en"))
 
       refute has_element?(view, @aside)
+      assert has_element?(view, @without_sidebar)
       refute has_element?(view, @narrow_column)
-      assert html =~ ~s(class="#{@category_wide_grid}")
+      assert has_element?(view, ~s(div[class="#{@category_wide_grid}"]))
       assert has_element?(view, @filters_button)
       refute has_element?(view, "#{@phone_only} #{@filters_button}")
       assert has_element?(view, "details")
@@ -143,6 +168,8 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
                Shop.category_url(beta, "en")
              ]
 
+      assert has_element?(view, @chips_row)
+
       # Replaces the cards and the phone category list, so nothing is doubled.
       refute has_element?(view, @category_cards)
       refute has_element?(view, "#{@phone_only} details")
@@ -155,10 +182,20 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
       assert active_chip_labels(view) == ["All Products"]
     end
 
-    test "the links carry no locale on a single-language site", %{conn: conn} do
+    test "the links carry no locale on a single-language site", %{
+      conn: conn,
+      alpha: alpha,
+      beta: beta
+    } do
       Settings.update_setting("languages_enabled", "false")
 
       {:ok, view, _html} = live(conn, "/shop")
+
+      assert chip_hrefs(view) == [
+               "/shop",
+               Shop.category_url(alpha, "en"),
+               Shop.category_url(beta, "en")
+             ]
 
       for href <- chip_hrefs(view), do: refute(href =~ ~r{^/(en|uk|de|ru|et|fr)(/|$)})
     end
@@ -245,14 +282,28 @@ defmodule PhoenixKitEcommerce.Web.CatalogLayoutSettingsTest do
       :ok
     end
 
-    test "carry the page's locale", %{conn: conn, alpha: alpha} do
+    test "carry the page's locale", %{conn: conn, alpha: alpha, beta: beta} do
       {:ok, view, _html} = live(conn, "/uk/shop")
 
-      hrefs = chip_hrefs(view)
+      assert chip_hrefs(view) == [
+               Shop.catalog_url("uk"),
+               Shop.category_url(alpha, "uk"),
+               Shop.category_url(beta, "uk")
+             ]
 
-      assert Shop.catalog_url("uk") in hrefs
-      assert Shop.category_url(alpha, "uk") in hrefs
-      assert Enum.all?(hrefs, &String.starts_with?(&1, "/uk/"))
+      assert Enum.all?(chip_hrefs(view), &String.starts_with?(&1, "/uk/"))
+    end
+
+    test "carry the locale on a category page too", %{conn: conn, alpha: alpha, beta: beta} do
+      {:ok, view, _html} = live(conn, Shop.category_url(alpha, "uk"))
+
+      assert chip_hrefs(view) == [
+               Shop.catalog_url("uk"),
+               Shop.category_url(alpha, "uk"),
+               Shop.category_url(beta, "uk")
+             ]
+
+      assert Enum.all?(chip_hrefs(view), &String.starts_with?(&1, "/uk/"))
     end
   end
 

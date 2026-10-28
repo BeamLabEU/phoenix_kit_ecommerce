@@ -430,7 +430,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <%!-- Mobile filter toggle. Suppressed when no filters are configured. --%>
         <%= if @enabled_filters != [] do %>
           <div class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-4")}>
-            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+            <button
+              phx-click="toggle_mobile_filters"
+              aria-expanded={to_string(@show_mobile_filters)}
+              class="btn btn-outline btn-sm gap-2"
+            >
               <.icon name="hero-funnel" class="w-4 h-4" />
               {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
               <%= if filter_count > 0 do %>
@@ -444,7 +448,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
              category_nav above already carries them, and passing true here
              rendered the category list twice on a phone. --%>
         <%= if @show_mobile_filters do %>
-          <div class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-6")}>
+          <div class={[
+            Helpers.sidebar_helper_class(@sidebar_enabled, "mb-6"),
+            !@sidebar_enabled && "max-w-md"
+          ]}>
             <div class="card bg-base-100 shadow-lg">
               <div class="card-body p-4">
                 <CatalogSidebar.catalog_sidebar

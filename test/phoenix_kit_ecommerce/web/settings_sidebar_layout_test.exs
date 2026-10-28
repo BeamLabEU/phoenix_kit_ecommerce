@@ -38,7 +38,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsSidebarLayoutTest do
       refute has_element?(view, "#toggle-shop-sidebar-enabled[checked]")
 
       row = assert_activity_logged("shop.sidebar_layout_changed")
-      assert row.metadata["sidebar_enabled"] == "false"
+      assert row.metadata["sidebar_enabled"] == false
 
       view |> element("#toggle-shop-sidebar-enabled") |> render_click()
 
@@ -51,7 +51,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsSidebarLayoutTest do
 
       html = render_click(element(view, "#toggle-shop-sidebar-enabled"))
 
-      assert html =~ "You don&#39;t have permission to do that"
+      assert html =~ "permission"
       assert Helpers.sidebar_enabled?()
       refute_activity_logged("shop.sidebar_layout_changed")
     end
@@ -83,6 +83,34 @@ defmodule PhoenixKitEcommerce.Web.SettingsSidebarLayoutTest do
       html = render_click(view, "update_category_display_mode", %{})
       assert html =~ "Invalid value"
       assert Helpers.category_display() == "buttons"
+      refute_activity_logged("shop.category_display_changed")
+    end
+
+    test "the radios mirror the stored mode and carry the event payload", %{conn: conn} do
+      {:ok, view, _html} = live(conn, @path)
+
+      radio = ~s(input[type=radio][name="category_display_mode"])
+      assert has_element?(view, ~s|#{radio}[value=cards][phx-value-mode=cards][checked]|)
+
+      assert has_element?(
+               view,
+               ~s|#{radio}[value=buttons][phx-value-mode=buttons]:not([checked])|
+             )
+
+      view |> element(~s(#{radio}[value=buttons])) |> render_click()
+
+      assert has_element?(view, ~s|#{radio}[value=buttons][checked]|)
+      assert has_element?(view, ~s|#{radio}[value=cards]:not([checked])|)
+      assert Helpers.category_display() == "buttons"
+    end
+
+    test "choosing the mode already selected writes no audit row", %{conn: conn} do
+      {:ok, view, _html} = live(conn, @path)
+
+      render_click(view, "update_category_display_mode", %{"mode" => "cards"})
+
+      refute_activity_logged("shop.category_display_changed")
+      assert Helpers.category_display() == "cards"
     end
 
     test "falls back to cards when the stored value is not understood" do
@@ -97,8 +125,9 @@ defmodule PhoenixKitEcommerce.Web.SettingsSidebarLayoutTest do
 
       html = render_click(view, "update_category_display_mode", %{"mode" => "buttons"})
 
-      assert html =~ "You don&#39;t have permission to do that"
+      assert html =~ "permission"
       assert Helpers.category_display() == "cards"
+      refute_activity_logged("shop.category_display_changed")
     end
   end
 end

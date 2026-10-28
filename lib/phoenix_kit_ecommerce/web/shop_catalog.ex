@@ -364,7 +364,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
              it used to render unconditionally and open an empty drawer. --%>
         <%= if @enabled_filters != [] do %>
           <div class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-4")}>
-            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+            <button
+              phx-click="toggle_mobile_filters"
+              aria-expanded={to_string(@show_mobile_filters)}
+              class="btn btn-outline btn-sm gap-2"
+            >
               <.icon name="hero-funnel" class="w-4 h-4" />
               {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
               <%= if filter_count > 0 do %>
@@ -376,7 +380,10 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
 
         <%!-- Mobile filter drawer (filters only, no categories) --%>
         <%= if @show_mobile_filters do %>
-          <div class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-6")}>
+          <div class={[
+            Helpers.sidebar_helper_class(@sidebar_enabled, "mb-6"),
+            !@sidebar_enabled && "max-w-md"
+          ]}>
             <div class="card bg-base-100 shadow-lg">
               <div class="card-body p-4">
                 <CatalogSidebar.catalog_sidebar
