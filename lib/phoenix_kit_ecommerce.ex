@@ -687,6 +687,22 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether the checkout requires a phone number (`shop_require_phone_at_checkout`).
+
+  Defaults to `false`, so a shop that never touches the setting is unchanged.
+  A settings-layer error degrades to `false` so a cache miss cannot block
+  checkout.
+  """
+  @spec require_phone_at_checkout?() :: boolean()
+  def require_phone_at_checkout? do
+    Settings.get_boolean_setting("shop_require_phone_at_checkout", false)
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  @doc """
   Whether stock tracking is effectively on: the `shop_stock_tracking_enabled`
   setting AND the Warehouse module installed AND enabled. See
   `PhoenixKitEcommerce.StockTracking`.

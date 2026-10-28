@@ -1,0 +1,119 @@
+defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
+  @moduledoc """
+  The "Require a phone number at checkout" setting: off by default, and on it
+  makes the checkout billing step refuse a blank phone. Billing may or may not
+  know the `require_phone` option (`BillingSupport`); the checkout must behave
+  the same either way, only the input's required mark depends on billing.
+  """
+
+  use PhoenixKitEcommerce.LiveCase, async: false
+
+  alias PhoenixKit.Settings
+  alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.BillingSupport
+  alias PhoenixKitEcommerce.DataCase
+
+  @form "#checkout-billing-form"
+  @phone "+3725555555"
+
+  # Decided before any test overrides the probe.
+  @billing_supports_phone BillingSupport.supported?()
+
+  setup %{conn: conn} do
+    # The settings cache is ETS-backed and is not rolled back by the sandbox.
+    on_exit(fn ->
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", false, "shop")
+      Application.delete_env(:phoenix_kit_ecommerce, :billing_require_phone_support)
+    end)
+
+    user = DataCase.fixture_user()
+    {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+    {:ok, _cart} = Shop.add_to_cart(cart, digital_product(), 1)
+
+    {:ok, conn: put_test_scope(conn, fake_scope(user_uuid: user.uuid, email: user.email))}
+  end
+
+  test "the setting is off by default" do
+    refute Shop.require_phone_at_checkout?()
+    assert BillingSupport.phone_attrs() == []
+  end
+
+  describe "setting off" do
+    test "a blank phone is accepted and the input is not marked", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      refute has_element?(view, "#checkout-billing-phone[required]")
+      refute continue(view, %{}) =~ "Please fill in all required fields"
+    end
+  end
+
+  for supported <- [false, true] do
+    describe "setting on, billing #{if supported, do: "with", else: "without"} the option" do
+      @describetag supported: supported
+
+      if supported and not @billing_supports_phone do
+        @describetag skip: "the installed billing has no require_phone option"
+      end
+
+      setup %{supported: supported} do
+        Application.put_env(:phoenix_kit_ecommerce, :billing_require_phone_support, supported)
+
+        Settings.update_boolean_setting_with_module(
+          "shop_require_phone_at_checkout",
+          true,
+          "shop"
+        )
+
+        :ok
+      end
+
+      test "a blank phone blocks the billing step, a phone lets it through", %{conn: conn} do
+        {:ok, blank, _html} = live(conn, "/checkout")
+
+        assert continue(blank, %{}) =~ "Please fill in all required fields"
+        assert render(blank) =~ "can&#39;t be blank"
+
+        # A fresh session: the flash of the first attempt would outlive the fix.
+        {:ok, filled, _html} = live(conn, "/checkout")
+
+        refute continue(filled, %{"phone" => @phone}) =~ "Please fill in all required fields"
+      end
+
+      test "a whitespace-only phone counts as blank", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/checkout")
+
+        assert continue(view, %{"phone" => "   "}) =~ "Please fill in all required fields"
+      end
+
+      if supported do
+        test "the input is marked required", %{conn: conn} do
+          {:ok, view, _html} = live(conn, "/checkout")
+
+          assert has_element?(view, "#checkout-billing-phone[required]")
+        end
+      end
+    end
+  end
+
+  defp continue(view, extra) do
+    billing = "EE" |> complete_billing("billing-profile") |> Map.merge(extra)
+
+    view |> form(@form, billing: billing) |> render_change()
+    view |> element("button[phx-click='proceed_to_review']") |> render_click()
+  end
+
+  defp digital_product do
+    {:ok, product} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Require Phone Widget #{System.unique_integer([:positive])}"},
+        "price" => Decimal.new("10.00"),
+        "status" => "active",
+        "currency" => "USD",
+        "product_type" => "digital",
+        "requires_shipping" => false,
+        "weight_grams" => 0
+      })
+
+    product
+  end
+end

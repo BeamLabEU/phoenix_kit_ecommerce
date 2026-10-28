@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitBilling.Web.Components.BillingProfileFields
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
+  alias PhoenixKitEcommerce.BillingSupport
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ItemImage
@@ -469,6 +470,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:billing_form, to_form(changeset, as: :billing))
     |> assign(:require_billing_address, Shop.cart_requires_shipping?(socket.assigns.cart))
+    |> assign(:billing_phone_attrs, BillingSupport.phone_attrs())
     |> assign(
       :subdivision_label,
       CountryData.get_subdivision_label(socket.assigns.billing_data["country"])
@@ -511,8 +513,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     %BillingProfile{}
     |> BillingProfile.fields_changeset(params,
       require_email: true,
-      require_address: Shop.cart_requires_shipping?(cart)
+      require_address: Shop.cart_requires_shipping?(cart),
+      require_phone: Shop.require_phone_at_checkout?()
     )
+    |> BillingSupport.require_phone()
     |> keep_blank_country(data["country"])
     |> Ecto.Changeset.validate_required([:country])
   end
@@ -1617,6 +1621,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   countries={@countries}
                   subdivision_label={@subdivision_label}
                   require_address={@require_billing_address}
+                  phone_attrs={@billing_phone_attrs}
                   save_profile_hint={@save_profile_hint?}
                   payment_options={@payment_options}
                 />
@@ -1762,6 +1767,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             countries={@countries}
             subdivision_label={@subdivision_label}
             require_address={@require_address}
+            phone_attrs={@phone_attrs}
             show_save_profile={not @is_guest}
             save_profile_hint={@save_profile_hint}
           />
@@ -1893,6 +1899,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         show_options={false}
         require_email
         require_address={@require_address}
+        {@phone_attrs}
       >
         <.checkbox
           :if={@show_save_profile}
