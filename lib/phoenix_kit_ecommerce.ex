@@ -5382,6 +5382,9 @@ defmodule PhoenixKitEcommerce do
     a carrier and its quote is missing, stale or unavailable, or the
     destination is not set (see `shipping_quote_blocks_checkout?/1`)
   - `{:error, :email_already_registered}` - Guest email belongs to confirmed user
+  - `{:error, {:billing_incomplete, missing}}` - The billing details lack what
+    the order needs; `missing` lists the fields (`"name"`, the address fields,
+    `"country"`, and `"phone"` while `shop_require_phone_at_checkout` is on)
   - `{:error, {:billing_profile_invalid, changeset}}` - `save_billing_profile: true`
     was requested and the entered details do not make a valid billing profile
   - `{:error, changeset}` - Validation errors
@@ -5876,9 +5879,12 @@ defmodule PhoenixKitEcommerce do
   # at all.
   #
   # With `shop_require_phone_at_checkout` on, the phone is part of every level,
-  # and it is also asked of billing details supplied where no other level
-  # applies: a saved profile has never been required to carry a phone, and a
-  # crafted `confirm_order` skips the review step's form validation.
+  # and it is also asked of billing details actually collected where no other
+  # level applies: a saved profile has never been required to carry a phone,
+  # and a crafted `confirm_order` skips the review step's form validation. The
+  # setting adds the phone to a billing form and to saved profiles; it does
+  # not introduce a billing step where there was none, so the blank form data
+  # of a shopper whose checkout skipped that step asks for nothing.
   defp validate_billing_completeness(%Cart{} = cart, opts) do
     phone? = require_phone_at_checkout?()
 
@@ -5897,9 +5903,15 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp billing_details_given?(opts),
-    do:
-      Keyword.get(opts, :billing_profile_uuid) != nil or is_map(Keyword.get(opts, :billing_data))
+  # A saved profile, or details that name someone: the blank form data of a
+  # checkout without a billing step carries an email and a country only.
+  defp billing_details_given?(opts) do
+    data = Keyword.get(opts, :billing_data)
+
+    Keyword.get(opts, :billing_profile_uuid) != nil or
+      (is_map(data) and
+         not (blank_field?(data["first_name"]) and blank_field?(data["company_name"])))
+  end
 
   defp validate_billing_details(opts, level, phone?) do
     cond do

@@ -563,15 +563,23 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp clean_for_type(data, "company"), do: Map.drop(data, @individual_only_fields)
   defp clean_for_type(data, _individual), do: Map.drop(data, @company_only_fields)
 
-  defp billing_incomplete_message(_cart, ["phone"]) do
-    gettext("Please add a phone number - this shop needs one to place an order")
-  end
+  # What the context found missing decides the wording: the phone alone, the
+  # phone with something else, or the usual address / details prompt.
+  defp billing_incomplete_message(cart, missing) do
+    cond do
+      missing == ["phone"] ->
+        gettext("Please add a phone number - this shop needs one to place an order")
 
-  defp billing_incomplete_message(cart, _missing) do
-    if Shop.cart_requires_shipping?(cart) do
-      gettext("Please complete the billing address - a physical order needs one")
-    else
-      gettext("Please complete your billing details - this payment method needs them")
+      "phone" in missing ->
+        gettext(
+          "Please complete your billing details and add a phone number - this shop needs one to place an order"
+        )
+
+      Shop.cart_requires_shipping?(cart) ->
+        gettext("Please complete the billing address - a physical order needs one")
+
+      true ->
+        gettext("Please complete your billing details - this payment method needs them")
     end
   end
 

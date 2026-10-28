@@ -825,7 +825,10 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   form requires it, and `convert_cart_to_order` refuses details without one
   (`{:billing_incomplete, ["phone"]}`), a saved profile included: a profile was
   never required to carry a phone, and a crafted `confirm_order` skips the
-  form. Billing's own `require_phone` option is only an extra: the shop's check
+  form. The setting adds the phone to a billing form and to saved profiles;
+  it does not introduce a billing step where there was none (a checkout that
+  skipped the step passes blank form data, which asks for nothing). Billing's
+  own `require_phone` option is only an extra: the shop's check
   does not depend on it (`BillingSupport` probes it for the input's required
   mark and goes when the minimum billing has the option).
 

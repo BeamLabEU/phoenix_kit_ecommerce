@@ -186,6 +186,83 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
     end
   end
 
+  describe "a checkout without a billing step" do
+    setup %{conn: conn} do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+
+      user = DataCase.fixture_user()
+      {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, cart} = Shop.add_to_cart(cart, digital_product(), 1)
+
+      # Only one active option, and it needs no billing profile: mount lands on
+      # review with the billing form never filled in.
+      case Billing.get_payment_option_by_code("cod") do
+        nil -> :ok
+        cod -> {:ok, _} = Billing.update_payment_option(cod, %{"active" => false})
+      end
+
+      {:ok, _option} = billing_less_option()
+
+      conn = put_test_scope(conn, fake_scope(user_uuid: user.uuid, email: user.email))
+      {:ok, conn: conn, user: user, cart: cart}
+    end
+
+    test "the phone setting does not introduce one", %{conn: conn, cart: cart} do
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      refute has_element?(view, @form)
+
+      view |> element("button[phx-click='confirm_order']") |> render_click()
+      assert_redirect(view)
+
+      assert Shop.get_cart!(cart.uuid).status == "converted"
+    end
+
+    test "and the order conversion asks nothing of the blank form data", ctx do
+      blank = %{
+        "first_name" => "",
+        "last_name" => "",
+        "email" => ctx.user.email,
+        "country" => "EE"
+      }
+
+      assert {:ok, _order} =
+               Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: blank)
+    end
+  end
+
+  describe "a saved profile that lacks the address and the phone" do
+    test "the shopper is told about both", %{conn: conn} do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+      Settings.update_setting_with_module("shop_shipping_skip_mode", "always", "shop")
+
+      on_exit(fn ->
+        Settings.update_setting_with_module("shop_shipping_skip_mode", "off", "shop")
+      end)
+
+      user = DataCase.fixture_user()
+
+      {:ok, _profile} =
+        Billing.create_billing_profile(user, %{
+          "first_name" => "Saved",
+          "last_name" => "Person",
+          "email" => "saved@example.com"
+        })
+
+      {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+      {:ok, _cart} = Shop.add_to_cart(cart, physical_product(), 1)
+
+      conn = put_test_scope(conn, fake_scope(user_uuid: user.uuid, email: user.email))
+      {:ok, view, _html} = live(conn, "/checkout")
+
+      html = view |> element("button[phx-click='confirm_order']") |> render_click()
+
+      assert html =~ "Please complete your billing details and add a phone number"
+      assert has_element?(view, "#checkout-billing-phone.input-error")
+      assert has_element?(view, "#checkout-billing-address_line1.input-error")
+    end
+  end
+
   defp continue(view, extra) do
     billing = "EE" |> complete_billing("billing-profile") |> Map.merge(extra)
 
@@ -206,5 +283,40 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
       })
 
     product
+  end
+
+  defp physical_product do
+    {:ok, product} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Require Phone Parcel #{System.unique_integer([:positive])}"},
+        "price" => Decimal.new("25.00"),
+        "status" => "active",
+        "currency" => "USD",
+        "product_type" => "physical",
+        "requires_shipping" => true,
+        "weight_grams" => 500
+      })
+
+    product
+  end
+
+  # Core seeds a row per payment option code; flip one to "no billing profile".
+  defp billing_less_option do
+    attrs = %{"active" => true, "requires_billing_profile" => false}
+
+    case Billing.get_payment_option_by_code("stripe") do
+      nil ->
+        Billing.create_payment_option(
+          Map.merge(attrs, %{
+            "name" => "stripe",
+            "code" => "stripe",
+            "type" => "online",
+            "provider" => "stripe"
+          })
+        )
+
+      option ->
+        Billing.update_payment_option(option, Map.put(attrs, "provider", "stripe"))
+    end
   end
 end
