@@ -140,6 +140,47 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
   end
 
   @doc """
+  The categories as one wrapping row of buttons: "All" first, every category
+  after it, the current one highlighted. Links are built like the category
+  list's (`Shop.catalog_url/1`, `Shop.category_url/2` plus the active filters),
+  so a single-language site gets no locale segment.
+  """
+  attr :categories, :list, required: true
+  attr :current_category, :any, default: nil
+  attr :current_language, :string, default: "en"
+  attr :filter_qs, :string, default: ""
+
+  def category_chips(assigns) do
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
+    ~H"""
+    <%= if @categories != [] do %>
+      <nav id="category-chips" aria-label={gettext("Categories")} class="flex flex-wrap gap-2">
+        <.link
+          navigate={Shop.catalog_url(@current_language) <> @filter_qs}
+          class={chip_class(is_nil(@current_category))}
+          aria-current={is_nil(@current_category) && "page"}
+        >
+          {Vocabulary.all_items()}
+        </.link>
+        <%= for cat <- @categories do %>
+          <.link
+            navigate={Shop.category_url(cat, @current_language) <> @filter_qs}
+            class={chip_class(@current_category && cat.uuid == @current_category.uuid)}
+            aria-current={@current_category && cat.uuid == @current_category.uuid && "page"}
+          >
+            {Translations.get_display(cat, :name, @current_language, prefixes: @name_prefixes)}
+          </.link>
+        <% end %>
+      </nav>
+    <% end %>
+    """
+  end
+
+  defp chip_class(true), do: "btn btn-sm btn-primary"
+  defp chip_class(_), do: "btn btn-sm btn-outline"
+
+  @doc """
   Renders only the category navigation tree (no filters).
 
   Lightweight component for pages where filters don't apply (e.g. product detail).
