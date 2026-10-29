@@ -254,6 +254,57 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
+  Whether the catalog pages render their desktop sidebar
+  (`shop_sidebar_enabled`, default `true`). Off drops the `<aside>`, widens the
+  products column and the grid, and keeps the filters and the categories
+  reachable at every width.
+  """
+  @spec sidebar_enabled?() :: boolean()
+  def sidebar_enabled? do
+    PhoenixKit.Settings.get_setting_cached("shop_sidebar_enabled", "true") != "false"
+  end
+
+  @doc """
+  How the storefront shows its categories above the products
+  (`shop_category_display`): `"cards"` (default) or `"buttons"`. A stored value
+  neither reader understands counts as `"cards"`.
+  """
+  @spec category_display() :: String.t()
+  def category_display do
+    case PhoenixKit.Settings.get_setting_cached("shop_category_display", "cards") do
+      "buttons" -> "buttons"
+      _ -> "cards"
+    end
+  end
+
+  @doc """
+  The CSS classes of a catalog page's product grid. With the sidebar the grid
+  shares the width with it (2 / 3 columns); without it the grid takes the full
+  width (2 / 3 / 4 columns). The token order is each page's own, so the default
+  markup is the one the pages always had.
+  """
+  @spec products_grid_class(:shop | :category, boolean()) :: String.t()
+  def products_grid_class(:shop, true), do: "grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
+
+  def products_grid_class(:shop, false),
+    do: "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+
+  def products_grid_class(:category, true),
+    do: "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6"
+
+  def products_grid_class(:category, false),
+    do: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+
+  @doc """
+  `extra` classes for a block that stands in for the sidebar's filters and
+  categories: phone-only (`lg:hidden`) while the sidebar is on, every width
+  when it is off, because the sidebar was where they lived.
+  """
+  @spec sidebar_helper_class(boolean(), String.t()) :: String.t()
+  def sidebar_helper_class(true, extra), do: "lg:hidden " <> extra
+  def sidebar_helper_class(false, extra), do: extra
+
+  @doc """
   `PhoenixKitEcommerce.list_active_categories/1` through
   `PhoenixKitEcommerce.StorefrontCache`, for the storefront's category
   navigation: one list shared by every visitor for about a minute (up to

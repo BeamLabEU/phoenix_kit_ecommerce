@@ -857,6 +857,17 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
 - `shop_category_name_display` — `"truncate"` (default) or `"wrap"`
 - `shop_category_icon_mode` — `"none"` (default), icon rendering mode
 - `shop_sidebar_show_categories` — show the category sidebar (default: `true`)
+- `shop_sidebar_enabled` — render the desktop sidebar on `/shop` and the
+  category pages (default: `true`). Off drops the `<aside>`, gives the
+  products the full width (a 2 / 3 / 4 column grid) and keeps the filters
+  button and the category list at every width, because the sidebar was where
+  they lived. Read through `Web.Helpers.sidebar_enabled?/0`.
+- `shop_category_display` — `"cards"` (default) or `"buttons"`. `buttons` is
+  one wrapping row (`CatalogSidebar.category_chips/1`: "All" first, the current
+  category highlighted) that replaces the cards and the phone category list.
+  On `/shop` it follows `shop_sidebar_show_categories` like the cards do; on a
+  category page it always shows. A stored value neither reader understands
+  counts as `"cards"`. Read through `Web.Helpers.category_display/0`.
 - `shop_show_cart_bar` — show the compact Shop/Cart bar on catalog pages
   (default: `true`). The storefront renders inside the HOST's layout, so a
   host whose header already links to the cart turns this off; a host whose

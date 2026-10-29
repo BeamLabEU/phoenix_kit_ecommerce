@@ -147,6 +147,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
       |> assign(:active_filters, active_filters)
       |> assign(:filter_qs, FilterHelpers.build_query_string(active_filters, enabled_filters))
       |> assign(:show_mobile_filters, false)
+      |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
+      # The row of buttons replaces the phone category list, always on a
+      # category page (it does not follow "Show Categories in Shop").
+      |> assign(:category_chips?, Helpers.category_display() == "buttons")
       |> assign(
         :category_name_wrap,
         Settings.get_setting_cached("shop_category_name_display", "truncate") == "wrap"
@@ -411,7 +415,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <%!-- Categories on mobile — same treatment as the catalog page. The
              drawer below does carry categories, but only behind a button
              labelled "Filters", which is not where a visitor looks for them. --%>
-        <div class="lg:hidden mb-4">
+        <div :if={!@category_chips?} class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-4")}>
           <CatalogSidebar.category_nav
             categories={@categories}
             current_category={@category}
@@ -425,8 +429,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
 
         <%!-- Mobile filter toggle. Suppressed when no filters are configured. --%>
         <%= if @enabled_filters != [] do %>
-          <div class="lg:hidden mb-4">
-            <button phx-click="toggle_mobile_filters" class="btn btn-outline btn-sm gap-2">
+          <div class={Helpers.sidebar_helper_class(@sidebar_enabled, "mb-4")}>
+            <button
+              phx-click="toggle_mobile_filters"
+              aria-expanded={to_string(@show_mobile_filters)}
+              class="btn btn-outline btn-sm gap-2"
+            >
               <.icon name="hero-funnel" class="w-4 h-4" />
               {gettext("Filters")} <% filter_count = FilterHelpers.active_filter_count(@active_filters) %>
               <%= if filter_count > 0 do %>
@@ -440,7 +448,10 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
              category_nav above already carries them, and passing true here
              rendered the category list twice on a phone. --%>
         <%= if @show_mobile_filters do %>
-          <div class="lg:hidden mb-6">
+          <div class={[
+            Helpers.sidebar_helper_class(@sidebar_enabled, "mb-6"),
+            !@sidebar_enabled && "max-w-md"
+          ]}>
             <div class="card bg-base-100 shadow-lg">
               <div class="card-body p-4">
                 <CatalogSidebar.catalog_sidebar
@@ -461,9 +472,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
         <% end %>
 
         <%!-- 4-column grid, in-page sidebar for everyone --%>
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div class={
+          if @sidebar_enabled,
+            do: "grid grid-cols-1 lg:grid-cols-4 gap-8",
+            else: "grid grid-cols-1 gap-8"
+        }>
             <%!-- Sidebar --%>
-            <aside class="lg:col-span-1 hidden lg:block">
+            <aside :if={@sidebar_enabled} class="lg:col-span-1 hidden lg:block">
               <div class="card bg-base-100 shadow-lg sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
                 <div class="card-body p-4">
                   <CatalogSidebar.catalog_sidebar
@@ -482,7 +497,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
             </aside>
 
             <%!-- Main Content --%>
-            <div class="lg:col-span-3">
+            <div class={@sidebar_enabled && "lg:col-span-3"}>
               <%!-- Category Header --%>
               <div class="mb-6">
                 <%!-- Heading only: the edit link rides in the row with the
@@ -497,6 +512,15 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                 </p>
               </div>
 
+              <div :if={@category_chips? and @categories != []} class="mb-6">
+                <CatalogSidebar.category_chips
+                  categories={@categories}
+                  current_category={@category}
+                  current_language={@current_language}
+                  filter_qs={@filter_qs}
+                />
+              </div>
+
               <%!-- Products Grid --%>
               <%= if @products == [] do %>
                 <.category_empty_state
@@ -505,7 +529,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategory do
                   filter_qs={@filter_qs}
                 />
               <% else %>
-                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div class={Helpers.products_grid_class(:category, @sidebar_enabled)}>
                   <%= for product <- @products do %>
                     <ShopCards.product_card
                       product={product}
