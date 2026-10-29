@@ -80,9 +80,11 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       assert OnlinePayment.origin(socket("http://localhost/x?y=1")) == "http://localhost"
     end
 
-    test "keeps a non-default port and drops a default one" do
-      assert OnlinePayment.origin(socket("http://localhost:4002/x")) == "http://localhost:4002"
-      assert OnlinePayment.origin(socket("https://localhost:443/x")) == "https://localhost"
+    test "returns the site's own origin, not the client's scheme, port or spelling" do
+      trusted = OnlinePayment.origin(socket("http://localhost/x"))
+
+      assert OnlinePayment.origin(socket("https://localhost:9999/x")) == trusted
+      assert OnlinePayment.origin(socket("http://LOCALHOST/x")) == trusted
     end
 
     test "brackets an IPv6 literal when the site base serves it" do
@@ -96,15 +98,17 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
     test "the canonical host of the page's language is served" do
       SearchFixtures.put_canonical_host_resolver!()
 
+      # On the scheme of the site base, whatever the client wrote.
+      base_scheme = PhoenixKit.Utils.Routes.base_url() |> URI.parse() |> Map.fetch!(:scheme)
+
       assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "de"})) ==
-               "https://shop.example.de"
+               "#{base_scheme}://shop.example.de"
 
       assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "en"})) ==
                nil
     end
 
     test "hosts are compared whole, case-insensitively" do
-      assert OnlinePayment.origin(socket("http://LOCALHOST/x")) == "http://LOCALHOST"
       assert OnlinePayment.origin(socket("http://localhost@evil.example/x")) == nil
       assert OnlinePayment.origin(socket("http://localhost./x")) == nil
     end
@@ -112,10 +116,6 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
     test "a host the site does not serve is not believed" do
       assert OnlinePayment.origin(socket("https://evil.example/x")) == nil
       assert OnlinePayment.origin(socket("https://localhost.evil.example/x")) == nil
-    end
-
-    test "a scheme other than http(s) is not believed" do
-      assert OnlinePayment.origin(socket("javascript://localhost/x")) == nil
     end
 
     test "is nil when unknown" do

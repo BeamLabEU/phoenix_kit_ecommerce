@@ -30,37 +30,34 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
   @unpaid ~w(draft pending confirmed)
 
   @doc """
-  The origin (`scheme://host[:port]`) of the request a LiveView socket is
-  connected on, for `start/3`'s `:origin`; `nil` when it is not known or not
-  trusted.
+  The origin (`scheme://host[:port]`) for `start/3`'s `:origin`, from the request
+  a LiveView socket is connected on; `nil` when it is not known or not trusted.
 
   On a connected mount the socket's `host_uri` comes from the `url` the client
-  sends in the join, so it is only believed when its host is one the site
-  serves: the endpoint's host, the host of `Routes.base_url/0` or the
-  canonical host of the page's language. Anything else answers `nil`, and
-  `start/3` then uses `Routes.base_url/0`, so a forged host cannot make the
-  provider send the shopper (and the order link) to another site.
+  sends in the join, so the client's host is only used to PICK one of the
+  origins the site itself serves: the endpoint's URL, `Routes.base_url/0`, or
+  the canonical host of the page's language (on the scheme of the site base).
+  What is returned is that origin as the site writes it, never the client's
+  spelling of scheme, case or port. Any other host answers `nil`, and `start/3`
+  then uses `Routes.base_url/0`, so a forged host cannot make the provider send
+  the shopper (and the order link) to another site.
   """
   @spec origin(Phoenix.LiveView.Socket.t()) :: String.t() | nil
-  def origin(%{host_uri: %URI{scheme: scheme, host: host, port: port}} = socket)
-      when scheme in ["http", "https"] and is_binary(host) do
-    if String.downcase(host) in trusted_hosts(socket) do
-      "#{scheme}://#{host_for_url(host)}#{port_suffix(scheme, port)}"
-    end
+  def origin(%{host_uri: %URI{host: host}} = socket) when is_binary(host) do
+    wanted = String.downcase(host)
+
+    Enum.find_value(trusted_origins(socket), fn {trusted_host, origin} ->
+      if trusted_host == wanted, do: origin
+    end)
   end
 
   def origin(_socket), do: nil
 
-  defp port_suffix("http", port) when port in [nil, 80], do: ""
-  defp port_suffix("https", port) when port in [nil, 443], do: ""
-  defp port_suffix(_scheme, port), do: ":#{port}"
-
-  # An IPv6 literal is a host without brackets in a URI struct and needs them
-  # back in a URL.
-  defp host_for_url(host), do: if(String.contains?(host, ":"), do: "[#{host}]", else: host)
-
-  defp trusted_hosts(socket) do
+  # `{host, origin}` of every origin the site serves.
+  defp trusted_origins(socket) do
     assigns = Map.get(socket, :assigns, %{})
+    base = Routes.base_url()
+    scheme = base |> URI.parse() |> Map.get(:scheme) |> Kernel.||("https")
 
     # The language the return URLs are built in (`Helpers.page_path/3`).
     languages =
@@ -69,28 +66,25 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
         _ -> [Translations.default_language()]
       end
 
-    canonical = Enum.map(languages, &Routes.canonical_host/1)
+    canonical =
+      for language <- languages,
+          host_port = Routes.canonical_host(language),
+          is_binary(host_port),
+          do: scheme <> "://" <> host_port
 
-    [endpoint_host(socket), uri_host(Routes.base_url()) | Enum.map(canonical, &uri_host/1)]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(&String.downcase/1)
-  end
-
-  defp endpoint_host(%{endpoint: endpoint}) when is_atom(endpoint) and not is_nil(endpoint) do
-    if function_exported?(endpoint, :host, 0), do: endpoint.host()
-  end
-
-  defp endpoint_host(_socket), do: nil
-
-  # `host`, `host:port` or a full URL, reduced to the host.
-  defp uri_host(nil), do: nil
-
-  defp uri_host(value) when is_binary(value) do
-    case URI.parse(value) do
-      %URI{host: host} when is_binary(host) -> host
-      _ -> value |> String.split(":") |> List.first()
+    for url <- [endpoint_url(socket), base | canonical],
+        is_binary(url),
+        %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) <-
+          [URI.parse(url)] do
+      {String.downcase(host), String.trim_trailing(url, "/")}
     end
   end
+
+  defp endpoint_url(%{endpoint: endpoint}) when is_atom(endpoint) and not is_nil(endpoint) do
+    if function_exported?(endpoint, :url, 0), do: endpoint.url()
+  end
+
+  defp endpoint_url(_socket), do: nil
 
   @doc "Whether the installed billing can start an order's payment."
   @spec supported?() :: boolean()
