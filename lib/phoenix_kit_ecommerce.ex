@@ -5959,9 +5959,12 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp validate_billing_data_completeness(data, level, phone?) do
-    name_missing = blank_field?(data["first_name"]) and blank_field?(data["company_name"])
+    # Presence decides whether billing was supplied; completeness also requires
+    # text, so malformed values cannot satisfy a required field.
+    missing? = &(not is_binary(data[&1]) or blank_field?(data[&1]))
+    name_missing = missing?.("first_name") and missing?.("company_name")
 
-    missing_billing_fields(name_missing, &blank_field?(data[&1]), level, phone?)
+    missing_billing_fields(name_missing, missing?, level, phone?)
   end
 
   defp missing_billing_fields(name_missing, blank?, level, phone?) do

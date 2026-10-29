@@ -128,14 +128,14 @@ defmodule PhoenixKitEcommerce.Shopify.StorefrontClientTest do
     end
 
     test "returns an error instead of looping forever when \"products\" is an empty map" do
-      Req.Test.stub(@stub, fn conn -> json_response(conn, 200, %{"products" => %{}}) end)
+      Req.Test.stub(@stub, fn conn ->
+        # A malformed page must stop pagination, independently of scheduler load.
+        assert page_param(conn) == "1"
+        json_response(conn, 200, %{"products" => %{}})
+      end)
 
-      task =
-        Task.async(fn ->
-          StorefrontClient.fetch_products("test-shop.myshopify.com", req_options())
-        end)
-
-      assert {:error, _reason} = Task.await(task, 1_000)
+      assert {:error, {:unexpected_body, {:object, 1}}} =
+               StorefrontClient.fetch_products("test-shop.myshopify.com", req_options())
     end
 
     test "reports an unexpected body by its shape, never its content" do
