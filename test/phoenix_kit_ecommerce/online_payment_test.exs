@@ -11,6 +11,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
 
   alias PhoenixKit.Users.Permissions
   alias PhoenixKit.Users.Roles
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce.InvoicePaymentHandler
   alias PhoenixKitEcommerce.Notifications
@@ -99,7 +100,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       SearchFixtures.put_canonical_host_resolver!()
 
       # On the scheme of the site base, whatever the client wrote.
-      base_scheme = PhoenixKit.Utils.Routes.base_url() |> URI.parse() |> Map.fetch!(:scheme)
+      base_scheme = Routes.base_url() |> URI.parse() |> Map.fetch!(:scheme)
 
       assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "de"})) ==
                "#{base_scheme}://shop.example.de"
