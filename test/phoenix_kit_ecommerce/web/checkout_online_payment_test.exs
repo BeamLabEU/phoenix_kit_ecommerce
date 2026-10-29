@@ -10,11 +10,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.DataCase
   alias PhoenixKitEcommerce.Test.FakeOnlinePayment
+  alias PhoenixKitEcommerce.Test.Repo
 
   @provider_url "https://pay.provider.test/session/abc"
 
@@ -284,8 +287,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       order = online_order!(ctx)
 
       {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
-      {:ok, refunded} = Billing.update_order(order, %{"status" => "refunded"})
-      Billing.Events.broadcast_order_refunded(refunded)
+      # Straight to the row, so the only message the page gets is the refund's.
+      Repo.update_all(from(o in Billing.Order, where: o.uuid == ^order.uuid),
+        set: [status: "refunded"]
+      )
+
+      Billing.Events.broadcast_order_refunded(Billing.get_order_by_uuid(order.uuid))
 
       assert has_element?(view, "#order-closed")
       refute has_element?(view, "#awaiting-payment")

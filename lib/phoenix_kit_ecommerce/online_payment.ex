@@ -24,6 +24,7 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
 
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
+  alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Helpers
 
   @unpaid ~w(draft pending confirmed)
@@ -61,13 +62,14 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
   defp trusted_hosts(socket) do
     assigns = Map.get(socket, :assigns, %{})
 
+    # The language the return URLs are built in (`Helpers.page_path/3`).
     languages =
-      for key <- [:current_locale, :current_language],
-          language = assigns[key],
-          is_binary(language),
-          do: language
+      case assigns[:current_locale] do
+        language when is_binary(language) -> [language]
+        _ -> [Translations.default_language()]
+      end
 
-    canonical = Enum.map([nil | languages], &Routes.canonical_host/1)
+    canonical = Enum.map(languages, &Routes.canonical_host/1)
 
     [endpoint_host(socket), uri_host(Routes.base_url()) | Enum.map(canonical, &uri_host/1)]
     |> Enum.reject(&is_nil/1)

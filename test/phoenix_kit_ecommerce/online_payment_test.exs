@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
   alias PhoenixKitEcommerce.InvoicePaymentHandler
   alias PhoenixKitEcommerce.Notifications
   alias PhoenixKitEcommerce.OnlinePayment
+  alias PhoenixKitEcommerce.SearchFixtures
   alias PhoenixKitEcommerce.Test.FakeOnlinePayment
 
   setup do
@@ -85,21 +86,27 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
     end
 
     test "brackets an IPv6 literal when the site base serves it" do
-      original = Application.get_env(:phoenix_kit, :site_url)
+      original = PhoenixKit.Settings.get_setting("site_url", "")
       PhoenixKit.Settings.update_setting("site_url", "http://[::1]:4000")
-      on_exit(fn -> PhoenixKit.Settings.update_setting("site_url", original || "") end)
+      on_exit(fn -> PhoenixKit.Settings.update_setting("site_url", original) end)
 
       assert OnlinePayment.origin(socket("http://[::1]:4000/x")) == "http://[::1]:4000"
     end
 
     test "the canonical host of the page's language is served" do
-      PhoenixKitEcommerce.SearchFixtures.put_canonical_host_resolver!()
+      SearchFixtures.put_canonical_host_resolver!()
 
       assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "de"})) ==
                "https://shop.example.de"
 
       assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "en"})) ==
                nil
+    end
+
+    test "hosts are compared whole, case-insensitively" do
+      assert OnlinePayment.origin(socket("http://LOCALHOST/x")) == "http://LOCALHOST"
+      assert OnlinePayment.origin(socket("http://localhost@evil.example/x")) == nil
+      assert OnlinePayment.origin(socket("http://localhost./x")) == nil
     end
 
     test "a host the site does not serve is not believed" do
