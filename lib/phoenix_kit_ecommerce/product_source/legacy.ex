@@ -34,6 +34,60 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
     |> repo().all()
   end
 
+  @doc """
+  The products of `ids` a shopper may see (status `active`, category not
+  `hidden`), in the order of `ids`. An unknown id is skipped. The storefront's
+  related-products block reads through this, never `list_products_by_ids/1`,
+  which returns drafts too.
+  """
+  @spec list_listed_by_ids([String.t()]) :: [Product.t()]
+  def list_listed_by_ids([]), do: []
+
+  def list_listed_by_ids(ids) when is_list(ids) do
+    found =
+      Product
+      |> where([p], p.uuid in ^ids and p.status == "active")
+      |> filter_by_visible_categories(true)
+      |> preload(:category)
+      |> repo().all()
+      |> Map.new(&{&1.uuid, &1})
+
+    Enum.flat_map(ids, fn id -> List.wrap(Map.get(found, id)) end)
+  end
+
+  @doc """
+  Up to `limit` products (any status) whose title matches `search`, newest
+  first, without their categories. For the admin pickers, which need no count.
+  """
+  @spec search_products(String.t(), pos_integer()) :: [Product.t()]
+  def search_products(search, limit) when is_binary(search) and is_integer(limit) and limit > 0 do
+    Product
+    |> filter_by_product_search(search)
+    |> order_by([p], desc: p.inserted_at, desc: p.uuid)
+    |> limit(^limit)
+    |> repo().all()
+  end
+
+  @doc """
+  Up to `limit` listed products of a category, newest first, leaving out
+  `exclude_uuid` (the product the block is shown on).
+  """
+  @spec list_listed_in_category(String.t(), String.t() | nil, pos_integer()) :: [Product.t()]
+  def list_listed_in_category(category_uuid, exclude_uuid, limit)
+      when is_binary(category_uuid) and is_integer(limit) and limit > 0 do
+    Product
+    |> where([p], p.category_uuid == ^category_uuid and p.status == "active")
+    |> exclude_product(exclude_uuid)
+    |> filter_by_visible_categories(true)
+    |> order_by([p], desc: p.inserted_at, desc: p.uuid)
+    |> limit(^limit)
+    |> preload(:category)
+    |> repo().all()
+  end
+
+  defp exclude_product(query, uuid) when is_binary(uuid), do: where(query, [p], p.uuid != ^uuid)
+  defp exclude_product(query, _uuid), do: query
+
   @impl PhoenixKitEcommerce.ProductSource
   def list_products_with_count(opts \\ []) do
     page = Keyword.get(opts, :page, 1)

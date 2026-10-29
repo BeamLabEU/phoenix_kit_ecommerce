@@ -14,11 +14,13 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.RelatedProducts
   alias PhoenixKitEcommerce.SelectedSpecs
   alias PhoenixKitEcommerce.SlugResolver
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
   alias PhoenixKitEcommerce.Web.Components.FilterHelpers
+  alias PhoenixKitEcommerce.Web.Components.RelatedProducts, as: RelatedProductsBlock
   alias PhoenixKitEcommerce.Web.Components.ShopCards
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
@@ -143,6 +145,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         find_cart_item_with_specs(user_uuid, session_id, product, selected_specs)
       )
       |> assign(:specifications, build_specifications(product))
+      |> assign(:related_products, RelatedProducts.for_product(product))
       |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
       |> assign(:selectable_specs, selectable_specs)
       |> assign(:selected_specs, selected_specs)
@@ -332,6 +335,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:authenticated, authenticated)
       |> assign(:cart_item, cart_item)
       |> assign(:specifications, specifications)
+      |> assign(:related_products, RelatedProducts.for_product(product))
       |> assign(:price_affecting_specs, price_affecting_specs)
       |> assign(:selectable_specs, selectable_specs)
       |> assign(:selected_specs, selected_specs)
@@ -1273,6 +1277,11 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
           </section>
         <% end %>
 
+        <RelatedProductsBlock.block
+          products={@related_products}
+          currency={@currency}
+          language={@current_language}
+        />
       </div>
     </ShopLayouts.shop_layout>
     """
@@ -1704,6 +1713,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     |> assign(:localized_description, Translations.get(product, :description, current_language))
     |> assign(:localized_body, Translations.get(product, :body_html, current_language))
     |> assign(:specifications, build_specifications(product))
+    |> assign(:related_products, RelatedProducts.for_product(product))
     |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
     |> assign(:selectable_specs, selectable_specs)
     |> assign(:selected_specs, selected_specs)

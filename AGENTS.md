@@ -529,6 +529,8 @@ lib/phoenix_kit_ecommerce/
 ├── translation_fingerprint.ex  # staleness: hash, four states, write-narrowing, candidate SQL
 ├── translation_sweep_settings.ex # settings reader for translations + the sweep
 ├── stock_tracking.ex # Stock tracking switch + optional phoenix_kit_warehouse probe
+├── related_products.ex # a product's hand-picked "You may also like" list + its settings
+├── availability.ex   # can a product be offered now (true today; where stock plugs in)
 ├── prompt_rollout.ex # content-sha rollout of the code-managed AI prompts
 ├── gettext.ex        # PhoenixKitEcommerce.Gettext backend
 └── migrations.ex     # module-owned migration chain
@@ -912,6 +914,31 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   fractional part is entirely zero (default: `false`). **Storefront only.**
   Invoices, receipts and credit notes call billing's `format_amount/2`
   directly and keep two decimals, which is the auditable form.
+
+**Related products — read through `PhoenixKitEcommerce.RelatedProducts`, never directly**
+
+- A legacy product's "You may also like" list is `metadata["related_product_uuids"]`
+  (at most 12 uuids, the merchant's order), edited in the product form's
+  "Related products" card (core's `SearchPicker`; the key is in
+  `@form_owned_metadata_keys` and the list lives in socket assigns). No column,
+  no migration. Every reader goes through `RelatedProducts.normalize/2`: it
+  keeps only well-formed uuid strings, once each, never the product itself;
+  any other shape reads as empty. The block renders only products
+  `Legacy.list_listed_by_ids/1` returns (status `active`, category not
+  `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts;
+  `Availability` answers true for everything today and is the one place a
+  stock feature plugs in (`config :phoenix_kit_ecommerce, :availability,
+  {Module, :function}` meanwhile; a hook that is missing, has another arity,
+  raises, exits or throws counts as available and is logged as a warning, so
+  a broken hook never crashes a product page). Dangling ids are skipped on read, never
+  cleaned. Under the catalogue source `for_product/2` answers `[]` (the list
+  is not stored there yet).
+- `shop_related_fallback` — `"off"` (default) or `"category"`: when nothing
+  the merchant picked can be shown, the newest listed products of the
+  product's own category stand in. Off keeps a page without a list exactly as
+  it was.
+- `shop_related_limit` — products the block shows, 1..12 (default 4); any
+  other stored value reads as 4.
 
 **Shipping — read through `PhoenixKitEcommerce`, never directly**
 

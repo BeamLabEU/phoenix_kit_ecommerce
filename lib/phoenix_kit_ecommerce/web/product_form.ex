@@ -40,11 +40,15 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
   alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.ProductSource.Legacy
+  alias PhoenixKitEcommerce.RelatedProducts
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Authz
   alias PhoenixKitEcommerce.Web.Components.TranslationTabs
   alias PhoenixKitEcommerce.Web.Helpers
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
+  import PhoenixKitWeb.Components.Core.SearchPicker, only: [search_picker: 1]
   import TranslationTabs
   import PhoenixKitEcommerce.Web.Helpers, only: [format_price: 2]
 
@@ -119,6 +123,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:original_option_values, %{})
     |> assign(:add_option_key, "")
     |> assign(:add_option_value, "")
+    |> assign_related([])
     |> assign_translation_state(%Product{})
   end
 
@@ -180,6 +185,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:selected_option_values, selected_option_values)
     |> assign(:add_option_key, "")
     |> assign(:add_option_value, "")
+    |> assign_related(RelatedProducts.uuids(product))
     |> assign_translation_state(product)
     |> maybe_warn_stale_mappings(had_stale_mappings)
   end
@@ -464,6 +470,36 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   end
 
   # ===========================================
+  # RELATED PRODUCTS
+  # ===========================================
+  # The list lives in socket assigns (like the option values) and is written
+  # into `metadata["related_product_uuids"]` on save. The picker's events only
+  # change those assigns; saving is gated.
+
+  def handle_event("picker_search", %{"q" => query} = params, socket) when is_binary(query) do
+    Authz.authorize(socket, :manage_catalog, fn -> search_related(query, params, socket) end)
+  end
+
+  def handle_event("picker_pick", %{"uuid" => uuid}, socket) when is_binary(uuid) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      {:noreply,
+       socket
+       |> add_related(uuid)
+       |> push_event("picker_staged", %{})}
+    end)
+  end
+
+  def handle_event("remove_related", %{"uuid" => uuid}, socket) when is_binary(uuid) do
+    {:noreply, assign_related(socket, List.delete(socket.assigns.related_uuids, uuid))}
+  end
+
+  def handle_event("move_related", %{"uuid" => uuid, "direction" => direction}, socket)
+      when direction in ~w(up down) do
+    {:noreply,
+     assign_related(socket, move_related(socket.assigns.related_uuids, uuid, direction))}
+  end
+
+  # ===========================================
   # OPTION VALUES MANAGEMENT
   # ===========================================
 
@@ -619,6 +655,11 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
     {:noreply, assign(socket, :metadata, metadata)}
   end
+
+  # Last, so it shadows nothing: an event this form does not know, or a known
+  # one whose payload is not the shape its clause takes (the related-products
+  # picker's, say), is ignored instead of crashing the page.
+  def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
   @impl true
   def handle_info({:media_selected, file_uuids}, socket) do
@@ -1167,6 +1208,73 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          <%!-- Card: Related products ("You may also like" on the product page) --%>
+          <div class="card bg-base-100 shadow-xl" id="product-related">
+            <div class="card-body">
+              <h2 class="card-title text-xl mb-2">{gettext("Related products")}</h2>
+              <p class="text-sm text-base-content/60 mb-4">
+                {gettext(
+                  "Shown under this product as \"You may also like\", in this order. Drafts and hidden products are never shown to shoppers."
+                )}
+              </p>
+
+              <ul :if={@related_uuids != []} id="related-products-list" class="space-y-2 mb-4">
+                <li
+                  :for={{uuid, index} <- Enum.with_index(@related_uuids)}
+                  id={"related-product-#{uuid}"}
+                  class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2"
+                >
+                  <span class="flex-1 truncate">{@related_titles[uuid]}</span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    phx-click="move_related"
+                    phx-value-uuid={uuid}
+                    phx-value-direction="up"
+                    disabled={index == 0}
+                    aria-label={gettext("Move up")}
+                  >
+                    <.icon name="hero-arrow-up" class="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    phx-click="move_related"
+                    phx-value-uuid={uuid}
+                    phx-value-direction="down"
+                    disabled={index == length(@related_uuids) - 1}
+                    aria-label={gettext("Move down")}
+                  >
+                    <.icon name="hero-arrow-down" class="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs text-error"
+                    phx-click="remove_related"
+                    phx-value-uuid={uuid}
+                    aria-label={gettext("Remove")}
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" />
+                  </button>
+                </li>
+              </ul>
+
+              <%= if length(@related_uuids) < RelatedProducts.max_items() do %>
+                <.search_picker
+                  id="related-products-search"
+                  dropdown_id="related-products-dropdown"
+                  placeholder={gettext("Search products to add...")}
+                  searching_label={gettext("Searching...")}
+                  no_matches_label={gettext("No matches")}
+                />
+              <% else %>
+                <p class="text-sm text-base-content/60">
+                  {gettext("The list is full (%{max} products).", max: RelatedProducts.max_items())}
+                </p>
+              <% end %>
             </div>
           </div>
 
@@ -2219,7 +2327,12 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # entitled to add, change, OR remove on save. Every other top-level key
   # is foreign to the form — it has no way to know about it, let alone
   # decide it should be gone — and must survive a save untouched.
-  @form_owned_metadata_keys ["_option_values", "_price_modifiers", "_image_mappings"]
+  @form_owned_metadata_keys [
+    "_option_values",
+    "_price_modifiers",
+    "_image_mappings",
+    RelatedProducts.metadata_key()
+  ]
 
   # `cleaned_metadata` was built from the client-submitted `product[metadata]`
   # params plus the form-owned keys above; it carries none of the keys the
@@ -2678,6 +2791,92 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp decimal_min([]), do: Decimal.new("0")
   defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 
+  defp assign_related(socket, uuids) do
+    {uuids, titles} = related_chips(uuids)
+
+    socket
+    |> assign(:related_uuids, uuids)
+    |> assign(:related_titles, titles)
+  end
+
+  # The chips: the stored products that still exist (a deleted one is dropped
+  # here and so from the next save), with the title to show.
+  defp related_chips([]), do: {[], %{}}
+
+  defp related_chips(uuids) do
+    found = uuids |> Legacy.list_products_by_ids() |> Map.new(&{&1.uuid, &1})
+    kept = Enum.filter(uuids, &Map.has_key?(found, &1))
+
+    {kept, Map.new(found, fn {uuid, product} -> {uuid, related_title(product)} end)}
+  end
+
+  defp related_title(product) do
+    Translations.get(product, :title, TranslationTabs.get_default_language()) ||
+      gettext("(untitled)")
+  end
+
+  defp add_related(socket, uuid) do
+    current = socket.assigns.related_uuids
+    own = socket.assigns.product.uuid
+
+    case RelatedProducts.normalize(current ++ [uuid], own) do
+      ^current -> socket
+      updated -> assign_related(socket, updated)
+    end
+  end
+
+  defp move_related(uuids, uuid, direction) do
+    case Enum.find_index(uuids, &(&1 == uuid)) do
+      nil ->
+        uuids
+
+      index ->
+        target = if direction == "up", do: index - 1, else: index + 1
+
+        if target in 0..(length(uuids) - 1)//1 do
+          uuids |> List.delete_at(index) |> List.insert_at(target, uuid)
+        else
+          uuids
+        end
+    end
+  end
+
+  defp search_related(query, params, socket) do
+    {:noreply,
+     push_event(socket, "picker_results", %{
+       q: query,
+       id: params["id"],
+       results: related_search_rows(socket, String.trim(query)),
+       has_more: false
+     })}
+  end
+
+  defp related_search_rows(_socket, ""), do: []
+
+  defp related_search_rows(socket, query) do
+    taken = [socket.assigns.product.uuid | socket.assigns.related_uuids]
+
+    query
+    |> Legacy.search_products(10)
+    |> Enum.reject(&(&1.uuid in taken))
+    |> Enum.map(fn product ->
+      %{
+        kind: "product",
+        uuid: product.uuid,
+        label: related_title(product),
+        sublabel: StatusLabels.product(product.status),
+        icon: "hero-cube"
+      }
+    end)
+  end
+
+  defp put_related(metadata, assigns) do
+    case RelatedProducts.normalize(assigns.related_uuids, assigns.product.uuid) do
+      [] -> Map.delete(metadata, RelatedProducts.metadata_key())
+      uuids -> Map.put(metadata, RelatedProducts.metadata_key(), uuids)
+    end
+  end
+
   defp gated_event("save", %{"product" => product_params}, socket) do
     # Remove helper fields from params (they're just UI helpers)
     product_params =
@@ -2744,6 +2943,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
         empty when empty == %{} -> Map.delete(cleaned_metadata, PriceDisplay.metadata_key())
         display -> Map.put(cleaned_metadata, PriceDisplay.metadata_key(), display)
       end
+
+    cleaned_metadata = put_related(cleaned_metadata, socket.assigns)
 
     # The form only ever reads/writes the metadata keys it renders inputs
     # for (_option_values, _price_modifiers, _image_mappings,
