@@ -20,6 +20,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.RelatedProducts
   alias PhoenixKitEcommerce.StockTracking
   alias PhoenixKitEcommerce.TranslationSweepSettings
   alias PhoenixKitEcommerce.Vocabulary
@@ -72,6 +73,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
       |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
       |> assign(:category_display_mode, Helpers.category_display())
+      |> assign(:related_fallback, RelatedProducts.fallback() == :category)
+      |> assign(:related_limit, RelatedProducts.limit())
       |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
@@ -338,6 +341,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_sidebar_enabled", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_sidebar_enabled", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_related_fallback", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_related_fallback", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("update_related_limit", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_related_limit", params, socket)
     end)
   end
 
@@ -1252,6 +1269,43 @@ defmodule PhoenixKitEcommerce.Web.Settings do
           </div>
         </div>
 
+        <%!-- Related products --%>
+        <div class="card bg-base-100 shadow-xl mb-6" id="related-products-settings">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-6">
+              <.icon name="hero-squares-plus" class="w-6 h-6" /> {gettext("Related products")}
+            </h2>
+
+            <.setting_toggle
+              id="toggle-related-fallback"
+              title={gettext("Fill an empty block from the product's category")}
+              description={
+                gettext(
+                  "When a product has no related products to show, the \"You may also like\" block lists other products of its category."
+                )
+              }
+              checked={@related_fallback}
+              event="toggle_related_fallback"
+            />
+
+            <div class="divider"></div>
+
+            <form phx-change="update_related_limit" id="related-limit-form" class="mb-2">
+              <label class="font-medium" for="related-limit">
+                {gettext("Products in the block")}
+              </label>
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext("How many related products the product page shows at most.")}
+              </p>
+              <select id="related-limit" name="limit" class="select select-bordered w-32">
+                <option :for={n <- 1..RelatedProducts.max_items()} value={n} selected={n == @related_limit}>
+                  {n}
+                </option>
+              </select>
+            </form>
+          </div>
+        </div>
+
         <%!-- Sidebar Display Settings --%>
         <div class="card bg-base-100 shadow-xl mb-6">
           <div class="card-body">
@@ -2085,6 +2139,64 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   defp gated_event("update_category_display", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
+  end
+
+  defp gated_event("toggle_related_fallback", _params, socket) do
+    new_value = !socket.assigns.related_fallback
+    stored = if new_value, do: "category", else: "off"
+
+    case Settings.update_setting("shop_related_fallback", stored) do
+      {:ok, _} ->
+        Activity.log("shop.related_products_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"related_fallback" => stored}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:related_fallback, new_value)
+         |> put_flash(:info, gettext("Related products updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  # Only 1..max (`RelatedProducts.limit/0` reads it back); anything else the
+  # client sends is refused rather than stored.
+  defp gated_event("update_related_limit", %{"limit" => value}, socket) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} when n in 1..12 and n == socket.assigns.related_limit ->
+        {:noreply, socket}
+
+      {n, ""} when n in 1..12 ->
+        case Settings.update_setting("shop_related_limit", Integer.to_string(n)) do
+          {:ok, _} ->
+            Activity.log("shop.related_products_changed",
+              actor_uuid: Activity.actor_uuid(socket),
+              actor_role: Activity.actor_role(socket),
+              resource_type: "setting",
+              metadata: %{"related_limit" => n}
+            )
+
+            {:noreply,
+             socket
+             |> assign(:related_limit, n)
+             |> put_flash(:info, gettext("Related products updated"))}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
+    end
+  end
+
+  defp gated_event("update_related_limit", _params, socket) do
     {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 

@@ -93,6 +93,15 @@ alias PhoenixKitEcommerce, as: Shop
 product = Shop.get_product_by_any_slug("bezdrotovi-navushnyky")
 ```
 
+### Related products
+
+A product can carry a hand-picked list of up to 12 other products, edited in the
+product form (**Related products**) and shown on the product page as
+"You may also like", in the order you set. Drafts, archived products and products
+of a hidden category are never shown. A page with no list renders exactly as
+before, unless you turn on the category fallback in Settings. Legacy products
+only for now.
+
 ### Categories
 
 ```elixir
@@ -575,6 +584,8 @@ unprefixed names that the code never read.)
 | `shop_category_display` | string | `"cards"` | `"cards"` or `"buttons"`: category cards, or one compact, wrapping row of buttons |
 | `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
 | `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+| `shop_related_fallback` | string | `"off"` | `"off"` or `"category"`: when a product has no related products to show, list others of its category. Read through `PhoenixKitEcommerce.RelatedProducts` |
+| `shop_related_limit` | integer | `4` | Products the "You may also like" block shows, 1–12 |
 | `shop_require_phone_at_checkout` | boolean | `false` | Require a phone number at checkout, for new details and saved profiles alike. Read through `PhoenixKitEcommerce.require_phone_at_checkout?/0` |
 | `api_confirm_price_change_pct` | integer | `30` | Admin API: a price move above this percent needs a confirmation. Not `shop_`-prefixed |
 
