@@ -3345,6 +3345,10 @@ defmodule PhoenixKitEcommerce do
         validate_locked_product_purchasable!(repo(), locked_product)
         validate_locked_specs!(locked_product, %{}, skip_validation)
 
+        # The caller's active-cart lookup may predate checkout. Serialize
+        # the line mutation with conversion, after the product lock.
+        cart = lock_active_cart!(cart.uuid)
+
         # Use unified price calculation path (same as add_product_with_specs_to_cart)
         # With empty specs this returns base_price, but allows future extensibility
         calculated_price = calculate_product_price(locked_product, %{})
@@ -3499,6 +3503,8 @@ defmodule PhoenixKitEcommerce do
 
         validate_locked_product_purchasable!(repo(), locked_product)
         validate_locked_specs!(locked_product, selected_specs, skip_validation)
+
+        cart = lock_active_cart!(cart.uuid)
 
         # Calculate price with spec modifiers using locked product state
         calculated_price = calculate_product_price(locked_product, selected_specs)
@@ -7363,8 +7369,9 @@ defmodule PhoenixKitEcommerce do
   # mutation rolls back.
   #
   # Lock ordering note: callers that also lock a PRODUCT row take
-  # product-then-cart, and conversion locks only the cart, so there is no
-  # cart→product path and no ABBA cycle.
+  # product-then-cart; conversion locks only the cart. API.CartWriter and
+  # the claim's add merge already hold a cart row: they add in product-uuid
+  # order and rescue deadlock_detected (see their transaction boundaries).
   defp lock_active_cart!(cart_uuid) do
     cart =
       Cart

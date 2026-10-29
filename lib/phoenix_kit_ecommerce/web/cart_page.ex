@@ -196,6 +196,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   # that needs no choice goes in; anything else is ignored.
   @impl true
   def handle_event("add_cross_sell", %{"uuid" => uuid}, socket) when is_binary(uuid) do
+    # Product edits do not broadcast to this cart. Recheck the offer,
+    # visibility, availability and options before trusting an old button.
+    socket = assign_cross_sells(socket, Shop.get_cart(socket.assigns.cart.uuid))
     product = Enum.find(socket.assigns.cross_sells, &(&1.uuid == uuid))
 
     if product && MapSet.member?(socket.assigns.cross_sell_quick, uuid) do
@@ -210,8 +213,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
   # Into the shopper's ACTIVE cart, read afresh: the one this page holds may
-  # have been converted into an order meanwhile (another tab, the checkout),
-  # and `add_to_cart` does not look at a cart's status.
+  # have been converted into an order meanwhile (another tab, the checkout).
+  # `add_to_cart` rechecks its status under lock if checkout wins after this read.
   defp add_cross_sell(socket, product) do
     user = get_current_user(socket)
 

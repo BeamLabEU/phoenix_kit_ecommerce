@@ -629,7 +629,13 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   minus what is already in the cart (a catalogue line is matched by
   `metadata["catalogue_item_uuid"]`). Its "Add" button only exists for a
   product with nothing to choose (no selectable option); any other gets a
-  link to its page, and the event ignores a product the block is not offering.
+  link to its page. The Add event reloads the originating cart and its offers,
+  rechecking visibility, availability and selectable options before adding;
+  an old button cannot add a removed offer or bypass a newly introduced choice.
+  The destination is the shopper's active cart, so a page left open across
+  checkout starts a new cart. Both `add_to_cart` paths lock and reload the cart
+  after locking/reloading the product, before inserting or incrementing a line;
+  checkout winning that lock refuses the add with `{:error, :cart_not_active}`.
 - `shop_related_fallback` — `"off"` (default) or `"category"`: when nothing
   the merchant picked can be shown, listed products of the
   product's own category stand in (legacy: newest first; catalogue: the

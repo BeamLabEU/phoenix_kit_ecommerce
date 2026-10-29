@@ -158,6 +158,33 @@ defmodule PhoenixKitEcommerce.Web.RelatedProductsCatalogueTest do
     assert RelatedProducts.uuids(product, :cross_sell) == [a.uuid]
   end
 
+  test "Add rechecks a catalogue category hidden after the cart opened", %{
+    conn: conn,
+    catalogue: catalogue
+  } do
+    {:ok, category} =
+      Catalogue.create_category(%{name: "Changing shelf", catalogue_uuid: catalogue.uuid})
+
+    extra = item!(catalogue, "Changing extra", %{category_uuid: category.uuid})
+    shirt = item!(catalogue, "Changing shirt", %{}, %{"cross_sell_product_uuids" => [extra.uuid]})
+
+    session_id = "cat-changing-#{System.unique_integer([:positive])}"
+    {:ok, cart} = Shop.create_cart(session_id: session_id)
+    [product] = Shop.list_products_by_ids([shirt.uuid])
+    {:ok, _} = Shop.add_to_cart(cart, product, 1)
+    conn = Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})
+    {:ok, view, _html} = live(conn, "/cart")
+    assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+    {:ok, _} =
+      Catalogue.update_category(category, %{data: %{"ecommerce" => %{"shop_status" => "hidden"}}})
+
+    render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    refute has_element?(view, "#cross-sell-#{extra.uuid}")
+  end
+
   describe "visibility of listed items" do
     alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
 

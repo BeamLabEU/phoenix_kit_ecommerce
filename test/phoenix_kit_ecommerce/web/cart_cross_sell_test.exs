@@ -173,6 +173,79 @@ defmodule PhoenixKitEcommerce.Web.CartCrossSellTest do
       render_hook(view, "add_cross_sell", %{"uuid" => sized.uuid})
       assert length(Shop.get_cart!(cart.uuid).items) == 1
     end
+
+    test "Add refreshes options introduced after the offer was rendered", ctx do
+      {:ok, category} =
+        Shop.create_category(%{
+          "name" => %{"en" => "Changing options"},
+          "slug" => %{"en" => "changing-options-#{System.unique_integer([:positive])}"}
+        })
+
+      extra = product!("Changing extra", %{"category_uuid" => category.uuid})
+      shirt = product!("T-shirt") |> cross_sells([extra.uuid])
+      cart = put_in_cart(ctx.cart, shirt)
+      {:ok, view, _html} = live(ctx.conn, "/cart")
+      assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+      # Optional choices are valid when omitted at the context layer, but
+      # the cross-sell must let the buyer choose before adding the product.
+      {:ok, _} =
+        Shop.update_category(category, %{"option_schema" => [Map.put(@size, "required", false)]})
+
+      render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+      assert length(Shop.get_cart!(cart.uuid).items) == 1
+      assert has_element?(view, "#cross-sell-#{extra.uuid} a")
+      refute has_element?(view, "#cross-sell-#{extra.uuid} button")
+    end
+  end
+
+  test "Add drops a product whose category became hidden after rendering", ctx do
+    {:ok, category} =
+      Shop.create_category(%{
+        "name" => %{"en" => "Visible shelf"},
+        "slug" => %{"en" => "visible-shelf-#{System.unique_integer([:positive])}"}
+      })
+
+    extra = product!("Hidden extra", %{"category_uuid" => category.uuid})
+    shirt = product!("T-shirt") |> cross_sells([extra.uuid])
+    cart = put_in_cart(ctx.cart, shirt)
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+    assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+    {:ok, _} = Shop.update_category(category, %{"status" => "hidden"})
+    render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    refute has_element?(view, "#cross-sell-#{extra.uuid}")
+  end
+
+  test "Add drops an offer removed by the merchant after rendering", ctx do
+    extra = product!("Removed offer")
+    shirt = product!("T-shirt") |> cross_sells([extra.uuid])
+    cart = put_in_cart(ctx.cart, shirt)
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+    assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+    cross_sells(shirt, [])
+    render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    refute has_element?(view, "#cross-sell-#{extra.uuid}")
+  end
+
+  test "Add ignores a deleted product without crashing the page", ctx do
+    extra = product!("Deleted extra")
+    shirt = product!("T-shirt") |> cross_sells([extra.uuid])
+    cart = put_in_cart(ctx.cart, shirt)
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+    assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+    {:ok, _} = Shop.delete_product(extra)
+    render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    refute has_element?(view, "#cross-sell-#{extra.uuid}")
   end
 
   test "Add goes into the shopper's active cart, not into one that became an order", ctx do
@@ -226,5 +299,20 @@ defmodule PhoenixKitEcommerce.Web.CartCrossSellTest do
 
     assert has_element?(view, "#cross-sell-#{kept.uuid}")
     refute has_element?(view, "#cross-sell-#{gone.uuid}")
+  end
+
+  test "Add rechecks availability after the offer was rendered", ctx do
+    extra = product!("Sold out extra")
+    shirt = product!("T-shirt") |> cross_sells([extra.uuid])
+    cart = put_in_cart(ctx.cart, shirt)
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+    assert has_element?(view, "#cross-sell-#{extra.uuid} button")
+
+    Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :available?})
+    on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :availability) end)
+    render_hook(view, "add_cross_sell", %{"uuid" => extra.uuid})
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    refute has_element?(view, "#cross-sell-#{extra.uuid}")
   end
 end
