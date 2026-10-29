@@ -1372,6 +1372,15 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Invoice-event handlers this package contributes (duck-typed discovery by
+  `PhoenixKitBilling.InvoiceEvents`). The one handler tells the buyer of an
+  online order that it is confirmed once billing has recorded the payment.
+  """
+  def billing_invoice_event_handlers do
+    [PhoenixKitEcommerce.InvoicePaymentHandler]
+  end
+
+  @doc """
   Warehouse source kinds this package contributes (duck-typed discovery by
   `PhoenixKitWarehouse.SourceKinds`, which merges them with the host's own
   list): the `shop_order` kind. A literal list, because Warehouse calls it for

@@ -74,6 +74,8 @@ defmodule PhoenixKitEcommerce.Errors do
           | :option_price_modifiers_required
           | :option_value_empty
           | :option_key_and_value_required
+          | :payment_start_failed
+          | :payment_unavailable
           | {:option_missing_keys, [String.t()]}
           | {:option_type_invalid, term()}
           | {:option_values_not_a_list, String.t()}
@@ -246,6 +248,12 @@ defmodule PhoenixKitEcommerce.Errors do
 
   def message(:option_key_and_value_required),
     do: gettext("Option key and value are required")
+
+  def message(:payment_unavailable),
+    do: gettext("Online payment is not available right now. Please try again later.")
+
+  def message(:payment_start_failed),
+    do: gettext("We could not start the payment. Please try again.")
 
   # `reprice_for_base_change/3`'s refusal: only the shop's own tables are
   # repriced, so the change is refused before any write.
