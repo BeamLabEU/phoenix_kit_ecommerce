@@ -1332,6 +1332,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:step, :billing)
     |> assign(:use_new_profile, true)
+    |> assign(:billing_validate?, true)
+    |> assign_billing_form()
     |> put_flash(:error, billing_incomplete_message(socket.assigns.cart, missing))
   end
 
@@ -1413,7 +1415,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         |> assign(:billing_validate?, true)
         |> assign(:save_billing_profile, false)
         |> assign(:billing_collected?, false)
-        |> assign_billing_form()
     end
   end
 

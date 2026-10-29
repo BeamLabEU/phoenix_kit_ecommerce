@@ -100,6 +100,80 @@ defmodule PhoenixKitEcommerce.Integration.ContextTest do
       assert uuid == product.uuid
     end
 
+    test "list_products_with_count/1 lists newest first with :exclude_hidden_categories" do
+      # Regression: the hidden-category filter used a join with `distinct: p.uuid`, which
+      # Postgres runs as DISTINCT ON (uuid) and so sorted by uuid ahead of
+      # `inserted_at`. The inserted_at values below run against uuid order, so
+      # only a real `desc: inserted_at` sort passes.
+      {:ok, visible} = Shop.create_category(%{"name" => %{"en" => "Visible"}})
+
+      {:ok, hidden} =
+        Shop.create_category(%{"name" => %{"en" => "Hidden"}, "status" => "hidden"})
+
+      [first, second, third] =
+        for n <- 1..3 do
+          {:ok, p} =
+            Shop.create_product(
+              product_attrs(%{"category_uuid" => visible.uuid, "title" => %{"en" => "P#{n}"}})
+            )
+
+          p
+        end
+
+      {:ok, unlisted} =
+        Shop.create_category(%{"name" => %{"en" => "Unlisted"}, "status" => "unlisted"})
+
+      {:ok, in_unlisted} = Shop.create_product(product_attrs(%{"category_uuid" => unlisted.uuid}))
+      {:ok, in_hidden} = Shop.create_product(product_attrs(%{"category_uuid" => hidden.uuid}))
+      {:ok, uncategorized} = Shop.create_product(product_attrs())
+
+      base = ~U[2026-01-01 00:00:00.000000Z]
+
+      # The last-created product (largest uuid) becomes the newest, so a sort by
+      # uuid ascending gives the reverse of the expected order.
+      for {product, offset} <- [
+            {uncategorized, 300},
+            {in_unlisted, 250},
+            {third, 200},
+            {second, 100},
+            {first, 0}
+          ] do
+        Repo.update_all(
+          from(p in PhoenixKitEcommerce.Product, where: p.uuid == ^product.uuid),
+          set: [inserted_at: DateTime.add(base, offset, :second)]
+        )
+      end
+
+      expected = [uncategorized.uuid, in_unlisted.uuid, third.uuid, second.uuid, first.uuid]
+      opts = [status: "active", exclude_hidden_categories: true]
+
+      {products, total} = Shop.list_products_with_count(opts)
+
+      assert total == 5
+      assert Enum.map(products, & &1.uuid) == expected
+      refute in_hidden.uuid in Enum.map(products, & &1.uuid)
+      assert Enum.map(Shop.list_products(opts), & &1.uuid) == expected
+
+      {page1, _} = Shop.list_products_with_count(opts ++ [page: 1, per_page: 2])
+      {page2, _} = Shop.list_products_with_count(opts ++ [page: 2, per_page: 2])
+
+      assert Enum.map(page1, & &1.uuid) == Enum.take(expected, 2)
+      assert Enum.map(page2, & &1.uuid) == Enum.slice(expected, 2, 2)
+    end
+
+    test "list_products/1 breaks inserted_at ties newest-first by uuid" do
+      {:ok, older} = Shop.create_product(product_attrs())
+      {:ok, newer} = Shop.create_product(product_attrs())
+      same_second = ~U[2026-01-01 00:00:00.000000Z]
+
+      Repo.update_all(
+        from(p in PhoenixKitEcommerce.Product, where: p.uuid in ^[older.uuid, newer.uuid]),
+        set: [inserted_at: same_second]
+      )
+
+      assert Enum.map(Shop.list_products(status: "active"), & &1.uuid) == [newer.uuid, older.uuid]
+    end
+
     test "list_products/1 :search matches tags" do
       {:ok, product} =
         Shop.create_product(product_attrs(%{"tags" => ["halloween", "wall-decor"]}))

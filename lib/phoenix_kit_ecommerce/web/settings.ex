@@ -70,6 +70,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:require_phone, Shop.require_phone_at_checkout?())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
+      |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
+      |> assign(:category_display_mode, Helpers.category_display())
       |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
@@ -329,6 +331,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("update_category_display", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_category_display", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_sidebar_enabled", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_sidebar_enabled", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("update_category_display_mode", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_category_display_mode", params, socket)
     end)
   end
 
@@ -1243,13 +1259,68 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <.icon name="hero-bars-3" class="w-6 h-6" /> {gettext("Sidebar Display")}
             </h2>
 
+            <%!-- Desktop sidebar --%>
+            <.setting_toggle
+              id="toggle-shop-sidebar-enabled"
+              title={gettext("Show the catalog sidebar")}
+              description={
+                gettext(
+                  "The filter and category sidebar beside the products. Turn it off for a full-width product grid; filters and categories stay reachable above the products."
+                )
+              }
+              checked={@sidebar_enabled}
+              event="toggle_sidebar_enabled"
+            />
+
+            <div class="divider"></div>
+
             <%!-- Show Categories in Shop --%>
             <.setting_toggle
               title={gettext("Show Categories in Shop")}
-              description={gettext("Display category cards above products in the main shop page")}
+              description={gettext(
+                "Show the categories on the main shop page, as cards or as a row of buttons (see Category block style)"
+              )}
               checked={@sidebar_show_categories}
               event="toggle_sidebar_categories"
             />
+
+            <div class="divider"></div>
+
+            <%!-- Category block style --%>
+            <div class="mb-6">
+              <h3 class="font-medium mb-1">{gettext("Category block style")}</h3>
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext(
+                  "Cards are large pictures; buttons are one compact row (All plus each category) that wraps on narrow screens."
+                )}
+              </p>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="category_display_mode"
+                    class="radio radio-primary"
+                    value="cards"
+                    checked={@category_display_mode == "cards"}
+                    phx-click="update_category_display_mode"
+                    phx-value-mode="cards"
+                  />
+                  <span>{gettext("Cards")}</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="category_display_mode"
+                    class="radio radio-primary"
+                    value="buttons"
+                    checked={@category_display_mode == "buttons"}
+                    phx-click="update_category_display_mode"
+                    phx-value-mode="buttons"
+                  />
+                  <span>{gettext("Buttons")}</span>
+                </label>
+              </div>
+            </div>
 
             <div class="divider"></div>
 
@@ -2014,6 +2085,67 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   defp gated_event("update_category_display", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
+  end
+
+  defp gated_event("toggle_sidebar_enabled", _params, socket) do
+    new_value = !socket.assigns.sidebar_enabled
+    value_str = to_string(new_value)
+
+    case Settings.update_setting("shop_sidebar_enabled", value_str) do
+      {:ok, _} ->
+        Activity.log("shop.sidebar_layout_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"sidebar_enabled" => new_value}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:sidebar_enabled, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Catalog sidebar enabled"),
+             else: gettext("Catalog sidebar disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  # Only the two values the storefront reads (`Helpers.category_display/0`);
+  # anything else the client sends is refused rather than stored.
+  defp gated_event("update_category_display_mode", %{"mode" => mode}, socket)
+       when mode in ~w(cards buttons) and mode == socket.assigns.category_display_mode do
+    {:noreply, socket}
+  end
+
+  defp gated_event("update_category_display_mode", %{"mode" => mode}, socket)
+       when mode in ~w(cards buttons) do
+    case Settings.update_setting("shop_category_display", mode) do
+      {:ok, _} ->
+        Activity.log("shop.category_display_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"category_display" => mode}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:category_display_mode, mode)
+         |> put_flash(:info, gettext("Category display updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("update_category_display_mode", _params, socket) do
     {:noreply, put_flash(socket, :error, gettext("Invalid value"))}
   end
 

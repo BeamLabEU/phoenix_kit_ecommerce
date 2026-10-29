@@ -96,6 +96,21 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
     end
   end
 
+  test "a new phone requirement refreshes the returned billing form", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/checkout")
+    continue(view, %{})
+    assert has_element?(view, "button[phx-click='confirm_order']")
+
+    Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+    view |> element("button[phx-click='confirm_order']") |> render_click()
+
+    assert has_element?(view, @form)
+    assert has_element?(view, "#checkout-billing-phone.input-error")
+
+    if @billing_supports_phone,
+      do: assert(has_element?(view, "#checkout-billing-phone[required]"))
+  end
+
   describe "a saved profile without a phone" do
     setup %{conn: conn} do
       user = DataCase.fixture_user()
@@ -148,6 +163,27 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
 
       assert {:error, {:billing_incomplete, ["phone"]}} =
                Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: data)
+    end
+
+    test "non-string phones cannot satisfy the order's phone requirement", ctx do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+
+      for phone <- [false, true, 0, [], %{"number" => @phone}] do
+        data = %{
+          "first_name" => "Ann",
+          "email" => ctx.user.email,
+          "country" => "EE",
+          "phone" => phone
+        }
+
+        assert {:error, {:billing_incomplete, ["phone"]}} =
+                 Shop.convert_cart_to_order(ctx.cart,
+                   user_uuid: ctx.user.uuid,
+                   billing_data: data
+                 )
+
+        assert Shop.get_cart!(ctx.cart.uuid).status == "active"
+      end
     end
 
     test "converts when the setting is off", ctx do
@@ -228,6 +264,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
 
       assert {:ok, _order} =
                Shop.convert_cart_to_order(ctx.cart, user_uuid: ctx.user.uuid, billing_data: blank)
+    end
+
+    test "malformed billing names do not count as an untouched form", ctx do
+      for name <- [false, true, 0, [], %{"name" => "Ann"}] do
+        data = %{"first_name" => name, "email" => ctx.user.email, "country" => "EE"}
+
+        assert {:error, {:billing_incomplete, ["phone"]}} =
+                 Shop.convert_cart_to_order(ctx.cart,
+                   user_uuid: ctx.user.uuid,
+                   billing_data: data
+                 )
+
+        assert Shop.get_cart!(ctx.cart.uuid).status == "active"
+      end
     end
   end
 

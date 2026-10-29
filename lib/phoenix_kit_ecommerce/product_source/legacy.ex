@@ -29,7 +29,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
   def list_products(opts \\ []) do
     Product
     |> apply_product_filters(opts)
-    |> order_by([p], desc: p.inserted_at)
+    |> order_by([p], desc: p.inserted_at, desc: p.uuid)
     |> maybe_preload(Keyword.get(opts, :preload))
     |> repo().all()
   end
@@ -48,7 +48,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
 
     products =
       base_query
-      |> order_by([p], desc: p.inserted_at)
+      |> order_by([p], desc: p.inserted_at, desc: p.uuid)
       |> limit(^per_page)
       |> offset(^offset)
       |> maybe_preload(Keyword.get(opts, :preload, [:category]))
@@ -313,15 +313,13 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
   defp filter_by_visible_categories(query, false), do: query
 
   defp filter_by_visible_categories(query, true) do
-    # Exclude products from categories with status "hidden"
-    # Products from "active" and "unlisted" categories are visible
-    # Use distinct to avoid duplicates from the left_join
-    from(p in query,
-      left_join: c in Category,
-      on: c.uuid == p.category_uuid,
-      where: is_nil(c.uuid) or c.status != "hidden",
-      distinct: p.uuid
-    )
+    # Exclude products from categories with status "hidden"; products from
+    # "active" and "unlisted" categories stay visible. A subquery rather than a
+    # join + `distinct: p.uuid`: DISTINCT ON puts `ORDER BY uuid` ahead of the
+    # listing's `desc: inserted_at`, so the newest products came out last.
+    hidden = from(c in Category, where: c.status == "hidden", select: c.uuid)
+
+    from(p in query, where: is_nil(p.category_uuid) or p.category_uuid not in subquery(hidden))
   end
 
   defp filter_by_price_range(query, nil, nil), do: query
@@ -370,7 +368,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
     # Searches in default language and falls back to any language match,
     # plus SKU (metadata->>'sku') and tags. Columns are bound through the
     # product binding so the query stays valid when other filters join
-    # additional tables (e.g. :exclude_hidden_categories).
+    # additional tables.
     where(
       query,
       [p],
