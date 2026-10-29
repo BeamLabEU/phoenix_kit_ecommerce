@@ -820,6 +820,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp apply_item_filters(query, opts) do
     query
     |> filter_by_status(Keyword.get(opts, :status))
+    |> filter_excluding(Keyword.get(opts, :exclude_uuids))
     |> filter_by_product_type(Keyword.get(opts, :product_type))
     |> filter_by_category(Keyword.get(opts, :category_uuid))
     |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
@@ -828,6 +829,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     |> filter_by_vendors(Keyword.get(opts, :vendors))
     |> filter_by_metadata(Keyword.get(opts, :metadata_filters), opts)
   end
+
+  # Items left out BEFORE any limit applies (a picker's already-chosen ones).
+  defp filter_excluding(query, uuids) when is_list(uuids) and uuids != [],
+    do: where(query, [i], i.uuid not in ^uuids)
+
+  defp filter_excluding(query, _uuids), do: query
 
   # Mirrors `View.product_status/2`'s fallback: with no `shop_status`
   # override, the derived status is "active" when `item.status ==

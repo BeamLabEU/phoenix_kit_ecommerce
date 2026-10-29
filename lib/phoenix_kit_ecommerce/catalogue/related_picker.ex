@@ -74,13 +74,15 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
   def handle_event(event, %{"q" => query} = params, socket)
       when event in ~w(related_search cross_sell_search) and is_binary(query) do
     kind = kind(event)
+    limit = search_limit(params["limit"])
+    rows = search_rows(socket, kind, String.trim(query), limit + 1)
 
     {:noreply,
      push_event(socket, "#{kind}_results", %{
        q: query,
        id: params["id"],
-       results: search_rows(socket, kind, String.trim(query)),
-       has_more: false
+       results: Enum.take(rows, limit),
+       has_more: length(rows) > limit and limit < 100
      })}
   end
 
@@ -133,14 +135,18 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
     end
   end
 
-  defp search_rows(_socket, _kind, ""), do: []
+  defp search_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 100)
+  defp search_limit(_limit), do: 8
 
-  defp search_rows(socket, kind, query) do
-    taken = [socket.assigns.item_uuid | socket.assigns.lists[kind]]
+  defp search_rows(_socket, _kind, "", _limit), do: []
 
-    [search: query, per_page: 10, page: 1]
+  # The ones already chosen (and the item itself) are left out in the query,
+  # before the limit, so they cannot crowd out the matches that remain.
+  defp search_rows(socket, kind, query, limit) do
+    taken = Enum.reject([socket.assigns.item_uuid | socket.assigns.lists[kind]], &is_nil/1)
+
+    [search: query, per_page: limit, page: 1, exclude_uuids: taken]
     |> Query.list_items()
-    |> Enum.reject(&(&1.uuid in taken))
     |> Enum.map(fn item ->
       %{
         kind: "product",

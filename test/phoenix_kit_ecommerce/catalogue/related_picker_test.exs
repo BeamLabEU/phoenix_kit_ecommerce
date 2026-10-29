@@ -157,4 +157,42 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
 
     assert inputs(view, "related_product_uuids") == [""]
   end
+
+  test "ten chosen items do not hide the matches that remain", %{conn: conn, catalogue: catalogue} do
+    main = item!(catalogue, "Bulk main")
+    chosen = for n <- 1..10, do: item!(catalogue, "Bulk chosen #{n}")
+    rest = item!(catalogue, "Bulk remaining")
+
+    {:ok, view, _html} =
+      host(conn, main, %{"related_product_uuids" => Enum.map(chosen, & &1.uuid)})
+
+    hook(view, "related_search", %{"q" => "Bulk"})
+
+    assert_push_event(view, "related_results", %{results: rows, has_more: false})
+    assert Enum.map(rows, & &1.uuid) == [rest.uuid]
+  end
+
+  test "the search honours the limit it is given and says whether more follow", %{
+    conn: conn,
+    catalogue: catalogue
+  } do
+    main = item!(catalogue, "Page main")
+    for n <- 1..5, do: item!(catalogue, "Paged #{n}")
+
+    {:ok, view, _html} = host(conn, main)
+
+    hook(view, "related_search", %{"q" => "Paged", "limit" => 2})
+    assert_push_event(view, "related_results", %{results: two, has_more: true})
+    assert length(two) == 2
+
+    hook(view, "related_search", %{"q" => "Paged", "limit" => 5})
+    assert_push_event(view, "related_results", %{results: five, has_more: false})
+    assert length(five) == 5
+
+    for bad <- [0, -1, "x", nil] do
+      hook(view, "related_search", %{"q" => "Paged", "limit" => bad})
+      assert_push_event(view, "related_results", %{results: rows, has_more: false})
+      assert length(rows) == 5
+    end
+  end
 end

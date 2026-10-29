@@ -510,7 +510,9 @@ lib/phoenix_kit_ecommerce/
 │                     # backfill_image_fingerprints (after upgrading),
 │                     # list_unstamped_prices (read-only audit)
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz,
-│                     # ClaimController + ClaimHTML (the checkout claim page)
+│                     # ClaimController + ClaimHTML (the checkout claim page);
+│                     # components/related_products.ex (product page block),
+│                     # components/cross_sells.ex (cart "Add to your order")
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
 ├── policy.ex         # secure-by-default admin policy settings
 ├── vocabulary.ex     # "products" / "services" / "mixed" storefront wording
