@@ -235,6 +235,11 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
       def throws(_product), do: throw(:no_stock)
       def one_arg_only(_product, _extra), do: false
       def nothing(_product), do: nil
+
+      def tracked(product) do
+        send(self(), {:availability_checked, product.uuid})
+        available?(product)
+      end
     end
 
     setup do
@@ -269,6 +274,21 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
     test "only false means unavailable" do
       Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :nothing})
       assert Availability.available?(%{})
+    end
+
+    test "stops consulting availability when the block is full" do
+      sold_out = product!(%{"title" => %{"en" => "Related sold out"}})
+      shown = product!()
+      extra = product!()
+      main = product!() |> with_related([sold_out.uuid, shown.uuid, extra.uuid])
+      Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :tracked})
+
+      assert Enum.map(RelatedProducts.for_product(main, limit: 1), & &1.uuid) == [shown.uuid]
+      assert_received {:availability_checked, sold_out_uuid}
+      assert sold_out_uuid == sold_out.uuid
+      assert_received {:availability_checked, shown_uuid}
+      assert shown_uuid == shown.uuid
+      refute_received {:availability_checked, _}
     end
 
     test "a failing hook does not empty the block" do

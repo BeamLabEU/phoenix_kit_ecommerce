@@ -137,7 +137,7 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
   defp fallback_products(_product, _limit), do: []
 
   defp available(products, limit),
-    do: products |> Enum.filter(&Availability.available?/1) |> Enum.take(limit)
+    do: products |> Stream.filter(&Availability.available?/1) |> Enum.take(limit)
 
   @doc """
   What stands in when a product has no list left to show: `:off` (default) or

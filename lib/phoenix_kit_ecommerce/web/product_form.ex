@@ -474,7 +474,7 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # ===========================================
   # The list lives in socket assigns (like the option values) and is written
   # into `metadata["related_product_uuids"]` on save. The picker's events only
-  # change those assigns; saving is gated.
+  # change those assigns; each event and the eventual save are gated.
 
   def handle_event("picker_search", %{"q" => query} = params, socket) when is_binary(query) do
     Authz.authorize(socket, :manage_catalog, fn -> search_related(query, params, socket) end)
@@ -489,14 +489,15 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     end)
   end
 
-  def handle_event("remove_related", %{"uuid" => uuid}, socket) when is_binary(uuid) do
-    {:noreply, assign_related(socket, List.delete(socket.assigns.related_uuids, uuid))}
+  def handle_event("remove_related", %{"uuid" => uuid} = params, socket) when is_binary(uuid) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      gated_event("remove_related", params, socket)
+    end)
   end
 
-  def handle_event("move_related", %{"uuid" => uuid, "direction" => direction}, socket)
-      when direction in ~w(up down) do
-    {:noreply,
-     assign_related(socket, move_related(socket.assigns.related_uuids, uuid, direction))}
+  def handle_event("move_related", %{"uuid" => uuid, "direction" => direction} = params, socket)
+      when is_binary(uuid) and direction in ~w(up down) do
+    Authz.authorize(socket, :manage_catalog, fn -> gated_event("move_related", params, socket) end)
   end
 
   # ===========================================
@@ -2842,23 +2843,28 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   end
 
   defp search_related(query, params, socket) do
+    limit = related_search_limit(params["limit"])
+    results = related_search_rows(socket, String.trim(query), limit + 1)
+
     {:noreply,
      push_event(socket, "picker_results", %{
        q: query,
        id: params["id"],
-       results: related_search_rows(socket, String.trim(query)),
-       has_more: false
+       results: Enum.take(results, limit),
+       has_more: length(results) > limit and limit < 100
      })}
   end
 
-  defp related_search_rows(_socket, ""), do: []
+  defp related_search_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 100)
+  defp related_search_limit(_limit), do: 8
 
-  defp related_search_rows(socket, query) do
-    taken = [socket.assigns.product.uuid | socket.assigns.related_uuids]
+  defp related_search_rows(_socket, "", _limit), do: []
+
+  defp related_search_rows(socket, query, limit) do
+    taken = Enum.reject([socket.assigns.product.uuid | socket.assigns.related_uuids], &is_nil/1)
 
     query
-    |> Legacy.search_products(10)
-    |> Enum.reject(&(&1.uuid in taken))
+    |> Legacy.search_products(limit, taken)
     |> Enum.map(fn product ->
       %{
         kind: "product",
@@ -2875,6 +2881,15 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
       [] -> Map.delete(metadata, RelatedProducts.metadata_key())
       uuids -> Map.put(metadata, RelatedProducts.metadata_key(), uuids)
     end
+  end
+
+  defp gated_event("remove_related", %{"uuid" => uuid}, socket) do
+    {:noreply, assign_related(socket, List.delete(socket.assigns.related_uuids, uuid))}
+  end
+
+  defp gated_event("move_related", %{"uuid" => uuid, "direction" => direction}, socket) do
+    {:noreply,
+     assign_related(socket, move_related(socket.assigns.related_uuids, uuid, direction))}
   end
 
   defp gated_event("save", %{"product" => product_params}, socket) do

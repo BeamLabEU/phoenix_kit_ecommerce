@@ -62,6 +62,81 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     assert_push_event(view, "picker_results", %{results: []})
   end
 
+  test "search can fill all twelve slots when the newest matches are already picked", %{
+    conn: conn
+  } do
+    products = for i <- 1..14, do: product!("Shared title #{i}")
+    main = product!("Shared title main")
+    {:ok, view, _html} = edit(conn, main)
+    picked = products |> Enum.reverse() |> Enum.take(10)
+
+    for product <- picked, do: render_hook(view, "picker_pick", %{"uuid" => product.uuid})
+
+    render_hook(view, "picker_search", %{"q" => "Shared title", "limit" => 8})
+    assert_push_event(view, "picker_results", %{results: rows})
+    assert length(rows) == 4
+
+    for row <- Enum.take(rows, 2), do: render_hook(view, "picker_pick", %{"uuid" => row.uuid})
+    save(view)
+
+    assert length(related(main)) == RelatedProducts.max_items()
+  end
+
+  test "search supports the picker's load more requests", %{conn: conn} do
+    products = for i <- 1..19, do: product!("Pageable #{i}")
+    main = product!("Main")
+    {:ok, view, _html} = edit(conn, main)
+
+    render_hook(view, "picker_search", %{
+      "id" => "related-products-search",
+      "q" => "Pageable",
+      "limit" => 8
+    })
+
+    assert_push_event(view, "picker_results", %{
+      id: "related-products-search",
+      results: first,
+      has_more: true
+    })
+
+    assert length(first) == 8
+
+    render_hook(view, "picker_search", %{"q" => "Pageable", "limit" => 16})
+    assert_push_event(view, "picker_results", %{results: more, has_more: true})
+    assert length(more) == 16
+    assert Enum.take(more, 8) == first
+
+    render_hook(view, "picker_search", %{"q" => "Pageable", "limit" => 24})
+    assert_push_event(view, "picker_results", %{results: all, has_more: false})
+    assert Enum.sort(Enum.map(all, & &1.uuid)) == Enum.sort(Enum.map(products, & &1.uuid))
+  end
+
+  test "malformed search limits keep the default page size", %{conn: conn} do
+    for i <- 1..10, do: product!("Limit check #{i}")
+    {:ok, view, _html} = edit(conn, product!("Main"))
+
+    for limit <- [nil, 0, -1, "16", 1.5, %{}] do
+      render_hook(view, "picker_search", %{"q" => "Limit check", "limit" => limit})
+      assert_push_event(view, "picker_results", %{results: rows, has_more: true})
+      assert length(rows) == 8
+    end
+  end
+
+  test "revoked catalog access also stops removing and reordering staged products", %{conn: conn} do
+    a = product!("Alpha")
+    b = product!("Beta")
+    main = product!("Main", %{"metadata" => %{"related_product_uuids" => [a.uuid, b.uuid]}})
+    {:ok, view, _html} = edit(conn, main)
+    swap_scope(view, fake_scope(permissions: ["shop"], roles: ["Employee"]))
+
+    render_hook(view, "move_related", %{"uuid" => b.uuid, "direction" => "up"})
+    render_hook(view, "remove_related", %{"uuid" => a.uuid})
+
+    assert has_element?(view, "#related-products-list li:first-child#related-product-#{a.uuid}")
+    assert has_element?(view, "#related-products-list li:last-child#related-product-#{b.uuid}")
+    assert render(view) =~ "You don&#39;t have permission"
+  end
+
   test "picked products are saved in the order picked and show as chips", %{conn: conn} do
     main = product!("Main")
     a = product!("Alpha")
