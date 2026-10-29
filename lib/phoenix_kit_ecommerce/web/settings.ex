@@ -41,6 +41,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
+  # The most products a related-products block may show (a guard cannot call it).
+  @related_max RelatedProducts.max_items()
+
   @impl true
   # The page needs `shop.manage_settings`, not just the base key: core's tab mapping
   # refuses it too where the page has a tab, but the check does not rely on it.
@@ -1297,7 +1300,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               <p class="text-sm text-base-content/70 mb-3">
                 {gettext("How many related products the product page shows at most.")}
               </p>
-              <select id="related-limit" name="limit" class="select select-bordered w-32">
+              <select id="related-limit" name="limit" class="select w-32">
                 <option :for={n <- 1..RelatedProducts.max_items()} value={n} selected={n == @related_limit}>
                   {n}
                 </option>
@@ -2169,10 +2172,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   # client sends is refused rather than stored.
   defp gated_event("update_related_limit", %{"limit" => value}, socket) when is_binary(value) do
     case Integer.parse(value) do
-      {n, ""} when n in 1..12 and n == socket.assigns.related_limit ->
+      {n, ""} when n >= 1 and n <= @related_max and n == socket.assigns.related_limit ->
         {:noreply, socket}
 
-      {n, ""} when n in 1..12 ->
+      {n, ""} when n >= 1 and n <= @related_max ->
         case Settings.update_setting("shop_related_limit", Integer.to_string(n)) do
           {:ok, _} ->
             Activity.log("shop.related_products_changed",

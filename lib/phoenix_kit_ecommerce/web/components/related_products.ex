@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.Components.RelatedProducts do
   use Phoenix.Component
   use Gettext, backend: PhoenixKitEcommerce.Gettext
 
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Web.Components.ShopCards
 
   attr :products, :list, required: true
@@ -17,6 +18,9 @@ defmodule PhoenixKitEcommerce.Web.Components.RelatedProducts do
   def block(%{products: []} = assigns), do: ~H""
 
   def block(assigns) do
+    # Read once for the whole row, not once per card (as the catalog grids do).
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <section id="related-products" class="mt-10">
       <div class="divider"></div>
@@ -27,6 +31,7 @@ defmodule PhoenixKitEcommerce.Web.Components.RelatedProducts do
           product={product}
           currency={@currency}
           language={@language}
+          name_prefixes={@name_prefixes}
         />
       </div>
     </section>

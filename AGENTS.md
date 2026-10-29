@@ -928,7 +928,9 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts;
   `Availability` answers true for everything today and is the one place a
   stock feature plugs in (`config :phoenix_kit_ecommerce, :availability,
-  {Module, :function}` meanwhile). Dangling ids are skipped on read, never
+  {Module, :function}` meanwhile; a hook that is missing, has another arity,
+  raises, exits or throws counts as available and is logged as a warning, so
+  a broken hook never crashes a product page). Dangling ids are skipped on read, never
   cleaned. Under the catalogue source `for_product/2` answers `[]` (the list
   is not stored there yet).
 - `shop_related_fallback` — `"off"` (default) or `"category"`: when nothing

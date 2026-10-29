@@ -477,20 +477,16 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # change those assigns; saving is gated.
 
   def handle_event("picker_search", %{"q" => query} = params, socket) when is_binary(query) do
-    {:noreply,
-     push_event(socket, "picker_results", %{
-       q: query,
-       id: params["id"],
-       results: related_search_rows(socket, String.trim(query)),
-       has_more: false
-     })}
+    Authz.authorize(socket, :manage_catalog, fn -> search_related(query, params, socket) end)
   end
 
   def handle_event("picker_pick", %{"uuid" => uuid}, socket) when is_binary(uuid) do
-    {:noreply,
-     socket
-     |> add_related(uuid)
-     |> push_event("picker_staged", %{})}
+    Authz.authorize(socket, :manage_catalog, fn ->
+      {:noreply,
+       socket
+       |> add_related(uuid)
+       |> push_event("picker_staged", %{})}
+    end)
   end
 
   def handle_event("remove_related", %{"uuid" => uuid}, socket) when is_binary(uuid) do
@@ -2845,15 +2841,23 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     end
   end
 
+  defp search_related(query, params, socket) do
+    {:noreply,
+     push_event(socket, "picker_results", %{
+       q: query,
+       id: params["id"],
+       results: related_search_rows(socket, String.trim(query)),
+       has_more: false
+     })}
+  end
+
   defp related_search_rows(_socket, ""), do: []
 
   defp related_search_rows(socket, query) do
     taken = [socket.assigns.product.uuid | socket.assigns.related_uuids]
 
-    {products, _total} =
-      Legacy.list_products_with_count(search: query, per_page: 10, page: 1, preload: [])
-
-    products
+    query
+    |> Legacy.search_products(10)
     |> Enum.reject(&(&1.uuid in taken))
     |> Enum.map(fn product ->
       %{

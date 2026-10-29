@@ -162,6 +162,28 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     assert related(main) == []
   end
 
+  test "metadata submitted with the form never overwrites the list the picker holds", %{
+    conn: conn
+  } do
+    kept = product!("Kept")
+    other = product!("Other")
+    main = product!("Main", %{"metadata" => %{"related_product_uuids" => [kept.uuid]}})
+
+    {:ok, view, _html} = edit(conn, main)
+
+    for hostile <- [[other.uuid], ["junk", 5, true], 7, "garbage", %{"x" => 1}] do
+      render_hook(view, "save", %{
+        "product" => %{
+          "title" => "Main",
+          "price" => "10.00",
+          "metadata" => %{"related_product_uuids" => hostile}
+        }
+      })
+
+      assert related(main) == [kept.uuid]
+    end
+  end
+
   test "the list stops at the maximum", %{conn: conn} do
     main = product!("Main")
     products = for i <- 1..(RelatedProducts.max_items() + 2), do: product!("Bulk #{i}")

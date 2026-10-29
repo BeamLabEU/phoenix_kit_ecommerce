@@ -82,7 +82,9 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
 
   def normalize(_other, _own_uuid), do: []
 
-  defp cast(value) when is_binary(value) do
+  # `Ecto.UUID.cast/1` also takes any 16-byte string as a raw uuid; a stored or
+  # submitted id is always the 36-character text form.
+  defp cast(value) when is_binary(value) and byte_size(value) == 36 do
     case Ecto.UUID.cast(value) do
       {:ok, uuid} -> uuid
       :error -> nil

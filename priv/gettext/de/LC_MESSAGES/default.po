@@ -27,7 +27,7 @@ msgstr "Dashboard"
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:154
 #: lib/phoenix_kit_ecommerce/web/products.ex:64
 #: lib/phoenix_kit_ecommerce/web/products.ex:299
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2620
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2623
 #: lib/phoenix_kit_ecommerce/web/trail.ex:45
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1855
 #, elixir-autogen
@@ -196,7 +196,7 @@ msgstr "Aktionen"
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:228
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:342
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:431
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:985
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:981
 #: lib/phoenix_kit_ecommerce/web/products.ex:329
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:592
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:37
@@ -220,8 +220,8 @@ msgstr "Aktiv — Kategorie und Produkte sichtbar"
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:871
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:922
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:489
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1563
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1266
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1559
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1269
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2684
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2703
 #, elixir-autogen, elixir-format
@@ -250,7 +250,7 @@ msgstr "Methode hinzufügen"
 msgid "Add Option"
 msgstr "Option hinzufügen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1572
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1568
 #, elixir-autogen, elixir-format
 msgid "Add Option or Value"
 msgstr "Option oder Wert hinzufügen"
@@ -261,7 +261,7 @@ msgstr "Option oder Wert hinzufügen"
 msgid "Add Product"
 msgstr "Produkt hinzufügen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1550
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1546
 #, elixir-autogen, elixir-format
 msgid "Add new value..."
 msgstr "Neuen Wert hinzufügen..."
@@ -294,7 +294,7 @@ msgstr "Alle Status"
 msgid "All Types"
 msgstr "Alle Typen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1482
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1478
 #, elixir-autogen, elixir-format
 msgid "All values"
 msgstr "Alle Werte"
@@ -307,7 +307,7 @@ msgstr "Analysieren & Konfigurieren"
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:92
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:148
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:149
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:986
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:982
 #: lib/phoenix_kit_ecommerce/web/products.ex:331
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:38
 #, elixir-autogen, elixir-format
@@ -364,18 +364,18 @@ msgstr "Automatisch generiert"
 msgid "Auto-generated from name"
 msgstr "Automatisch aus dem Namen generiert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1006
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1002
 #, elixir-autogen, elixir-format
 msgid "Auto-generated from title"
 msgstr "Automatisch aus dem Titel generiert"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:298
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1418
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1414
 #, elixir-autogen, elixir-format
 msgid "Available Options"
 msgstr "Verfügbare Optionen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1226
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1229
 #, elixir-autogen, elixir-format
 msgid "Available Product Options"
 msgstr "Verfügbare Produktoptionen"
@@ -386,12 +386,12 @@ msgid "Back to Orders"
 msgstr "Zurück zu den Bestellungen"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:475
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1068
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1064
 #, elixir-autogen, elixir-format
 msgid "Base Price"
 msgstr "Grundpreis"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1641
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1637
 #, elixir-autogen, elixir-format
 msgid "Base price:"
 msgstr "Grundpreis:"
@@ -417,7 +417,7 @@ msgstr "Rechnungsinformationen"
 msgid "Billing module is not enabled"
 msgstr "Das Abrechnungsmodul ist nicht aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:972
+#: lib/phoenix_kit_ecommerce/web/settings.ex:975
 #, elixir-autogen, elixir-format
 msgid "Billing module settings"
 msgstr "Einstellungen des Abrechnungsmoduls"
@@ -428,7 +428,7 @@ msgid "Blue"
 msgstr "Blau"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:113
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1015
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1011
 #, elixir-autogen, elixir-format
 msgid "Brand or manufacturer"
 msgstr "Marke oder Hersteller"
@@ -444,7 +444,7 @@ msgstr "Produkte durchsuchen"
 msgid "Browse Shop"
 msgstr "Shop durchsuchen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1007
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1010
 #, elixir-autogen, elixir-format
 msgid "CSV Import Filters"
 msgstr "CSV-Import-Filter"
@@ -458,7 +458,7 @@ msgstr "CSV-Import-Filter"
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:634
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:669
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:649
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2096
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2092
 #: lib/phoenix_kit_ecommerce/web/products.ex:689
 #: lib/phoenix_kit_ecommerce/web/products.ex:729
 #: lib/phoenix_kit_ecommerce/web/products.ex:757
@@ -494,18 +494,18 @@ msgstr "Wiederholung nicht möglich: Datei existiert nicht mehr"
 msgid "Carts will appear here when customers add items"
 msgstr "Warenkörbe werden hier angezeigt, sobald Kunden Artikel hinzufügen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2277
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2280
 #, elixir-autogen, elixir-format
 msgid "Categories in shop disabled"
 msgstr "Kategorien im Shop deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2276
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2279
 #, elixir-autogen, elixir-format
 msgid "Categories in shop enabled"
 msgstr "Kategorien im Shop aktiviert"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:545
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1031
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1027
 #: lib/phoenix_kit_ecommerce/web/products.ex:350
 #: lib/phoenix_kit_ecommerce/web/products.ex:438
 #: lib/phoenix_kit_ecommerce/web/products.ex:505
@@ -514,7 +514,7 @@ msgstr "Kategorien im Shop aktiviert"
 msgid "Category"
 msgstr "Kategorie"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1593
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1596
 #, elixir-autogen, elixir-format
 msgid "Category Icons"
 msgstr "Kategoriesymbole"
@@ -524,7 +524,7 @@ msgstr "Kategoriesymbole"
 msgid "Category Image"
 msgstr "Kategoriebild"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1397
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1400
 #, elixir-autogen, elixir-format
 msgid "Category Name Display"
 msgstr "Anzeige des Kategorienamens"
@@ -549,18 +549,18 @@ msgstr "Kategorie gelöscht"
 msgid "Category description"
 msgstr "Kategoriebeschreibung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2133
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2136
 #, elixir-autogen, elixir-format
 msgid "Category display setting updated"
 msgstr "Anzeigeeinstellung der Kategorie aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2317
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2320
 #, elixir-autogen, elixir-format
 msgid "Category icon setting updated"
 msgstr "Symboleinstellung der Kategorie aktualisiert"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:534
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1635
 #, elixir-autogen, elixir-format
 msgid "Category image"
 msgstr "Kategoriebild"
@@ -594,7 +594,7 @@ msgstr "Übergeordnete Kategorie ändern"
 msgid "Change Status"
 msgstr "Status ändern"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1105
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1101
 #, elixir-autogen, elixir-format
 msgid "Charge tax on this product"
 msgstr "Steuer für dieses Produkt berechnen"
@@ -612,7 +612,7 @@ msgid "Compare At"
 msgstr "Vergleichspreis"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:136
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1079
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1075
 #, elixir-autogen, elixir-format
 msgid "Compare at price"
 msgstr "Vergleichspreis"
@@ -623,8 +623,8 @@ msgid "Completed At"
 msgstr "Abgeschlossen am"
 
 #: lib/phoenix_kit_ecommerce/web/imports.ex:867
-#: lib/phoenix_kit_ecommerce/web/settings.ex:993
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1016
+#: lib/phoenix_kit_ecommerce/web/settings.ex:996
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1019
 #, elixir-autogen, elixir-format
 msgid "Configure"
 msgstr "Konfigurieren"
@@ -635,7 +635,7 @@ msgid "Configure Option Mappings"
 msgstr "Optionszuordnungen konfigurieren"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:177
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1009
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1012
 #, elixir-autogen, elixir-format
 msgid "Configure keyword filters and category rules for CSV product imports"
 msgstr "Konfigurieren Sie Schlüsselwortfilter und Kategorieregeln für CSV-Produktimporte"
@@ -645,7 +645,7 @@ msgstr "Konfigurieren Sie Schlüsselwortfilter und Kategorieregeln für CSV-Prod
 msgid "Configure shipping method details"
 msgstr "Details der Versandmethode konfigurieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:497
+#: lib/phoenix_kit_ecommerce/web/settings.ex:500
 #, elixir-autogen, elixir-format
 msgid "Configure your e-commerce store"
 msgstr "Konfigurieren Sie Ihren Onlineshop"
@@ -684,7 +684,7 @@ msgid "Cost"
 msgstr "Kosten"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:149
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1091
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1087
 #, elixir-autogen, elixir-format
 msgid "Cost per item"
 msgstr "Kosten pro Artikel"
@@ -699,7 +699,7 @@ msgstr "Kategorie erstellen"
 msgid "Create Method"
 msgstr "Methode erstellen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2100
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2096
 #, elixir-autogen, elixir-format
 msgid "Create Product"
 msgstr "Produkt erstellen"
@@ -709,7 +709,7 @@ msgstr "Produkt erstellen"
 msgid "Create a new category"
 msgstr "Neue Kategorie erstellen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:931
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:927
 #, elixir-autogen, elixir-format
 msgid "Create a new product"
 msgstr "Neues Produkt erstellen"
@@ -735,32 +735,32 @@ msgstr "Erstellt:"
 msgid "Currency"
 msgstr "Währung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:968
+#: lib/phoenix_kit_ecommerce/web/settings.ex:971
 #, elixir-autogen, elixir-format
 msgid "Currency & Tax Settings"
 msgstr "Währungs- und Steuereinstellungen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:970
+#: lib/phoenix_kit_ecommerce/web/settings.ex:973
 #, elixir-autogen, elixir-format
 msgid "Currency and tax configuration is managed in the"
 msgstr "Die Konfiguration von Währung und Steuern erfolgt in"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1895
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1891
 #, elixir-autogen, elixir-format
 msgid "Current Modifier"
 msgstr "Aktueller Modifikator"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1748
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1744
 #, elixir-autogen, elixir-format
 msgid "Custom"
 msgstr "Benutzerdefiniert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1689
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1685
 #, elixir-autogen, elixir-format
 msgid "Custom Price"
 msgstr "Benutzerdefinierter Preis"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1480
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1476
 #, elixir-autogen, elixir-format
 msgid "Custom selection"
 msgstr "Benutzerdefinierte Auswahl"
@@ -775,7 +775,7 @@ msgstr "Kunde"
 msgid "Date"
 msgstr "Datum"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1688
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1684
 #, elixir-autogen, elixir-format
 msgid "Default Price"
 msgstr "Standardpreis"
@@ -785,7 +785,7 @@ msgstr "Standardpreis"
 msgid "Define options specific to this category. These override global options with the same key."
 msgstr "Definieren Sie Optionen, die speziell für diese Kategorie gelten. Diese überschreiben globale Optionen mit demselben Schlüssel."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:988
+#: lib/phoenix_kit_ecommerce/web/settings.ex:991
 #, elixir-autogen, elixir-format
 msgid "Define options that apply to all products (size, color, material, etc.)"
 msgstr "Definieren Sie Optionen, die für alle Produkte gelten (Größe, Farbe, Material usw.)"
@@ -875,8 +875,8 @@ msgstr "Lieferung in 3–5 Werktagen"
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1219
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:508
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:692
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1040
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1338
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1036
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1334
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:362
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1683
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1464
@@ -890,7 +890,7 @@ msgid "Description:"
 msgstr "Beschreibung:"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:103
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1024
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1020
 #: lib/phoenix_kit_ecommerce/web/products.ex:343
 #, elixir-autogen, elixir-format
 msgid "Digital"
@@ -931,7 +931,7 @@ msgstr "Herunterladbare Produkte"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:90
 #: lib/phoenix_kit_ecommerce/catalogue/shop_status_column.ex:147
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:984
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:980
 #: lib/phoenix_kit_ecommerce/web/products.ex:330
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:22
 #: lib/phoenix_kit_ecommerce/web/status_labels.ex:36
@@ -949,7 +949,7 @@ msgstr "Produktentwürfe"
 msgid "Drag CSV file here or click to browse"
 msgstr "CSV-Datei hierher ziehen oder zum Durchsuchen klicken"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:496
+#: lib/phoenix_kit_ecommerce/web/settings.ex:499
 #, elixir-autogen, elixir-format
 msgid "E-Commerce Settings"
 msgstr "E-Commerce-Einstellungen"
@@ -996,22 +996,22 @@ msgstr "Option bearbeiten"
 msgid "Edit category details"
 msgstr "Kategoriedetails bearbeiten"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:931
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:927
 #, elixir-autogen, elixir-format
 msgid "Edit product details"
 msgstr "Produktdetails bearbeiten"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1652
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1648
 #, elixir-autogen, elixir-format
 msgid "Editable"
 msgstr "Bearbeitbar"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1172
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1175
 #, elixir-autogen, elixir-format
 msgid "Enabled"
 msgstr "Aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1574
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1570
 #, elixir-autogen, elixir-format
 msgid "Enter an existing option key to add a new value, or a new key to create a new option."
 msgstr "Geben Sie einen vorhandenen Optionsschlüssel ein, um einen neuen Wert hinzuzufügen, oder einen neuen Schlüssel, um eine neue Option zu erstellen."
@@ -1060,8 +1060,8 @@ msgstr "Ablaufdatum:"
 msgid "Failed"
 msgstr "Fehlgeschlagen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2387
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2424
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2390
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2427
 #, elixir-autogen, elixir-format
 msgid "Failed to add filter"
 msgstr "Filter konnte nicht hinzugefügt werden"
@@ -1098,45 +1098,45 @@ msgstr "Versandmethode konnte nicht gelöscht werden"
 msgid "Failed to read CSV file headers"
 msgstr "CSV-Dateiköpfe konnten nicht gelesen werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2440
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2443
 #, elixir-autogen, elixir-format
 msgid "Failed to remove filter"
 msgstr "Filter konnte nicht entfernt werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2455
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2458
 #, elixir-autogen, elixir-format
 msgid "Failed to reset filters"
 msgstr "Filter konnten nicht zurückgesetzt werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2137
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2140
 #, elixir-autogen, elixir-format
 msgid "Failed to update category display setting"
 msgstr "Anzeigeeinstellung der Kategorie konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2320
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2323
 #, elixir-autogen, elixir-format
 msgid "Failed to update category icon setting"
 msgstr "Symboleinstellung der Kategorie konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2342
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2345
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter"
 msgstr "Filter konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2357
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2360
 #, elixir-autogen, elixir-format
 msgid "Failed to update filter label"
 msgstr "Filterbezeichnung konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:486
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1745
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2164
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2191
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2228
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2256
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2282
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2304
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2677
+#: lib/phoenix_kit_ecommerce/web/settings.ex:489
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1748
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2167
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2194
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2231
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2259
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2285
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2307
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2680
 #, elixir-autogen, elixir-format
 msgid "Failed to update setting"
 msgstr "Einstellung konnte nicht aktualisiert werden"
@@ -1166,39 +1166,39 @@ msgstr "Datei:"
 msgid "Filename"
 msgstr "Dateiname"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1169
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1172
 #, elixir-autogen, elixir-format
 msgid "Filter"
 msgstr "Filter"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2384
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2421
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2387
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2424
 #, elixir-autogen, elixir-format
 msgid "Filter '%{key}' added"
 msgstr "Filter „%{key}“ hinzugefügt"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2366
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2402
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2369
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2405
 #, elixir-autogen, elixir-format
 msgid "Filter for '%{key}' already exists"
 msgstr "Filter für „%{key}“ existiert bereits"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2437
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2440
 #, elixir-autogen, elixir-format
 msgid "Filter removed"
 msgstr "Filter entfernt"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2452
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2455
 #, elixir-autogen, elixir-format
 msgid "Filters reset to defaults"
 msgstr "Filter auf Standardwerte zurückgesetzt"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1896
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1892
 #, elixir-autogen, elixir-format
 msgid "Final Price"
 msgstr "Endpreis"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1620
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1623
 #, elixir-autogen, elixir-format
 msgid "Folder icon"
 msgstr "Ordnersymbol"
@@ -1208,7 +1208,7 @@ msgstr "Ordnersymbol"
 msgid "Free above"
 msgstr "Kostenlos ab"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1875
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1871
 #, elixir-autogen, elixir-format
 msgid "From Import"
 msgstr "Aus Import"
@@ -1218,7 +1218,7 @@ msgstr "Aus Import"
 msgid "Full Description:"
 msgstr "Vollständige Beschreibung:"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:986
+#: lib/phoenix_kit_ecommerce/web/settings.ex:989
 #, elixir-autogen, elixir-format
 msgid "Global Product Options"
 msgstr "Globale Produktoptionen"
@@ -1252,7 +1252,7 @@ msgstr "Ausgeblendet"
 msgid "Hidden — Category and products hidden"
 msgstr "Ausgeblendet — Kategorie und Produkte ausgeblendet"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1399
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1402
 #, elixir-autogen, elixir-format
 msgid "How category names should be displayed in the sidebar"
 msgstr "Wie Kategorienamen in der Seitenleiste angezeigt werden sollen"
@@ -1284,7 +1284,7 @@ msgid "Import"
 msgstr "Import"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:176
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1003
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1006
 #, elixir-autogen, elixir-format
 msgid "Import Configurations"
 msgstr "Importkonfigurationen"
@@ -1363,13 +1363,13 @@ msgid "Import started: %{filename}"
 msgstr "Import gestartet: %{filename}"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:128
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1476
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1888
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1472
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1884
 #, elixir-autogen, elixir-format
 msgid "Imported"
 msgstr "Importiert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1874
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1870
 #, elixir-autogen, elixir-format
 msgid "Imported Option Prices"
 msgstr "Importierte Optionspreise"
@@ -1406,7 +1406,7 @@ msgstr "Schlüssel"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:832
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:438
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1171
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1174
 #, elixir-autogen, elixir-format
 msgid "Label"
 msgstr "Bezeichnung"
@@ -1477,7 +1477,7 @@ msgstr "Min. Bestellung"
 msgid "Min weight (g)"
 msgstr "Min. Gewicht (g)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1799
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1795
 #, elixir-autogen, elixir-format
 msgid "Modifier"
 msgstr "Modifikator"
@@ -1568,13 +1568,13 @@ msgstr "Keine kategoriespezifischen Optionen"
 msgid "No filter (import all products)"
 msgstr "Kein Filter (alle Produkte importieren)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1608
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1611
 #, elixir-autogen, elixir-format
 msgid "No icons"
 msgstr "Keine Symbole"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:267
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1972
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1968
 #, elixir-autogen, elixir-format
 msgid "No image"
 msgstr "Kein Bild"
@@ -1605,7 +1605,7 @@ msgid "No min"
 msgstr "Kein Min."
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:791
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2300
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2296
 #, elixir-autogen, elixir-format
 msgid "No options defined"
 msgstr "Keine Optionen definiert"
@@ -1659,22 +1659,22 @@ msgid "Only one file at a time"
 msgstr "Nur eine Datei gleichzeitig"
 
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:286
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1797
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1793
 #, elixir-autogen, elixir-format
 msgid "Option"
 msgstr "Option"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:822
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:818
 #, elixir-autogen, elixir-format
 msgid "Option '%{key}' created"
 msgstr "Option „%{key}“ erstellt"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1579
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1575
 #, elixir-autogen, elixir-format
 msgid "Option Key"
 msgstr "Options-Schlüssel"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1638
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1634
 #, elixir-autogen, elixir-format
 msgid "Option Prices"
 msgstr "Optionspreise"
@@ -1685,7 +1685,7 @@ msgid "Option added"
 msgstr "Option hinzugefügt"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:250
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:771
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:767
 #, elixir-autogen, elixir-format
 msgid "Option key and value are required"
 msgstr "Options-Schlüssel und -Wert sind erforderlich"
@@ -1750,7 +1750,7 @@ msgid "Order not found"
 msgstr "Bestellung nicht gefunden"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:137
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1082
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1078
 #, elixir-autogen, elixir-format
 msgid "Original price"
 msgstr "Ursprünglicher Preis"
@@ -1779,13 +1779,13 @@ msgstr "Übergeordnete Kategorie"
 msgid "Pending"
 msgstr "Ausstehend"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1653
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1649
 #, elixir-autogen, elixir-format
 msgid "Per-product price modifiers"
 msgstr "Produktspezifische Preisänderungen"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:103
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1024
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1020
 #: lib/phoenix_kit_ecommerce/web/products.ex:342
 #, elixir-autogen, elixir-format
 msgid "Physical"
@@ -1801,7 +1801,7 @@ msgstr "Physische Produkte"
 msgid "Placed on %{date}"
 msgstr "Aufgegeben am %{date}"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:720
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:716
 #, elixir-autogen, elixir-format
 msgid "Please enter a value first"
 msgstr "Bitte geben Sie zuerst einen Wert ein"
@@ -1862,13 +1862,13 @@ msgstr "Preisberechnung"
 msgid "Price Range"
 msgstr "Preisspanne"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:990
+#: lib/phoenix_kit_ecommerce/web/settings.ex:993
 #, elixir-autogen, elixir-format
 msgid "Price override is configured per-option in the options settings."
 msgstr "Die Preisüberschreibung wird pro Option in den Optionseinstellungen konfiguriert."
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:431
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1060
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1056
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:374
 #, elixir-autogen, elixir-format
 msgid "Pricing"
@@ -1889,30 +1889,30 @@ msgid "Product"
 msgstr "Produkt"
 
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:345
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:946
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:942
 #, elixir-autogen, elixir-format
 msgid "Product Details"
 msgstr "Produktdetails"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2017
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2013
 #, elixir-autogen, elixir-format
 msgid "Product Images"
 msgstr "Produktbilder"
 
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:236
-#: lib/phoenix_kit_ecommerce/web/settings.ex:982
+#: lib/phoenix_kit_ecommerce/web/settings.ex:985
 #, elixir-autogen, elixir-format
 msgid "Product Options"
 msgstr "Produktoptionen"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:101
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1023
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1019
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2662
 #, elixir-autogen, elixir-format
 msgid "Product type"
 msgstr "Produkttyp"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:839
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:835
 #, elixir-autogen, elixir-format
 msgid "Product created"
 msgstr "Produkt erstellt"
@@ -1924,12 +1924,12 @@ msgstr "Produkt erstellt"
 msgid "Product deleted"
 msgstr "Produkt gelöscht"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:967
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:963
 #, elixir-autogen, elixir-format
 msgid "Product title"
 msgstr "Produkttitel"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:872
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:868
 #, elixir-autogen, elixir-format
 msgid "Product updated"
 msgstr "Produkt aktualisiert"
@@ -1969,9 +1969,9 @@ msgstr "Schnellaktionen"
 msgid "Refresh stats"
 msgstr "Statistiken aktualisieren"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1262
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1210
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1214
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1258
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1213
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1217
 #, elixir-autogen, elixir-format
 msgid "Remove"
 msgstr "Entfernen"
@@ -1981,7 +1981,7 @@ msgstr "Entfernen"
 msgid "Remove auto-created categories that have no products after import"
 msgstr "Automatisch erstellte Kategorien ohne Produkte nach dem Import entfernen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1211
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1214
 #, elixir-autogen, elixir-format
 msgid "Remove this filter?"
 msgstr "Diesen Filter entfernen?"
@@ -2003,7 +2003,7 @@ msgstr "Pflichtfeld"
 msgid "Requires Shipping:"
 msgstr "Erfordert Versand:"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1154
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1157
 #, elixir-autogen, elixir-format
 msgid "Reset to defaults"
 msgstr "Auf Standardwerte zurücksetzen"
@@ -2035,7 +2035,7 @@ msgid "SEO"
 msgstr "SEO"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:688
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1334
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1330
 #, elixir-autogen, elixir-format
 msgid "SEO-friendly URL for this language"
 msgstr "SEO-freundliche URL für diese Sprache"
@@ -2100,13 +2100,13 @@ msgstr "Als nicht gelistet festlegen"
 msgid "Set parent for %{count} selected categories"
 msgstr "Übergeordnete Kategorie für %{count} ausgewählte Kategorien festlegen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1878
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1874
 #, elixir-autogen, elixir-format
 msgid "Set prices for each option value. Enter the final price (base price + modifier)."
 msgstr "Legen Sie Preise für jeden Optionswert fest. Geben Sie den Endpreis ein (Grundpreis + Änderung)."
 
 #: lib/phoenix_kit_ecommerce/web/dashboard.ex:182
-#: lib/phoenix_kit_ecommerce/web/settings.ex:64
+#: lib/phoenix_kit_ecommerce/web/settings.ex:67
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2197
 #: lib/phoenix_kit_ecommerce/web/trail.ex:49
 #, elixir-autogen, elixir-format
@@ -2149,22 +2149,22 @@ msgstr "Shopify- oder Prom.ua-CSV-Format, max. 50 MB"
 msgid "Shopping Carts"
 msgstr "Warenkörbe"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1050
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1046
 #, elixir-autogen, elixir-format
 msgid "Short product description"
 msgstr "Kurze Produktbeschreibung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1333
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1336
 #, elixir-autogen, elixir-format
 msgid "Show Categories in Shop"
 msgstr "Kategorien im Shop anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1595
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1598
 #, elixir-autogen, elixir-format
 msgid "Show icons next to category names in sidebar"
 msgstr "Symbole neben Kategorienamen in der Seitenleiste anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1313
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1316
 #, elixir-autogen, elixir-format
 msgid "Sidebar Display"
 msgstr "Seitenleistenanzeige"
@@ -2197,21 +2197,21 @@ msgstr "Slot-Schlüssel"
 #: lib/phoenix_kit_ecommerce/web/categories.ex:447
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:453
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:174
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:994
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:990
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:354
 #, elixir-autogen, elixir-format
 msgid "Slug"
 msgstr "Slug"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:1148
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:852
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:892
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:848
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:888
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Please try again."
 msgstr "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1257
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2078
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2074
 #, elixir-autogen, elixir-format
 msgid "Specifications"
 msgstr "Spezifikationen"
@@ -2252,7 +2252,7 @@ msgstr "Migration für %{count} Produkte gestartet"
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:283
 #: lib/phoenix_kit_ecommerce/web/imports.ex:1040
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:533
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:982
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:978
 #: lib/phoenix_kit_ecommerce/web/products.ex:325
 #: lib/phoenix_kit_ecommerce/web/products.ex:435
 #: lib/phoenix_kit_ecommerce/web/products.ex:503
@@ -2270,12 +2270,12 @@ msgstr "Status"
 msgid "Storage image has priority"
 msgstr "Bild aus dem Speicher hat Vorrang"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1151
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1154
 #, elixir-autogen, elixir-format
 msgid "Storefront Filters"
 msgstr "Shop-Filter"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2339
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2342
 #, elixir-autogen, elixir-format
 msgid "Storefront filter updated"
 msgstr "Shop-Filter aktualisiert"
@@ -2305,7 +2305,7 @@ msgstr "Tags:"
 msgid "Tax"
 msgstr "Steuer"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1100
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1096
 #, elixir-autogen, elixir-format
 msgid "Tax Settings"
 msgstr "Steuereinstellungen"
@@ -2320,7 +2320,7 @@ msgstr "Steuerpflichtig:"
 msgid "Text fields will be imported to this language"
 msgstr "Textfelder werden in diese Sprache importiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1228
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1231
 #, elixir-autogen, elixir-format
 msgid "These option keys were found in product metadata. Click to add as a filter."
 msgstr "Diese Optionsschlüssel wurden in den Produktmetadaten gefunden. Klicken Sie, um sie als Filter hinzuzufügen."
@@ -2341,8 +2341,8 @@ msgid "Timestamps"
 msgstr "Zeitstempel"
 
 #: lib/phoenix_kit_ecommerce/web/import_show.ex:173
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:952
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1325
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:948
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1321
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1681
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2660
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1463
@@ -2393,24 +2393,24 @@ msgid "Translated description"
 msgstr "Übersetzte Beschreibung"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:655
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1294
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1290
 #: lib/phoenix_kit_ecommerce/web/translations.ex:216
 #, elixir-autogen, elixir-format
 msgid "Translations"
 msgstr "Übersetzungen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1412
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1415
 #, elixir-autogen, elixir-format
 msgid "Truncate (single line)"
 msgstr "Kürzen (einzeilig)"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:856
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:469
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1800
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1796
 #: lib/phoenix_kit_ecommerce/web/products.ex:338
 #: lib/phoenix_kit_ecommerce/web/products.ex:436
 #: lib/phoenix_kit_ecommerce/web/products.ex:504
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1170
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1173
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1852
 #, elixir-autogen, elixir-format
 msgid "Type"
@@ -2422,7 +2422,7 @@ msgid "Type:"
 msgstr "Typ:"
 
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:685
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1331
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1327
 #, elixir-autogen, elixir-format
 msgid "URL Slug"
 msgstr "URL-Slug"
@@ -2472,7 +2472,7 @@ msgstr "Kategorie aktualisieren"
 msgid "Update Method"
 msgstr "Methode aktualisieren"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2100
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2096
 #, elixir-autogen, elixir-format
 msgid "Update Product"
 msgstr "Produkt aktualisieren"
@@ -2520,42 +2520,42 @@ msgstr "Wird als Kategoriebild verwendet, wenn kein Bild aus dem Speicher ausgew
 msgid "User"
 msgstr "Benutzer"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1591
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1687
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1798
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1894
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1587
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1683
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1794
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1890
 #, elixir-autogen, elixir-format
 msgid "Value"
 msgstr "Wert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:745
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:741
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' added"
 msgstr "Wert „%{value}“ hinzugefügt"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:812
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:808
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' added to '%{key}'"
 msgstr "Wert „%{value}“ zu „%{key}“ hinzugefügt"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:701
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:727
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:697
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:723
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' already exists"
 msgstr "Wert „%{value}“ existiert bereits"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:796
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:792
 #, elixir-autogen, elixir-format
 msgid "Value '%{value}' already exists in '%{key}'"
 msgstr "Wert „%{value}“ existiert bereits in „%{key}“"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1953
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1949
 #, elixir-autogen, elixir-format
 msgid "Variant Images"
 msgstr "Variantenbilder"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:112
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1014
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1010
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1684
 #, elixir-autogen, elixir-format
 msgid "Vendor"
@@ -2583,7 +2583,7 @@ msgstr "Bestellverlauf anzeigen"
 msgid "Weight:"
 msgstr "Gewicht:"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1424
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1427
 #, elixir-autogen, elixir-format
 msgid "Wrap (multi-line)"
 msgstr "Umbruch (mehrzeilig)"
@@ -2595,12 +2595,12 @@ msgstr "Umbruch (mehrzeilig)"
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:369
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:378
 #: lib/phoenix_kit_ecommerce/web/product_detail.ex:384
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2273
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2269
 #, elixir-autogen, elixir-format
 msgid "Yes"
 msgstr "Ja"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1094
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1090
 #, elixir-autogen, elixir-format
 msgid "Your cost for profit calculation"
 msgstr "Ihre Kosten für die Gewinnberechnung"
@@ -2703,7 +2703,7 @@ msgstr "Ein Titel ist erforderlich."
 msgid "An account with this email address already exists."
 msgstr "Es existiert bereits ein Konto mit dieser E-Mail-Adresse."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1159
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1162
 #, elixir-autogen, elixir-format
 msgid "Configure product filters shown on the storefront sidebar. Customers can search by name, SKU, or tags, and filter by price, vendor, and product options."
 msgstr "Konfigurieren Sie die im Shop-Seitenbereich angezeigten Produktfilter. Kunden können nach Name, SKU oder Tags suchen und nach Preis, Anbieter und Produktoptionen filtern."
@@ -2858,12 +2858,12 @@ msgstr "Unerwarteter Fehler: %{reason}"
 msgid "You do not have permission to perform this action."
 msgstr "Sie sind nicht berechtigt, diese Aktion auszuführen."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1596
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1592
 #, elixir-autogen, elixir-format
 msgid "e.g. 14 inches, Red"
 msgstr "z. B. 14 Zoll, Rot"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1584
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1580
 #, elixir-autogen, elixir-format
 msgid "e.g. size, color"
 msgstr "z. B. Größe, Farbe"
@@ -2900,12 +2900,12 @@ msgid_plural "%{count} methods configured"
 msgstr[0] "1 Methode konfiguriert"
 msgstr[1] "%{count} Methoden konfiguriert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1346
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1342
 #, elixir-autogen, elixir-format
 msgid "<p>Full translated description...</p>"
 msgstr "<p>Vollständige übersetzte Beschreibung...</p>"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1424
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1420
 #, elixir-autogen, elixir-format
 msgid "Add custom options for this product."
 msgstr "Fügen Sie benutzerdefinierte Optionen für dieses Produkt hinzu."
@@ -2920,12 +2920,12 @@ msgstr "Erstellen Sie Ihr erstes Produkt, um loszulegen"
 msgid "Download images:"
 msgstr "Bilder herunterladen:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2020
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2016
 #, elixir-autogen, elixir-format
 msgid "Drag images to reorder. First image is the featured (main) image."
 msgstr "Ziehen Sie Bilder, um die Reihenfolge zu ändern. Das erste Bild ist das hervorgehobene (Haupt-)Bild."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2081
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2077
 #, elixir-autogen, elixir-format
 msgid "Fill in the product specifications based on global and category options."
 msgstr "Füllen Sie die Produktspezifikationen basierend auf globalen und kategoriespezifischen Optionen aus."
@@ -2940,17 +2940,17 @@ msgstr "Format:"
 msgid "Import details:"
 msgstr "Importdetails:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1656
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1652
 #, elixir-autogen, elixir-format
 msgid "Leave as \"Default\" to use global option values, or set custom values per-product."
 msgstr "Lassen Sie „Standard“ stehen, um globale Optionswerte zu verwenden, oder legen Sie produktspezifische Werte fest."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1956
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1952
 #, elixir-autogen, elixir-format
 msgid "Link images to option values. When a customer selects an option, the corresponding image displays."
 msgstr "Verknüpfen Sie Bilder mit Optionswerten. Wenn ein Kunde eine Option auswählt, wird das entsprechende Bild angezeigt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1358
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1354
 #, elixir-autogen, elixir-format
 msgid "Meta description for search engines (max 160 chars)"
 msgstr "Meta-Beschreibung für Suchmaschinen (max. 160 Zeichen)"
@@ -2970,12 +2970,12 @@ msgstr "Keine Produkte gefunden"
 msgid "No products tracked for this import. Product tracking was added in a later version."
 msgstr "Für diesen Import werden keine Produkte erfasst. Die Produkterfassung wurde in einer späteren Version hinzugefügt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1352
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1348
 #, elixir-autogen, elixir-format
 msgid "Page title for search engines (max 60 chars)"
 msgstr "Seitentitel für Suchmaschinen (max. 60 Zeichen)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1837
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1833
 #, elixir-autogen, elixir-format
 msgid "Price Range:"
 msgstr "Preisspanne:"
@@ -2990,22 +2990,22 @@ msgstr "Produkte:"
 msgid "Remove this option?"
 msgstr "Diese Option entfernen?"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1356
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1352
 #, elixir-autogen, elixir-format
 msgid "SEO Description"
 msgstr "SEO-Beschreibung"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1350
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1346
 #, elixir-autogen, elixir-format
 msgid "SEO Title"
 msgstr "SEO-Titel"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1422
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1418
 #, elixir-autogen, elixir-format
 msgid "Select which option values are available for this product."
 msgstr "Wählen Sie aus, welche Optionswerte für dieses Produkt verfügbar sind."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1340
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1336
 #, elixir-autogen, elixir-format
 msgid "Short translated description"
 msgstr "Kurze übersetzte Beschreibung"
@@ -3015,127 +3015,127 @@ msgstr "Kurze übersetzte Beschreibung"
 msgid "Skip empty categories:"
 msgstr "Leere Kategorien überspringen:"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1298
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1294
 #, elixir-autogen, elixir-format
 msgid "Translate product content for different languages. The default language uses the main fields above."
 msgstr "Übersetzen Sie den Produktinhalt für verschiedene Sprachen. Die Standardsprache verwendet die obigen Hauptfelder."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1327
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1323
 #, elixir-autogen, elixir-format
 msgid "Translated product title"
 msgstr "Übersetzter Produkttitel"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:739
+#: lib/phoenix_kit_ecommerce/web/settings.ex:742
 #, elixir-autogen, elixir-format
 msgid "Allow SVG images from import"
 msgstr "SVG-Bilder beim Import zulassen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#: lib/phoenix_kit_ecommerce/web/settings.ex:730
 #, elixir-autogen, elixir-format
 msgid "Allow raw HTML in product descriptions"
 msgstr "Unverarbeitetes HTML in Produktbeschreibungen zulassen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:773
+#: lib/phoenix_kit_ecommerce/web/settings.ex:776
 #, elixir-autogen, elixir-format
 msgid "Cleanup removes only categories the import created"
 msgstr "Die Bereinigung entfernt nur Kategorien, die der Import erstellt hat"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1715
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1718
 #, elixir-autogen, elixir-format
 msgid "Enter a two-letter country code, or leave it blank."
 msgstr "Geben Sie einen zweistelligen Ländercode ein oder lassen Sie das Feld leer."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1686
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1689
 #, elixir-autogen, elixir-format
 msgid "Image import network policy updated"
 msgstr "Netzwerkrichtlinie für den Bildimport aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:769
+#: lib/phoenix_kit_ecommerce/web/settings.ex:772
 #, elixir-autogen, elixir-format
 msgid "Import Behaviour"
 msgstr "Importverhalten"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1697
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1700
 #, elixir-autogen, elixir-format
 msgid "Import cleanup scope updated"
 msgstr "Umfang der Importbereinigung aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:751
+#: lib/phoenix_kit_ecommerce/web/settings.ex:754
 #, elixir-autogen, elixir-format
 msgid "Let image import reach internal addresses"
 msgstr "Dem Bildimport Zugriff auf interne Adressen erlauben"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:741
+#: lib/phoenix_kit_ecommerce/web/settings.ex:744
 #, elixir-autogen, elixir-format
 msgid "Off (recommended): SVG files are rejected by the image importer. SVG can carry scripts and stored images are served inline."
 msgstr "Aus (empfohlen): SVG-Dateien werden vom Bildimporteur abgelehnt. SVG kann Skripte enthalten, und gespeicherte Bilder werden inline ausgeliefert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:729
+#: lib/phoenix_kit_ecommerce/web/settings.ex:732
 #, elixir-autogen, elixir-format
 msgid "Off (recommended): descriptions are sanitized before display. On: descriptions render as-is, which trusts everyone who can edit a product — or supply a CSV import — with running scripts in every shopper's browser."
 msgstr "Aus (empfohlen): Beschreibungen werden vor der Anzeige bereinigt. Ein: Beschreibungen werden unverändert dargestellt, wodurch jedem, der ein Produkt bearbeiten oder einen CSV-Import liefern kann, erlaubt wird, Skripte im Browser jedes Käufers auszuführen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:753
+#: lib/phoenix_kit_ecommerce/web/settings.ex:756
 #, elixir-autogen, elixir-format
 msgid "Off (recommended): the importer refuses private and loopback addresses. Turn on only when importing from an image host inside your own network."
 msgstr "Aus (empfohlen): Der Importeur lehnt private und Loopback-Adressen ab. Aktivieren Sie dies nur, wenn Sie von einem Bild-Host innerhalb Ihres eigenen Netzwerks importieren."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:775
+#: lib/phoenix_kit_ecommerce/web/settings.ex:778
 #, elixir-autogen, elixir-format
 msgid "On (recommended): the post-import cleanup only deletes empty categories that the import itself created. Off: it deletes every empty category in your catalog, including ones you left empty on purpose."
 msgstr "Ein (empfohlen): Die Bereinigung nach dem Import löscht nur leere Kategorien, die der Import selbst erstellt hat. Aus: Es werden alle leeren Kategorien in Ihrem Katalog gelöscht, auch solche, die Sie absichtlich leer gelassen haben."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:717
+#: lib/phoenix_kit_ecommerce/web/settings.ex:720
 #, elixir-autogen, elixir-format
 msgid "On: an order confirmation page opens only for the person who placed the order. Off: anyone with the order link can read its name, address, phone and email — turn this off only if you deliberately mail shareable order links."
 msgstr "Ein: Eine Bestellbestätigungsseite öffnet sich nur für die Person, die die Bestellung aufgegeben hat. Aus: Jeder mit dem Bestelllink kann Name, Adresse, Telefonnummer und E-Mail einsehen — deaktivieren Sie dies nur, wenn Sie bewusst teilbare Bestelllinks versenden."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:946
+#: lib/phoenix_kit_ecommerce/web/settings.ex:949
 #, elixir-autogen, elixir-format
 msgid "Optional. Tax is normally calculated from the address collected at checkout. Set a two-letter country code here if your shop is single-jurisdiction and should charge tax even before an address is supplied. Leave blank to charge tax only against a real address."
 msgstr "Optional. Die Steuer wird normalerweise anhand der beim Checkout erfassten Adresse berechnet. Legen Sie hier einen zweistelligen Ländercode fest, wenn Ihr Shop nur in einer Jurisdiktion tätig ist und bereits vor Angabe einer Adresse Steuer berechnen soll. Lassen Sie das Feld leer, um Steuer nur anhand einer echten Adresse zu berechnen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1659
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1662
 #, elixir-autogen, elixir-format
 msgid "Order access policy updated"
 msgstr "Zugriffsrichtlinie für Bestellungen aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:715
+#: lib/phoenix_kit_ecommerce/web/settings.ex:718
 #, elixir-autogen, elixir-format
 msgid "Order pages need the buyer's session"
 msgstr "Bestellseiten benötigen die Sitzung des Käufers"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1668
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1671
 #, elixir-autogen, elixir-format
 msgid "Product description rendering updated"
 msgstr "Darstellung der Produktbeschreibung aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1677
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1680
 #, elixir-autogen, elixir-format
 msgid "SVG import policy updated"
 msgstr "SVG-Importrichtlinie aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:629
-#: lib/phoenix_kit_ecommerce/web/settings.ex:959
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1090
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1487
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1513
+#: lib/phoenix_kit_ecommerce/web/settings.ex:632
+#: lib/phoenix_kit_ecommerce/web/settings.ex:962
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1093
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1490
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1516
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2947
 #, elixir-autogen, elixir-format
 msgid "Save"
 msgstr "Speichern"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:706
+#: lib/phoenix_kit_ecommerce/web/settings.ex:709
 #, elixir-autogen, elixir-format
 msgid "Security & Privacy"
 msgstr "Sicherheit & Datenschutz"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:943
+#: lib/phoenix_kit_ecommerce/web/settings.ex:946
 #, elixir-autogen, elixir-format
 msgid "Tax Fallback Country"
 msgstr "Ausweichland für Steuer"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1711
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1714
 #, elixir-autogen, elixir-format
 msgid "Tax fallback country updated"
 msgstr "Ausweichland für Steuer aktualisiert"
@@ -3147,12 +3147,12 @@ msgstr "Ausweichland für Steuer aktualisiert"
 msgid "That billing profile is not available."
 msgstr "Dieses Rechnungsprofil ist nicht verfügbar."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:709
+#: lib/phoenix_kit_ecommerce/web/settings.ex:712
 #, elixir-autogen, elixir-format
 msgid "These default to the safe option. Change one only if you understand what it opens up — each is explained below."
 msgstr "Diese sind standardmäßig auf die sichere Option eingestellt. Ändern Sie eine nur, wenn Sie verstehen, was sie ermöglicht — jede wird unten erklärt."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:956
+#: lib/phoenix_kit_ecommerce/web/settings.ex:959
 #, elixir-autogen, elixir-format
 msgid "e.g. EE"
 msgstr "z. B. EE"
@@ -3168,24 +3168,24 @@ msgstr "Ein Artikel in Ihrem Warenkorb ist nicht mehr verfügbar"
 msgid "Please complete the billing address - a physical order needs one"
 msgstr "Bitte vervollständigen Sie die Rechnungsadresse — für eine physische Bestellung wird sie benötigt"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1140
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1136
 #, elixir-autogen, elixir-format
 msgid "Price display"
 msgstr "Preisanzeige"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:283
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1113
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1109
 #, elixir-autogen, elixir-format
 msgid "Price unit"
 msgstr "Preiseinheit"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:239
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1145
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1141
 #, elixir-autogen, elixir-format
 msgid "Show \"From\" before the price"
 msgstr "„Ab“ vor dem Preis anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1126
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1122
 #, elixir-autogen, elixir-format
 msgid "Shown after the price (%{lang}). Leave empty for none."
 msgstr "Wird nach dem Preis angezeigt (%{lang}). Leer lassen für keine Angabe."
@@ -3215,7 +3215,7 @@ msgid "The shop is currently unavailable"
 msgstr "Der Shop ist derzeit nicht verfügbar"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:284
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1122
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1118
 #, elixir-autogen, elixir-format
 msgid "e.g. per hour, per m², per litre"
 msgstr "z. B. pro Stunde, pro m², pro Liter"
@@ -3225,7 +3225,7 @@ msgstr "z. B. pro Stunde, pro m², pro Liter"
 msgid "From"
 msgstr "Ab"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1385
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1388
 #, elixir-autogen, elixir-format
 msgid "A compact Shop / Cart bar on catalog pages. Turn it off if your own site header already links to the cart."
 msgstr "Eine kompakte Shop-/Warenkorb-Leiste auf Katalogseiten. Deaktivieren Sie dies, wenn Ihre eigene Website-Kopfzeile bereits auf den Warenkorb verlinkt."
@@ -3235,17 +3235,17 @@ msgstr "Eine kompakte Shop-/Warenkorb-Leiste auf Katalogseiten. Deaktivieren Sie
 msgid "Cart"
 msgstr "Warenkorb"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1383
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1386
 #, elixir-autogen, elixir-format
 msgid "Show the storefront cart bar"
 msgstr "Warenkorb-Leiste im Shop anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2299
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2302
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar disabled"
 msgstr "Warenkorb-Leiste deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2298
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2301
 #, elixir-autogen, elixir-format
 msgid "Storefront cart bar enabled"
 msgstr "Warenkorb-Leiste aktiviert"
@@ -3594,14 +3594,14 @@ msgid "Price on request"
 msgstr "Preis auf Anfrage"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:248
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1155
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1151
 #, elixir-autogen, elixir-format
 msgid "Price on request (hide the amount)"
 msgstr "Preis auf Anfrage (Betrag ausblenden)"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1127
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1132
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1265
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1268
 #, elixir-autogen, elixir-format
 msgid "Adding..."
 msgstr "Wird hinzugefügt..."
@@ -3642,7 +3642,7 @@ msgstr "Fügen Sie etwas hinzu, um zu beginnen"
 msgid "All Services"
 msgstr "Alle Dienstleistungen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2619
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2622
 #, elixir-autogen, elixir-format
 msgid "Both (neutral wording)"
 msgstr "Beide (neutrale Formulierung)"
@@ -3682,12 +3682,12 @@ msgstr "Durchstöbern Sie unsere Dienstleistungen in verschiedenen Kategorien"
 msgid "Catalogue"
 msgstr "Katalog"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1561
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1564
 #, elixir-autogen, elixir-format
 msgid "Catalogue vocabulary"
 msgstr "Katalog-Terminologie"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2110
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2113
 #, elixir-autogen, elixir-format
 msgid "Catalogue vocabulary updated"
 msgstr "Katalog-Terminologie aktualisiert"
@@ -3697,8 +3697,8 @@ msgstr "Katalog-Terminologie aktualisiert"
 msgid "Everything"
 msgstr "Alles"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2113
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2118
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2116
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2121
 #, elixir-autogen, elixir-format
 msgid "Failed to update catalogue vocabulary"
 msgstr "Aktualisierung der Katalog-Terminologie fehlgeschlagen"
@@ -3754,7 +3754,7 @@ msgid "Service not found"
 msgstr "Dienstleistung nicht gefunden"
 
 #: lib/phoenix_kit_ecommerce/vocabulary.ex:63
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2618
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2621
 #, elixir-autogen, elixir-format
 msgid "Services"
 msgstr "Dienstleistungen"
@@ -3789,7 +3789,7 @@ msgstr "Dieser Artikel konnte nicht zum Warenkorb hinzugefügt werden. Bitte akt
 msgid "Unable to add this service to cart. Please refresh the page and try again."
 msgstr "Diese Dienstleistung konnte nicht zum Warenkorb hinzugefügt werden. Bitte aktualisieren Sie die Seite und versuchen Sie es erneut."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1563
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1566
 #, elixir-autogen, elixir-format
 msgid "What the storefront calls what you sell. Each option is separately translated, not a swapped word, so it reads correctly in every language."
 msgstr "Wie die Storefront das nennt, was Sie verkaufen. Jede Option wird separat übersetzt, nicht durch ein ausgetauschtes Wort, sodass sie in jeder Sprache korrekt wiedergegeben wird."
@@ -3862,22 +3862,22 @@ msgstr "Bitte wählen Sie ein Rechnungsprofil aus"
 msgid "%{price} each"
 msgstr "%{price} pro Stück"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1988
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1991
 #, elixir-autogen, elixir-format
 msgid "Failed to update price format"
 msgstr "Preisformat konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1533
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1536
 #, elixir-autogen, elixir-format
 msgid "Hide .00 on whole prices (40 instead of 40.00)"
 msgstr "„.00“ bei ganzen Preisen ausblenden (40 statt 40.00)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1520
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1523
 #, elixir-autogen, elixir-format
 msgid "Price format"
 msgstr "Preisformat"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1985
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1988
 #, elixir-autogen, elixir-format
 msgid "Price format updated"
 msgstr "Preisformat aktualisiert"
@@ -3894,7 +3894,7 @@ msgid_plural "Showing %{shown} of %{total} items"
 msgstr[0] "Zeige %{shown} von %{total} Artikel"
 msgstr[1] "Zeige %{shown} von %{total} Artikeln"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1522
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1525
 #, elixir-autogen, elixir-format
 msgid "Storefront only. Invoices and receipts always keep two decimals."
 msgstr "Nur Storefront. Rechnungen und Belege behalten immer zwei Dezimalstellen."
@@ -4123,7 +4123,7 @@ msgstr "erforderliche Option"
 msgid "set a default in your account settings"
 msgstr "legen Sie in Ihren Kontoeinstellungen ein Standardprofil fest"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:664
+#: lib/phoenix_kit_ecommerce/web/settings.ex:667
 #, elixir-autogen, elixir-format
 msgid "Buyer proceeded to checkout"
 msgstr "Käufer ist zur Kasse gegangen"
@@ -4134,24 +4134,24 @@ msgstr "Käufer ist zur Kasse gegangen"
 msgid "Continue"
 msgstr "Weiter"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:656
+#: lib/phoenix_kit_ecommerce/web/settings.ex:659
 #, elixir-autogen, elixir-format
 msgid "Every item added to a cart"
 msgstr "Jeder zum Warenkorb hinzugefügte Artikel"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1813
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1829
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1845
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1816
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1832
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1848
 #, elixir-autogen, elixir-format
 msgid "Failed to update notification setting"
 msgstr "Benachrichtigungseinstellung konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1871
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1874
 #, elixir-autogen, elixir-format
 msgid "Failed to update recipients"
 msgstr "Empfänger konnten nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:648
+#: lib/phoenix_kit_ecommerce/web/settings.ex:651
 #, elixir-autogen, elixir-format
 msgid "First item added to a cart"
 msgstr "Erster zum Warenkorb hinzugefügter Artikel"
@@ -4161,29 +4161,29 @@ msgstr "Erster zum Warenkorb hinzugefügter Artikel"
 msgid "No shipping methods are available for your country."
 msgstr "Für Ihr Land sind keine Versandmethoden verfügbar."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1868
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1871
 #, elixir-autogen, elixir-format
 msgid "Notification recipients updated"
 msgstr "Benachrichtigungsempfänger aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1810
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1826
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1842
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1813
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1829
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1845
 #, elixir-autogen, elixir-format
 msgid "Notification setting updated"
 msgstr "Benachrichtigungseinstellung aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:641
+#: lib/phoenix_kit_ecommerce/web/settings.ex:644
 #, elixir-autogen, elixir-format
 msgid "Notify shop operators about cart activity. Delivery uses each recipient's own notification channels (email, Telegram, in-app)."
 msgstr "Benachrichtigen Sie Shop-Betreiber über Warenkorbaktivitäten. Die Zustellung erfolgt über die eigenen Benachrichtigungskanäle jedes Empfängers (E-Mail, Telegram, In-App)."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:676
+#: lib/phoenix_kit_ecommerce/web/settings.ex:679
 #, elixir-autogen, elixir-format
 msgid "Recipients"
 msgstr "Empfänger"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:695
+#: lib/phoenix_kit_ecommerce/web/settings.ex:698
 #, elixir-autogen, elixir-format
 msgid "Save recipients"
 msgstr "Empfänger speichern"
@@ -4193,7 +4193,7 @@ msgstr "Empfänger speichern"
 msgid "Shipping to your country will be arranged individually - we will contact you to confirm delivery and details after you place the order."
 msgstr "Der Versand in Ihr Land wird individuell arrangiert - wir werden Sie nach der Bestellung kontaktieren, um Lieferung und Details zu bestätigen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:639
+#: lib/phoenix_kit_ecommerce/web/settings.ex:642
 #, elixir-autogen, elixir-format
 msgid "Storefront notifications"
 msgstr "Storefront-Benachrichtigungen"
@@ -4203,7 +4203,7 @@ msgstr "Storefront-Benachrichtigungen"
 msgid "Translate with AI"
 msgstr "Mit KI übersetzen"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1302
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1298
 #, elixir-autogen, elixir-format
 msgid "Use \"Translate with AI\" to fill the missing languages automatically."
 msgstr "Verwenden Sie „Mit KI übersetzen“, um die fehlenden Sprachen automatisch auszufüllen."
@@ -4213,7 +4213,7 @@ msgstr "Verwenden Sie „Mit KI übersetzen“, um die fehlenden Sprachen automa
 msgid "We will contact you to arrange shipping and confirm your order details."
 msgstr "Wir werden Sie kontaktieren, um den Versand zu arrangieren und Ihre Bestelldetails zu bestätigen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:678
+#: lib/phoenix_kit_ecommerce/web/settings.ex:681
 #, elixir-autogen, elixir-format
 msgid "Applies to the cart-activity notifications above. Leave all unchecked to notify every shop administrator."
 msgstr "Gilt für die oben genannten Warenkorb-Aktivitätsbenachrichtigungen. Lassen Sie alle Kästchen leer, um alle Shop-Administratoren zu benachrichtigen."
@@ -4223,7 +4223,7 @@ msgstr "Gilt für die oben genannten Warenkorb-Aktivitätsbenachrichtigungen. La
 msgid "You don't have access to this order"
 msgstr "Sie haben keinen Zugriff auf diese Bestellung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:520
+#: lib/phoenix_kit_ecommerce/web/settings.ex:523
 #, elixir-autogen, elixir-format
 msgid "Allow the order through when nothing covers the country - contact the buyer afterwards"
 msgstr "Bestellung zulassen, wenn keine Methode das Land abdeckt - Käufer anschließend kontaktieren"
@@ -4233,64 +4233,64 @@ msgstr "Bestellung zulassen, wenn keine Methode das Land abdeckt - Käufer ansch
 msgid "Back"
 msgstr "Zurück"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:556
+#: lib/phoenix_kit_ecommerce/web/settings.ex:559
 #, elixir-autogen, elixir-format
 msgid "Cart page (default)"
 msgstr "Warenkorbseite (Standard)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:557
+#: lib/phoenix_kit_ecommerce/web/settings.ex:560
 #, elixir-autogen, elixir-format
 msgid "Checkout step, after billing"
 msgstr "Checkout-Schritt, nach Rechnungsdaten"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1903
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1908
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1906
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1911
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping requirement"
 msgstr "Versandanforderung konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1925
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1930
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1928
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1933
 #, elixir-autogen, elixir-format
 msgid "Failed to update shipping selection step"
 msgstr "Versandauswahlschritt konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:523
+#: lib/phoenix_kit_ecommerce/web/settings.ex:526
 #, elixir-autogen, elixir-format
 msgid "Never ask for a shipping method"
 msgstr "Nie nach einer Versandmethode fragen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:548
+#: lib/phoenix_kit_ecommerce/web/settings.ex:551
 #, elixir-autogen, elixir-format
 msgid "On the cart page the destination country is not known yet, so every method is listed. As a checkout step after billing, methods are filtered by the real country."
 msgstr "Auf der Warenkorbseite ist das Zielland noch nicht bekannt, daher werden alle Methoden angezeigt. Als Checkout-Schritt nach den Rechnungsdaten werden die Methoden nach dem tatsächlichen Land gefiltert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:518
+#: lib/phoenix_kit_ecommerce/web/settings.ex:521
 #, elixir-autogen, elixir-format
 msgid "Require a shipping method (default)"
 msgstr "Versandmethode erforderlich (Standard)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:506
+#: lib/phoenix_kit_ecommerce/web/settings.ex:509
 #, elixir-autogen, elixir-format
 msgid "Shipping requirement"
 msgstr "Versandanforderung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1900
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1903
 #, elixir-autogen, elixir-format
 msgid "Shipping requirement updated"
 msgstr "Versandanforderung aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1922
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1925
 #, elixir-autogen, elixir-format
 msgid "Shipping selection step updated"
 msgstr "Versandauswahlschritt aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:510
+#: lib/phoenix_kit_ecommerce/web/settings.ex:513
 #, elixir-autogen, elixir-format
 msgid "What happens when no active shipping method covers the buyer's country."
 msgstr "Was passiert, wenn keine aktive Versandmethode das Land des Käufers abdeckt."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:546
+#: lib/phoenix_kit_ecommerce/web/settings.ex:549
 #, elixir-autogen, elixir-format
 msgid "Where the buyer picks a shipping method"
 msgstr "Wo der Käufer eine Versandmethode auswählt"
@@ -4417,12 +4417,12 @@ msgstr "Klicken Sie auf **Save**"
 msgid "Configure Admin API scopes"
 msgstr "Admin-API-Berechtigungen konfigurieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1137
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1140
 #, elixir-autogen, elixir-format
 msgid "Connect"
 msgstr "Verbinden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1126
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1129
 #, elixir-autogen, elixir-format
 msgid "Connect a Shopify Admin API token in Integrations settings, then review and apply catalog changes from the Shopify Sync page."
 msgstr "Hinterlegen Sie ein Shopify-Admin-API-Token in den Integrationseinstellungen und prüfen und übernehmen Sie Katalogänderungen anschließend auf der Seite „Shopify Sync“."
@@ -4526,12 +4526,12 @@ msgstr "Keine Änderungen – der Shop stimmt mit Shopify überein."
 msgid "No price differences found. Other fields were not compared — see the notice above."
 msgstr "Keine Preisunterschiede gefunden. Andere Felder wurden nicht verglichen – siehe Hinweis oben."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1124
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1127
 #, elixir-autogen, elixir-format
 msgid "One-way sync from Shopify"
 msgstr "Einweg-Synchronisierung von Shopify"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1140
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1143
 #, elixir-autogen, elixir-format
 msgid "Open Sync"
 msgstr "Sync öffnen"
@@ -4581,8 +4581,8 @@ msgstr "Shop-Domain nicht gefunden – prüfen Sie die Shop-Domain der Verbindun
 msgid "Shopify"
 msgstr "Shopify"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:860
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1120
+#: lib/phoenix_kit_ecommerce/web/settings.ex:863
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1123
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:161
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2205
 #, elixir-autogen, elixir-format
@@ -4826,22 +4826,22 @@ msgstr "Gewicht (Gramm)"
 msgid "comma, separated, tags"
 msgstr "komma, getrennte, Tags"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1252
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1255
 #, elixir-autogen, elixir-format
 msgid "Add a storefront filter backed by a catalogue attribute set, by its slug."
 msgstr "Fügen Sie einen Storefront-Filter hinzu, der auf einem Katalog-Attributset basiert, anhand seines Slugs."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1250
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1253
 #, elixir-autogen, elixir-format
 msgid "Attribute Set Filter"
 msgstr "Attributset-Filter"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2398
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2401
 #, elixir-autogen, elixir-format
 msgid "Set slug can't be blank"
 msgstr "Set-Slug darf nicht leer sein"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1261
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1264
 #, elixir-autogen, elixir-format
 msgid "Set slug, e.g. size"
 msgstr "Set-Slug, z. B. size"
@@ -4910,7 +4910,7 @@ msgstr "Varianten & Preise synchronisieren"
 msgid "Manage Shop"
 msgstr "Shop verwalten"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1344
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1340
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1682
 #, elixir-autogen, elixir-format
 msgid "Full Description"
@@ -4960,17 +4960,17 @@ msgstr "Unbekannt"
 msgid "default"
 msgstr "Standard"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1497
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1500
 #, elixir-autogen, elixir-format
 msgid "Comma-separated prefixes to strip from product and category names on public pages only — e.g. \"3D Printed\" turns \"3D Printed Costume Masks\" into \"Costume Masks\". Stored names, admin pages and Shopify sync are never affected. Leave blank to keep every name exactly as stored (default)."
 msgstr "Kommagetrennte Präfixe, die nur auf öffentlichen Seiten aus Produkt- und Kategorienamen entfernt werden — z. B. wird aus „3D Printed Costume Masks“ mit dem Präfix „3D Printed“ „Costume Masks“. Die gespeicherten Namen, die Admin-Seiten und der Shopify-Abgleich sind davon nie betroffen. Leer lassen, um jeden Namen genau wie gespeichert anzuzeigen (Standard)."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1495
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1498
 #, elixir-autogen, elixir-format
 msgid "Hide name prefixes on the storefront"
 msgstr "Namenspräfixe im Shop ausblenden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1742
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1745
 #, elixir-autogen, elixir-format
 msgid "Storefront name prefixes updated"
 msgstr "Namenspräfixe im Shop aktualisiert"
@@ -4980,7 +4980,7 @@ msgstr "Namenspräfixe im Shop aktualisiert"
 msgid "changes"
 msgstr "Änderungen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1510
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1513
 #, elixir-autogen, elixir-format
 msgid "e.g. 3D Printed"
 msgstr "z. B. 3D Printed"
@@ -5012,13 +5012,13 @@ msgstr "Die Basiswährung des Shops hat sich geändert und dieser Warenkorb kann
 msgid "This cart's currency is not available right now."
 msgstr "Die Währung dieses Warenkorbs ist derzeit nicht verfügbar."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1751
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1766
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2142
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2195
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2200
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2261
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2325
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1754
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1769
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2145
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2198
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2203
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2264
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2328
 #, elixir-autogen, elixir-format
 msgid "Invalid value"
 msgstr "Ungültiger Wert"
@@ -5075,7 +5075,7 @@ msgstr "Eine Übersetzung, deren Quelle sich seither geändert hat („veraltet�
 msgid "A translation whose source has changed since (\"stale\") is accepted as up to date — the sweep will stop picking it up until its reference is reset."
 msgstr "Eine Übersetzung, deren Quelle sich seither geändert hat („veraltet“), gilt als aktuell — der Abgleich erfasst sie nicht mehr, bis ihre Referenz zurückgesetzt wird."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:796
+#: lib/phoenix_kit_ecommerce/web/settings.ex:799
 #, elixir-autogen, elixir-format
 msgid "AI Translations"
 msgstr "KI-Übersetzungen"
@@ -5166,12 +5166,12 @@ msgid_plural "Clear the stored reference for %{count} resources matching the fil
 msgstr[0] "Die gespeicherte Referenz für %{count} Ressource, die den obigen Filtern entspricht, löschen — über alle Seiten hinweg, nicht nur die angezeigte. Die vorhandene Übersetzung bleibt unverändert; das Paar gilt als „unbekannt“, bis es festgelegt oder erneut übersetzt wird."
 msgstr[1] "Die gespeicherte Referenz für %{count} Ressourcen, die den obigen Filtern entsprechen, löschen — über alle Seiten hinweg, nicht nur die angezeigte. Die vorhandene Übersetzung bleibt unverändert; das Paar gilt als „unbekannt“, bis es festgelegt oder erneut übersetzt wird."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2044
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2047
 #, elixir-autogen, elixir-format
 msgid "Configure an enabled AI endpoint in the AI section before enabling this."
 msgstr "Konfigurieren Sie zuerst einen aktivierten KI-Endpunkt im Bereich „KI“, bevor Sie dies aktivieren."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:817
+#: lib/phoenix_kit_ecommerce/web/settings.ex:820
 #, elixir-autogen, elixir-format
 msgid "Configure an enabled AI endpoint in the AI section first — this stays off until one exists."
 msgstr "Konfigurieren Sie zuerst einen aktivierten KI-Endpunkt im Bereich „KI“ — bis dahin bleibt dies deaktiviert."
@@ -5186,82 +5186,82 @@ msgstr "Die Übersetzungswarteschlange konnte nicht gestoppt werden — nichts w
 msgid "Diagnostics — recent AI request log entries"
 msgstr "Diagnose — letzte Protokolleinträge der KI-Anfragen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:871
+#: lib/phoenix_kit_ecommerce/web/settings.ex:874
 #, elixir-autogen, elixir-format
 msgid "Enable Shopify sync"
 msgstr "Shopify-Sync aktivieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:902
+#: lib/phoenix_kit_ecommerce/web/settings.ex:905
 #, elixir-autogen, elixir-format
 msgid "Stock"
 msgstr "Lagerbestand"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:908
+#: lib/phoenix_kit_ecommerce/web/settings.ex:911
 #, elixir-autogen, elixir-format
 msgid "Stock tracking"
 msgstr "Bestandsverfolgung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2079
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2082
 #, elixir-autogen, elixir-format
 msgid "Stock tracking enabled"
 msgstr "Bestandsverfolgung aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2080
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2083
 #, elixir-autogen, elixir-format
 msgid "Stock tracking disabled"
 msgstr "Bestandsverfolgung deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2518
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2521
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is not installed."
 msgstr "Bestandsverfolgung wurde nicht aktiviert: Das Modul Warehouse ist nicht installiert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2521
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2524
 #, elixir-autogen, elixir-format
 msgid "Stock tracking was not turned on: the Warehouse module is disabled."
 msgstr "Bestandsverfolgung wurde nicht aktiviert: Das Modul Warehouse ist deaktiviert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2524
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2527
 #, elixir-autogen, elixir-format
 msgid "Failed to update stock tracking"
 msgstr "Bestandsverfolgung konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2533
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2536
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Install it from Modules → Not installed."
 msgstr "Die Bestandsverfolgung benötigt das Modul Warehouse. Installieren Sie es unter Module → Nicht installiert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2545
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2548
 #, elixir-autogen, elixir-format
 msgid "Stock tracking needs the Warehouse module. Enable it in Modules → Disabled."
 msgstr "Die Bestandsverfolgung benötigt das Modul Warehouse. Aktivieren Sie es unter Module → Deaktiviert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2555
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2558
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module. Choose a default warehouse in Warehouse settings first."
 msgstr "Der Bestand wird vom Modul Warehouse geführt. Wählen Sie zuerst in den Warehouse-Einstellungen ein Standardlager aus."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2566
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2569
 #, elixir-autogen, elixir-format
 msgid "Stock is kept by the Warehouse module."
 msgstr "Der Bestand wird vom Modul Warehouse geführt."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2536
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2539
 #, elixir-autogen, elixir-format
 msgid "Open Modules"
 msgstr "Module öffnen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2546
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2549
 #, elixir-autogen, elixir-format
 msgid "Enable Warehouse"
 msgstr "Warehouse aktivieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2558
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2561
 #, elixir-autogen, elixir-format
 msgid "Set up Warehouse"
 msgstr "Warehouse einrichten"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2567
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2570
 #, elixir-autogen, elixir-format
 msgid "Open stock"
 msgstr "Bestand öffnen"
@@ -5271,17 +5271,17 @@ msgstr "Bestand öffnen"
 msgid "Enable automatic sweep"
 msgstr "Automatischen Abgleich aktivieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:807
+#: lib/phoenix_kit_ecommerce/web/settings.ex:810
 #, elixir-autogen, elixir-format
 msgid "Enable shop translations"
 msgstr "Shop-Übersetzungen aktivieren"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2601
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2604
 #, elixir-autogen, elixir-format
 msgid "Failed to update Shopify sync"
 msgstr "Shopify-Sync konnte nicht aktualisiert werden"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2487
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2490
 #, elixir-autogen, elixir-format
 msgid "Failed to update shop translations"
 msgstr "Shop-Übersetzungen konnten nicht aktualisiert werden"
@@ -5377,12 +5377,12 @@ msgstr "Keine Quelle"
 msgid "Only successful model calls are attributed to a resource here — a transport failure (e.g. a timeout) never carries attribution, so it won't appear even though it may have been a retryable failure. See the design notes for why."
 msgstr "Hier wird einer Ressource nur ein erfolgreicher Modellaufruf zugeordnet — ein Übertragungsfehler (z. B. ein Timeout) wird nie zugeordnet und erscheint daher nicht, selbst wenn es sich um einen wiederholbaren Fehler gehandelt haben könnte. Die Gründe dafür stehen in den Design-Notizen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:888
+#: lib/phoenix_kit_ecommerce/web/settings.ex:891
 #, elixir-autogen, elixir-format
 msgid "Open the Shopify sync page →"
 msgstr "Shopify-Sync-Seite öffnen →"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:841
+#: lib/phoenix_kit_ecommerce/web/settings.ex:844
 #, elixir-autogen, elixir-format
 msgid "Open the translations page →"
 msgstr "Übersetzungsseite öffnen →"
@@ -5493,22 +5493,22 @@ msgstr "Shop-Übersetzungen"
 msgid "Shop translations aren't enabled. Turn them on in E-Commerce settings first."
 msgstr "Shop-Übersetzungen sind nicht aktiviert. Aktivieren Sie sie zuerst in den E-Commerce-Einstellungen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2482
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2485
 #, elixir-autogen, elixir-format
 msgid "Shop translations disabled"
 msgstr "Shop-Übersetzungen deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2481
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2484
 #, elixir-autogen, elixir-format
 msgid "Shop translations enabled"
 msgstr "Shop-Übersetzungen aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2596
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2599
 #, elixir-autogen, elixir-format
 msgid "Shopify sync disabled"
 msgstr "Shopify-Sync deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2595
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2598
 #, elixir-autogen, elixir-format
 msgid "Shopify sync enabled"
 msgstr "Shopify-Sync aktiviert"
@@ -5662,12 +5662,12 @@ msgstr "Erneut übersetzen?"
 msgid "Translate?"
 msgstr "Übersetzen?"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:863
+#: lib/phoenix_kit_ecommerce/web/settings.ex:866
 #, elixir-autogen, elixir-format
 msgid "Turns off the Shopify sync page, its sidebar entry, and the Shopify option on the integrations page. A saved connection and its access token are kept — turning this back on restores them exactly as they were."
 msgstr "Schaltet die Shopify-Sync-Seite, ihren Eintrag in der Seitenleiste und die Shopify-Option auf der Integrationsseite aus. Eine gespeicherte Verbindung und ihr Zugriffstoken bleiben erhalten — wird dies wieder eingeschaltet, werden sie genau wie zuvor wiederhergestellt."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:799
+#: lib/phoenix_kit_ecommerce/web/settings.ex:802
 #, elixir-autogen, elixir-format
 msgid "Turns on AI-powered translation of products and categories: the management page, its sidebar entry, and manual translate/stamp/reset actions. Requires a configured AI endpoint."
 msgstr "Aktiviert die KI-gestützte Übersetzung von Produkten und Kategorien: die Verwaltungsseite, ihren Eintrag in der Seitenleiste sowie die manuellen Aktionen Übersetzen/Als Referenz festlegen/Zurücksetzen. Erfordert einen konfigurierten KI-Endpunkt."
@@ -5730,8 +5730,8 @@ msgstr "Kategorien werden jetzt im Modul „Kataloge“ verwaltet."
 msgid "Products are managed in the Catalogues module now."
 msgstr "Produkte werden jetzt im Modul „Kataloge“ verwaltet."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:809
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2034
+#: lib/phoenix_kit_ecommerce/web/settings.ex:812
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2037
 #, elixir-autogen, elixir-format
 msgid "Not available while the shop reads products from the Catalogues module — the translation adapters only cover the shop's own product and category tables."
 msgstr "Nicht verfügbar, solange der Shop Produkte aus dem Modul „Kataloge“ bezieht — die Übersetzungsadapter decken nur die eigenen Produkt- und Kategorietabellen des Shops ab."
@@ -5751,7 +5751,7 @@ msgstr "Shop-Übersetzungen sind nicht verfügbar, solange der Shop Produkte aus
 msgid "Sweep did not run — translations aren't available while the shop reads products from the Catalogues module."
 msgstr "Abgleich nicht ausgeführt — Übersetzungen sind nicht verfügbar, solange der Shop Produkte aus dem Modul „Kataloge“ bezieht."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1032
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1028
 #, elixir-autogen, elixir-format
 msgid "— Category not set —"
 msgstr "— Kategorie nicht festgelegt —"
@@ -6064,11 +6064,11 @@ msgstr "Läuft…"
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1421
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:636
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:671
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2098
-#: lib/phoenix_kit_ecommerce/web/settings.ex:628
-#: lib/phoenix_kit_ecommerce/web/settings.ex:694
-#: lib/phoenix_kit_ecommerce/web/settings.ex:959
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1513
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2094
+#: lib/phoenix_kit_ecommerce/web/settings.ex:631
+#: lib/phoenix_kit_ecommerce/web/settings.ex:697
+#: lib/phoenix_kit_ecommerce/web/settings.ex:962
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1516
 #: lib/phoenix_kit_ecommerce/web/shipping_method_form.ex:615
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2946
 #: lib/phoenix_kit_ecommerce/web/translations.ex:1808
@@ -6257,7 +6257,7 @@ msgstr "Lieferdaten ändern"
 msgid "Check delivery details"
 msgstr "Lieferdaten prüfen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1959
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1962
 #, elixir-autogen, elixir-format
 msgid "Check the default parcel values"
 msgstr "Prüfen Sie die Standardwerte für das Paket"
@@ -6276,12 +6276,12 @@ msgstr "Vom Kunden angegeben"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:475
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:600
-#: lib/phoenix_kit_ecommerce/web/settings.ex:583
+#: lib/phoenix_kit_ecommerce/web/settings.ex:586
 #, elixir-autogen, elixir-format
 msgid "Default parcel"
 msgstr "Standardpaket"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1953
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1956
 #, elixir-autogen, elixir-format
 msgid "Default parcel updated"
 msgstr "Standardpaket aktualisiert"
@@ -6337,8 +6337,8 @@ msgstr "Lieferzeit bis (Tage)"
 msgid "Estimated price: the carrier did not respond"
 msgstr "Geschätzter Preis: Der Versanddienstleister hat nicht geantwortet"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1962
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1967
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1965
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1970
 #, elixir-autogen, elixir-format
 msgid "Failed to update the default parcel"
 msgstr "Standardpaket konnte nicht aktualisiert werden"
@@ -6356,8 +6356,8 @@ msgstr "Festpreis"
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:202
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:506
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:634
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1211
-#: lib/phoenix_kit_ecommerce/web/settings.ex:616
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1207
+#: lib/phoenix_kit_ecommerce/web/settings.ex:619
 #, elixir-autogen, elixir-format
 msgid "Height (mm)"
 msgstr "Höhe (mm)"
@@ -6375,8 +6375,8 @@ msgstr "Rundung leer lassen, wenn nicht gerundet werden soll."
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:184
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:488
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:614
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1191
-#: lib/phoenix_kit_ecommerce/web/settings.ex:602
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1187
+#: lib/phoenix_kit_ecommerce/web/settings.ex:605
 #, elixir-autogen, elixir-format
 msgid "Length (mm)"
 msgstr "Länge (mm)"
@@ -6546,7 +6546,7 @@ msgid "Searching"
 msgstr "Suche läuft"
 
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1141
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1274
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1270
 #, elixir-autogen, elixir-format
 msgid "Searching..."
 msgstr "Suche läuft ..."
@@ -6556,7 +6556,7 @@ msgstr "Suche läuft ..."
 msgid "Shipping cost calculation"
 msgstr "Berechnung der Versandkosten"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1166
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1162
 #, elixir-autogen, elixir-format
 msgid "Shipping parcel"
 msgstr "Versandpaket"
@@ -6678,7 +6678,7 @@ msgstr "Der Dienst ist gerade ausgelastet. Bitte versuchen Sie es gleich noch ei
 msgid "The shipping provider settings are not valid"
 msgstr "Die Einstellungen des Versandanbieters sind ungültig"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:585
+#: lib/phoenix_kit_ecommerce/web/settings.ex:588
 #, elixir-autogen, elixir-format
 msgid "The size every parcel is at least as big as, and the weight assumed for a product that has none. Carriers price the parcel by them. A product's own values and its category's defaults come first. Leave empty to set nothing."
 msgstr "Die Größe, die jedes Paket mindestens hat, und das Gewicht, das für ein Produkt ohne eigenes angenommen wird. Versanddienstleister berechnen den Paketpreis nach diesen Werten. Die eigenen Werte eines Produkts und die Standardwerte seiner Kategorie haben Vorrang. Leer lassen, um nichts festzulegen."
@@ -6753,13 +6753,13 @@ msgstr "Volumendivisor (cm³ pro kg)"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:515
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:644
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1181
-#: lib/phoenix_kit_ecommerce/web/settings.ex:623
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1177
+#: lib/phoenix_kit_ecommerce/web/settings.ex:626
 #, elixir-autogen, elixir-format
 msgid "Weight (g)"
 msgstr "Gewicht (g)"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1168
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1164
 #, elixir-autogen, elixir-format
 msgid "Weight and size of one unit. Carriers price the parcel by them; leave empty to use the category's or the shop's defaults."
 msgstr "Gewicht und Größe einer Einheit. Versanddienstleister berechnen den Paketpreis danach; leer lassen, um die Standardwerte der Kategorie oder des Shops zu verwenden."
@@ -6772,8 +6772,8 @@ msgstr "Woher der Preis dieser Methode stammt."
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:193
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:497
 #: lib/phoenix_kit_ecommerce/web/category_form.ex:624
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1201
-#: lib/phoenix_kit_ecommerce/web/settings.ex:609
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1197
+#: lib/phoenix_kit_ecommerce/web/settings.ex:612
 #, elixir-autogen, elixir-format
 msgid "Width (mm)"
 msgstr "Breite (mm)"
@@ -6941,7 +6941,7 @@ msgstr "Ansehen"
 #: lib/phoenix_kit_ecommerce/web/products.ex:681
 #: lib/phoenix_kit_ecommerce/web/products.ex:707
 #: lib/phoenix_kit_ecommerce/web/products.ex:716
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1153
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1156
 #, elixir-autogen, elixir-format
 msgid "Working…"
 msgstr "Wird ausgeführt…"
@@ -7583,54 +7583,54 @@ msgstr "„%{sync}“ ist bereits eingereiht oder läuft — es läuft jeweils n
 msgid "“%{sync}” is running. One sync runs at a time — the others can start when it has finished."
 msgstr "„%{sync}“ läuft. Es läuft jeweils nur eine Synchronisierung — die anderen können starten, sobald sie beendet ist."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1030
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1033
 #, elixir-autogen, elixir-format
 msgid "Admin API"
 msgstr "Admin-API"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1033
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1036
 #, elixir-autogen, elixir-format
 msgid "Outside systems, scripts and AI agents can read and change prices, availability and images through the admin API. The on/off switch and the keys are on the API settings page."
 msgstr "Externe Systeme, Skripte und KI-Agenten können über die Admin-API Preise, Verfügbarkeit und Bilder lesen und ändern. Der Ein/Aus-Schalter und die Schlüssel befinden sich auf der API-Einstellungsseite."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1044
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1047
 #, elixir-autogen, elixir-format
 msgid "The admin API is switched on."
 msgstr "Die Admin-API ist eingeschaltet."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1046
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1049
 #, elixir-autogen, elixir-format
 msgid "The admin API is switched off."
 msgstr "Die Admin-API ist ausgeschaltet."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1055
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1058
 #, elixir-autogen, elixir-format
 msgid "Shopify sync is off. The admin API is how an outside system feeds products into this shop."
 msgstr "Die Shopify-Synchronisierung ist aus. Über die Admin-API kann ein externes System Produkte in diesen Shop einspielen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1064
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1067
 #, elixir-autogen, elixir-format
 msgid "Shopify sync is on. A price written through the API can be overwritten by the next sync; the change log shows who wrote each value."
 msgstr "Die Shopify-Synchronisierung ist an. Ein über die API geschriebener Preis kann von der nächsten Synchronisierung überschrieben werden; das Änderungsprotokoll zeigt, wer welchen Wert geschrieben hat."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1077
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1093
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1080
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1096
 #, elixir-autogen, elixir-format
 msgid "Confirmation threshold for price changes (%)"
 msgstr "Bestätigungsschwelle für Preisänderungen (%)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1107
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1110
 #, elixir-autogen, elixir-format
 msgid "Open API settings →"
 msgstr "API-Einstellungen öffnen →"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1789
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1792
 #, elixir-autogen, elixir-format
 msgid "Price change threshold updated"
 msgstr "Schwelle für Preisänderungen aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1792
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1798
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1795
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1801
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to 1000."
 msgstr "Geben Sie eine ganze Zahl von 0 bis 1000 ein."
@@ -7687,47 +7687,47 @@ msgstr "Einige Artikel konnten nicht hinzugefügt werden, da sie nicht mehr verf
 msgid "Something went wrong. Your cart was not changed."
 msgstr "Etwas ist schiefgelaufen. Ihr Warenkorb wurde nicht geändert."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1432
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1435
 #, elixir-autogen, elixir-format
 msgid "Assistant carts"
 msgstr "Assistenten-Warenkörbe"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1434
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1437
 #, elixir-autogen, elixir-format
 msgid "Carts built by an AI assistant through the shop API. The caps limit the notifications about them (0 turns them off). How many new assistant carts one client may open is set on the API settings page."
 msgstr "Warenkörbe, die ein KI-Assistent über die Shop-API aufgebaut hat. Die Obergrenzen begrenzen die Benachrichtigungen darüber (0 schaltet sie aus). Wie viele neue Assistenten-Warenkörbe ein Client öffnen darf, wird auf der API-Einstellungsseite festgelegt."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1457
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1460
 #, elixir-autogen, elixir-format
 msgid "Days before an idle assistant cart is abandoned"
 msgstr "Tage, bis ein inaktiver Assistenten-Warenkorb aufgegeben wird"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1466
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1469
 #, elixir-autogen, elixir-format
 msgid "Minutes a checkout link works"
 msgstr "Minuten, die ein Checkout-Link gültig ist"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1475
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1478
 #, elixir-autogen, elixir-format
 msgid "Assistant notifications per cart per hour"
 msgstr "Assistenten-Benachrichtigungen pro Warenkorb und Stunde"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1484
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1487
 #, elixir-autogen, elixir-format
 msgid "Assistant notifications per hour, all carts"
 msgstr "Assistenten-Benachrichtigungen pro Stunde, alle Warenkörbe"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2675
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2678
 #, elixir-autogen, elixir-format
 msgid "Assistant cart settings updated"
 msgstr "Einstellungen für Assistenten-Warenkörbe aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1761
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1764
 #, elixir-autogen, elixir-format
 msgid "Enter whole numbers within the shown ranges."
 msgstr "Geben Sie ganze Zahlen innerhalb der angezeigten Bereiche ein."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1097
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1100
 #, elixir-autogen, elixir-format
 msgid "A price change larger than this percentage of the current price is held until it is confirmed. A price set to zero is always held; any other first price is not. From 100 percent on, only increases are held, as a cut cannot exceed 100 percent."
 msgstr "Eine Preisänderung, die diesen Prozentsatz des aktuellen Preises überschreitet, wird bis zur Bestätigung zurückgehalten. Ein auf null gesetzter Preis wird immer zurückgehalten; jeder andere erste Preis nicht. Ab 100 Prozent werden nur Erhöhungen zurückgehalten, da eine Senkung 100 Prozent nicht übersteigen kann."
@@ -7787,72 +7787,72 @@ msgstr "Ausgewählt: %{countries}"
 msgid "This method is never offered to these countries."
 msgstr "Diese Versandart wird für diese Länder nie angeboten."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1374
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1377
 #, elixir-autogen, elixir-format
 msgid "Buttons"
 msgstr "Schaltflächen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1362
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1365
 #, elixir-autogen, elixir-format
 msgid "Cards"
 msgstr "Karten"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1347
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1350
 #, elixir-autogen, elixir-format
 msgid "Cards are large pictures; buttons are one compact row (All plus each category) that wraps on narrow screens."
 msgstr "Karten sind große Bilder; Schaltflächen sind eine kompakte Zeile (Alle plus jede Kategorie), die auf schmalen Bildschirmen umbricht."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2223
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2226
 #, elixir-autogen, elixir-format
 msgid "Catalog sidebar disabled"
 msgstr "Katalog-Seitenleiste deaktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2222
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2225
 #, elixir-autogen, elixir-format
 msgid "Catalog sidebar enabled"
 msgstr "Katalog-Seitenleiste aktiviert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1345
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1348
 #, elixir-autogen, elixir-format
 msgid "Category block style"
 msgstr "Stil des Kategoriebereichs"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2253
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2256
 #, elixir-autogen, elixir-format
 msgid "Category display updated"
 msgstr "Kategorieanzeige aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1319
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1322
 #, elixir-autogen, elixir-format
 msgid "Show the catalog sidebar"
 msgstr "Katalog-Seitenleiste anzeigen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1321
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1324
 #, elixir-autogen, elixir-format
 msgid "The filter and category sidebar beside the products. Turn it off for a full-width product grid; filters and categories stay reachable above the products."
 msgstr "Die Filter- und Kategorie-Seitenleiste neben den Produkten. Ausschalten für ein Produktraster in voller Breite; Filter und Kategorien bleiben oberhalb der Produkte erreichbar."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1334
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1337
 #, elixir-autogen, elixir-format
 msgid "Show the categories on the main shop page, as cards or as a row of buttons (see Category block style)"
 msgstr "Kategorien auf der Shop-Startseite als Karten oder als Button-Reihe anzeigen (siehe Kategorieblock-Stil)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1542
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1545
 #, elixir-autogen, elixir-format
 msgid "Carriers often need a recipient phone number to deliver a parcel."
 msgstr "Paketdienste benötigen oft die Telefonnummer des Empfängers, um ein Paket zuzustellen."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1540
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1543
 #, elixir-autogen, elixir-format
 msgid "Checkout phone number"
 msgstr "Telefonnummer an der Kasse"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2007
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2010
 #, elixir-autogen, elixir-format
 msgid "Checkout phone requirement updated"
 msgstr "Telefonpflicht an der Kasse aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2011
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2014
 #, elixir-autogen, elixir-format
 msgid "Failed to update the checkout phone requirement"
 msgstr "Die Telefonpflicht an der Kasse konnte nicht aktualisiert werden"
@@ -7867,7 +7867,7 @@ msgstr "Bitte geben Sie eine Telefonnummer an - dieser Shop benötigt sie für d
 msgid "Please complete your billing details and add a phone number - this shop needs one to place an order"
 msgstr "Bitte vervollständigen Sie Ihre Rechnungsdaten und geben Sie eine Telefonnummer an - dieser Shop benötigt sie für die Bestellung"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1554
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1557
 #, elixir-autogen, elixir-format
 msgid "Require a phone number at checkout"
 msgstr "Telefonnummer an der Kasse verlangen"
@@ -7918,74 +7918,74 @@ msgstr "Die Zahlung konnte nicht gestartet werden. Bitte versuchen Sie es erneut
 msgid "Your order is saved and will be processed as soon as it is paid."
 msgstr "Ihre Bestellung ist gespeichert und wird bearbeitet, sobald sie bezahlt ist."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:2819
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:2815
 #, elixir-autogen, elixir-format
 msgid "(untitled)"
 msgstr "(ohne Titel)"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1281
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1284
 #, elixir-autogen, elixir-format
 msgid "Fill an empty block from the product's category"
 msgstr "Leeren Block mit Produkten der Kategorie füllen"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1298
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1301
 #, elixir-autogen, elixir-format
 msgid "How many related products the product page shows at most."
 msgstr "Wie viele verwandte Produkte die Produktseite höchstens zeigt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1253
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1249
 #, elixir-autogen, elixir-format
 msgid "Move down"
 msgstr "Nach unten"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1242
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1238
 #, elixir-autogen, elixir-format
 msgid "Move up"
 msgstr "Nach oben"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1275
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1271
 #, elixir-autogen, elixir-format
 msgid "No matches"
 msgstr "Keine Treffer"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1295
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1298
 #, elixir-autogen, elixir-format
 msgid "Products in the block"
 msgstr "Produkte im Block"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1221
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1276
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1217
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1279
 #, elixir-autogen, elixir-format
 msgid "Related products"
 msgstr "Verwandte Produkte"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2161
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2188
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2164
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2191
 #, elixir-autogen, elixir-format
 msgid "Related products updated"
 msgstr "Verwandte Produkte aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1273
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1269
 #, elixir-autogen, elixir-format
 msgid "Search products to add..."
 msgstr "Produkte zum Hinzufügen suchen..."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1223
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1219
 #, elixir-autogen, elixir-format
 msgid "Shown under this product as \"You may also like\", in this order. Drafts and hidden products are never shown to shoppers."
 msgstr "Wird unter diesem Produkt als \"Das könnte Ihnen auch gefallen\" in dieser Reihenfolge angezeigt. Entwürfe und versteckte Produkte werden Kunden nie gezeigt."
 
-#: lib/phoenix_kit_ecommerce/web/product_form.ex:1279
+#: lib/phoenix_kit_ecommerce/web/product_form.ex:1275
 #, elixir-autogen, elixir-format
 msgid "The list is full (%{max} products)."
 msgstr "Die Liste ist voll (%{max} Produkte)."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1283
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1286
 #, elixir-autogen, elixir-format
 msgid "When a product has no related products to show, the \"You may also like\" block lists other products of its category."
 msgstr "Hat ein Produkt keine verwandten Produkte, listet der Block \"Das könnte Ihnen auch gefallen\" andere Produkte seiner Kategorie."
 
-#: lib/phoenix_kit_ecommerce/web/components/related_products.ex:23
+#: lib/phoenix_kit_ecommerce/web/components/related_products.ex:27
 #, elixir-autogen, elixir-format
 msgid "You may also like"
 msgstr "Das könnte Ihnen auch gefallen"

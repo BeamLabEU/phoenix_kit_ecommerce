@@ -10,20 +10,35 @@ defmodule PhoenixKitEcommerce.Availability do
 
   An application can already supply the answer through
   `config :phoenix_kit_ecommerce, :availability, {Module, :function}`; the
-  function takes the product and returns a boolean. A missing or failing
-  function counts as available, so a broken hook never empties a page.
+  function takes the product and returns a boolean (only `false` means
+  unavailable). A hook that is missing, has the wrong arity, raises, exits
+  (a `GenServer.call` timeout, say) or throws counts as available and is
+  logged as a warning with the hook and what went wrong, so a broken hook
+  never empties or crashes a page and is not silent either.
   """
+
+  require Logger
 
   @spec available?(term()) :: boolean()
   def available?(product) do
     case Application.get_env(:phoenix_kit_ecommerce, :availability) do
       {module, function} when is_atom(module) and is_atom(function) ->
-        module |> apply(function, [product]) |> Kernel.!=(false)
+        ask(module, function, product)
 
       _ ->
         true
     end
-  rescue
-    _ -> true
+  end
+
+  defp ask(module, function, product) do
+    module |> apply(function, [product]) |> Kernel.!=(false)
+  catch
+    kind, reason ->
+      Logger.warning(
+        "[Shop] availability hook #{inspect({module, function})} failed " <>
+          "(#{inspect(kind)}: #{inspect(reason)}); treating the product as available"
+      )
+
+      true
   end
 end

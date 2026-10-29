@@ -56,6 +56,19 @@ defmodule PhoenixKitEcommerce.ProductSource.Legacy do
   end
 
   @doc """
+  Up to `limit` products (any status) whose title matches `search`, newest
+  first, without their categories. For the admin pickers, which need no count.
+  """
+  @spec search_products(String.t(), pos_integer()) :: [Product.t()]
+  def search_products(search, limit) when is_binary(search) and is_integer(limit) and limit > 0 do
+    Product
+    |> filter_by_product_search(search)
+    |> order_by([p], desc: p.inserted_at, desc: p.uuid)
+    |> limit(^limit)
+    |> repo().all()
+  end
+
+  @doc """
   Up to `limit` listed products of a category, newest first, leaving out
   `exclude_uuid` (the product the block is shown on).
   """

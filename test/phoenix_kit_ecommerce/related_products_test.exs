@@ -6,6 +6,8 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Availability
@@ -68,6 +70,13 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
       own = Ecto.UUID.generate()
 
       assert RelatedProducts.normalize([a, b, a, own, String.upcase(b)], own) == [a, b]
+    end
+
+    test "a 16-byte string is not a uuid, only the 36-character text form is" do
+      raw = <<1::128>>
+      good = Ecto.UUID.generate()
+
+      assert RelatedProducts.normalize([raw, good, String.replace(good, "-", "")]) == [good]
     end
 
     test "drops every entry that is not a uuid string" do
@@ -220,6 +229,12 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
       @moduledoc false
       def available?(%{title: %{"en" => "Related sold out"}}), do: false
       def available?(_product), do: true
+
+      def raises(_product), do: raise("stock service down")
+      def exits(_product), do: exit(:timeout)
+      def throws(_product), do: throw(:no_stock)
+      def one_arg_only(_product, _extra), do: false
+      def nothing(_product), do: nil
     end
 
     setup do
@@ -240,9 +255,31 @@ defmodule PhoenixKitEcommerce.RelatedProductsTest do
       assert Enum.map(RelatedProducts.for_product(main), & &1.uuid) == [kept.uuid]
     end
 
-    test "a hook that raises counts as available" do
-      Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :missing})
+    test "a hook that is missing, has another arity, raises, exits or throws counts as available" do
+      for function <- [:missing, :one_arg_only, :raises, :exits, :throws] do
+        Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, function})
+
+        log = capture_log(fn -> assert Availability.available?(%{}) end)
+
+        assert log =~ "availability hook"
+        assert log =~ inspect(function)
+      end
+    end
+
+    test "only false means unavailable" do
+      Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :nothing})
       assert Availability.available?(%{})
+    end
+
+    test "a failing hook does not empty the block" do
+      kept = product!()
+      main = product!() |> with_related([kept.uuid])
+
+      Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :exits})
+
+      capture_log(fn ->
+        assert Enum.map(RelatedProducts.for_product(main), & &1.uuid) == [kept.uuid]
+      end)
     end
   end
 end
