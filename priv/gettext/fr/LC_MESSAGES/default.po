@@ -7870,44 +7870,44 @@ msgstr "Exiger un numéro de téléphone à la commande"
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:261
 #, elixir-autogen, elixir-format
 msgid "Awaiting payment"
-msgstr ""
+msgstr "En attente de paiement"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:253
 #, elixir-autogen, elixir-format
 msgid "Online payment is not available right now. Please try again later."
-msgstr ""
+msgstr "Le paiement en ligne n'est pas disponible pour le moment. Veuillez réessayer plus tard."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:283
 #, elixir-autogen, elixir-format
 msgid "Pay now"
-msgstr ""
+msgstr "Payer maintenant"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:280
 #, elixir-autogen, elixir-format
 msgid "Starting payment..."
-msgstr ""
+msgstr "Démarrage du paiement..."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:263
 #, elixir-autogen, elixir-format
 msgid "Thank you! Your payment is being processed. This page updates as soon as it is confirmed."
-msgstr ""
+msgstr "Merci ! Votre paiement est en cours de traitement. Cette page se met à jour dès qu'il est confirmé."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:274
 #, elixir-autogen, elixir-format
 msgid "The payment was not completed. You can pay now or come back to this page later."
-msgstr ""
+msgstr "Le paiement n'a pas été finalisé. Vous pouvez payer maintenant ou revenir sur cette page plus tard."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:509
 #, elixir-autogen, elixir-format
 msgid "Waiting for payment"
-msgstr ""
+msgstr "En attente du paiement"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:256
 #, elixir-autogen, elixir-format
 msgid "We could not start the payment. Please try again."
-msgstr ""
+msgstr "Nous n'avons pas pu démarrer le paiement. Veuillez réessayer."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:268
 #, elixir-autogen, elixir-format
 msgid "Your order is saved and will be processed as soon as it is paid."
-msgstr ""
+msgstr "Votre commande est enregistrée et sera traitée dès qu'elle sera payée."

@@ -7870,44 +7870,44 @@ msgstr "Telefonnummer an der Kasse verlangen"
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:261
 #, elixir-autogen, elixir-format
 msgid "Awaiting payment"
-msgstr ""
+msgstr "Zahlung ausstehend"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:253
 #, elixir-autogen, elixir-format
 msgid "Online payment is not available right now. Please try again later."
-msgstr ""
+msgstr "Die Online-Zahlung ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:283
 #, elixir-autogen, elixir-format
 msgid "Pay now"
-msgstr ""
+msgstr "Jetzt bezahlen"
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:280
 #, elixir-autogen, elixir-format
 msgid "Starting payment..."
-msgstr ""
+msgstr "Zahlung wird gestartet..."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:263
 #, elixir-autogen, elixir-format
 msgid "Thank you! Your payment is being processed. This page updates as soon as it is confirmed."
-msgstr ""
+msgstr "Vielen Dank! Ihre Zahlung wird verarbeitet. Diese Seite aktualisiert sich, sobald sie bestätigt ist."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:274
 #, elixir-autogen, elixir-format
 msgid "The payment was not completed. You can pay now or come back to this page later."
-msgstr ""
+msgstr "Die Zahlung wurde nicht abgeschlossen. Sie können jetzt bezahlen oder später auf diese Seite zurückkehren."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:509
 #, elixir-autogen, elixir-format
 msgid "Waiting for payment"
-msgstr ""
+msgstr "Warten auf Zahlung"
 
 #: lib/phoenix_kit_ecommerce/errors.ex:256
 #, elixir-autogen, elixir-format
 msgid "We could not start the payment. Please try again."
-msgstr ""
+msgstr "Die Zahlung konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
 
 #: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:268
 #, elixir-autogen, elixir-format
 msgid "Your order is saved and will be processed as soon as it is paid."
-msgstr ""
+msgstr "Ihre Bestellung ist gespeichert und wird bearbeitet, sobald sie bezahlt ist."
