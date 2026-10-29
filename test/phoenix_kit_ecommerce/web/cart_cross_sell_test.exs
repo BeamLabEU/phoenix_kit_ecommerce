@@ -40,6 +40,16 @@ defmodule PhoenixKitEcommerce.Web.CartCrossSellTest do
     product
   end
 
+  # The settings cache is ETS-backed and survives a test; start from the defaults
+  # whatever an earlier test left behind.
+  setup do
+    for {key, value} <- [{"shop_related_limit", "4"}, {"shop_related_fallback", "off"}] do
+      PhoenixKit.Settings.update_setting(key, value)
+    end
+
+    :ok
+  end
+
   setup %{conn: conn} do
     session_id = "xsell-#{System.unique_integer([:positive])}"
     {:ok, cart} = Shop.create_cart(session_id: session_id)
