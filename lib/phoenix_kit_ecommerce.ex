@@ -687,6 +687,22 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Whether the checkout requires a phone number (`shop_require_phone_at_checkout`).
+
+  Defaults to `false`, so a shop that never touches the setting is unchanged.
+  A settings-layer error degrades to `false` so a cache miss cannot block
+  checkout.
+  """
+  @spec require_phone_at_checkout?() :: boolean()
+  def require_phone_at_checkout? do
+    Settings.get_boolean_setting("shop_require_phone_at_checkout", false)
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  @doc """
   Whether stock tracking is effectively on: the `shop_stock_tracking_enabled`
   setting AND the Warehouse module installed AND enabled. See
   `PhoenixKitEcommerce.StockTracking`.
@@ -5366,6 +5382,9 @@ defmodule PhoenixKitEcommerce do
     a carrier and its quote is missing, stale or unavailable, or the
     destination is not set (see `shipping_quote_blocks_checkout?/1`)
   - `{:error, :email_already_registered}` - Guest email belongs to confirmed user
+  - `{:error, {:billing_incomplete, missing}}` - The billing details lack what
+    the order needs; `missing` lists the fields (`"name"`, the address fields,
+    `"country"`, and `"phone"` while `shop_require_phone_at_checkout` is on)
   - `{:error, {:billing_profile_invalid, changeset}}` - `save_billing_profile: true`
     was requested and the entered details do not make a valid billing profile
   - `{:error, changeset}` - Validation errors
@@ -5858,26 +5877,49 @@ defmodule PhoenixKitEcommerce do
   # `requires_billing_profile` still needs to know who is paying: the same
   # crafted event would otherwise place that order with no billing details
   # at all.
+  #
+  # With `shop_require_phone_at_checkout` on, the phone is part of every level,
+  # and it is also asked of billing details actually collected where no other
+  # level applies: a saved profile has never been required to carry a phone,
+  # and a crafted `confirm_order` skips the review step's form validation. The
+  # setting adds the phone to a billing form and to saved profiles; it does
+  # not introduce a billing step where there was none, so the blank form data
+  # of a shopper whose checkout skipped that step asks for nothing.
   defp validate_billing_completeness(%Cart{} = cart, opts) do
+    phone? = require_phone_at_checkout?()
+
     cond do
       items_require_shipping?(cart.items) ->
-        validate_billing_details(opts, :address)
+        validate_billing_details(opts, :address, phone?)
 
       payment_option_requires_billing?(cart) ->
-        validate_billing_details(opts, :identity)
+        validate_billing_details(opts, :identity, phone?)
+
+      phone? and billing_details_given?(opts) ->
+        validate_billing_details(opts, :phone_only, phone?)
 
       true ->
         :ok
     end
   end
 
-  defp validate_billing_details(opts, level) do
+  # A saved profile, or details that name someone: the blank form data of a
+  # checkout without a billing step carries an email and a country only.
+  defp billing_details_given?(opts) do
+    data = Keyword.get(opts, :billing_data)
+
+    Keyword.get(opts, :billing_profile_uuid) != nil or
+      (is_map(data) and
+         not (blank_field?(data["first_name"]) and blank_field?(data["company_name"])))
+  end
+
+  defp validate_billing_details(opts, level, phone?) do
     cond do
       uuid = Keyword.get(opts, :billing_profile_uuid) ->
-        validate_profile_completeness(uuid, level)
+        validate_profile_completeness(uuid, level, phone?)
 
       is_map(Keyword.get(opts, :billing_data)) ->
-        validate_billing_data_completeness(Keyword.get(opts, :billing_data), level)
+        validate_billing_data_completeness(Keyword.get(opts, :billing_data), level, phone?)
 
       true ->
         {:error, {:billing_incomplete, ["billing details"]}}
@@ -5892,9 +5934,10 @@ defmodule PhoenixKitEcommerce do
     _ -> true
   end
 
-  # `level` is `:address` (a deliverable address) or `:identity` (who is
-  # paying: a name and a country, no street address).
-  defp validate_profile_completeness(uuid, level) do
+  # `level` is `:address` (a deliverable address), `:identity` (who is
+  # paying: a name and a country, no street address) or `:phone_only` (the
+  # phone and nothing else, for details that no other level asks about).
+  defp validate_profile_completeness(uuid, level, phone?) do
     case PhoenixKitBilling.get_billing_profile(uuid) do
       nil ->
         {:error, :billing_profile_not_found}
@@ -5909,23 +5952,28 @@ defmodule PhoenixKitEcommerce do
         missing_billing_fields(
           name_missing,
           &blank_field?(Map.get(profile, String.to_existing_atom(&1))),
-          level
+          level,
+          phone?
         )
     end
   end
 
-  defp validate_billing_data_completeness(data, level) do
+  defp validate_billing_data_completeness(data, level, phone?) do
     name_missing = blank_field?(data["first_name"]) and blank_field?(data["company_name"])
 
-    missing_billing_fields(name_missing, &blank_field?(data[&1]), level)
+    missing_billing_fields(name_missing, &blank_field?(data[&1]), level, phone?)
   end
 
-  defp missing_billing_fields(name_missing, blank?, level) do
+  defp missing_billing_fields(name_missing, blank?, level, phone?) do
     fields =
       case level do
         :address -> ~w(address_line1 city postal_code country)
         :identity -> ~w(country)
+        :phone_only -> []
       end
+
+    fields = if phone?, do: fields ++ ["phone"], else: fields
+    name_missing = name_missing and level != :phone_only
 
     missing = if(name_missing, do: ["name"], else: []) ++ Enum.filter(fields, blank?)
 
