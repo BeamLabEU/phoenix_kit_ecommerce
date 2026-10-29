@@ -59,6 +59,10 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
     field :shopify, :map, default: %{}
     field :legacy_product_uuid, Ecto.UUID
     field :translation_fingerprints, :map, default: %{}
+    # Hand-picked product lists (`RelatedProducts`): uuids of other items, in
+    # the merchant's order. Upsells on the product page, cross-sells in the cart.
+    field :related_product_uuids, {:array, :string}, default: []
+    field :cross_sell_product_uuids, {:array, :string}, default: []
   end
 
   @fields ~w(
@@ -67,7 +71,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
     made_to_order file_uuid
     download_limit download_expiry_days price_unit price_from
     price_on_request price_modifiers price_fit_rule shopify legacy_product_uuid
-    translation_fingerprints
+    translation_fingerprints related_product_uuids cross_sell_product_uuids
   )a
 
   @doc """
@@ -157,6 +161,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
       (params || %{})
       |> normalize_tags()
       |> normalize_price_unit()
+      |> normalize_related()
 
     merged = Map.merge(current || %{}, normalized)
 
@@ -209,6 +214,24 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerce do
   end
 
   defp normalize_price_unit(params), do: params
+
+  # The two product lists go through the one reader, so only well-formed,
+  # distinct uuid strings (at most `RelatedProducts.max_items/0`) are stored.
+  # An item cannot list itself, but its own uuid is not known here, so that
+  # is dropped on read (`RelatedProducts.uuids/2`).
+  defp normalize_related(params) do
+    Enum.reduce([:related, :cross_sell], params, fn kind, acc ->
+      key = PhoenixKitEcommerce.RelatedProducts.metadata_key(kind)
+
+      case acc do
+        %{^key => value} ->
+          Map.put(acc, key, PhoenixKitEcommerce.RelatedProducts.normalize(value))
+
+        _ ->
+          acc
+      end
+    end)
+  end
 
   defp to_storage_map(%__MODULE__{} = struct) do
     struct

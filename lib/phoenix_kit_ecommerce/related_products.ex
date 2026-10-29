@@ -5,9 +5,9 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
 
   ## Storage
 
-  A list of product uuids under `metadata["related_product_uuids"]` of a
-  legacy product. No column and no migration; the form owns the key (see
-  `ProductForm`). The order is the merchant's. The list is data a form
+  A list of product uuids under `related_product_uuids` (upsells, the product
+  page) or `cross_sell_product_uuids` (the cart). No column and no migration;
+  the product form owns the key (see `ProductForm`). The order is the merchant's. The list is data a form
   submits, so every reader goes through `normalize/2`: only well-formed uuids,
   each once, never the product itself, at most `max_items/0`. A stored value of
   any other shape reads as an empty list.
@@ -22,8 +22,10 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
   products of the product's own category stand in. The fallback is off by
   default, so a shop that never sets a list renders exactly what it did.
 
-  Only the legacy product source stores the list; under the catalogue source
-  `for_product/2` answers `[]`.
+  Both product sources store the lists: a legacy product under its `metadata`,
+  a catalogue item under `data["ecommerce"]` (the catalogue view puts them in
+  the view-struct's `metadata` under the same keys). The cart's cross-sell
+  list (`:cross_sell`) is stored the same way and read by `cross_sells/2`.
 
   ## Settings
 
@@ -37,29 +39,35 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.Availability
   alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.ProductSource.Catalogue
   alias PhoenixKitEcommerce.ProductSource.Legacy
 
-  @metadata_key "related_product_uuids"
+  @keys %{related: "related_product_uuids", cross_sell: "cross_sell_product_uuids"}
   @max_items 12
   @default_limit 4
 
-  @doc "The `metadata` key the list is stored under."
-  @spec metadata_key() :: String.t()
-  def metadata_key, do: @metadata_key
+  @typedoc "`:related` (the product page) or `:cross_sell` (the cart)."
+  @type kind :: :related | :cross_sell
+
+  @doc "The key a list is stored under (`metadata` of a legacy product, `data[\"ecommerce\"]` of an item)."
+  @spec metadata_key(kind()) :: String.t()
+  def metadata_key(kind \\ :related), do: Map.fetch!(@keys, kind)
 
   @doc "The most products one list may hold."
   @spec max_items() :: pos_integer()
   def max_items, do: @max_items
 
   @doc """
-  The product's stored list, normalized.
+  The product's stored list of `kind`, normalized.
   """
-  @spec uuids(term()) :: [String.t()]
-  def uuids(%{metadata: metadata} = product) when is_map(metadata) do
-    metadata |> Map.get(@metadata_key) |> normalize(Map.get(product, :uuid))
+  @spec uuids(term(), kind()) :: [String.t()]
+  def uuids(product, kind \\ :related)
+
+  def uuids(%{metadata: metadata} = product, kind) when is_map(metadata) do
+    metadata |> Map.get(metadata_key(kind)) |> normalize(Map.get(product, :uuid))
   end
 
-  def uuids(_other), do: []
+  def uuids(_other, _kind), do: []
 
   @doc """
   Keeps the well-formed, distinct uuids of `value` in their order, drops
@@ -93,46 +101,73 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
 
   @doc """
   The products to show under `product`, ready for the storefront. Options:
-  `:limit` (default `limit/0`).
+  `:limit` (default `limit/0`), `:language`.
   """
   @spec for_product(term(), keyword()) :: [PhoenixKitEcommerce.Product.t()]
   def for_product(product, opts \\ [])
 
   def for_product(%{uuid: uuid} = product, opts) when is_binary(uuid) do
-    if ProductSource.current() == Legacy do
-      limit = Keyword.get(opts, :limit, limit())
+    limit = Keyword.get(opts, :limit, limit())
 
-      case chosen(product, limit) do
-        [] -> fallback_products(product, limit)
-        listed -> listed
-      end
-    else
-      []
+    case product |> uuids(:related) |> listed(opts) |> available(limit) do
+      [] -> fallback_products(product, limit, opts)
+      shown -> shown
     end
   end
 
   def for_product(_other, _opts), do: []
 
-  defp chosen(product, limit) do
-    product
-    |> uuids()
-    |> Legacy.list_listed_by_ids()
+  @doc """
+  The cross-sells of a cart: the `:cross_sell` lists of `cart_products`
+  together, in cart order, leaving out `:exclude` (uuids already in the cart)
+  and anything a shopper may not see. Options: `:exclude`, `:limit` (default
+  `limit/0`), `:language`.
+  """
+  @spec cross_sells([term()], keyword()) :: [PhoenixKitEcommerce.Product.t()]
+  def cross_sells(cart_products, opts \\ []) when is_list(cart_products) do
+    exclude = Keyword.get(opts, :exclude, [])
+    limit = Keyword.get(opts, :limit, limit())
+
+    cart_products
+    |> Enum.flat_map(&uuids(&1, :cross_sell))
+    |> Enum.uniq()
+    |> Enum.reject(&(&1 in exclude))
+    |> listed(opts)
     |> available(limit)
   end
 
-  defp fallback_products(%{category_uuid: category, uuid: uuid}, limit)
+  # The listed products of `ids`, in the order of `ids`, read from the
+  # active product source.
+  defp listed(ids, opts) do
+    case ProductSource.current() do
+      Legacy -> Legacy.list_listed_by_ids(ids)
+      Catalogue -> Catalogue.list_listed_by_ids(ids, language: Keyword.get(opts, :language))
+    end
+  end
+
+  defp fallback_products(%{category_uuid: category, uuid: uuid}, limit, opts)
        when is_binary(category) do
     if fallback() == :category do
       # More than `limit` are read: some may be unavailable.
-      category
-      |> Legacy.list_listed_in_category(uuid, limit * 3)
-      |> available(limit)
+      category |> in_category(uuid, limit * 3, opts) |> available(limit)
     else
       []
     end
   end
 
-  defp fallback_products(_product, _limit), do: []
+  defp fallback_products(_product, _limit, _opts), do: []
+
+  defp in_category(category, uuid, count, opts) do
+    case ProductSource.current() do
+      Legacy ->
+        Legacy.list_listed_in_category(category, uuid, count)
+
+      Catalogue ->
+        Catalogue.list_listed_in_category(category, uuid, count,
+          language: Keyword.get(opts, :language)
+        )
+    end
+  end
 
   defp available(products, limit),
     do: products |> Enum.filter(&Availability.available?/1) |> Enum.take(limit)

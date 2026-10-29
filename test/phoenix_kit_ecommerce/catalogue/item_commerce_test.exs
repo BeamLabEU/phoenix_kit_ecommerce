@@ -135,7 +135,9 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerceTest do
                "price_fit_rule" => nil,
                "shopify" => %{},
                "legacy_product_uuid" => nil,
-               "translation_fingerprints" => %{}
+               "translation_fingerprints" => %{},
+               "related_product_uuids" => [],
+               "cross_sell_product_uuids" => []
              }
     end
 

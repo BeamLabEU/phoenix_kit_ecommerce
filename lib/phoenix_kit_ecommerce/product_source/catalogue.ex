@@ -50,6 +50,39 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   end
 
   @doc """
+  The products of `ids` a shopper may see, in the order of `ids`
+  (`Query.list_listed_items_by_uuids/1`). Option: `:language`.
+  """
+  @spec list_listed_by_ids([String.t()], keyword()) :: [PhoenixKitEcommerce.Product.t()]
+  def list_listed_by_ids(ids, opts \\ []) do
+    ids |> Query.list_listed_items_by_uuids() |> build_products(opts)
+  end
+
+  @doc """
+  Up to `count` listed products of a category, leaving out `exclude_uuid`.
+  Option: `:language`.
+  """
+  @spec list_listed_in_category(String.t(), String.t() | nil, pos_integer(), keyword()) ::
+          [PhoenixKitEcommerce.Product.t()]
+  def list_listed_in_category(category_uuid, exclude_uuid, count, opts \\ []) do
+    opts =
+      with_catalogue(
+        category_uuid: category_uuid,
+        status: "active",
+        exclude_hidden_categories: true,
+        page: 1,
+        per_page: count + 1,
+        language: Keyword.get(opts, :language)
+      )
+
+    opts
+    |> Query.list_items()
+    |> Enum.reject(&(&1.uuid == exclude_uuid))
+    |> Enum.take(count)
+    |> build_products(opts)
+  end
+
+  @doc """
   View-structs for catalogue items the caller already loaded, in the same
   order. Unlike `list_products_by_ids/1` it takes `language:`, which picks
   the language the option value labels (`metadata["_option_values"]`, ...)

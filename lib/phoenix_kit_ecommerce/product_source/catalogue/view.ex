@@ -351,6 +351,17 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
     legacy_metadata(item, sets, language)
     |> maybe_put_price_display(ecommerce)
     |> maybe_put("_shopify", Map.get(ecommerce, "shopify"))
+    |> maybe_put_related(ecommerce)
+  end
+
+  # The hand-picked product lists live in the item's `data["ecommerce"]`; the
+  # storefront reads them off the view's `metadata`, same as for a legacy
+  # product (`RelatedProducts.uuids/2`).
+  defp maybe_put_related(metadata, ecommerce) do
+    Enum.reduce([:related, :cross_sell], metadata, fn kind, acc ->
+      key = PhoenixKitEcommerce.RelatedProducts.metadata_key(kind)
+      maybe_put(acc, key, PhoenixKitEcommerce.RelatedProducts.normalize(Map.get(ecommerce, key)))
+    end)
   end
 
   defp maybe_put_price_display(metadata, ecommerce) do

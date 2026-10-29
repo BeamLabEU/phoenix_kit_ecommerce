@@ -48,9 +48,9 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
       Shop.update_product(main, %{"metadata" => %{"related_product_uuids" => [chosen.uuid]}})
 
     {:ok, view, _html} = edit(conn, main)
-    render_hook(view, "picker_search", %{"q" => "Calendar", "id" => "related-products-search"})
+    render_hook(view, "related_search", %{"q" => "Calendar", "id" => "related-products-search"})
 
-    assert_push_event(view, "picker_results", %{results: rows, q: "Calendar"})
+    assert_push_event(view, "related_results", %{results: rows, q: "Calendar"})
     assert Enum.map(rows, & &1.uuid) == [other.uuid]
   end
 
@@ -58,8 +58,8 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     main = product!("Solo")
     {:ok, view, _html} = edit(conn, main)
 
-    render_hook(view, "picker_search", %{"q" => "   "})
-    assert_push_event(view, "picker_results", %{results: []})
+    render_hook(view, "related_search", %{"q" => "   "})
+    assert_push_event(view, "related_results", %{results: []})
   end
 
   test "picked products are saved in the order picked and show as chips", %{conn: conn} do
@@ -68,8 +68,8 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     b = product!("Beta")
 
     {:ok, view, _html} = edit(conn, main)
-    render_hook(view, "picker_pick", %{"uuid" => b.uuid})
-    render_hook(view, "picker_pick", %{"uuid" => a.uuid})
+    render_hook(view, "related_pick", %{"uuid" => b.uuid})
+    render_hook(view, "related_pick", %{"uuid" => a.uuid})
 
     assert has_element?(view, "#related-product-#{a.uuid}")
     assert has_element?(view, "#related-product-#{b.uuid}")
@@ -83,7 +83,7 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     [a, b, c] = for t <- ~w(A B C), do: product!("Item #{t}")
 
     {:ok, view, _html} = edit(conn, main)
-    for p <- [a, b, c], do: render_hook(view, "picker_pick", %{"uuid" => p.uuid})
+    for p <- [a, b, c], do: render_hook(view, "related_pick", %{"uuid" => p.uuid})
 
     render_hook(view, "move_related", %{"uuid" => c.uuid, "direction" => "up"})
     render_hook(view, "move_related", %{"uuid" => a.uuid, "direction" => "up"})
@@ -150,13 +150,13 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     main = product!("Main")
     {:ok, view, _html} = edit(conn, main)
 
-    render_hook(view, "picker_pick", %{"uuid" => 5})
-    render_hook(view, "picker_pick", %{"uuid" => "not-a-uuid"})
-    render_hook(view, "picker_pick", %{"uuid" => Ecto.UUID.generate()})
-    render_hook(view, "picker_pick", %{"uuid" => main.uuid})
+    render_hook(view, "related_pick", %{"uuid" => 5})
+    render_hook(view, "related_pick", %{"uuid" => "not-a-uuid"})
+    render_hook(view, "related_pick", %{"uuid" => Ecto.UUID.generate()})
+    render_hook(view, "related_pick", %{"uuid" => main.uuid})
     render_hook(view, "move_related", %{"uuid" => 1, "direction" => "sideways"})
     render_hook(view, "remove_related", %{})
-    render_hook(view, "picker_search", %{"q" => 7})
+    render_hook(view, "related_search", %{"q" => 7})
 
     save(view)
     assert related(main) == []
@@ -167,10 +167,71 @@ defmodule PhoenixKitEcommerce.Web.ProductFormRelatedTest do
     products = for i <- 1..(RelatedProducts.max_items() + 2), do: product!("Bulk #{i}")
 
     {:ok, view, _html} = edit(conn, main)
-    for p <- products, do: render_hook(view, "picker_pick", %{"uuid" => p.uuid})
+    for p <- products, do: render_hook(view, "related_pick", %{"uuid" => p.uuid})
     save(view)
 
     assert length(related(main)) == RelatedProducts.max_items()
     refute has_element?(view, "#related-products-search")
+  end
+
+  test "cross-sells are a separate list with their own picker", %{conn: conn} do
+    main = product!("Main")
+    related = product!("Related one")
+    extra = product!("Cart extra")
+
+    {:ok, view, _html} = edit(conn, main)
+    assert has_element?(view, "#product-cross-sell")
+    assert has_element?(view, "#cross-sell-products-search")
+
+    render_hook(view, "related_pick", %{"uuid" => related.uuid})
+    render_hook(view, "cross_sell_pick", %{"uuid" => extra.uuid})
+
+    assert has_element?(view, "#related-product-#{related.uuid}")
+    refute has_element?(view, "#related-product-#{extra.uuid}")
+    assert has_element?(view, "#cross-sell-product-#{extra.uuid}")
+
+    save(view)
+    stored = Shop.get_product!(main.uuid)
+    assert RelatedProducts.uuids(stored, :related) == [related.uuid]
+    assert RelatedProducts.uuids(stored, :cross_sell) == [extra.uuid]
+  end
+
+  test "a cross-sell can be moved and removed without touching the other list", %{conn: conn} do
+    main = product!("Main")
+    [a, b] = for t <- ~w(A B), do: product!("Cross #{t}")
+    keep = product!("Kept related")
+
+    {:ok, view, _html} = edit(conn, main)
+    render_hook(view, "related_pick", %{"uuid" => keep.uuid})
+    for p <- [a, b], do: render_hook(view, "cross_sell_pick", %{"uuid" => p.uuid})
+
+    render_hook(view, "move_related", %{
+      "uuid" => b.uuid,
+      "direction" => "up",
+      "kind" => "cross_sell"
+    })
+
+    render_hook(view, "remove_related", %{"uuid" => a.uuid, "kind" => "cross_sell"})
+    save(view)
+
+    stored = Shop.get_product!(main.uuid)
+    assert RelatedProducts.uuids(stored, :cross_sell) == [b.uuid]
+    assert RelatedProducts.uuids(stored, :related) == [keep.uuid]
+  end
+
+  test "searching offers products the other list already holds, not this list's own", %{
+    conn: conn
+  } do
+    main = product!("Main")
+    held = product!("Zebra held")
+    {:ok, view, _html} = edit(conn, main)
+
+    render_hook(view, "related_pick", %{"uuid" => held.uuid})
+    render_hook(view, "cross_sell_search", %{"q" => "Zebra"})
+    assert_push_event(view, "cross_sell_results", %{results: [%{uuid: uuid}]})
+    assert uuid == held.uuid
+
+    render_hook(view, "related_search", %{"q" => "Zebra"})
+    assert_push_event(view, "related_results", %{results: []})
   end
 end

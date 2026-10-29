@@ -274,6 +274,32 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   end
 
   @doc """
+  The items of `uuids` a shopper may see (item `active`, shop status `active`,
+  category not `hidden`), order preserved, anything else dropped. Scoped to
+  the shop catalogue like every read here.
+  """
+  @spec list_listed_items_by_uuids([Ecto.UUID.t()]) :: [CatItem.t()]
+  def list_listed_items_by_uuids([]), do: []
+
+  def list_listed_items_by_uuids(uuids) when is_list(uuids) do
+    case catalogue_uuid() do
+      nil ->
+        []
+
+      catalogue_uuid ->
+        by_uuid =
+          CatItem
+          |> where([i], i.uuid in ^uuids and i.catalogue_uuid == ^catalogue_uuid)
+          |> filter_by_status("active")
+          |> filter_by_visible_categories(true)
+          |> repo().all()
+          |> Map.new(&{&1.uuid, &1})
+
+        uuids |> Enum.uniq() |> Enum.flat_map(&List.wrap(Map.get(by_uuid, &1)))
+    end
+  end
+
+  @doc """
   Active-item counts grouped by `category_uuid`, "active" meaning
   `item.status == "active"` and `COALESCE(shop_status, 'active') =
   'active'` (spec principle 7, same fallback as the listing) — items

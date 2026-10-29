@@ -891,25 +891,37 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
 
 **Related products — read through `PhoenixKitEcommerce.RelatedProducts`, never directly**
 
-- A legacy product's "You may also like" list is `metadata["related_product_uuids"]`
-  (at most 12 uuids, the merchant's order), edited in the product form's
-  "Related products" card (core's `SearchPicker`; the key is in
-  `@form_owned_metadata_keys` and the list lives in socket assigns). No column,
-  no migration. Every reader goes through `RelatedProducts.normalize/2`: it
+- A product's "You may also like" list is `related_product_uuids`, and its
+  cart cross-sell list `cross_sell_product_uuids` (each at most 12 uuids, the
+  merchant's order). Legacy: keys in `metadata`, edited in the product form's
+  "Related products" and "Cross-sells" cards (core's `SearchPicker`; both keys
+  are in `@form_owned_metadata_keys` and the lists live in socket assigns).
+  Catalogue: the same keys in the item's `data["ecommerce"]` (`ItemCommerce`
+  normalizes them; the catalogue view copies them into the view-struct's
+  `metadata`), edited by `Catalogue.RelatedPicker`, a LiveComponent inside the
+  Shop section of the catalogue item form (it submits hidden
+  `item[ecommerce][...][]` inputs, plus an always-present empty one so an
+  emptied list can be cleared). No column, no migration. Every reader goes through `RelatedProducts.normalize/2`: it
   keeps only well-formed uuid strings, once each, never the product itself;
   any other shape reads as empty. The block renders only products
   `Legacy.list_listed_by_ids/1` returns (status `active`, category not
-  `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts;
+  `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts
+  (`Legacy.list_listed_by_ids/1`, `Catalogue.list_listed_by_ids/2`);
   `Availability` answers true for everything today and is the one place a
   stock feature plugs in (`config :phoenix_kit_ecommerce, :availability,
   {Module, :function}` meanwhile). Dangling ids are skipped on read, never
-  cleaned. Under the catalogue source `for_product/2` answers `[]` (the list
-  is not stored there yet).
+  cleaned. The cart's "Add to your order" block (`CartPage`,
+  `Web.Components.CrossSells`) is `RelatedProducts.cross_sells/2`: the
+  cross-sell lists of the products in the cart together, in cart order,
+  minus what is already in the cart (a catalogue line is matched by
+  `metadata["catalogue_item_uuid"]`). Its "Add" button only exists for a
+  product with nothing to choose (no selectable option); any other gets a
+  link to its page, and the event ignores a product the block is not offering.
 - `shop_related_fallback` — `"off"` (default) or `"category"`: when nothing
   the merchant picked can be shown, the newest listed products of the
   product's own category stand in. Off keeps a page without a list exactly as
   it was.
-- `shop_related_limit` — products the block shows, 1..12 (default 4); any
+- `shop_related_limit` — products each block shows, 1..12 (default 4); any
   other stored value reads as 4.
 
 **Shipping — read through `PhoenixKitEcommerce`, never directly**
