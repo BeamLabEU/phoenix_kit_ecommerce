@@ -1970,7 +1970,7 @@ msgstr ""
 msgid "Refresh stats"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:244
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:252
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2831
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1213
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1217
@@ -6548,7 +6548,7 @@ msgstr ""
 msgid "Searching"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:261
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:269
 #: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1141
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2847
 #, elixir-autogen, elixir-format
@@ -7933,19 +7933,19 @@ msgstr ""
 msgid "Fill an empty block from the product's category"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:233
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:241
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2821
 #, elixir-autogen, elixir-format
 msgid "Move down"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:220
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:228
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2809
 #, elixir-autogen, elixir-format
 msgid "Move up"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:262
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:270
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2848
 #, elixir-autogen, elixir-format
 msgid "No matches"
@@ -7956,7 +7956,7 @@ msgstr ""
 msgid "Products in the block"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:174
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:182
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1232
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1279
 #, elixir-autogen, elixir-format
@@ -7969,19 +7969,19 @@ msgstr ""
 msgid "Related products updated"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:260
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:268
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2846
 #, elixir-autogen, elixir-format
 msgid "Search products to add..."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:175
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:183
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1234
 #, elixir-autogen, elixir-format
 msgid "Shown under this product as \"You may also like\", in this order. Drafts and hidden products are never shown to shoppers."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:266
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:274
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:2852
 #, elixir-autogen, elixir-format
 msgid "The list is full (%{max} products)."
@@ -8008,7 +8008,7 @@ msgstr ""
 msgid "Could not add this item to your cart"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:178
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:186
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1249
 #, elixir-autogen, elixir-format
 msgid "Cross-sells"
@@ -8019,7 +8019,7 @@ msgstr ""
 msgid "Item added to cart"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:179
+#: lib/phoenix_kit_ecommerce/catalogue/related_picker.ex:187
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:1251
 #, elixir-autogen, elixir-format
 msgid "Offered in the cart when this product is in it (\"Add to your order\"), in this order. Drafts and hidden products are never shown to shoppers."

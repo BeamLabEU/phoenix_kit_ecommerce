@@ -138,14 +138,16 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
   defp search_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 100)
   defp search_limit(_limit), do: 8
 
-  defp search_rows(_socket, _kind, "", _limit), do: []
+  defp search_rows(_socket, _kind, "", _fetch), do: []
 
   # The ones already chosen (and the item itself) are left out in the query,
   # before the limit, so they cannot crowd out the matches that remain.
-  defp search_rows(socket, kind, query, limit) do
+  # `fetch` is how many rows to read (the caller's limit plus one, to know
+  # whether more follow).
+  defp search_rows(socket, kind, query, fetch) do
     taken = Enum.reject([socket.assigns.item_uuid | socket.assigns.lists[kind]], &is_nil/1)
 
-    [search: query, per_page: limit, page: 1, exclude_uuids: taken]
+    [search: query, per_page: fetch, page: 1, exclude_uuids: taken]
     |> Query.list_items()
     |> Enum.map(fn item ->
       %{
