@@ -88,6 +88,32 @@ pages.
 - **No payment logic.** Checkout converts a cart to an order through
   `PhoenixKitBilling`; tax configuration (`billing_tax_enabled`,
   `billing_default_tax_rate`) is read from billing, never redefined here.
+  The same goes for online payment: `OnlinePayment` only asks
+  `PhoenixKitBilling.start_order_payment/2` (looked up with
+  `function_exported?/3`, so an older billing keeps the old behaviour, and
+  `OnlinePayment.awaiting?/1` is then false everywhere) for a checkout URL.
+  Invoice, session and the "paid" fact are billing's; the provider's webhook,
+  never the return URL, confirms a payment. While an online order is unpaid
+  the admins get "New order ... awaiting online payment" at once, the buyer's
+  "Your order is confirmed" waits for `InvoicePaymentHandler` (billing's
+  durable invoice-event handler, `billing_invoice_event_handlers/0`), and
+  `CheckoutComplete` shows "Awaiting payment" with "Pay now", updating on
+  billing's `:order_paid` PubSub event. An abandoned online order stays
+  `pending`: nothing times it out. Tests swap the billing module through the
+  `:online_payment_module` app env (`FakeOnlinePayment`); the real chain
+  (`online_payment_chain_test.exs`, tag `:billing_start_order_payment`) runs
+  once the resolved billing has the function. Checkout snapshots
+  `checkout_language` and `payment_option_type` in order metadata: a delayed
+  confirmation uses the buyer's language, and an edited or deleted option
+  cannot change whether an order was placed online. Older orders fall back
+  to the current option. The invoice handler locks the order and commits its
+  `_shop_payment_notified` marker with the notification; redelivery is a
+  no-op. Only a supported, positive-total online payment defers the
+  confirmation (`OnlinePayment.required?/1`); free orders and older billing
+  keep their immediate confirmation and the handler sends nothing more.
+  That internal marker changes neither the business revision nor
+  `updated_at`; a notification insertion error rolls both writes back so
+  billing's worker can retry.
 - **No module-owned top-level layout.** The storefront is the host's
   surface and renders inside the host's configured `layouts_module`.
 - **No scope on the public context API.** `PhoenixKitEcommerce.create_product/1`

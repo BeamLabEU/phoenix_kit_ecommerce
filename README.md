@@ -11,7 +11,7 @@ E-commerce module for [PhoenixKit](https://github.com/BeamLabEU/phoenix_kit). Pr
 - **Dynamic options & pricing** — two-level option system (global + category-specific) with fixed and percentage price modifiers
 - **Hierarchical categories** — nested categories with multi-language names, slugs, and per-category option schemas
 - **Shopping cart** — guest (session-based) and user (persistent) carts with real-time cross-tab sync via PubSub
-- **Checkout & payments** — integrated with [PhoenixKitBilling](https://github.com/BeamLabEU/phoenix_kit_billing) for order conversion and payment processing
+- **Checkout & payments** — integrated with [PhoenixKitBilling](https://github.com/BeamLabEU/phoenix_kit_billing) for order conversion and payment processing; an order placed with an online payment option (Stripe, PayPal, ...) goes straight to the provider's page (needs a billing that has `start_order_payment/2`, otherwise checkout behaves as before), the order page offers "Pay now" until it is paid and updates when the payment is recorded, and the buyer's "order confirmed" message waits for the payment
 - **Shipping methods** — weight-based and price-based constraints, geographic restrictions, free shipping thresholds, delivery estimates
 - **CSV import** — automatic format detection (Shopify, Prom.ua, generic) with keyword filtering, category rules, and image migration
 - **Multi-language** — localized titles, slugs, descriptions, and SEO metadata across products and categories

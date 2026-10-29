@@ -39,7 +39,8 @@ support_dir = Path.expand("support", __DIR__)
   "cart_api_fixtures.ex",
   "api_fixtures.ex",
   "api_case.ex",
-  "order_fixtures.ex"
+  "order_fixtures.ex",
+  "fake_online_payment.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -376,6 +377,23 @@ billing_order_sync_exclude =
     [:billing_order_sync]
   end
 
+# Online payment at checkout starts the payment through billing's
+# `start_order_payment/2`. The tests of the real chain (a stubbed Stripe, the
+# provider's webhook) are tagged :billing_start_order_payment and run once the
+# resolved billing has the function; the rest use `FakeOnlinePayment`.
+billing_start_order_payment_exclude =
+  if Code.ensure_loaded?(PhoenixKitBilling) and
+       function_exported?(PhoenixKitBilling, :start_order_payment, 2) do
+    []
+  else
+    Logger.info(
+      "[test_helper] PhoenixKitBilling.start_order_payment/2 not available - the real " <>
+        "online-payment chain tests (:billing_start_order_payment) excluded."
+    )
+
+    [:billing_start_order_payment]
+  end
+
 # The shop API registers tools and cron entries through callbacks that exist only in
 # a core with the public API (`PhoenixKit.API.*`, `PhoenixKit.ObanCrons`). Tests of
 # those are tagged :requires_core_api and are EXCLUDED AT RUN TIME on a core
@@ -502,6 +520,7 @@ ExUnit.start(
       user_menu_exclude ++
       billing_user_menu_exclude ++
       billing_order_sync_exclude ++
+      billing_start_order_payment_exclude ++
       api_exclude ++
       canonical_urls_exclude ++
       trigram_exclude ++ analytics_exclude ++ mcp_exclude ++ replay_exclude
