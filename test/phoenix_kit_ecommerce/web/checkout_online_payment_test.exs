@@ -45,6 +45,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
       assert_received {:start_order_payment, order, opts}
       assert order.status in ~w(pending confirmed draft)
+      assert order.metadata["payment_option_type"] == "online"
+      assert order.metadata["checkout_language"] == "en"
 
       # The test client's host (www.example.com) is not one the site serves,
       # so the return URLs fall back to the configured site URL.
@@ -65,6 +67,18 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
       assert_received {:start_order_payment, order, opts}
       assert opts[:success_url] =~ ~r{^http://localhost(/.*)?/checkout/complete/#{order.uuid}\?}
+    end
+
+    test "records the page language for the delayed confirmation", %{conn: conn} do
+      PhoenixKitEcommerce.SearchFixtures.enable_languages!(["en", "de"])
+      FakeOnlinePayment.put_result({:ok, %{invoice: %{}, url: @provider_url}})
+
+      {:ok, view, _html} = live(put_test_locale(conn, "de"), "/de/checkout")
+      view |> element("#checkout-confirm-order") |> render_click()
+      assert_redirect(view, @provider_url)
+
+      assert_received {:start_order_payment, order, _opts}
+      assert order.metadata["checkout_language"] == "de"
     end
 
     test "a forged host is not used for the return urls", %{conn: conn} do

@@ -93,8 +93,14 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
     Code.ensure_loaded?(module) and function_exported?(module, :start_order_payment, 2)
   end
 
-  @doc "Whether the order was placed with an online payment option."
+  @doc """
+  Whether the order was placed with an online payment option. Uses its
+  checkout snapshot; older orders fall back to the live payment option.
+  """
   @spec online?(map()) :: boolean()
+  def online?(%{metadata: %{"payment_option_type" => type}}) when type in ~w(online offline),
+    do: type == "online"
+
   def online?(%{payment_option_uuid: uuid}) when is_binary(uuid) do
     match?(%{type: "online"}, Billing.get_payment_option(uuid))
   rescue
@@ -103,10 +109,13 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
 
   def online?(_order), do: false
 
+  @doc "Whether this checkout requires a supported online payment, regardless of its status."
+  @spec required?(map()) :: boolean()
+  def required?(order), do: payable_total?(order) and supported?() and online?(order)
+
   @doc "Whether the order is an online order that has not been paid yet."
   @spec awaiting?(map()) :: boolean()
-  def awaiting?(%{status: status} = order) when status in @unpaid,
-    do: payable_total?(order) and supported?() and online?(order)
+  def awaiting?(%{status: status} = order) when status in @unpaid, do: required?(order)
 
   def awaiting?(_order), do: false
 

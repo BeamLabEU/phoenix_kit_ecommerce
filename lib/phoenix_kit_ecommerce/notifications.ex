@@ -73,11 +73,14 @@ defmodule PhoenixKitEcommerce.Notifications do
   @doc """
   Tells the buyer of an online order that their payment arrived and the order
   is confirmed. Called by `PhoenixKitEcommerce.InvoicePaymentHandler`;
-  best-effort like every send here. `language:` as for `order_placed/2` (the
-  handler runs long after the page, so it is normally the primary language).
+  returns an insertion error to the durable handler so it can retry.
+  `language:` as for `order_placed/2`.
   """
   def order_paid(order, opts \\ []) do
-    safely(fn -> notify_customer_of_order(order, opts[:language]) end)
+    case notify_customer_of_order(order, opts[:language]) do
+      {:ok, _notification_or_skipped} -> :ok
+      result -> result
+    end
   end
 
   @doc """

@@ -57,6 +57,27 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       refute OnlinePayment.awaiting?(%{status: "pending", payment_option_uuid: nil})
     end
 
+    test "the payment type recorded at checkout survives option changes", %{stripe: stripe} do
+      order = %{
+        status: "pending",
+        payment_option_uuid: stripe.uuid,
+        metadata: %{"payment_option_type" => "online"}
+      }
+
+      {:ok, _} = Billing.update_payment_option(stripe, %{"type" => "offline"})
+      assert OnlinePayment.awaiting?(order)
+    end
+
+    test "an offline checkout does not become online after its option changes", %{cod: cod} do
+      {:ok, _} = Billing.update_payment_option(cod, %{"type" => "online", "provider" => "stripe"})
+
+      refute OnlinePayment.awaiting?(%{
+               status: "pending",
+               payment_option_uuid: cod.uuid,
+               metadata: %{"payment_option_type" => "offline"}
+             })
+    end
+
     test "a free order does not", %{stripe: stripe} do
       refute OnlinePayment.awaiting?(%{
                status: "pending",
@@ -216,6 +237,36 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       assert Enum.any?(texts(ctx.buyer.uuid), &(&1 =~ "Your order ORD-OLD-1 is confirmed"))
     end
 
+    test "an older billing does not confirm again when an invoice is paid", ctx do
+      FakeOnlinePayment.put_old_billing()
+      {:ok, placed} = real_order(ctx.stripe, ctx.buyer, "pending")
+      assert :ok = Notifications.order_placed(placed)
+      {:ok, paid} = Billing.update_order(placed, %{"status" => "paid"})
+
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
+      assert [_one_confirmation] = texts(ctx.buyer.uuid)
+    end
+
+    test "a free online order is not confirmed again when its invoice is paid", ctx do
+      {:ok, placed} = real_order(ctx.stripe, ctx.buyer, "pending")
+
+      {:ok, free} =
+        Billing.update_order(placed, %{
+          "line_items" => [
+            %{"name" => "Free", "quantity" => 1, "unit_price" => "0", "total" => "0"}
+          ],
+          "subtotal" => "0",
+          "total" => "0"
+        })
+
+      assert Decimal.equal?(free.total, 0)
+      assert :ok = Notifications.order_placed(free)
+      {:ok, paid} = Billing.update_order(free, %{"status" => "paid"})
+
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
+      assert [_one_confirmation] = texts(ctx.buyer.uuid)
+    end
+
     test "the payment arriving tells the buyer, through billing's handler", ctx do
       {:ok, placed} = real_order(ctx.stripe, ctx.buyer, "pending")
       assert :ok = Notifications.order_placed(placed)
@@ -239,6 +290,61 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
                InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: unpaid.uuid})
 
       assert texts(ctx.buyer.uuid) == []
+    end
+
+    test "redelivery of a paid event confirms the order only once", ctx do
+      {:ok, paid} = real_order(ctx.stripe, ctx.buyer, "paid")
+      invoice = %{order_uuid: paid.uuid}
+
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, invoice)
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, invoice)
+
+      assert [text] = texts(ctx.buyer.uuid)
+      assert text == "Your order #{paid.order_number} is confirmed"
+      delivered = Billing.get_order_by_uuid(paid.uuid)
+      assert delivered.metadata["source"] == "shop_checkout"
+      assert delivered.metadata["_shop_payment_notified"] == true
+      assert Billing.Order.revision(delivered) == Billing.Order.revision(paid)
+      assert delivered.updated_at == paid.updated_at
+    end
+
+    test "a rollback loses both the notification and its delivery marker", ctx do
+      {:ok, paid} = real_order(ctx.stripe, ctx.buyer, "paid")
+      invoice = %{order_uuid: paid.uuid}
+
+      assert {:error, :retry} =
+               Repo.transaction(fn ->
+                 assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, invoice)
+                 Repo.rollback(:retry)
+               end)
+
+      assert texts(ctx.buyer.uuid) == []
+      refute Billing.get_order_by_uuid(paid.uuid).metadata["_shop_payment_notified"]
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, invoice)
+      assert [_one_confirmation] = texts(ctx.buyer.uuid)
+    end
+
+    test "the delayed confirmation keeps the checkout language", ctx do
+      SearchFixtures.enable_languages!(["en", "de"])
+
+      {:ok, paid} =
+        real_order(ctx.stripe, ctx.buyer, "paid", %{
+          "source" => "shop_checkout",
+          "checkout_language" => "de"
+        })
+
+      assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
+
+      assert [metadata] =
+               Repo.all(
+                 from(n in "phoenix_kit_notifications",
+                   where: n.recipient_uuid == type(^ctx.buyer.uuid, Ecto.UUID),
+                   select: n.metadata
+                 )
+               )
+
+      assert metadata["notification_link"] ==
+               Routes.path("/dashboard/orders/#{paid.uuid}", locale: "de")
     end
 
     test "the handler ignores other events, sources, offline and closed orders", ctx do

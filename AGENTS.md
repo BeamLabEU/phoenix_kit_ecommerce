@@ -102,7 +102,18 @@ pages.
   `pending`: nothing times it out. Tests swap the billing module through the
   `:online_payment_module` app env (`FakeOnlinePayment`); the real chain
   (`online_payment_chain_test.exs`, tag `:billing_start_order_payment`) runs
-  once the resolved billing has the function.
+  once the resolved billing has the function. Checkout snapshots
+  `checkout_language` and `payment_option_type` in order metadata: a delayed
+  confirmation uses the buyer's language, and an edited or deleted option
+  cannot change whether an order was placed online. Older orders fall back
+  to the current option. The invoice handler locks the order and commits its
+  `_shop_payment_notified` marker with the notification; redelivery is a
+  no-op. Only a supported, positive-total online payment defers the
+  confirmation (`OnlinePayment.required?/1`); free orders and older billing
+  keep their immediate confirmation and the handler sends nothing more.
+  That internal marker changes neither the business revision nor
+  `updated_at`; a notification insertion error rolls both writes back so
+  billing's worker can retry.
 - **No module-owned top-level layout.** The storefront is the host's
   surface and renders inside the host's configured `layouts_module`.
 - **No scope on the public context API.** `PhoenixKitEcommerce.create_product/1`

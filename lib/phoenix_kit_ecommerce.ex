@@ -6238,6 +6238,7 @@ defmodule PhoenixKitEcommerce do
           %{
             "source" => "shop_checkout",
             "cart_uuid" => cart.uuid,
+            "checkout_language" => checkout_language(opts),
             # The shop session that placed this order. This is what lets the
             # confirmation page recognise a guest as the person who just checked
             # out, instead of treating knowledge of the order uuid as proof.
@@ -6284,6 +6285,8 @@ defmodule PhoenixKitEcommerce do
         base_attrs
     end
   end
+
+  defp checkout_language(opts), do: opts[:language] || Translations.default_language()
 
   # What the order keeps of a calculated shipping method: provider and service,
   # where it goes, the carrier's quote the price came from and the parcels it
@@ -6416,14 +6419,21 @@ defmodule PhoenixKitEcommerce do
 
   # The customer's validated payment choice, also recorded in metadata: the
   # column carries the LINK (nulled if the option is later deleted), the
-  # metadata carries the code, so a deleted option still degrades to "it
-  # was a bank transfer" rather than to nothing.
+  # metadata carries the code and type, so deleting or editing the option
+  # cannot change whether this order was placed with online payment.
   defp payment_option_metadata(%Cart{payment_option_uuid: nil}), do: %{}
 
   defp payment_option_metadata(%Cart{payment_option_uuid: uuid}) do
     case PhoenixKitBilling.get_payment_option(uuid) do
-      %{code: code} -> %{"payment_option_uuid" => uuid, "payment_option_code" => code}
-      _ -> %{"payment_option_uuid" => uuid}
+      %{code: code, type: type} ->
+        %{
+          "payment_option_uuid" => uuid,
+          "payment_option_code" => code,
+          "payment_option_type" => type
+        }
+
+      _ ->
+        %{"payment_option_uuid" => uuid}
     end
   rescue
     _ -> %{"payment_option_uuid" => uuid}
