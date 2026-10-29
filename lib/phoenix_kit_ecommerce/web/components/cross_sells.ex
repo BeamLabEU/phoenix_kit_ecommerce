@@ -12,17 +12,22 @@ defmodule PhoenixKitEcommerce.Web.Components.CrossSells do
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
 
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Helpers
 
   attr :products, :list, required: true
+  attr :quick, :any, required: true, doc: "MapSet of the uuids that can go straight into the cart"
   attr :currency, :any, required: true
   attr :language, :string, required: true
 
   def block(%{products: []} = assigns), do: ~H""
 
   def block(assigns) do
+    # Read once for the whole row, not once per card.
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+
     ~H"""
     <section id="cart-cross-sells" class="card bg-base-100 shadow-xl mt-6">
       <div class="card-body">
@@ -44,13 +49,13 @@ defmodule PhoenixKitEcommerce.Web.Components.CrossSells do
                 <.icon :if={!Helpers.first_image(product)} name="hero-cube" class="w-10 h-10 opacity-30" />
               </div>
               <h3 class="font-medium text-sm mt-2 line-clamp-2">
-                {Translations.get_display(product, :title, @language)}
+                {Translations.get_display(product, :title, @language, prefixes: @name_prefixes)}
               </h3>
             </.link>
             <span class="font-bold text-primary text-sm">
               {PriceDisplay.render(product, @currency, :catalog, language: @language)}
             </span>
-            <%= if quick_add?(product) do %>
+            <%= if MapSet.member?(@quick, product.uuid) do %>
               <button
                 type="button"
                 class="btn btn-primary btn-sm mt-auto"
@@ -77,7 +82,9 @@ defmodule PhoenixKitEcommerce.Web.Components.CrossSells do
 
   @doc """
   Whether a product can go into the cart without the shopper choosing first:
-  it has no option to choose from.
+  it has no option to choose from (its category's schema included, so the
+  product must be read with its category). The currency is not looked at: a
+  product the cart cannot take answers an error when "Add" is pressed.
   """
   @spec quick_add?(term()) :: boolean()
   def quick_add?(product), do: Shop.get_selectable_specs(product) == []

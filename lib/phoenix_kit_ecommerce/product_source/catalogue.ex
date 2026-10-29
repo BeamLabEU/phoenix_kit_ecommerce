@@ -55,6 +55,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
   """
   @spec list_listed_by_ids([String.t()], keyword()) :: [PhoenixKitEcommerce.Product.t()]
   def list_listed_by_ids(ids, opts \\ []) do
+    # With the category: its option schema decides whether the product has
+    # something to choose (`Options.get_selectable_specs_for_product/1`).
+    opts = Keyword.put(opts, :preload, [:category])
     ids |> Query.list_listed_items_by_uuids() |> build_products(opts)
   end
 
@@ -72,6 +75,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue do
         exclude_hidden_categories: true,
         page: 1,
         per_page: count + 1,
+        preload: [:category],
         language: Keyword.get(opts, :language)
       )
 

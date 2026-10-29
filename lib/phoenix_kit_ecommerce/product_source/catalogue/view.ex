@@ -360,7 +360,11 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   defp maybe_put_related(metadata, ecommerce) do
     Enum.reduce([:related, :cross_sell], metadata, fn kind, acc ->
       key = PhoenixKitEcommerce.RelatedProducts.metadata_key(kind)
-      maybe_put(acc, key, PhoenixKitEcommerce.RelatedProducts.normalize(Map.get(ecommerce, key)))
+
+      case PhoenixKitEcommerce.RelatedProducts.normalize(Map.get(ecommerce, key)) do
+        [] -> acc
+        uuids -> Map.put(acc, key, uuids)
+      end
     end)
   end
 

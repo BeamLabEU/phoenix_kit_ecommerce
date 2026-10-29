@@ -6,6 +6,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerceRelatedTest do
 
   use ExUnit.Case, async: true
 
+  alias PhoenixKitEcommerce.Catalogue.Extension
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
 
   test "the lists default to empty" do
@@ -59,6 +60,22 @@ defmodule PhoenixKitEcommerce.Catalogue.ItemCommerceRelatedTest do
              ItemCommerce.cast(%{"vendor" => "Acme"}, %{"related_product_uuids" => [a]})
 
     assert map["related_product_uuids"] == [a]
+  end
+
+  test "a duplicated item keeps both lists" do
+    a = Ecto.UUID.generate()
+
+    data = %{
+      "related_product_uuids" => [a],
+      "cross_sell_product_uuids" => [a],
+      "shopify" => %{"handle" => "x"}
+    }
+
+    kept = Extension.duplicate_data(:item, data)
+
+    assert kept["related_product_uuids"] == [a]
+    assert kept["cross_sell_product_uuids"] == [a]
+    refute Map.has_key?(kept, "shopify")
   end
 
   test "at most the maximum is stored" do

@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  require Logger
+
   alias PhoenixKit.Utils.Routes
 
   alias PhoenixKitEcommerce, as: Shop
@@ -196,7 +198,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   def handle_event("add_cross_sell", %{"uuid" => uuid}, socket) when is_binary(uuid) do
     product = Enum.find(socket.assigns.cross_sells, &(&1.uuid == uuid))
 
-    if product && CrossSells.quick_add?(product) do
+    if product && MapSet.member?(socket.assigns.cross_sell_quick, uuid) do
       add_cross_sell(socket, product)
     else
       {:noreply, socket}
@@ -207,19 +209,42 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   # known one whose payload is not the shape its clause takes.
   def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
 
+  # Into the shopper's ACTIVE cart, read afresh: the one this page holds may
+  # have been converted into an order meanwhile (another tab, the checkout),
+  # and `add_to_cart` does not look at a cart's status.
   defp add_cross_sell(socket, product) do
-    case Shop.add_to_cart(socket.assigns.cart, product, 1,
-           language: socket.assigns.current_language
-         ) do
-      {:ok, updated_cart} ->
-        {:noreply,
-         socket
-         |> assign_cart_state(updated_cart)
-         |> put_flash(:info, gettext("Item added to cart"))}
+    user = get_current_user(socket)
+
+    with {:ok, cart} <-
+           Shop.get_or_create_cart(
+             user_uuid: user && user.uuid,
+             session_id: socket.assigns.session_id
+           ),
+         {:ok, updated_cart} <-
+           Shop.add_to_cart(cart, product, 1, language: socket.assigns.current_language) do
+      {:noreply,
+       socket
+       |> assign_cart_state(updated_cart)
+       |> put_flash(:info, gettext("Item added to cart"))}
+    else
+      {:error, code, detail} ->
+        Logger.warning("[Shop] could not add a cross-sell: #{inspect({code, detail})}")
+        {:noreply, put_flash(socket, :error, gettext("Could not add this item to your cart"))}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, gettext("Could not add this item to your cart"))}
     end
+  end
+
+  # The offers, and which of them can go straight into the cart (worked out
+  # once here, not per card on every render).
+  defp assign_cross_sells(socket, cart) do
+    offers = cross_sells_for(cart, socket.assigns[:current_language])
+
+    quick =
+      for product <- offers, CrossSells.quick_add?(product), into: MapSet.new(), do: product.uuid
+
+    socket |> assign(:cross_sells, offers) |> assign(:cross_sell_quick, quick)
   end
 
   # What the cart offers on top of its lines: the cross-sell lists of the
@@ -280,7 +305,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     socket
     |> assign(:cart, cart)
-    |> assign(:cross_sells, cross_sells_for(cart, socket.assigns[:current_language]))
+    |> assign_cross_sells(cart)
     |> assign(:currency, Shop.currency_for_code(cart.currency))
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
@@ -655,6 +680,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
             <CrossSells.block
               :if={@cart.items != []}
               products={@cross_sells}
+              quick={@cross_sell_quick}
               currency={@currency}
               language={@current_language}
             />

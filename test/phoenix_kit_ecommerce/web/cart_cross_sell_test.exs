@@ -8,6 +8,7 @@ defmodule PhoenixKitEcommerce.Web.CartCrossSellTest do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.RelatedProducts
+  alias PhoenixKitEcommerce.Test.Repo
 
   defp product!(title, attrs \\ %{}) do
     n = System.unique_integer([:positive])
@@ -127,5 +128,93 @@ defmodule PhoenixKitEcommerce.Web.CartCrossSellTest do
     render_hook(view, "add_cross_sell", %{})
 
     assert length(Shop.get_cart!(cart.uuid).items) == 1
+  end
+
+  describe "products with something to choose" do
+    @size %{
+      "key" => "size",
+      "label" => "Size",
+      "type" => "select",
+      "options" => ["S", "L"],
+      "required" => true,
+      "affects_price" => true,
+      "modifier_type" => "fixed",
+      "price_modifiers" => %{"S" => "0", "L" => "5"}
+    }
+
+    test "a product whose category has a required option gets a link, not an Add button", ctx do
+      {:ok, category} =
+        Shop.create_category(%{
+          "name" => %{"en" => "Sized"},
+          "slug" => %{"en" => "sized-#{System.unique_integer([:positive])}"},
+          "option_schema" => [@size]
+        })
+
+      sized = product!("Sized vase", %{"category_uuid" => category.uuid})
+      shirt = product!("T-shirt") |> cross_sells([sized.uuid])
+      cart = put_in_cart(ctx.cart, shirt)
+
+      {:ok, view, _html} = live(ctx.conn, "/cart")
+
+      assert has_element?(view, "#cross-sell-#{sized.uuid} a")
+      refute has_element?(view, "#cross-sell-#{sized.uuid} button")
+
+      # Pushed at the page anyway, the event is ignored.
+      render_hook(view, "add_cross_sell", %{"uuid" => sized.uuid})
+      assert length(Shop.get_cart!(cart.uuid).items) == 1
+    end
+  end
+
+  test "Add goes into the shopper's active cart, not into one that became an order", ctx do
+    calendar = product!("Wall calendar")
+    shirt = product!("T-shirt") |> cross_sells([calendar.uuid])
+    cart = put_in_cart(ctx.cart, shirt)
+
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+
+    # The cart is converted elsewhere (another tab, the checkout) after the page opened.
+    cart |> Ecto.Changeset.change(status: "converted") |> Repo.update!()
+
+    view |> element("#cross-sell-#{calendar.uuid} button") |> render_click()
+
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+    active = Shop.find_active_cart(session_id: cart.session_id)
+    assert active.uuid != cart.uuid
+    assert calendar.uuid in Enum.map(active.items, & &1.product_uuid)
+  end
+
+  test "the block size setting limits the offers", ctx do
+    extras = for t <- ~w(A B C), do: product!("Limit #{t}")
+    shirt = product!("T-shirt") |> cross_sells(Enum.map(extras, & &1.uuid))
+    put_in_cart(ctx.cart, shirt)
+
+    previous = PhoenixKit.Settings.get_setting("shop_related_limit", "")
+    PhoenixKit.Settings.update_setting("shop_related_limit", "2")
+    on_exit(fn -> PhoenixKit.Settings.update_setting("shop_related_limit", previous) end)
+
+    {:ok, _view, html} = live(ctx.conn, "/cart")
+
+    assert length(Regex.scan(~r/id="cross-sell-[0-9a-f-]{36}"/, html)) == 2
+  end
+
+  defmodule Hook do
+    @moduledoc false
+    def available?(%{title: %{"en" => "Sold out extra"}}), do: false
+    def available?(_product), do: true
+  end
+
+  test "the availability hook removes a product from the offers", ctx do
+    gone = product!("Sold out extra")
+    kept = product!("Kept extra")
+    shirt = product!("T-shirt") |> cross_sells([gone.uuid, kept.uuid])
+    put_in_cart(ctx.cart, shirt)
+
+    Application.put_env(:phoenix_kit_ecommerce, :availability, {Hook, :available?})
+    on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :availability) end)
+
+    {:ok, view, _html} = live(ctx.conn, "/cart")
+
+    assert has_element?(view, "#cross-sell-#{kept.uuid}")
+    refute has_element?(view, "#cross-sell-#{gone.uuid}")
   end
 end

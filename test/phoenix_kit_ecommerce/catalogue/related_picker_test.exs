@@ -13,7 +13,7 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitEcommerce.Catalogue.RelatedPicker
+  alias PhoenixKitEcommerce.Catalogue.ShopSections
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Test.Repo
 
@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
     def render(assigns) do
       ~H"""
       <form id="host-form">
-        <.live_component module={RelatedPicker} id="picker" item={@item} ecommerce={@ecommerce} />
+        <ShopSections.item item={@item} data={%{"ecommerce" => @ecommerce}} current_language="en" />
       </form>
       """
     end
@@ -80,6 +80,17 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
     ~r/<input[^>]*name="#{name}"[^>]*value="([^"]*)"/
     |> Regex.scan(render(view))
     |> Enum.map(fn [_, value] -> value end)
+  end
+
+  test "the pickers mount inside the Shop section under its real ids, with no duplicate DOM id",
+       %{conn: conn, catalogue: catalogue} do
+    main = item!(catalogue, "Main")
+    {:ok, view, _html} = host(conn, main)
+
+    assert has_element?(view, "#ext-ecommerce-section")
+    assert has_element?(view, "#ext-ecommerce-related")
+    assert has_element?(view, "#ext-ecommerce-related-card")
+    assert has_element?(view, "#ext-ecommerce-cross_sell-card")
   end
 
   test "an empty picker still submits the empty sentinel", %{conn: conn, catalogue: catalogue} do

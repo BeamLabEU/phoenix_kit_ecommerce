@@ -1298,7 +1298,9 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 {gettext("Products in the block")}
               </label>
               <p class="text-sm text-base-content/70 mb-3">
-                {gettext("How many related products the product page shows at most.")}
+                {gettext(
+                  "How many products each block shows at most: related products on the product page, cross-sells in the cart."
+                )}
               </p>
               <select id="related-limit" name="limit" class="select w-32">
                 <option :for={n <- 1..RelatedProducts.max_items()} value={n} selected={n == @related_limit}>

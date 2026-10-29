@@ -157,4 +157,78 @@ defmodule PhoenixKitEcommerce.Web.RelatedProductsCatalogueTest do
     assert RelatedProducts.uuids(product, :related) == [a.uuid]
     assert RelatedProducts.uuids(product, :cross_sell) == [a.uuid]
   end
+
+  describe "visibility of listed items" do
+    alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+
+    defp category!(catalogue, name, shop_status) do
+      {:ok, category} =
+        Catalogue.create_category(%{
+          name: name,
+          catalogue_uuid: catalogue.uuid,
+          data: %{"ecommerce" => %{"shop_status" => shop_status}}
+        })
+
+      category
+    end
+
+    test "an item of a hidden category is not listed, one of an unlisted category is", %{
+      catalogue: catalogue
+    } do
+      hidden = category!(catalogue, "Hidden shelf", "hidden")
+      unlisted = category!(catalogue, "Unlisted shelf", "unlisted")
+
+      in_hidden = item!(catalogue, "In hidden", %{category_uuid: hidden.uuid})
+      in_unlisted = item!(catalogue, "In unlisted", %{category_uuid: unlisted.uuid})
+      loose = item!(catalogue, "Loose item")
+      draft = item!(catalogue, "Draft one", %{}, %{"shop_status" => "draft"})
+
+      uuids = [in_hidden.uuid, draft.uuid, in_unlisted.uuid, loose.uuid]
+
+      assert Enum.map(Query.list_listed_items_by_uuids(uuids), & &1.uuid) ==
+               [in_unlisted.uuid, loose.uuid]
+
+      assert Query.list_listed_items_by_uuids([]) == []
+    end
+  end
+
+  test "a product whose category has a required option gets a link, not an Add button", %{
+    conn: conn,
+    catalogue: catalogue
+  } do
+    size = %{
+      "key" => "size",
+      "label" => "Size",
+      "type" => "select",
+      "options" => ["S", "L"],
+      "required" => true,
+      "affects_price" => true,
+      "modifier_type" => "fixed",
+      "price_modifiers" => %{"S" => "0", "L" => "5"}
+    }
+
+    {:ok, category} =
+      Catalogue.create_category(%{
+        name: "Sized shelf",
+        catalogue_uuid: catalogue.uuid,
+        data: %{"ecommerce" => %{"option_schema" => [size]}}
+      })
+
+    sized = item!(catalogue, "Sized item", %{category_uuid: category.uuid})
+    shirt = item!(catalogue, "Option shirt", %{}, %{"cross_sell_product_uuids" => [sized.uuid]})
+
+    session_id = "cat-opt-#{System.unique_integer([:positive])}"
+    {:ok, cart} = Shop.create_cart(session_id: session_id)
+    [product] = Shop.list_products_by_ids([shirt.uuid])
+    {:ok, _} = Shop.add_to_cart(cart, product, 1)
+
+    conn = Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})
+    {:ok, view, _html} = live(conn, "/cart")
+
+    assert has_element?(view, "#cross-sell-#{sized.uuid} a")
+    refute has_element?(view, "#cross-sell-#{sized.uuid} button")
+
+    render_hook(view, "add_cross_sell", %{"uuid" => sized.uuid})
+    assert length(Shop.get_cart!(cart.uuid).items) == 1
+  end
 end

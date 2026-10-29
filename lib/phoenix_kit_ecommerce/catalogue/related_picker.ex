@@ -138,9 +138,8 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
   defp search_rows(socket, kind, query) do
     taken = [socket.assigns.item_uuid | socket.assigns.lists[kind]]
 
-    {items, _total} = Query.list_items_with_count(search: query, per_page: 10, page: 1)
-
-    items
+    [search: query, per_page: 10, page: 1]
+    |> Query.list_items()
     |> Enum.reject(&(&1.uuid in taken))
     |> Enum.map(fn item ->
       %{
@@ -195,7 +194,7 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
       assign(assigns, :name, "item[ecommerce][#{RelatedProducts.metadata_key(assigns.kind)}][]")
 
     ~H"""
-    <div id={"ext-ecommerce-#{@kind}"}>
+    <div id={"ext-ecommerce-#{@kind}-card"}>
       <h3 class="text-sm font-semibold text-base-content/80 mb-1">{@title}</h3>
       <p class="text-xs text-base-content/60 mb-3">{@hint}</p>
 

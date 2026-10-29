@@ -18,8 +18,9 @@ defmodule PhoenixKitEcommerce.RelatedProducts do
   `active`, category not `hidden`, `PhoenixKitEcommerce.Availability`), in the
   merchant's order, at most `limit/0` of them. An id that points to a deleted,
   draft or hidden product is skipped silently; nothing is cleaned up on read.
-  When nothing is left and `fallback/0` is `:category`, the newest listed
-  products of the product's own category stand in. The fallback is off by
+  When nothing is left and `fallback/0` is `:category`, listed products
+  of the product's own category stand in (the legacy source: newest first;
+  the catalogue source: the catalogue's order, by position and name). The fallback is off by
   default, so a shop that never sets a list renders exactly what it did.
 
   Both product sources store the lists: a legacy product under its `metadata`,
