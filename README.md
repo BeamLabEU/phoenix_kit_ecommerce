@@ -99,8 +99,13 @@ A product can carry a hand-picked list of up to 12 other products, edited in the
 product form (**Related products**) and shown on the product page as
 "You may also like", in the order you set. Drafts, archived products and products
 of a hidden category are never shown. A page with no list renders exactly as
-before, unless you turn on the category fallback in Settings. Legacy products
-only for now.
+before, unless you turn on the category fallback in Settings.
+
+A second list, **Cross-sells**, is offered in the cart as "Add to your order"
+when the product is in it: products already in the cart are left out, and a
+product with options to choose gets a link to its page instead of an Add
+button. Both lists work for legacy products (product form) and catalogue items
+(the Shop section of the catalogue item form).
 
 ### Categories
 

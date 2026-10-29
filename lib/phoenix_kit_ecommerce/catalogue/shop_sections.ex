@@ -23,6 +23,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
 
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKitEcommerce.Catalogue.ItemCommerce
+  alias PhoenixKitEcommerce.Catalogue.RelatedPicker
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
 
   attr :form, :any, default: nil
@@ -325,6 +326,13 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSections do
             />
           </div>
         </div>
+
+        <.live_component
+          module={RelatedPicker}
+          id="ext-ecommerce-related"
+          item={@item}
+          ecommerce={@ecommerce}
+        />
       </div>
     </div>
     """

@@ -123,7 +123,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:original_option_values, %{})
     |> assign(:add_option_key, "")
     |> assign(:add_option_value, "")
-    |> assign_related([])
+    |> assign_list(:related, [])
+    |> assign_list(:cross_sell, [])
     |> assign_translation_state(%Product{})
   end
 
@@ -185,7 +186,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     |> assign(:selected_option_values, selected_option_values)
     |> assign(:add_option_key, "")
     |> assign(:add_option_value, "")
-    |> assign_related(RelatedProducts.uuids(product))
+    |> assign_list(:related, RelatedProducts.uuids(product, :related))
+    |> assign_list(:cross_sell, RelatedProducts.uuids(product, :cross_sell))
     |> assign_translation_state(product)
     |> maybe_warn_stale_mappings(had_stale_mappings)
   end
@@ -473,19 +475,26 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   # RELATED PRODUCTS
   # ===========================================
   # The list lives in socket assigns (like the option values) and is written
-  # into `metadata["related_product_uuids"]` on save. The picker's events only
+  # into `metadata` on save (`related_product_uuids` for the product page,
+  # `cross_sell_product_uuids` for the cart). The picker's events only
   # change those assigns; each event and the eventual save are gated.
 
-  def handle_event("picker_search", %{"q" => query} = params, socket) when is_binary(query) do
-    Authz.authorize(socket, :manage_catalog, fn -> search_related(query, params, socket) end)
+  def handle_event(event, %{"q" => query} = params, socket)
+      when event in ~w(related_search cross_sell_search) and is_binary(query) do
+    Authz.authorize(socket, :manage_catalog, fn ->
+      search_related(list_kind(event), query, params, socket)
+    end)
   end
 
-  def handle_event("picker_pick", %{"uuid" => uuid}, socket) when is_binary(uuid) do
+  def handle_event(event, %{"uuid" => uuid}, socket)
+      when event in ~w(related_pick cross_sell_pick) and is_binary(uuid) do
+    kind = list_kind(event)
+
     Authz.authorize(socket, :manage_catalog, fn ->
       {:noreply,
        socket
-       |> add_related(uuid)
-       |> push_event("picker_staged", %{})}
+       |> add_related(kind, uuid)
+       |> push_event("#{kind}_staged", %{})}
     end)
   end
 
@@ -1212,72 +1221,40 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
             </div>
           </div>
 
-          <%!-- Card: Related products ("You may also like" on the product page) --%>
-          <div class="card bg-base-100 shadow-xl" id="product-related">
-            <div class="card-body">
-              <h2 class="card-title text-xl mb-2">{gettext("Related products")}</h2>
-              <p class="text-sm text-base-content/60 mb-4">
-                {gettext(
-                  "Shown under this product as \"You may also like\", in this order. Drafts and hidden products are never shown to shoppers."
-                )}
-              </p>
+          <%!-- Cards: hand-picked product lists --%>
+          <.product_list_card
+            kind="related"
+            card_id="product-related"
+            list_id="related-products-list"
+            item_prefix="related-product"
+            picker_id="related-products-search"
+            dropdown_id="related-products-dropdown"
+            title={gettext("Related products")}
+            hint={
+              gettext(
+                "Shown under this product as \"You may also like\", in this order. Drafts and hidden products are never shown to shoppers."
+              )
+            }
+            uuids={@related_uuids}
+            titles={@related_titles}
+          />
 
-              <ul :if={@related_uuids != []} id="related-products-list" class="space-y-2 mb-4">
-                <li
-                  :for={{uuid, index} <- Enum.with_index(@related_uuids)}
-                  id={"related-product-#{uuid}"}
-                  class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2"
-                >
-                  <span class="flex-1 truncate">{@related_titles[uuid]}</span>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs"
-                    phx-click="move_related"
-                    phx-value-uuid={uuid}
-                    phx-value-direction="up"
-                    disabled={index == 0}
-                    aria-label={gettext("Move up")}
-                  >
-                    <.icon name="hero-arrow-up" class="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs"
-                    phx-click="move_related"
-                    phx-value-uuid={uuid}
-                    phx-value-direction="down"
-                    disabled={index == length(@related_uuids) - 1}
-                    aria-label={gettext("Move down")}
-                  >
-                    <.icon name="hero-arrow-down" class="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    phx-click="remove_related"
-                    phx-value-uuid={uuid}
-                    aria-label={gettext("Remove")}
-                  >
-                    <.icon name="hero-x-mark" class="w-4 h-4" />
-                  </button>
-                </li>
-              </ul>
-
-              <%= if length(@related_uuids) < RelatedProducts.max_items() do %>
-                <.search_picker
-                  id="related-products-search"
-                  dropdown_id="related-products-dropdown"
-                  placeholder={gettext("Search products to add...")}
-                  searching_label={gettext("Searching...")}
-                  no_matches_label={gettext("No matches")}
-                />
-              <% else %>
-                <p class="text-sm text-base-content/60">
-                  {gettext("The list is full (%{max} products).", max: RelatedProducts.max_items())}
-                </p>
-              <% end %>
-            </div>
-          </div>
+          <.product_list_card
+            kind="cross_sell"
+            card_id="product-cross-sell"
+            list_id="cross-sell-products-list"
+            item_prefix="cross-sell-product"
+            picker_id="cross-sell-products-search"
+            dropdown_id="cross-sell-products-dropdown"
+            title={gettext("Cross-sells")}
+            hint={
+              gettext(
+                "Offered in the cart when this product is in it (\"Add to your order\"), in this order. Drafts and hidden products are never shown to shoppers."
+              )
+            }
+            uuids={@cross_sell_uuids}
+            titles={@related_titles}
+          />
 
           <%!-- Card: Translations (only show when Languages module enabled with 2+ languages) --%>
           <%= if @show_translation_tabs do %>
@@ -2332,7 +2309,8 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     "_option_values",
     "_price_modifiers",
     "_image_mappings",
-    RelatedProducts.metadata_key()
+    RelatedProducts.metadata_key(:related),
+    RelatedProducts.metadata_key(:cross_sell)
   ]
 
   # `cleaned_metadata` was built from the client-submitted `product[metadata]`
@@ -2792,12 +2770,108 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp decimal_min([]), do: Decimal.new("0")
   defp decimal_min([first | rest]), do: Enum.reduce(rest, first, &Decimal.min/2)
 
-  defp assign_related(socket, uuids) do
+  # One card of a hand-picked list: the chosen products in order, a search
+  # box while there is room. `kind` ("related" / "cross_sell") names the
+  # events the card sends and the picker listens to.
+  attr :kind, :string, required: true
+  attr :card_id, :string, required: true
+  attr :list_id, :string, required: true
+  attr :item_prefix, :string, required: true
+  attr :picker_id, :string, required: true
+  attr :dropdown_id, :string, required: true
+  attr :title, :string, required: true
+  attr :hint, :string, required: true
+  attr :uuids, :list, required: true
+  attr :titles, :map, required: true
+
+  defp product_list_card(assigns) do
+    ~H"""
+    <div class="card bg-base-100 shadow-xl" id={@card_id}>
+      <div class="card-body">
+        <h2 class="card-title text-xl mb-2">{@title}</h2>
+        <p class="text-sm text-base-content/60 mb-4">{@hint}</p>
+
+        <ul :if={@uuids != []} id={@list_id} class="space-y-2 mb-4">
+          <li
+            :for={{uuid, index} <- Enum.with_index(@uuids)}
+            id={"#{@item_prefix}-#{uuid}"}
+            class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2"
+          >
+            <span class="flex-1 truncate">{@titles[uuid]}</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              phx-click="move_related"
+              phx-value-uuid={uuid}
+              phx-value-kind={@kind}
+              phx-value-direction="up"
+              disabled={index == 0}
+              aria-label={gettext("Move up")}
+            >
+              <.icon name="hero-arrow-up" class="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              phx-click="move_related"
+              phx-value-uuid={uuid}
+              phx-value-kind={@kind}
+              phx-value-direction="down"
+              disabled={index == length(@uuids) - 1}
+              aria-label={gettext("Move down")}
+            >
+              <.icon name="hero-arrow-down" class="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs text-error"
+              phx-click="remove_related"
+              phx-value-uuid={uuid}
+              phx-value-kind={@kind}
+              aria-label={gettext("Remove")}
+            >
+              <.icon name="hero-x-mark" class="w-4 h-4" />
+            </button>
+          </li>
+        </ul>
+
+        <%= if length(@uuids) < RelatedProducts.max_items() do %>
+          <.search_picker
+            id={@picker_id}
+            dropdown_id={@dropdown_id}
+            search_event={"#{@kind}_search"}
+            results_event={"#{@kind}_results"}
+            pick_event={"#{@kind}_pick"}
+            staged_event={"#{@kind}_staged"}
+            placeholder={gettext("Search products to add...")}
+            searching_label={gettext("Searching...")}
+            no_matches_label={gettext("No matches")}
+          />
+        <% else %>
+          <p class="text-sm text-base-content/60">
+            {gettext("The list is full (%{max} products).", max: RelatedProducts.max_items())}
+          </p>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  # The event name's kind ("related_pick" / "cross_sell_search" / "cross_sell")
+  # is one of two; anything else is the product page's list.
+  defp list_kind("cross_sell" <> _), do: :cross_sell
+  defp list_kind(_other), do: :related
+
+  defp list_uuids(socket, :related), do: socket.assigns.related_uuids
+  defp list_uuids(socket, :cross_sell), do: socket.assigns.cross_sell_uuids
+
+  defp assign_list(socket, kind, uuids) do
     {uuids, titles} = related_chips(uuids)
+    key = if kind == :cross_sell, do: :cross_sell_uuids, else: :related_uuids
 
     socket
-    |> assign(:related_uuids, uuids)
-    |> assign(:related_titles, titles)
+    |> assign(key, uuids)
+    |> assign(:related_titles, Map.merge(socket.assigns[:related_titles] || %{}, titles))
   end
 
   # The chips: the stored products that still exist (a deleted one is dropped
@@ -2816,13 +2890,13 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
       gettext("(untitled)")
   end
 
-  defp add_related(socket, uuid) do
-    current = socket.assigns.related_uuids
+  defp add_related(socket, kind, uuid) do
+    current = list_uuids(socket, kind)
     own = socket.assigns.product.uuid
 
     case RelatedProducts.normalize(current ++ [uuid], own) do
       ^current -> socket
-      updated -> assign_related(socket, updated)
+      updated -> assign_list(socket, kind, updated)
     end
   end
 
@@ -2842,12 +2916,12 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     end
   end
 
-  defp search_related(query, params, socket) do
+  defp search_related(kind, query, params, socket) do
     limit = related_search_limit(params["limit"])
-    results = related_search_rows(socket, String.trim(query), limit + 1)
+    results = related_search_rows(socket, kind, String.trim(query), limit + 1)
 
     {:noreply,
-     push_event(socket, "picker_results", %{
+     push_event(socket, "#{kind}_results", %{
        q: query,
        id: params["id"],
        results: Enum.take(results, limit),
@@ -2858,10 +2932,10 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   defp related_search_limit(limit) when is_integer(limit) and limit > 0, do: min(limit, 100)
   defp related_search_limit(_limit), do: 8
 
-  defp related_search_rows(_socket, "", _limit), do: []
+  defp related_search_rows(_socket, _kind, "", _limit), do: []
 
-  defp related_search_rows(socket, query, limit) do
-    taken = Enum.reject([socket.assigns.product.uuid | socket.assigns.related_uuids], &is_nil/1)
+  defp related_search_rows(socket, kind, query, limit) do
+    taken = Enum.reject([socket.assigns.product.uuid | list_uuids(socket, kind)], &is_nil/1)
 
     query
     |> Legacy.search_products(limit, taken)
@@ -2877,19 +2951,25 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
   end
 
   defp put_related(metadata, assigns) do
-    case RelatedProducts.normalize(assigns.related_uuids, assigns.product.uuid) do
-      [] -> Map.delete(metadata, RelatedProducts.metadata_key())
-      uuids -> Map.put(metadata, RelatedProducts.metadata_key(), uuids)
-    end
+    Enum.reduce([related: :related_uuids, cross_sell: :cross_sell_uuids], metadata, fn
+      {kind, assign_key}, acc ->
+        key = RelatedProducts.metadata_key(kind)
+
+        case RelatedProducts.normalize(Map.fetch!(assigns, assign_key), assigns.product.uuid) do
+          [] -> Map.delete(acc, key)
+          uuids -> Map.put(acc, key, uuids)
+        end
+    end)
   end
 
-  defp gated_event("remove_related", %{"uuid" => uuid}, socket) do
-    {:noreply, assign_related(socket, List.delete(socket.assigns.related_uuids, uuid))}
+  defp gated_event("remove_related", %{"uuid" => uuid} = params, socket) do
+    kind = list_kind(params["kind"])
+    {:noreply, assign_list(socket, kind, List.delete(list_uuids(socket, kind), uuid))}
   end
 
-  defp gated_event("move_related", %{"uuid" => uuid, "direction" => direction}, socket) do
-    {:noreply,
-     assign_related(socket, move_related(socket.assigns.related_uuids, uuid, direction))}
+  defp gated_event("move_related", %{"uuid" => uuid, "direction" => direction} = params, socket) do
+    kind = list_kind(params["kind"])
+    {:noreply, assign_list(socket, kind, move_related(list_uuids(socket, kind), uuid, direction))}
   end
 
   defp gated_event("save", %{"product" => product_params}, socket) do

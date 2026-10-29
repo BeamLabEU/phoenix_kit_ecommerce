@@ -274,6 +274,32 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   end
 
   @doc """
+  The items of `uuids` a shopper may see (item `active`, shop status `active`,
+  category not `hidden`), order preserved, anything else dropped. Scoped to
+  the shop catalogue like every read here.
+  """
+  @spec list_listed_items_by_uuids([Ecto.UUID.t()]) :: [CatItem.t()]
+  def list_listed_items_by_uuids([]), do: []
+
+  def list_listed_items_by_uuids(uuids) when is_list(uuids) do
+    case catalogue_uuid() do
+      nil ->
+        []
+
+      catalogue_uuid ->
+        by_uuid =
+          CatItem
+          |> where([i], i.uuid in ^uuids and i.catalogue_uuid == ^catalogue_uuid)
+          |> filter_by_status("active")
+          |> filter_by_visible_categories(true)
+          |> repo().all()
+          |> Map.new(&{&1.uuid, &1})
+
+        uuids |> Enum.uniq() |> Enum.flat_map(&List.wrap(Map.get(by_uuid, &1)))
+    end
+  end
+
+  @doc """
   Active-item counts grouped by `category_uuid`, "active" meaning
   `item.status == "active"` and `COALESCE(shop_status, 'active') =
   'active'` (spec principle 7, same fallback as the listing) — items
@@ -794,6 +820,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   defp apply_item_filters(query, opts) do
     query
     |> filter_by_status(Keyword.get(opts, :status))
+    |> filter_excluding(Keyword.get(opts, :exclude_uuids))
     |> filter_by_product_type(Keyword.get(opts, :product_type))
     |> filter_by_category(Keyword.get(opts, :category_uuid))
     |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
@@ -802,6 +829,12 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     |> filter_by_vendors(Keyword.get(opts, :vendors))
     |> filter_by_metadata(Keyword.get(opts, :metadata_filters), opts)
   end
+
+  # Items left out BEFORE any limit applies (a picker's already-chosen ones).
+  defp filter_excluding(query, uuids) when is_list(uuids) and uuids != [],
+    do: where(query, [i], i.uuid not in ^uuids)
+
+  defp filter_excluding(query, _uuids), do: query
 
   # Mirrors `View.product_status/2`'s fallback: with no `shop_status`
   # override, the derived status is "active" when `item.status ==

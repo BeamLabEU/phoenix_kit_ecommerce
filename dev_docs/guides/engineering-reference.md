@@ -166,7 +166,9 @@ lib/phoenix_kit_ecommerce/
 ├── catalogue/        # duck-typed phoenix_kit_catalogue extension slot:
 │                     # Extension, ItemCommerce, CategoryCommerce, ShopSections,
 │                     # ShopStatusColumn, Writer (Shopify -> catalogue),
-│                     # ShopifyAttribution, ValueResolver, SetSlug
+│                     # ShopifyAttribution, ValueResolver, SetSlug,
+│                     # RelatedPicker (LiveComponent: the hand-picked product
+│                     # lists inside the Shop section of the item form)
 ├── api.ex            # the admin API tools offered to core (api_tools/0)
 ├── api/              # the tools' handlers, plans and adapters to core/catalogue
 ├── warehouse_source_kind.ex # the shop_order kind offered to Warehouse
@@ -188,7 +190,9 @@ lib/phoenix_kit_ecommerce/
 │                     # backfill_image_fingerprints (after upgrading),
 │                     # list_unstamped_prices (read-only audit)
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz,
-│                     # ClaimController + ClaimHTML (the checkout claim page)
+│                     # ClaimController + ClaimHTML (the checkout claim page);
+│                     # components/related_products.ex (product page block),
+│                     # components/cross_sells.ex (cart "Add to your order")
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
 ├── policy.ex         # secure-by-default admin policy settings
 ├── vocabulary.ex     # "products" / "services" / "mixed" storefront wording
@@ -209,7 +213,7 @@ lib/phoenix_kit_ecommerce/
 ├── translation_fingerprint.ex  # staleness: hash, four states, write-narrowing, candidate SQL
 ├── translation_sweep_settings.ex # settings reader for translations + the sweep
 ├── stock_tracking.ex # Stock tracking switch + optional phoenix_kit_warehouse probe
-├── related_products.ex # a product's hand-picked "You may also like" list + its settings
+├── related_products.ex # a product's hand-picked "You may also like" and cart cross-sell lists + their settings
 ├── availability.ex   # can a product be offered now (true today; where stock plugs in)
 ├── prompt_rollout.ex # content-sha rollout of the code-managed AI prompts
 ├── gettext.ex        # PhoenixKitEcommerce.Gettext backend
@@ -597,27 +601,41 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
 
 **Related products — read through `PhoenixKitEcommerce.RelatedProducts`, never directly**
 
-- A legacy product's "You may also like" list is `metadata["related_product_uuids"]`
-  (at most 12 uuids, the merchant's order), edited in the product form's
-  "Related products" card (core's `SearchPicker`; the key is in
-  `@form_owned_metadata_keys` and the list lives in socket assigns). No column,
-  no migration. Every reader goes through `RelatedProducts.normalize/2`: it
+- A product's "You may also like" list is `related_product_uuids`, and its
+  cart cross-sell list `cross_sell_product_uuids` (each at most 12 uuids, the
+  merchant's order). Legacy: keys in `metadata`, edited in the product form's
+  "Related products" and "Cross-sells" cards (core's `SearchPicker`; both keys
+  are in `@form_owned_metadata_keys` and the lists live in socket assigns).
+  Catalogue: the same keys in the item's `data["ecommerce"]` (`ItemCommerce`
+  normalizes them; the catalogue view copies them into the view-struct's
+  `metadata`), edited by `Catalogue.RelatedPicker`, a LiveComponent inside the
+  Shop section of the catalogue item form (it submits hidden
+  `item[ecommerce][...][]` inputs, plus an always-present empty one so an
+  emptied list can be cleared). No column, no migration. Every reader goes through `RelatedProducts.normalize/2`: it
   keeps only well-formed uuid strings, once each, never the product itself;
   any other shape reads as empty. The block renders only products
   `Legacy.list_listed_by_ids/1` returns (status `active`, category not
-  `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts;
+  `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts
+  (`Legacy.list_listed_by_ids/1`, `Catalogue.list_listed_by_ids/2`);
   `Availability` answers true for everything today and is the one place a
   stock feature plugs in (`config :phoenix_kit_ecommerce, :availability,
   {Module, :function}` meanwhile; a hook that is missing, has another arity,
   raises, exits or throws counts as available and is logged as a warning, so
-  a broken hook never crashes a product page). Dangling ids are skipped on read, never
-  cleaned. Under the catalogue source `for_product/2` answers `[]` (the list
-  is not stored there yet).
+  a broken hook never crashes a product page). Dangling ids are skipped on read and dropped when the
+  merchant next saves the form (a legacy product's form drops a deleted product
+  from its chips; the catalogue picker does the same); nothing sweeps them. The cart's "Add to your order" block (`CartPage`,
+  `Web.Components.CrossSells`) is `RelatedProducts.cross_sells/2`: the
+  cross-sell lists of the products in the cart together, in cart order,
+  minus what is already in the cart (a catalogue line is matched by
+  `metadata["catalogue_item_uuid"]`). Its "Add" button only exists for a
+  product with nothing to choose (no selectable option); any other gets a
+  link to its page, and the event ignores a product the block is not offering.
 - `shop_related_fallback` — `"off"` (default) or `"category"`: when nothing
-  the merchant picked can be shown, the newest listed products of the
-  product's own category stand in. Off keeps a page without a list exactly as
-  it was.
-- `shop_related_limit` — products the block shows, 1..12 (default 4); any
+  the merchant picked can be shown, listed products of the
+  product's own category stand in (legacy: newest first; catalogue: the
+  catalogue's own order, by position and name). Off keeps a page without a
+  list exactly as it was.
+- `shop_related_limit` — products each block shows, 1..12 (default 4); any
   other stored value reads as 4.
 
 **Shipping — read through `PhoenixKitEcommerce`, never directly**
@@ -962,7 +980,7 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 |---|---|---|
 | Price display and storefront i18n | "Price on request" is snapshotted onto the cart line and the order line, never read live; every public LiveView calls `put_content_locale/1` in `mount/3`; `push_event` names, paths, route segments and setting keys are never wrapped in `gettext` | `dev_docs/guides/storefront.md` |
 | AI translation control | Fingerprints are hashed identically in Elixir and SQL (`sql_trim_chars/0`); the sweep never auto-queues `unknown`; a write whose field fingerprint still matches is narrowed away; nothing enqueues under the catalogue product source. The sweep's chain, gates and budget are `PhoenixKitAI.TranslationSweep`'s — the worker supplies only the shop's gates, settings, candidates and prompts, and answers `:ai_unavailable` when the installed `phoenix_kit_ai` has no engine | `TranslationFingerprint`, `Workers.TranslationSweepWorker`, `Web.Translations` moduledocs |
-| Shipping destination picker | `Web.Components.ShippingDestinationPicker` (the one LiveComponent, justified in its moduledoc) is embedded by `CartPage` and `CheckoutPage` under the selected calculated method. Shipping is worked out ONCE per cart change by the parent (`Shop.shipping_quote_snapshot/2`: status, entry, presented, `blocks?`, service) and passed down — never recompute it in `render/1` or per component (packing, hashing, the service list and the provider's destination check are not free). The picker keeps no cart of its own: it saves, the shipping broadcast reaches the parent, the parent passes the new cart down; `:shipping_recheck` asks the parent to recompute when only the answer changed. Anything that calls the carrier on behalf of an anonymous shopper is bounded (one lookup in flight, `:shipping_lookup_interval`, capped texts, `Web.ShippingRequote` for automatic quotes: once per cart state, at most 3 in a row). A transient service failure is a retry, never "not available for this order". The shared display lines (ETA, COD fee, estimate note, reasons) are `Web.Components.ShippingDisplay`; DOM ids inside the picker derive from its `id` | `Web.Components.ShippingDestinationPicker`, `Web.ShippingRequote`, `PhoenixKitEcommerce.shipping_quote_snapshot/2` |
+| Shipping destination picker | `Web.Components.ShippingDestinationPicker` (the storefront's one LiveComponent, justified in its moduledoc; the admin side has `Catalogue.RelatedPicker`) is embedded by `CartPage` and `CheckoutPage` under the selected calculated method. Shipping is worked out ONCE per cart change by the parent (`Shop.shipping_quote_snapshot/2`: status, entry, presented, `blocks?`, service) and passed down — never recompute it in `render/1` or per component (packing, hashing, the service list and the provider's destination check are not free). The picker keeps no cart of its own: it saves, the shipping broadcast reaches the parent, the parent passes the new cart down; `:shipping_recheck` asks the parent to recompute when only the answer changed. Anything that calls the carrier on behalf of an anonymous shopper is bounded (one lookup in flight, `:shipping_lookup_interval`, capped texts, `Web.ShippingRequote` for automatic quotes: once per cart state, at most 3 in a row). A transient service failure is a retry, never "not available for this order". The shared display lines (ETA, COD fee, estimate note, reasons) are `Web.Components.ShippingDisplay`; DOM ids inside the picker derive from its `id` | `Web.Components.ShippingDestinationPicker`, `Web.ShippingRequote`, `PhoenixKitEcommerce.shipping_quote_snapshot/2` |
 | Public read API and search index | Visibility is decided only by `API.Visibility` and every public tool loads products through `API.Loader`; the index holds listed products and base-currency prices only; `Indexer` upserts first and deletes stale rows last, so a rebuild never empties the index, and does nothing when the shop catalogue cannot be resolved; a hidden product, a malformed id and an unknown id answer alike; products and cards are always read live while the `count`, the facets and the category counts come from the index and lag a change by the reindex delay, so every write path of a product source must enqueue its reindex (`Search.Jobs`; the Legacy bulk category change and bulk delete do it themselves, the rest reaches `Search.Subscriber` as events, and the events of other catalogues are dropped there); a UUID from a caller is accepted only through `API.Loader.canonical_uuid/1`; money is converted only by `API.Context.money/2`; no value in a public answer is a `Decimal`, a `DateTime` or a struct | `API.Visibility`, `Search.Indexer`, `Search.Query`, `API.Public.*` moduledocs |
 | Public cart API | The cart token is a signed bearer value and is never stored, logged or put in a notification; the cart row is created only by the first write, under core's cart-row limits; option keys are the ones `Search.OptionKeys` announces and `CartOptions` only maps them back; a line is addable only when `API.Visibility` says `:listed`, and a UUID from a caller goes through `API.Loader.canonical_uuid/1`; only the refusals `add_to_cart` makes before it opens its own transaction and that a retry cannot change (`CartWriter` `@line_refusals`) are that line's error, any other answer rolls the whole batch back for a retryable `state_changed`, because a refusal inside the writer's transaction dooms it; `shop.clear_cart` asks for confirmation only when the cart has lines; a carrier-priced method has no price until the buyer picks a destination; while a cart is checking out only `shop.get_cart` answers it (`checking_out`, no lines): the other read, `shop.get_shipping_options`, refuses it with `cart_locked` like a write (deliberate, pinned by a test); the claim route has no locale prefix, the claim URL's host must be one of `ctx.hosts` or the host of the `site_url` setting (else the first of `ctx.hosts`, else the `site_url` origin; no host to use at all refuses the call before a claim exists, a dry run refusing in exactly the same cases; core fills `hosts` with the request's Host header unless the host app's `:api_request_context` hook names the domains, so with core's defaults any Host header is believed and a multi-domain install should name its domains) and a GET never consumes a claim; the claim page's form carries the revision of the cart it showed, and a POST made after the agent changed the cart, or without that revision, shows the page again (`Claims.redeem/3` requires `revision` and answers `:reshow` for a missing or different one) instead of claiming lines the buyer did not see | `API.CartTools`, `API.Claims`, `API.CartStore` moduledocs |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |

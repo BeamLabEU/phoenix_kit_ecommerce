@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   use PhoenixKitEcommerce.Web, :live_view
 
+  require Logger
+
   alias PhoenixKit.Utils.Routes
 
   alias PhoenixKitEcommerce, as: Shop
@@ -17,10 +19,13 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   alias PhoenixKitEcommerce.ItemImage
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.ProductSource
+  alias PhoenixKitEcommerce.RelatedProducts
   alias PhoenixKitEcommerce.SelectedSpecs
   alias PhoenixKitEcommerce.ShippingMethod
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Vocabulary
+  alias PhoenixKitEcommerce.Web.Components.CrossSells
   alias PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
@@ -187,9 +192,87 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
     end
   end
 
+  # "Add" on a cross-sell card. Only a product the block offers right now and
+  # that needs no choice goes in; anything else is ignored.
+  @impl true
+  def handle_event("add_cross_sell", %{"uuid" => uuid}, socket) when is_binary(uuid) do
+    product = Enum.find(socket.assigns.cross_sells, &(&1.uuid == uuid))
+
+    if product && MapSet.member?(socket.assigns.cross_sell_quick, uuid) do
+      add_cross_sell(socket, product)
+    else
+      {:noreply, socket}
+    end
+  end
+
   # Last, so it shadows nothing: an event this page does not know, or a
   # known one whose payload is not the shape its clause takes.
   def handle_event(event, _params, socket), do: Helpers.ignore_event(event, socket)
+
+  # Into the shopper's ACTIVE cart, read afresh: the one this page holds may
+  # have been converted into an order meanwhile (another tab, the checkout),
+  # and `add_to_cart` does not look at a cart's status.
+  defp add_cross_sell(socket, product) do
+    user = get_current_user(socket)
+
+    with {:ok, cart} <-
+           Shop.get_or_create_cart(
+             user_uuid: user && user.uuid,
+             session_id: socket.assigns.session_id
+           ),
+         {:ok, updated_cart} <-
+           Shop.add_to_cart(cart, product, 1, language: socket.assigns.current_language) do
+      {:noreply,
+       socket
+       |> assign_cart_state(updated_cart)
+       |> put_flash(:info, gettext("Item added to cart"))}
+    else
+      {:error, code, detail} ->
+        Logger.warning("[Shop] could not add a cross-sell: #{inspect({code, detail})}")
+        {:noreply, put_flash(socket, :error, gettext("Could not add this item to your cart"))}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, gettext("Could not add this item to your cart"))}
+    end
+  end
+
+  # The offers, and which of them can go straight into the cart (worked out
+  # once here, not per card on every render).
+  defp assign_cross_sells(socket, cart) do
+    offers = cross_sells_for(cart, socket.assigns[:current_language])
+
+    quick =
+      for product <- offers, CrossSells.quick_add?(product), into: MapSet.new(), do: product.uuid
+
+    socket |> assign(:cross_sells, offers) |> assign(:cross_sell_quick, quick)
+  end
+
+  # What the cart offers on top of its lines: the cross-sell lists of the
+  # products in it, minus what is already in it. A line whose product is gone
+  # (no `product_uuid`, no catalogue item uuid) offers nothing.
+  defp cross_sells_for(%{items: items}, language) when is_list(items) do
+    uuids = items |> Enum.map(&line_product_uuid/1) |> Enum.filter(&is_binary/1) |> Enum.uniq()
+
+    if uuids == [] do
+      []
+    else
+      by_uuid = uuids |> ProductSource.current().list_products_by_ids() |> Map.new(&{&1.uuid, &1})
+      in_cart = Enum.flat_map(uuids, &List.wrap(Map.get(by_uuid, &1)))
+
+      RelatedProducts.cross_sells(in_cart, exclude: uuids, language: language)
+    end
+  end
+
+  defp cross_sells_for(_cart, _language), do: []
+
+  # A legacy line points at its product; a catalogue line has no product row
+  # and carries the item's uuid in its metadata snapshot.
+  defp line_product_uuid(%{product_uuid: uuid}) when is_binary(uuid), do: uuid
+
+  defp line_product_uuid(%{metadata: %{"catalogue_item_uuid" => uuid}}) when is_binary(uuid),
+    do: uuid
+
+  defp line_product_uuid(_line), do: nil
 
   # One choke point for "the cart changed": refresh available methods,
   # drop a selection the cart has outgrown (or stopped needing), and keep
@@ -222,6 +305,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
     socket
     |> assign(:cart, cart)
+    |> assign_cross_sells(cart)
     |> assign(:currency, Shop.currency_for_code(cart.currency))
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
@@ -592,6 +676,14 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
                 </div>
               </div>
             <% end %>
+
+            <CrossSells.block
+              :if={@cart.items != []}
+              products={@cross_sells}
+              quick={@cross_sell_quick}
+              currency={@currency}
+              language={@current_language}
+            />
 
             <%!-- Shipping Section (digital-only carts don't ship; also hidden
             when shipping selection is skipped or happens at checkout) --%>
