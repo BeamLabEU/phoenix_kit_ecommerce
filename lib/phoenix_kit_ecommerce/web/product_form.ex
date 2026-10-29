@@ -481,25 +481,21 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
 
   def handle_event(event, %{"q" => query} = params, socket)
       when event in ~w(related_search cross_sell_search) and is_binary(query) do
-    kind = list_kind(event)
-
-    {:noreply,
-     push_event(socket, "#{kind}_results", %{
-       q: query,
-       id: params["id"],
-       results: related_search_rows(socket, kind, String.trim(query)),
-       has_more: false
-     })}
+    Authz.authorize(socket, :manage_catalog, fn ->
+      search_related(list_kind(event), query, params, socket)
+    end)
   end
 
   def handle_event(event, %{"uuid" => uuid}, socket)
       when event in ~w(related_pick cross_sell_pick) and is_binary(uuid) do
     kind = list_kind(event)
 
-    {:noreply,
-     socket
-     |> add_related(kind, uuid)
-     |> push_event("#{kind}_staged", %{})}
+    Authz.authorize(socket, :manage_catalog, fn ->
+      {:noreply,
+       socket
+       |> add_related(kind, uuid)
+       |> push_event("#{kind}_staged", %{})}
+    end)
   end
 
   def handle_event("remove_related", %{"uuid" => uuid} = params, socket) when is_binary(uuid) do
@@ -2920,15 +2916,23 @@ defmodule PhoenixKitEcommerce.Web.ProductForm do
     end
   end
 
+  defp search_related(kind, query, params, socket) do
+    {:noreply,
+     push_event(socket, "#{kind}_results", %{
+       q: query,
+       id: params["id"],
+       results: related_search_rows(socket, kind, String.trim(query)),
+       has_more: false
+     })}
+  end
+
   defp related_search_rows(_socket, _kind, ""), do: []
 
   defp related_search_rows(socket, kind, query) do
     taken = [socket.assigns.product.uuid | list_uuids(socket, kind)]
 
-    {products, _total} =
-      Legacy.list_products_with_count(search: query, per_page: 10, page: 1, preload: [])
-
-    products
+    query
+    |> Legacy.search_products(10)
     |> Enum.reject(&(&1.uuid in taken))
     |> Enum.map(fn product ->
       %{

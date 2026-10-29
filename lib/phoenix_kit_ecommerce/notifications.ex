@@ -39,6 +39,7 @@ defmodule PhoenixKitEcommerce.Notifications do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.Paths, as: BillingPaths
+  alias PhoenixKitEcommerce.OnlinePayment
   alias PhoenixKitEcommerce.Translations
 
   @order_action "shop.order_placed"
@@ -60,9 +61,26 @@ defmodule PhoenixKitEcommerce.Notifications do
   """
   def order_placed(order, opts \\ []) do
     safely(fn ->
-      notify_admins_of_order(order)
-      notify_customer_of_order(order, opts[:language])
+      awaiting? = OnlinePayment.awaiting?(order)
+      notify_admins_of_order(order, awaiting?)
+
+      # An online order is not confirmed until the money lands; the buyer is
+      # told by `order_paid/2` then (billing's invoice-event handler).
+      if !awaiting?, do: notify_customer_of_order(order, opts[:language])
     end)
+  end
+
+  @doc """
+  Tells the buyer of an online order that their payment arrived and the order
+  is confirmed. Called by `PhoenixKitEcommerce.InvoicePaymentHandler`;
+  returns an insertion error to the durable handler so it can retry.
+  `language:` as for `order_placed/2`.
+  """
+  def order_paid(order, opts \\ []) do
+    case notify_customer_of_order(order, opts[:language]) do
+      {:ok, _notification_or_skipped} -> :ok
+      result -> result
+    end
   end
 
   @doc """
@@ -258,7 +276,7 @@ defmodule PhoenixKitEcommerce.Notifications do
 
   defp cart_totals(_), do: ""
 
-  defp notify_admins_of_order(order) do
+  defp notify_admins_of_order(order, awaiting_payment?) do
     # A buyer who is also a shop operator stays in the list: the order still
     # needs confirming on the Billing page, and their own "Your order ... is
     # confirmed" message (customer-facing copy, a customer link) does not
@@ -272,6 +290,7 @@ defmodule PhoenixKitEcommerce.Notifications do
     # the operator still owes this buyer a delivery arrangement, and
     # nothing else in the admin fan-out flags that.
     suffix = if order.metadata["shipping_skipped"], do: " — shipping pending", else: ""
+    suffix = if awaiting_payment?, do: suffix <> " — awaiting online payment", else: suffix
 
     attrs = %{
       action: @order_action,

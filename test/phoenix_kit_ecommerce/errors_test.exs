@@ -315,6 +315,14 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
                "Option key and value are required"
     end
 
+    test "the two ways an online payment fails to start" do
+      assert Errors.message(:payment_unavailable) ==
+               "Online payment is not available right now. Please try again later."
+
+      assert Errors.message(:payment_start_failed) ==
+               "We could not start the payment. Please try again."
+    end
+
     test "a detail that is not text is shown inspected, not raised on" do
       assert Errors.message({:option_type_invalid, %{"a" => 1}}) =~ ~s(%{"a" => 1})
     end

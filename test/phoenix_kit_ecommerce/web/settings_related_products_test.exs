@@ -43,7 +43,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsRelatedProductsTest do
     assert RelatedProducts.fallback() == :off
   end
 
-  test "the block size is stored and audited, a repeat is not", %{conn: conn} do
+  test "the block size is stored and audited", %{conn: conn} do
     {:ok, view, _html} = live(conn, @path)
 
     view |> form("#related-limit-form", %{"limit" => "8"}) |> render_change()
