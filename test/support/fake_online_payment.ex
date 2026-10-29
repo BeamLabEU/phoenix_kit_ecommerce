@@ -11,7 +11,7 @@ defmodule PhoenixKitEcommerce.Test.FakeOnlinePayment do
   @result_key :fake_online_payment_result
   @owner_key :fake_online_payment_owner
 
-  @doc "Uses the fake and makes it answer `result` (an `{:ok, _}` or `{:error, _}`)."
+  @doc "Uses the fake and makes it answer `result` (an `{:ok, _}` or `{:error, _}`, or `:raise` to raise)."
   def put_result(result) do
     Application.put_env(:phoenix_kit_ecommerce, @env_key, __MODULE__)
     Application.put_env(:phoenix_kit_ecommerce, @result_key, result)
@@ -33,7 +33,10 @@ defmodule PhoenixKitEcommerce.Test.FakeOnlinePayment do
     if owner = Application.get_env(:phoenix_kit_ecommerce, @owner_key),
       do: send(owner, {:start_order_payment, order, opts})
 
-    Application.get_env(:phoenix_kit_ecommerce, @result_key, {:error, :not_set})
+    case Application.get_env(:phoenix_kit_ecommerce, @result_key, {:error, :not_set}) do
+      :raise -> raise "start_order_payment failed"
+      result -> result
+    end
   end
 end
 

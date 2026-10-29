@@ -70,9 +70,45 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
   end
 
   describe "origin/1" do
-    test "is the scheme, host and port of the socket's request" do
-      assert OnlinePayment.origin(%{host_uri: URI.parse("https://shop.example:8443/x?y=1")}) ==
-               "https://shop.example:8443"
+    alias PhoenixKitEcommerce.Test.Endpoint
+
+    defp socket(url, assigns \\ %{}),
+      do: %{host_uri: URI.parse(url), endpoint: Endpoint, assigns: assigns}
+
+    test "is the scheme and host of the socket's request when the endpoint serves it" do
+      assert OnlinePayment.origin(socket("http://localhost/x?y=1")) == "http://localhost"
+    end
+
+    test "keeps a non-default port and drops a default one" do
+      assert OnlinePayment.origin(socket("http://localhost:4002/x")) == "http://localhost:4002"
+      assert OnlinePayment.origin(socket("https://localhost:443/x")) == "https://localhost"
+    end
+
+    test "brackets an IPv6 literal when the site base serves it" do
+      original = Application.get_env(:phoenix_kit, :site_url)
+      PhoenixKit.Settings.update_setting("site_url", "http://[::1]:4000")
+      on_exit(fn -> PhoenixKit.Settings.update_setting("site_url", original || "") end)
+
+      assert OnlinePayment.origin(socket("http://[::1]:4000/x")) == "http://[::1]:4000"
+    end
+
+    test "the canonical host of the page's language is served" do
+      PhoenixKitEcommerce.SearchFixtures.put_canonical_host_resolver!()
+
+      assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "de"})) ==
+               "https://shop.example.de"
+
+      assert OnlinePayment.origin(socket("https://shop.example.de/x", %{current_locale: "en"})) ==
+               nil
+    end
+
+    test "a host the site does not serve is not believed" do
+      assert OnlinePayment.origin(socket("https://evil.example/x")) == nil
+      assert OnlinePayment.origin(socket("https://localhost.evil.example/x")) == nil
+    end
+
+    test "a scheme other than http(s) is not believed" do
+      assert OnlinePayment.origin(socket("javascript://localhost/x")) == nil
     end
 
     test "is nil when unknown" do
@@ -102,6 +138,13 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       assert_received {:start_order_payment, _order, opts}
       assert opts[:success_url] =~ ~r{^https://shop\.example:8443/.*payment=success$}
       assert opts[:cancel_url] =~ ~r{^https://shop\.example:8443/.*payment=cancelled$}
+    end
+
+    test "a billing that raises is a failed start, not a crash", %{order: order} do
+      FakeOnlinePayment.put_result(:raise)
+
+      assert {:error, :payment_start_failed} =
+               OnlinePayment.start(order, %{current_locale: "en"})
     end
 
     test "an order billing already holds as paid", %{order: order} do

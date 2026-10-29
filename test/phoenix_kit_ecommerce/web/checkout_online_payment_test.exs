@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
+  alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.DataCase
@@ -42,12 +43,37 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       assert_received {:start_order_payment, order, opts}
       assert order.status in ~w(pending confirmed draft)
 
-      # Built on the host the shopper is on, not on the configured site URL.
-      assert opts[:success_url] =~
-               ~r{^http://www\.example\.com(/.*)?/checkout/complete/#{order.uuid}\?payment=success$}
+      # The test client's host (www.example.com) is not one the site serves,
+      # so the return URLs fall back to the configured site URL.
+      base = Routes.base_url()
+      assert String.starts_with?(opts[:success_url], base)
+      assert opts[:success_url] =~ ~r{/checkout/complete/#{order.uuid}\?payment=success$}
 
       assert opts[:cancel_url] =~ "/checkout/complete/#{order.uuid}?payment=cancelled"
       assert opts[:customer_email]
+    end
+
+    test "return urls use the host the shopper is on when the endpoint serves it", %{conn: conn} do
+      FakeOnlinePayment.put_result({:ok, %{invoice: %{}, url: @provider_url}})
+
+      {:ok, view, _html} = live(%{conn | host: "localhost"}, "/checkout")
+      view |> element("#checkout-confirm-order") |> render_click()
+      assert_redirect(view, @provider_url)
+
+      assert_received {:start_order_payment, order, opts}
+      assert opts[:success_url] =~ ~r{^http://localhost(/.*)?/checkout/complete/#{order.uuid}\?}
+    end
+
+    test "a forged host is not used for the return urls", %{conn: conn} do
+      FakeOnlinePayment.put_result({:ok, %{invoice: %{}, url: @provider_url}})
+
+      {:ok, view, _html} = live(%{conn | host: "evil.example"}, "/checkout")
+      view |> element("#checkout-confirm-order") |> render_click()
+      assert_redirect(view, @provider_url)
+
+      assert_received {:start_order_payment, _order, opts}
+      refute opts[:success_url] =~ "evil.example"
+      refute opts[:cancel_url] =~ "evil.example"
     end
 
     test "a payment that cannot start still leaves the order, on a page that says so", %{
@@ -235,6 +261,56 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       refute has_element?(view, "#awaiting-payment")
     end
 
+    test "a guest sees Pay now on the order their own session placed", ctx do
+      order = guest_order!(ctx, "guest-own-session")
+
+      {:ok, view, _html} =
+        live(guest_conn("guest-own-session"), "/checkout/complete/#{order.uuid}")
+
+      assert has_element?(view, "#awaiting-payment")
+      assert has_element?(view, "#pay-now-button")
+    end
+
+    test "someone else's order is not shown and gives no Pay now", ctx do
+      order = guest_order!(ctx, "guest-owner-session")
+
+      assert {:error, {:live_redirect, %{to: to}}} =
+               live(guest_conn("another-session"), "/checkout/complete/#{order.uuid}")
+
+      refute to =~ "/checkout/complete/"
+    end
+
+    test "a refunded order closes the page", ctx do
+      order = online_order!(ctx)
+
+      {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
+      {:ok, refunded} = Billing.update_order(order, %{"status" => "refunded"})
+      Billing.Events.broadcast_order_refunded(refunded)
+
+      assert has_element?(view, "#order-closed")
+      refute has_element?(view, "#awaiting-payment")
+    end
+
+    test "a message of no interest is ignored", ctx do
+      order = online_order!(ctx)
+      {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
+
+      send(view.pid, {:something_else, %{uuid: order.uuid}})
+
+      assert has_element?(view, "#awaiting-payment")
+    end
+
+    test "a provider that raises on Pay now leaves the page with the error", ctx do
+      order = online_order!(ctx)
+      FakeOnlinePayment.put_result(:raise)
+
+      {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
+      view |> element("#pay-now-button") |> render_click()
+
+      assert has_element?(view, "#payment-start-failed")
+      assert has_element?(view, "#pay-now-button")
+    end
+
     test "Pay now pushed at a paid order is ignored", ctx do
       order = online_order!(ctx)
       {:ok, _} = Billing.update_order(order, %{"status" => "paid"})
@@ -285,6 +361,35 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       })
 
     order
+  end
+
+  # An order placed by a guest session: owned by a user the visitor is not,
+  # recorded with the session that placed it.
+  defp guest_order!(%{option: option}, session_id) do
+    owner = DataCase.fixture_user()
+
+    {:ok, order} =
+      Billing.create_order(owner, %{
+        "total" => Decimal.new("10.00"),
+        "currency" => "USD",
+        "status" => "pending",
+        "payment_option_uuid" => option.uuid,
+        "billing_snapshot" => %{"email" => owner.email},
+        "line_items" => [
+          %{"name" => "Thing", "quantity" => 1, "unit_price" => "10.00", "total" => "10.00"}
+        ],
+        "metadata" => %{"source" => "shop_checkout", "session_id" => session_id}
+      })
+
+    order
+  end
+
+  defp guest_conn(session_id) do
+    Phoenix.ConnTest.build_conn()
+    |> Plug.Test.init_test_session(%{
+      "shop_session_id" => session_id,
+      "shop_session_trusted" => true
+    })
   end
 
   defp ensure_option(code, type, attrs) do

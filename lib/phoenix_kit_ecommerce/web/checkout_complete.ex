@@ -66,6 +66,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
        socket
        |> setup_order_assigns(order)
        |> assign(:payment_hint, payment_hint)
+       |> assign(:payment_error, nil)
        |> assign_awaiting(order)}
     else
       {:ok, redirect_with_error(socket, gettext("You don't have access to this order"))}
@@ -224,11 +225,17 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   @impl true
   def handle_info({event, %{uuid: uuid}}, %{assigns: %{order: %{uuid: uuid}}} = socket)
-      when event in [:order_paid, :order_confirmed, :order_updated, :order_cancelled] do
+      when event in [
+             :order_paid,
+             :order_confirmed,
+             :order_updated,
+             :order_cancelled,
+             :order_refunded
+           ] do
     {:noreply, refresh_order(socket)}
   end
 
-  def handle_info(_message, socket), do: {:noreply, socket}
+  def handle_info(message, socket), do: Helpers.ignore_message(message, socket)
 
   defp refresh_order(socket) do
     case Billing.get_order_by_uuid(socket.assigns.order.uuid) do
@@ -261,7 +268,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               {gettext("Your order is saved and will be processed as soon as it is paid.")}
             </p>
             <div :if={@payment_hint == "failed"} id="payment-start-failed" class="alert alert-error mt-4">
-              {assigns[:payment_error] || Errors.message(:payment_start_failed)}
+              {@payment_error || Errors.message(:payment_start_failed)}
             </div>
             <div :if={@payment_hint == "cancelled"} id="payment-cancelled" class="alert alert-warning mt-4">
               {gettext("The payment was not completed. You can pay now or come back to this page later.")}
@@ -285,20 +292,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
               <h1 class="text-3xl font-bold mb-2">{StatusLabels.order(@order.status)}</h1>
             </div>
           <% else %>
-          <div class="text-center mb-8">
-            <div class="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <.icon name="hero-check-circle" class="w-12 h-12 text-success" />
-            </div>
-            <h1 class="text-3xl font-bold mb-2">{gettext("Order Confirmed!")}</h1>
-            <p class="text-base-content/60">
-              {gettext("Thank you for your order. We've received your order and will process it shortly.")}
-            </p>
-            <%= if @order.metadata["shipping_skipped"] do %>
-              <div id="shipping-pending-notice" class="alert alert-info mt-4">
-                {gettext("We will contact you to arrange shipping and confirm your order details.")}
+            <div class="text-center mb-8">
+              <div class="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <.icon name="hero-check-circle" class="w-12 h-12 text-success" />
               </div>
-            <% end %>
-          </div>
+              <h1 class="text-3xl font-bold mb-2">{gettext("Order Confirmed!")}</h1>
+              <p class="text-base-content/60">
+                {gettext("Thank you for your order. We've received your order and will process it shortly.")}
+              </p>
+              <%= if @order.metadata["shipping_skipped"] do %>
+                <div id="shipping-pending-notice" class="alert alert-info mt-4">
+                  {gettext("We will contact you to arrange shipping and confirm your order details.")}
+                </div>
+              <% end %>
+            </div>
           <% end %>
         <% end %>
 

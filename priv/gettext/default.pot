@@ -401,8 +401,8 @@ msgstr ""
 msgid "Basic Information"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:360
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:373
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:367
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:380
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:1783
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2152
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:145
@@ -665,7 +665,7 @@ msgstr ""
 msgid "Constraints"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:516
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:523
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:264
 #, elixir-autogen, elixir-format
 msgid "Continue Shopping"
@@ -906,7 +906,7 @@ msgid "Digital Products"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:729
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:465
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:472
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2519
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:113
 #, elixir-autogen, elixir-format
@@ -1392,7 +1392,7 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/carts.ex:158
 #: lib/phoenix_kit_ecommerce/web/carts.ex:181
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:398
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:405
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:218
 #, elixir-autogen, elixir-format
 msgid "Items"
@@ -1493,7 +1493,7 @@ msgstr ""
 msgid "Move to Category"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:520
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:527
 #: lib/phoenix_kit_ecommerce/web/user_orders.ex:27
 #: lib/phoenix_kit_ecommerce/web/user_orders.html.heex:6
 #, elixir-autogen, elixir-format
@@ -1730,7 +1730,7 @@ msgstr ""
 msgid "Order Items"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:337
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:344
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:206
 #, elixir-autogen, elixir-format
 msgid "Order Number"
@@ -2279,7 +2279,7 @@ msgstr ""
 msgid "Storefront filter updated"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:452
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:459
 #: lib/phoenix_kit_ecommerce/web/claim_html.ex:81
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:100
 #, elixir-autogen, elixir-format
@@ -2297,7 +2297,7 @@ msgid "Tags:"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:736
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:458
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:465
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2512
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:106
 #, elixir-autogen, elixir-format
@@ -2357,7 +2357,7 @@ msgstr ""
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:744
 #: lib/phoenix_kit_ecommerce/web/carts.ex:163
 #: lib/phoenix_kit_ecommerce/web/carts.ex:182
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:471
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:478
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2527
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:119
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:224
@@ -3314,7 +3314,7 @@ msgstr ""
 msgid "Check back soon or browse other categories"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:312
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:319
 #, elixir-autogen, elixir-format
 msgid "Check your inbox"
 msgstr ""
@@ -3336,17 +3336,17 @@ msgstr ""
 msgid "Clear filters"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:322
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:329
 #, elixir-autogen, elixir-format
 msgid "Click the confirmation link inside"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:320
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:327
 #, elixir-autogen, elixir-format
 msgid "Confirm your account"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:326
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:333
 #, elixir-autogen, elixir-format
 msgid "Don't see it? Check your spam or junk folder. The email may take a minute to arrive."
 msgstr ""
@@ -3427,29 +3427,29 @@ msgstr ""
 msgid "On sale!"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:319
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:326
 #, elixir-autogen, elixir-format
 msgid "Open the email titled"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:149
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:199
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:150
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:200
 #, elixir-autogen, elixir-format
 msgid "Order Confirmed"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:292
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:299
 #, elixir-autogen, elixir-format
 msgid "Order Confirmed!"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:197
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:355
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:198
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:362
 #, elixir-autogen, elixir-format
 msgid "Order Details"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:499
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:506
 #, elixir-autogen, elixir-format
 msgid "Order Status"
 msgstr ""
@@ -3510,7 +3510,7 @@ msgstr ""
 msgid "Shopping Cart"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:294
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:301
 #, elixir-autogen, elixir-format
 msgid "Thank you for your order. We've received your order and will process it shortly."
 msgstr ""
@@ -3541,12 +3541,12 @@ msgstr ""
 msgid "Welcome to Our Shop"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:346
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:353
 #, elixir-autogen, elixir-format
 msgid "You can follow this order from your account at any time."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:323
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:330
 #, elixir-autogen, elixir-format
 msgid "Your account will be activated and you can track your order"
 msgstr ""
@@ -3561,7 +3561,7 @@ msgstr ""
 msgid "Your cart is empty"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:504
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:511
 #, elixir-autogen, elixir-format
 msgid "Your order is being processed"
 msgstr ""
@@ -3621,7 +3621,7 @@ msgstr ""
 msgid "View Cart"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:314
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:321
 #, elixir-autogen, elixir-format
 msgid "We've sent a confirmation email to"
 msgstr ""
@@ -3855,7 +3855,7 @@ msgid "Please select a billing profile"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:567
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:434
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:441
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:81
 #, elixir-autogen, elixir-format
 msgid "%{price} each"
@@ -4004,7 +4004,7 @@ msgid "Insufficient stock (only %{count} available).\nPlease reduce quantity."
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:768
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:479
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:486
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2548
 #: lib/phoenix_kit_ecommerce/web/claim_html.ex:90
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:127
@@ -4207,7 +4207,7 @@ msgstr ""
 msgid "Use \"Translate with AI\" to fill the missing languages automatically."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:298
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:305
 #, elixir-autogen, elixir-format
 msgid "We will contact you to arrange shipping and confirm your order details."
 msgstr ""
@@ -4217,7 +4217,7 @@ msgstr ""
 msgid "Applies to the cart-activity notifications above. Leave all unchecked to notify every shop administrator."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:71
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:72
 #, elixir-autogen, elixir-format
 msgid "You don't have access to this order"
 msgstr ""
@@ -6122,7 +6122,7 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:644
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:718
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:425
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:432
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2007
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2208
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2501
@@ -6140,7 +6140,7 @@ msgid "Paid on delivery at carrier rates"
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/cart_page.ex:776
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:485
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:492
 #: lib/phoenix_kit_ecommerce/web/checkout_page.ex:2554
 #: lib/phoenix_kit_ecommerce/web/user_order_details.html.heex:133
 #, elixir-autogen, elixir-format
@@ -7817,8 +7817,8 @@ msgstr ""
 msgid "Please complete your billing details and add a phone number - this shop needs one to place an order"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:194
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:254
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:195
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:261
 #, elixir-autogen, elixir-format
 msgid "Awaiting payment"
 msgstr ""
@@ -7828,27 +7828,27 @@ msgstr ""
 msgid "Online payment is not available right now. Please try again later."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:276
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:283
 #, elixir-autogen, elixir-format
 msgid "Pay now"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:273
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:280
 #, elixir-autogen, elixir-format
 msgid "Starting payment..."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:256
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:263
 #, elixir-autogen, elixir-format
 msgid "Thank you! Your payment is being processed. This page updates as soon as it is confirmed."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:267
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:274
 #, elixir-autogen, elixir-format
 msgid "The payment was not completed. You can pay now or come back to this page later."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:502
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:509
 #, elixir-autogen, elixir-format
 msgid "Waiting for payment"
 msgstr ""
@@ -7858,7 +7858,7 @@ msgstr ""
 msgid "We could not start the payment. Please try again."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:261
+#: lib/phoenix_kit_ecommerce/web/checkout_complete.ex:268
 #, elixir-autogen, elixir-format
 msgid "Your order is saved and will be processed as soon as it is paid."
 msgstr ""

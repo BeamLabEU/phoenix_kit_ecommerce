@@ -138,6 +138,57 @@ defmodule PhoenixKitEcommerce.Web.OnlinePaymentChainTest do
     refute_received {:stripe_body, _second}
   end
 
+  test "an order with tax is charged its total at the provider and the webhook pays it", ctx do
+    %{conn: conn, user: user} = ctx
+
+    for {key, value} <- [{"billing_tax_enabled", "true"}, {"billing_default_tax_rate", "20"}] do
+      previous = Settings.get_setting(key, "")
+      Settings.update_setting(key, value)
+      on_exit(fn -> Settings.update_setting(key, previous) end)
+    end
+
+    {:ok, view, _html} = live(conn, "/checkout")
+    view |> element("#checkout-confirm-order") |> render_click()
+    assert_redirect(view, "https://checkout.stripe.test/cs_chain_1")
+
+    [order] = Billing.list_user_orders(user.uuid)
+    assert Decimal.compare(order.tax_amount, 0) == :gt
+    total_minor = Decimal.to_integer(Decimal.mult(order.total, 100))
+    assert total_minor > 2000
+
+    [invoice] = Billing.list_invoices_for_order(order.uuid)
+    assert_received {:stripe_body, params}
+
+    charged =
+      for {key, amount} <- params,
+          String.ends_with?(key, "[price_data][unit_amount]"),
+          reduce: 0 do
+        sum ->
+          quantity =
+            Map.get(params, String.replace(key, "[price_data][unit_amount]", "[quantity]"))
+
+          sum + String.to_integer(amount) * String.to_integer(quantity)
+      end
+
+    assert charged == total_minor
+
+    assert {:ok, _paid} =
+             WebhookProcessor.process(%{
+               event_id: "evt_chain_tax_#{System.unique_integer([:positive])}",
+               provider: :stripe,
+               type: "checkout.completed",
+               data: %{
+                 mode: "payment",
+                 invoice_uuid: invoice.uuid,
+                 amount_total: total_minor,
+                 currency: order.currency,
+                 payment_intent_id: "pi_chain_tax"
+               }
+             })
+
+    assert Billing.get_order_by_uuid(order.uuid).status == "paid"
+  end
+
   defp user_texts(user_uuid) do
     import Ecto.Query, only: [from: 2]
 

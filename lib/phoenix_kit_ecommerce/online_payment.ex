@@ -30,16 +30,65 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
 
   @doc """
   The origin (`scheme://host[:port]`) of the request a LiveView socket is
-  connected on, for `start/3`'s `:origin`; `nil` when it is not known.
+  connected on, for `start/3`'s `:origin`; `nil` when it is not known or not
+  trusted.
+
+  On a connected mount the socket's `host_uri` comes from the `url` the client
+  sends in the join, so it is only believed when its host is one the site
+  serves: the endpoint's host, the host of `Routes.base_url/0` or the
+  canonical host of the page's language. Anything else answers `nil`, and
+  `start/3` then uses `Routes.base_url/0`, so a forged host cannot make the
+  provider send the shopper (and the order link) to another site.
   """
   @spec origin(Phoenix.LiveView.Socket.t()) :: String.t() | nil
-  def origin(%{host_uri: %{scheme: scheme, host: host, port: port}})
-      when is_binary(scheme) and is_binary(host) do
-    suffix = if port in [nil, 80, 443], do: "", else: ":#{port}"
-    "#{scheme}://#{host}#{suffix}"
+  def origin(%{host_uri: %URI{scheme: scheme, host: host, port: port}} = socket)
+      when scheme in ["http", "https"] and is_binary(host) do
+    if String.downcase(host) in trusted_hosts(socket) do
+      "#{scheme}://#{host_for_url(host)}#{port_suffix(scheme, port)}"
+    end
   end
 
   def origin(_socket), do: nil
+
+  defp port_suffix("http", port) when port in [nil, 80], do: ""
+  defp port_suffix("https", port) when port in [nil, 443], do: ""
+  defp port_suffix(_scheme, port), do: ":#{port}"
+
+  # An IPv6 literal is a host without brackets in a URI struct and needs them
+  # back in a URL.
+  defp host_for_url(host), do: if(String.contains?(host, ":"), do: "[#{host}]", else: host)
+
+  defp trusted_hosts(socket) do
+    assigns = Map.get(socket, :assigns, %{})
+
+    languages =
+      for key <- [:current_locale, :current_language],
+          language = assigns[key],
+          is_binary(language),
+          do: language
+
+    canonical = Enum.map([nil | languages], &Routes.canonical_host/1)
+
+    [endpoint_host(socket), uri_host(Routes.base_url()) | Enum.map(canonical, &uri_host/1)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&String.downcase/1)
+  end
+
+  defp endpoint_host(%{endpoint: endpoint}) when is_atom(endpoint) and not is_nil(endpoint) do
+    if function_exported?(endpoint, :host, 0), do: endpoint.host()
+  end
+
+  defp endpoint_host(_socket), do: nil
+
+  # `host`, `host:port` or a full URL, reduced to the host.
+  defp uri_host(nil), do: nil
+
+  defp uri_host(value) when is_binary(value) do
+    case URI.parse(value) do
+      %URI{host: host} when is_binary(host) -> host
+      _ -> value |> String.split(":") |> List.first()
+    end
+  end
 
   @doc "Whether the installed billing can start an order's payment."
   @spec supported?() :: boolean()
