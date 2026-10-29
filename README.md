@@ -575,6 +575,7 @@ unprefixed names that the code never read.)
 | `shop_category_display` | string | `"cards"` | `"cards"` or `"buttons"`: category cards, or one compact, wrapping row of buttons |
 | `shop_catalog_vocabulary` | string | `"products"` | `"products"`, `"services"` or `"mixed"` — what the storefront calls what you sell |
 | `shop_hide_zero_decimals` | boolean | `false` | Render `40` rather than `40.00` when the fraction is all zeros. **Storefront only** |
+| `shop_require_phone_at_checkout` | boolean | `false` | Require a phone number at checkout, for new details and saved profiles alike. Read through `PhoenixKitEcommerce.require_phone_at_checkout?/0` |
 | `api_confirm_price_change_pct` | integer | `30` | Admin API: a price move above this percent needs a confirmation. Not `shop_`-prefixed |
 
 `shop_catalog_vocabulary` exists because a shop selling colour grading reads

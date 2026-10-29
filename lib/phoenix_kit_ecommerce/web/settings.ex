@@ -67,6 +67,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:catalog_vocabulary, Vocabulary.current())
       |> assign(:name_prefixes, Enum.join(NamePrefix.prefixes(), ", "))
       |> assign(:hide_zero_decimals, Helpers.hide_zero_decimals?())
+      |> assign(:require_phone, Shop.require_phone_at_checkout?())
       |> assign(:category_icon_mode, get_category_icon_mode())
       |> assign(:sidebar_show_categories, get_sidebar_show_categories())
       |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
@@ -309,6 +310,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_hide_zero_decimals", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_hide_zero_decimals", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_require_phone", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_require_phone", params, socket)
     end)
   end
 
@@ -1475,6 +1483,27 @@ defmodule PhoenixKitEcommerce.Web.Settings do
             <div class="divider"></div>
 
             <div>
+              <h3 class="font-medium mb-1">{gettext("Checkout phone number")}</h3>
+              <p class="text-sm text-base-content/60 mb-3">
+                {gettext(
+                  "Carriers often need a recipient phone number to deliver a parcel."
+                )}
+              </p>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary"
+                  id="toggle-shop-require-phone"
+                  checked={@require_phone}
+                  phx-click="toggle_require_phone"
+                />
+                <span>{gettext("Require a phone number at checkout")}</span>
+              </label>
+            </div>
+
+            <div class="divider"></div>
+
+            <div>
               <h3 class="font-medium mb-1">{gettext("Catalogue vocabulary")}</h3>
               <p class="text-sm text-base-content/60 mb-3">
                 {gettext(
@@ -1903,6 +1932,29 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update price format"))}
+    end
+  end
+
+  defp gated_event("toggle_require_phone", _params, socket) do
+    value = to_string(!socket.assigns.require_phone)
+
+    case Settings.update_setting("shop_require_phone_at_checkout", value) do
+      {:ok, _} ->
+        Activity.log("shop.checkout_phone_requirement_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"require_phone" => value}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:require_phone, value == "true")
+         |> put_flash(:info, gettext("Checkout phone requirement updated"))}
+
+      {:error, _} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Failed to update the checkout phone requirement"))}
     end
   end
 
