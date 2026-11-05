@@ -228,8 +228,9 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
                )
     end
 
-    # Billing 0.24 has no marker guard, so each run of this chain re-applies
-    # billing's. That is safe only while a rerun leaves the merchant's data alone.
+    # Each run of this chain re-applies billing's, which skips only a database
+    # already past its target. That is safe only while a rerun leaves the
+    # merchant's data alone.
     test "a second run does not restore what the merchant deleted from billing's seeds" do
       prefix = create_schema_without_billing("pke_up_billing_rerun")
       cod = "SELECT count(*) FROM #{prefix}.phoenix_kit_payment_options WHERE code = 'cod'"

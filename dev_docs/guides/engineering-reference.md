@@ -95,7 +95,7 @@ pages.
   `billing_default_tax_rate`) is read from billing, never redefined here.
   The same goes for online payment: `OnlinePayment` only asks
   `PhoenixKitBilling.start_order_payment/2` (looked up with
-  `function_exported?/3`, so an older billing keeps the old behaviour, and
+  `function_exported?/3`, so billing 0.24 keeps the old behaviour, and
   `OnlinePayment.awaiting?/1` is then false everywhere) for a checkout URL.
   Invoice, session and the "paid" fact are billing's; the provider's webhook,
   never the return URL, confirms a payment. While an online order is unpaid
@@ -842,12 +842,12 @@ Before its own statements `up/1` runs billing's chain (`PhoenixKitBilling.Migrat
 to billing's current version): this chain's foreign key points at
 `phoenix_kit_payment_options`, core 3.x no longer creates it, and a host's
 migration files written under core 2.x can run this chain before billing's.
-Billing 0.24.0's `up/1` has no marker guard: every run re-applies billing's
-chain and stamps its current version. That changes nothing, because its
-statements are idempotent and it seeds a table only when it creates it
-(`migrations_up_version_test.exs` pins this); a host's older billing file can
-lower the marker only until its next file raises it. Billing's `main` leaves a
-database already past the target as it is, from its next release.
+A run re-applies billing's chain and stamps its current version. That changes
+nothing, because its statements are idempotent and it seeds a table only when
+it creates it (`migrations_up_version_test.exs` pins this). Billing 0.25.0
+leaves a database already past the target as it is. Billing 0.24.0 has no such
+guard, so a host's older billing file can lower the marker there, but only
+until its next file raises it.
 `up_statements/2` stays this chain's SQL only.
 
 V1 is **adoptive**: under core 2.x all ten shop tables are core baseline tables,

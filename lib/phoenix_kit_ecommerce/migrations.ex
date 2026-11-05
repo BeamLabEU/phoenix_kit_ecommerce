@@ -196,10 +196,10 @@ defmodule PhoenixKitEcommerce.Migrations do
       # This chain's foreign key into `phoenix_kit_payment_options` needs
       # billing's table, which core no longer creates (3.x), and a host's
       # migration files can run this chain before billing's. Build billing's
-      # chain first. Billing 0.24 has no marker guard, so this re-applies it on
-      # every run: its statements are idempotent and it seeds a table only when
-      # it creates it, so a rerun changes nothing. Later billing skips a
-      # database already past the target.
+      # chain first. This re-applies it, on every run in billing 0.24 and from
+      # 0.25 unless the database is already past billing's target: its
+      # statements are idempotent and it seeds a table only when it creates
+      # it, so a rerun changes nothing.
       PhoenixKitBilling.Migrations.up(prefix: prefix)
 
       prefix

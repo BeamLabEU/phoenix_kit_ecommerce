@@ -2,7 +2,7 @@ defmodule PhoenixKitEcommerce.BillingSupport do
   @moduledoc """
   What the installed `phoenix_kit_billing` can do for the checkout form.
 
-  A billing release after 0.24 adds the `require_phone` option to
+  Billing 0.25 adds the `require_phone` option to
   `BillingProfile.fields_changeset/3` and an attribute of the same name to
   `BillingProfileFields.billing_profile_fields/1`. This package's billing
   requirement is lower than that, so the checkout asks the installed billing
@@ -20,8 +20,7 @@ defmodule PhoenixKitEcommerce.BillingSupport do
   overrides the probe; tests use it to run both shapes against one billing.
 
   Remove this module (and the `{@phone_attrs}` pass-through in the checkout)
-  when the minimum billing requirement reaches the release that has
-  `require_phone`.
+  when the minimum billing requirement reaches 0.25.
   """
 
   alias PhoenixKitBilling.Web.Components.BillingProfileFields
