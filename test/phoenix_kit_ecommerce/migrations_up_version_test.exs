@@ -192,6 +192,37 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
     end
   end
 
+  describe "a schema core 3.x built, without billing's tables" do
+    # Core 3.x no longer creates `phoenix_kit_payment_options`, and a host's
+    # migration files can run this chain before billing's. `up/1` builds
+    # billing's chain first, so this chain's foreign key has its target.
+    test "builds, with billing's payment options created first" do
+      prefix = "pke_up_no_billing"
+      Repo.query!("CREATE SCHEMA #{prefix}")
+
+      Repo.query!("""
+      CREATE FUNCTION #{prefix}.uuid_generate_v7() RETURNS uuid
+      LANGUAGE sql AS 'SELECT public.uuid_generate_v7()'
+      """)
+
+      for table <- ~w(phoenix_kit_users phoenix_kit_settings) do
+        Repo.query!("CREATE TABLE #{prefix}.#{table} (LIKE public.#{table} INCLUDING ALL)")
+      end
+
+      run_up(prefix: prefix, version: 2)
+
+      assert version(prefix) == 2
+
+      assert %{rows: [[1]]} =
+               Repo.query!(
+                 "SELECT count(*) FROM pg_constraint WHERE contype = 'f' " <>
+                   "AND conname = 'fk_shop_carts_payment_option_uuid' " <>
+                   "AND conrelid = '#{prefix}.phoenix_kit_shop_carts'::regclass " <>
+                   "AND confrelid = '#{prefix}.phoenix_kit_payment_options'::regclass"
+               )
+    end
+  end
+
   describe "upgrades" do
     test "one version at a time leaves the same catalog as one full run" do
       stepwise = create_schema("pke_up_steps")
