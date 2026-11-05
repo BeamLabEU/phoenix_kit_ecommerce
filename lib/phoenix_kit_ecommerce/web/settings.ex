@@ -17,8 +17,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   alias PhoenixKitEcommerce.Activity
   alias PhoenixKitEcommerce.API.CartSettings
   alias PhoenixKitEcommerce.API.Settings, as: ApiSettings
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Notifications, as: ShopNotifications
+  alias PhoenixKitEcommerce.OrderEmails
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.RelatedProducts
   alias PhoenixKitEcommerce.StockTracking
@@ -101,6 +103,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
         Settings.get_setting_cached("shop_notify_checkout_started", "false") == "true"
       )
       |> assign(:notification_recipients, notification_recipients())
+      |> assign(:order_emails_to_buyer, OrderEmails.buyer_emails_enabled?())
+      |> assign(:order_email_recipients, Enum.join(OrderEmails.shop_recipients(), ", "))
       |> assign(:recipient_candidates, load_recipient_candidates())
       |> assign(:shipping_skip_mode, to_string(Shop.shipping_skip_mode()))
       |> assign(:shipping_selection_position, to_string(Shop.shipping_selection_position()))
@@ -288,6 +292,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("save_notification_recipients", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("save_notification_recipients", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_order_emails_to_buyer", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_order_emails_to_buyer", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("save_order_email_recipients", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_order_email_recipients", params, socket)
     end)
   end
 
@@ -633,6 +651,50 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 </button>
               </div>
             </.form>
+          </div>
+        </div>
+
+        <%!-- Order emails --%>
+        <div class="card bg-base-100 shadow-xl mb-6" id="shop-order-emails-card">
+          <div class="card-body">
+            <h2 class="card-title">{gettext("Order emails")}</h2>
+            <p class="text-sm text-base-content/60">
+              {gettext(
+                "Sent automatically, whatever each user's notification preferences say. The templates can be previewed and overridden like the other emails."
+              )}
+            </p>
+
+            <.setting_toggle
+              id="toggle-order-emails-to-buyer"
+              title={gettext("Email the buyer when an order is placed and when it is paid")}
+              checked={@order_emails_to_buyer}
+              event="toggle_order_emails_to_buyer"
+              toggle_class="toggle-secondary"
+              class="py-2"
+            />
+
+            <form
+              phx-submit="save_order_email_recipients"
+              id="shop-order-email-recipients-form"
+              class="mt-4"
+            >
+              <h3 class="font-medium mb-1">{gettext("Shop's addresses")}</h3>
+              <p class="text-xs text-base-content/60 mb-2">
+                {gettext(
+                  "Each new order is sent here with the buyer's contacts. Separate addresses with commas; leave empty to send nothing."
+                )}
+              </p>
+              <input
+                type="text"
+                name="addresses"
+                id="shop-order-email-recipients"
+                value={@order_email_recipients}
+                class="input input-bordered w-full"
+              />
+              <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm mt-3">
+                {gettext("Save addresses")}
+              </button>
+            </form>
           </div>
         </div>
 
@@ -1874,6 +1936,35 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update recipients"))}
+    end
+  end
+
+  defp gated_event("toggle_order_emails_to_buyer", _params, socket) do
+    case OrderEmails.set_buyer_emails_enabled(!socket.assigns.order_emails_to_buyer) do
+      {:ok, enabled} ->
+        {:noreply,
+         socket
+         |> assign(:order_emails_to_buyer, enabled)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
+  defp gated_event("save_order_email_recipients", params, socket) do
+    case OrderEmails.set_shop_recipients(Map.get(params, "addresses", "")) do
+      {:ok, addresses} ->
+        {:noreply,
+         socket
+         |> assign(:order_email_recipients, Enum.join(addresses, ", "))
+         |> put_flash(:info, gettext("Notification recipients updated"))}
+
+      {:error, :update_failed} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update recipients"))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
     end
   end
 

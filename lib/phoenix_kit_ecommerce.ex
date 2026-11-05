@@ -70,6 +70,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.ImportConfig
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Options.MetadataValidator
+  alias PhoenixKitEcommerce.OrderEmails
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Product
@@ -1390,12 +1391,17 @@ defmodule PhoenixKitEcommerce do
 
   @doc """
   Order-event handlers this package contributes (duck-typed discovery by
-  `PhoenixKitBilling.OrderEvents`). The one handler writes a paid order's goods
-  off the warehouse stock.
+  `PhoenixKitBilling.OrderEvents`): one writes a paid order's goods off the
+  warehouse stock, the other sends its emails. They are separate so that a
+  failure of one retries alone.
   """
   def billing_order_event_handlers do
-    [PhoenixKitEcommerce.OrderStockHandler]
+    [PhoenixKitEcommerce.OrderStockHandler, PhoenixKitEcommerce.OrderEmailHandler]
   end
+
+  @doc "The order emails, for core's email preview (`PhoenixKit.Email.Catalog`)."
+  @impl PhoenixKit.Module
+  def email_templates, do: PhoenixKitEcommerce.OrderEmailDefaults.catalog_entries()
 
   @doc """
   Warehouse source kinds this package contributes (duck-typed discovery by
@@ -5568,7 +5574,8 @@ defmodule PhoenixKitEcommerce do
                user_uuid && guest_email
              ),
            {:ok, order} <- do_create_order(user_uuid, order_attrs),
-           {:ok, _cart} <- mark_cart_converted(cart, order.uuid) do
+           {:ok, _cart} <- mark_cart_converted(cart, order.uuid),
+           :ok <- OrderEmails.order_placed(order) do
         {:ok, order}
       else
         {:error, reason} ->

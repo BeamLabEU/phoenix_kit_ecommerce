@@ -336,6 +336,11 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
                "Not enough stock for: Vase, Plate.\nPlease change your cart."
     end
 
+    test "an order email address that is not one" do
+      assert Errors.message({:invalid_order_email_addresses, ["x", "y"]}) ==
+               "Not an email address: x, y"
+    end
+
     test "a detail that is not text is shown inspected, not raised on" do
       assert Errors.message({:option_type_invalid, %{"a" => 1}}) =~ ~s(%{"a" => 1})
     end

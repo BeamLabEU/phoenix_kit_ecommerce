@@ -380,7 +380,8 @@ defmodule PhoenixKitEcommerce.Notifications do
   # no URLs). It is the page's own code, never the Gettext locale: the shop's
   # catalogues are a subset of the languages a site can enable, so a buyer in
   # one of the others would read back the shop default there.
-  defp buyer_language(language) when is_binary(language) do
+  @doc false
+  def buyer_language(language) when is_binary(language) do
     base = DialectMapper.extract_base(language)
 
     if Languages.enabled?() and base in enabled_bases(),
@@ -388,7 +389,7 @@ defmodule PhoenixKitEcommerce.Notifications do
       else: Translations.default_language()
   end
 
-  defp buyer_language(_language), do: Translations.default_language()
+  def buyer_language(_language), do: Translations.default_language()
 
   defp enabled_bases do
     Enum.map(Languages.get_enabled_languages(), &DialectMapper.extract_base(&1.code))

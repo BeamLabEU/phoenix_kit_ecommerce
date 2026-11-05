@@ -43,6 +43,7 @@ contract changes.
 | Module/file map, schemas, options, imports, PubSub and web layer | [Architecture](dev_docs/guides/engineering-reference.md#architecture) |
 | Admin API confirmation, lock ordering, owned paths, image download restrictions, order tools | [Admin API tools](dev_docs/guides/engineering-reference.md#admin-api-tools) |
 | Sub-permissions, notification fan-out, audit action names | [Permissions](dev_docs/guides/engineering-reference.md#permissions), [Notifications](dev_docs/guides/engineering-reference.md#notifications-and-the-audit-trail) |
+| Buyer and shop order emails: when, once per order, language, guest links | [Order emails](dev_docs/guides/engineering-reference.md#order-emails) |
 | Defaults and setting wrappers, shipping/service/destination semantics, Shopify, related products, stock and translations | [Settings keys](dev_docs/guides/engineering-reference.md#settings-keys) |
 | Migration targets, shipped versions, prefix-specific object names | [Database and migrations](dev_docs/guides/engineering-reference.md#database--migrations) |
 | Harness, support modules, environment and dependency-specific test tags | [Testing](dev_docs/guides/engineering-reference.md#testing) |
@@ -212,7 +213,8 @@ Repo-local aliases:
   CSV import must not hold up a tick); the search workers, on `shop_search`;
   and the three public cart API cron workers (`ApiCartSweepWorker`,
   `ApiCartPruneWorker`, `ApiClaimPruneWorker`), on `default`: they are
-  short, scheduled through `oban_crons/0`, and must not wait behind an import.
+  short, scheduled through `oban_crons/0`, and must not wait behind an import;
+  `OrderEmailWorker`, also on `default`, for the same reason.
   The Shopify sync runs ONE kind at a
   time: on a catalogue that does not honour `data_owned_paths`, images and
   variants each write an item's whole `data` map from a read taken when the

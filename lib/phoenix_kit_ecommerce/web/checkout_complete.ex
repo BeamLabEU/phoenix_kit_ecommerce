@@ -353,11 +353,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
             <div class="text-sm text-base-content/60">{gettext("Order Number")}</div>
             <div class="text-2xl font-mono font-bold">{@order.order_number}</div>
             <%= unless @is_guest_order do %>
-              <%!-- Deliberately does NOT promise a confirmation email. Nothing in
-                   this module sends one to a signed-in customer: the only mail
-                   checkout sends is the guest ACCOUNT confirmation above. The
-                   sentence that used to sit here was simply false, and a live
-                   shop reported it. --%>
+              <%!-- Deliberately does NOT promise a confirmation email: a shop can
+                   turn them off and an order awaiting online payment gets none
+                   (`OrderEmails`). A sentence that promised one used to sit here,
+                   when it was simply false, and a live shop reported it. --%>
               <div class="text-sm text-base-content/60 mt-2">
                 {gettext("You can follow this order from your account at any time.")}
               </div>

@@ -699,10 +699,30 @@ Recipients are the holders of the relevant permission **unioned with Owner-role
 holders and `"*"` superadmins** — neither of those has permission rows, so a
 key-only query misses the primary operator of a default install.
 
-⚠️ Note that the order-confirmation page's copy is independent of all this. It
-tells guests that an account-confirmation email is on its way, which is true and
-is the only mail checkout sends. It does **not** promise customers an order
-confirmation, because the module does not send one.
+### Order emails
+
+Apart from those notifications, an order sends real emails, whatever each user's
+preferences say:
+
+| Email | To | When |
+|---|---|---|
+| `shop_order_confirmation` | Buyer | The order is placed, unless it awaits online payment |
+| `shop_order_paid` | Buyer | The order becomes paid |
+| `shop_order_received` | The shop's addresses | The order is placed, or paid if it waited for online payment |
+
+The buyer's are in the language of the checkout; turn them off under **Order
+emails** on the shop settings page. The shop's email adds the buyer's contacts and
+a link to the admin order, and goes to the addresses saved there; with none, it is
+not sent. Each email goes once per order, from a background job on the `default`
+queue, so a mail failure retries on its own and never reaches the checkout.
+
+The templates are overridable like any other (a database template, or files under
+`priv/phoenix_kit_templates/<name>/`), in the layout group `shop`, and are listed
+in the email preview.
+
+⚠️ The order-confirmation page's copy is independent of this. It tells guests
+that an account-confirmation email is on its way and does **not** promise an order
+email, because the shop can turn those off and an unpaid online order gets none.
 
 ## Architecture
 

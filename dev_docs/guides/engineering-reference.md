@@ -215,6 +215,9 @@ lib/phoenix_kit_ecommerce/
 ├── translation_sweep_settings.ex # settings reader for translations + the sweep
 ├── stock_tracking.ex # Stock tracking switch, stock reads, goods issue of a sale (optional phoenix_kit_warehouse)
 ├── order_stock_handler.ex # billing's order event: writes a paid order's goods off
+├── order_emails.ex   # who gets which order email and when; sends them once
+├── order_email_defaults.ex # their default copy, variables and preview entries
+├── order_email_handler.ex # billing's order event: queues a paid order's emails
 ├── related_products.ex # a product's hand-picked "You may also like" and cart cross-sell lists + their settings
 ├── availability.ex   # can a product be offered now (stock, or the host's hook)
 ├── prompt_rollout.ex # content-sha rollout of the code-managed AI prompts
@@ -514,6 +517,35 @@ explicit fan-out. A test pins this contract — keep it.
 Recipients union permission holders with **Owner-role holders and `"*"`
 superadmins**: neither has permission rows, so a key-only query misses the
 primary operator of a default install.
+
+### Order emails
+
+`OrderEmails` sends real emails, apart from the notifications above and from
+each user's preferences. Three templates, overridable and previewable like any
+other (`email_templates/0`, layout group `shop`): `shop_order_confirmation` and
+`shop_order_paid` to the buyer, `shop_order_received` to the shop.
+
+- **When.** On placing, the buyer's confirmation and the shop's email, unless the
+  order awaits online payment; on `:paid`, the buyer's paid email and the shop's
+  email if it has not gone yet. An online order is not confirmed until the money
+  lands, so an abandoned payment mails nobody.
+- **How.** One `Workers.OrderEmailWorker` job per email, on `default`. The placing
+  jobs are queued in the conversion transaction, the paid ones by
+  `OrderEmailHandler` from billing's durable order event, so the checkout never
+  waits for a mail server and a failure cannot reach it.
+- **Once.** A job is unique per order and email, and a sent email is marked in
+  `metadata["_shop_emails"]`, which outlives the job row (Oban prunes those).
+  The mark goes in after the send, on the locked order, and changes neither the
+  revision nor `updated_at`: a crash between them can repeat an email, never
+  lose one.
+- **Language.** The buyer's emails use `metadata["checkout_language"]`, the shop's
+  the primary language. Order lines keep the text the buyer saw.
+- **The order link.** A confirmed account gets `/dashboard/orders/:uuid`. A guest
+  gets `/checkout/complete/:uuid` only under the `:link` lookup policy: under
+  `:strict` that page opens only in the placing session, so the link is left out.
+- **Settings**, through `OrderEmails`: `shop_order_emails_to_buyer` (default on,
+  a read error counts as off) and `shop_order_email_recipients` (addresses; none
+  means no shop email). An address list with one bad entry is refused whole.
 
 ### Settings keys
 

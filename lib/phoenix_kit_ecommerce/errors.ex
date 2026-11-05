@@ -266,6 +266,10 @@ defmodule PhoenixKitEcommerce.Errors do
     )
   end
 
+  def message({:invalid_order_email_addresses, addresses}) do
+    gettext("Not an email address: %{addresses}", addresses: Enum.join(addresses, ", "))
+  end
+
   def message(:payment_unavailable),
     do: gettext("Online payment is not available right now. Please try again later.")
 
