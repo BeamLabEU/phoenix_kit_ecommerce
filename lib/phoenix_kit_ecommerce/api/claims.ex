@@ -444,6 +444,9 @@ defmodule PhoenixKitEcommerce.API.Claims do
       {:ok, updated} ->
         {updated, skipped}
 
+      {:error, {:insufficient_stock, _lines}} ->
+        {cart, [item.product_title | skipped]}
+
       {:error, reason} when is_atom(reason) ->
         if CartWriter.refused_before_write?(reason),
           do: {cart, [item.product_title | skipped]},

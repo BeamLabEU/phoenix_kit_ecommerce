@@ -234,7 +234,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
         "Sets the named lines to their FINAL quantities (a new line is added, an existing one is set, 0 removes it); lines you do not name stay. " <>
           "Up to 50 lines per call, and a cart holds at most 50 different lines (a new line beyond that is a validation_failed line error with reason cart_lines_limit). A line is identified by product_id and options; options are {attribute_key, value_key} pairs " <>
           "(product details list the keys). A bad line gets its own error and never stops the others: " <>
-          "not_found, not_on_sale, option_required, option_invalid, quantity_invalid (a whole number from 0 to 99), duplicate_line, validation_failed. " <>
+          "not_found, not_on_sale, option_required, option_invalid, quantity_invalid (a whole number from 0 to 99), insufficient_stock (allowed.max is what the line may hold), duplicate_line, validation_failed. " <>
           "Send expected_revision from your last read to be told if the cart changed meanwhile (409 revision_mismatch, with what changed). " <>
           "The cart's currency is fixed by its first write.",
       input_schema:

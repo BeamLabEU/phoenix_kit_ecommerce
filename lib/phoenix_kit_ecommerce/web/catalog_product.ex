@@ -10,6 +10,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.CartItem
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.Policy
@@ -576,6 +577,12 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
          |> assign(:adding_to_cart, false)
          |> put_flash(:error, Vocabulary.unavailable_gone())}
 
+      {:error, {:insufficient_stock, _lines} = reason} ->
+        {:noreply,
+         socket
+         |> assign(:adding_to_cart, false)
+         |> put_flash(:error, Errors.message(reason))}
+
       {:error, reason} ->
         # Log error for admin monitoring
         log_cart_error(
@@ -664,18 +671,6 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
     gettext("Missing required option: %{option}.\nPlease select all required parameters.",
       option: missing_option
-    )
-  end
-
-  defp get_user_friendly_error_message(:out_of_stock, _detail) do
-    gettext("This item is out of stock.\nPlease try again later or choose another one.")
-  end
-
-  defp get_user_friendly_error_message(:insufficient_stock, detail) do
-    available = detail[:available] || 0
-
-    gettext("Insufficient stock (only %{count} available).\nPlease reduce quantity.",
-      count: available
     )
   end
 

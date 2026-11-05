@@ -323,6 +323,19 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
                "We could not start the payment. Please try again."
     end
 
+    test "stock that does not cover a quantity" do
+      assert Errors.message({:insufficient_stock, [%{requested: 1, available: 0}]}) ==
+               "This item is out of stock.\nPlease try again later or choose another one."
+
+      assert Errors.message({:insufficient_stock, [%{requested: 4, available: 3}]}) ==
+               "Insufficient stock (only 3 available).\nPlease reduce quantity."
+
+      lines = [%{name: "Vase", available: 1}, %{name: "Plate", available: 0}]
+
+      assert Errors.message({:insufficient_stock, lines}) ==
+               "Not enough stock for: Vase, Plate.\nPlease change your cart."
+    end
+
     test "a detail that is not text is shown inspected, not raised on" do
       assert Errors.message({:option_type_invalid, %{"a" => 1}}) =~ ~s(%{"a" => 1})
     end

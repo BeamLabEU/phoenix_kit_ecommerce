@@ -30,9 +30,9 @@ pages.
   translations page use it, and all of them compile out when it is absent;
   0.20 is the first engine that binds `{{SourceFields}}` and forwards
   `opts[:source_fields]`, `test/ai_pin_conformance_test.exs` guards it),
-  `phoenix_kit_warehouse` `~> 0.5` (optional — only the Stock tracking
-  switch uses it, through `StockTracking`, which calls `enabled?/0` and
-  `StockLedger.default_location_uuid/0`),
+  `phoenix_kit_warehouse` `~> 0.7` (optional — only `StockTracking` calls
+  it, for the switch, the stock of an item and the goods issue of a paid
+  order),
   `phoenix_kit_web_analytics` (optional — the V5 migration step reads
   `PhoenixKitWebAnalytics.Config.default_exclusions/0`, to add the claim path
   to the analytics exclusion list, and `Web.ClaimController` calls
@@ -95,7 +95,7 @@ pages.
   `billing_default_tax_rate`) is read from billing, never redefined here.
   The same goes for online payment: `OnlinePayment` only asks
   `PhoenixKitBilling.start_order_payment/2` (looked up with
-  `function_exported?/3`, so billing 0.24 keeps the old behaviour, and
+  `function_exported?/3`, so a billing without it keeps the old behaviour, and
   `OnlinePayment.awaiting?/1` is then false everywhere) for a checkout URL.
   Invoice, session and the "paid" fact are billing's; the provider's webhook,
   never the return URL, confirms a payment. While an online order is unpaid
@@ -213,9 +213,10 @@ lib/phoenix_kit_ecommerce/
 ├── category_ai_translatable.ex # the same for categories
 ├── translation_fingerprint.ex  # staleness: hash, four states, write-narrowing, candidate SQL
 ├── translation_sweep_settings.ex # settings reader for translations + the sweep
-├── stock_tracking.ex # Stock tracking switch + optional phoenix_kit_warehouse probe
+├── stock_tracking.ex # Stock tracking switch, stock reads, goods issue of a sale (optional phoenix_kit_warehouse)
+├── order_stock_handler.ex # billing's order event: writes a paid order's goods off
 ├── related_products.ex # a product's hand-picked "You may also like" and cart cross-sell lists + their settings
-├── availability.ex   # can a product be offered now (true today; where stock plugs in)
+├── availability.ex   # can a product be offered now (stock, or the host's hook)
 ├── prompt_rollout.ex # content-sha rollout of the code-managed AI prompts
 ├── gettext.ex        # PhoenixKitEcommerce.Gettext backend
 └── migrations.ex     # module-owned migration chain
@@ -497,8 +498,9 @@ the narrow scope is now refused before any event can be sent.
 
 ### Notifications and the audit trail
 
-`notification_types/0` declares four sub-types under `"shop"`: admin `orders`,
-customer `order_confirmations`, `imports`, and `cart_activity`. They are
+`notification_types/0` declares five sub-types under `"shop"`: admin `orders`,
+customer `order_confirmations`, `stock` (a paid order that could not be written
+off), `imports`, and `cart_activity`. They are
 separate so an operator can mute the order firehose without silencing their
 own receipts.
 
@@ -542,8 +544,7 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   it does not introduce a billing step where there was none (a checkout that
   skipped the step passes blank form data, which asks for nothing). Billing's
   own `require_phone` option is only an extra: the shop's check
-  does not depend on it (`BillingSupport` probes it for the input's required
-  mark and goes when the minimum billing has the option).
+  does not depend on it (it only marks the input required).
 
 **Admin API**
 
@@ -618,11 +619,11 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   `Legacy.list_listed_by_ids/1` returns (status `active`, category not
   `hidden`) that `PhoenixKitEcommerce.Availability.available?/1` accepts
   (`Legacy.list_listed_by_ids/1`, `Catalogue.list_listed_by_ids/2`);
-  `Availability` answers true for everything today and is the one place a
-  stock feature plugs in (`config :phoenix_kit_ecommerce, :availability,
-  {Module, :function}` meanwhile; a hook that is missing, has another arity,
-  raises, exits or throws counts as available and is logged as a warning, so
-  a broken hook never crashes a product page). Dangling ids are skipped on read and dropped when the
+  `Availability` answers false for a product stock tracking counts with
+  nothing on hand, unless the host answers instead (`config
+  :phoenix_kit_ecommerce, :availability, {Module, :function}`; a hook that is
+  missing, has another arity, raises, exits or throws counts as available and
+  is logged as a warning, so a broken hook never crashes a product page). Dangling ids are skipped on read and dropped when the
   merchant next saves the form (a legacy product's form drops a deleted product
   from its chips; the catalogue picker does the same); nothing sweeps them. The cart's "Add to your order" block (`CartPage`,
   `Web.Components.CrossSells`) is `RelatedProducts.cross_sells/2`: the
@@ -798,6 +799,34 @@ settings-layer error.
   (no compile-time reference, so a host without the package compiles
   unchanged) and a failing probe counts as `:disabled`; tests swap them via
   the `:stock_tracking_modules` app env (`test/support/fake_warehouse.ex`).
+- **What is limited.** While `StockTracking.location/0` answers (tracking on and
+  a default warehouse chosen), stock at that location limits a sale. A catalogue
+  item that ships is counted, and one with no stock row has none, so turning the
+  switch on before receiving goods makes them out of stock. A Legacy product has
+  no warehouse item and a line with `requires_shipping: false` is not goods;
+  neither is limited. Quantities are whole units: a fraction on hand is not a
+  unit. A failed stock read is logged and limits nothing.
+- **Where it is refused.** `add_to_cart/4` and `update_cart_item/2` answer
+  `{:error, {:insufficient_stock, [line]}}` counting every line of the item, and
+  lowering a quantity is always allowed. The check runs before their own
+  transaction opens, because `API.CartWriter` and the claim's merge hold one of
+  theirs that a rollback would doom. `convert_cart_to_order/2` decides again on
+  the locked cart. `shop.set_cart_items` makes it the line's `insufficient_stock`
+  error with `allowed.max`; the claim's merge skips and names the line.
+- **The write-off.** `OrderStockHandler.handle_order_event(:paid, order)` posts
+  one goods issue through `StockTracking.post_sale/3`: reason `sale`, the order
+  number as `external_ref`, a `shop_order` source reference, no performer. Only
+  `metadata["source"] == "shop_checkout"` orders still `paid` at delivery count.
+  `external_ref` makes a redelivery a no-op. A goods issue is all or nothing: a
+  short line posts nothing and the job ends `:ok`, with one
+  `shop.order_stock_short` notification to shop operators and warehouse keepers,
+  held to one by `metadata["_shop_stock_short"]` on the locked order. The keeper
+  posts the issue by hand. Order events reach the handler on billing's `billing`
+  queue.
+- **Not there yet (#82).** Nothing is reserved: a cart or an unpaid order holds
+  no stock, so the last unit can be sold twice and the second order is flagged.
+  A refund or a cancellation gives nothing back, there is no low-stock reminder,
+  the product page shows no "N left", and native per-variant stock does not exist.
 
 **AI translations — read through `PhoenixKitEcommerce.TranslationSweepSettings`**
 
@@ -844,10 +873,9 @@ to billing's current version): this chain's foreign key points at
 migration files written under core 2.x can run this chain before billing's.
 A run re-applies billing's chain and stamps its current version. That changes
 nothing, because its statements are idempotent and it seeds a table only when
-it creates it (`migrations_up_version_test.exs` pins this). Billing 0.25.0
-leaves a database already past the target as it is. Billing 0.24.0 has no such
-guard, so a host's older billing file can lower the marker there, but only
-until its next file raises it.
+it creates it (`migrations_up_version_test.exs` pins this). A database already
+past the target is left as it is, so a host's older billing file cannot lower
+the marker.
 `up_statements/2` stays this chain's SQL only.
 
 V1 is **adoptive**: under core 2.x all ten shop tables are core baseline tables,

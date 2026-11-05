@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
 
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.CartItem
+  alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ItemImage
   alias PhoenixKitEcommerce.NamePrefix
@@ -421,6 +422,9 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       case Shop.update_cart_item(item, quantity) do
         {:ok, updated_cart} ->
           {:noreply, assign_cart_state(socket, updated_cart)}
+
+        {:error, {:insufficient_stock, _lines} = reason} ->
+          {:noreply, put_flash(socket, :error, Errors.message(reason))}
 
         {:error, _} ->
           {:noreply, put_flash(socket, :error, gettext("Failed to update quantity"))}

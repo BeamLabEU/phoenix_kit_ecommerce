@@ -16,7 +16,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   alias PhoenixKitBilling.Web.Components.BillingProfileFields
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Activity
-  alias PhoenixKitEcommerce.BillingSupport
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
   alias PhoenixKitEcommerce.ItemImage
@@ -471,7 +470,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     socket
     |> assign(:billing_form, to_form(changeset, as: :billing))
     |> assign(:require_billing_address, Shop.cart_requires_shipping?(socket.assigns.cart))
-    |> assign(:billing_phone_attrs, BillingSupport.phone_attrs(Shop.require_phone_at_checkout?()))
+    |> assign(:require_phone, Shop.require_phone_at_checkout?())
     |> assign(
       :subdivision_label,
       CountryData.get_subdivision_label(socket.assigns.billing_data["country"])
@@ -1313,6 +1312,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     |> navigate_to_cart()
   end
 
+  # Stock ran out while the cart was open: the cart is where a quantity changes.
+  defp handle_order_result({:error, {:insufficient_stock, _lines} = reason}, socket) do
+    socket
+    |> assign(:processing, false)
+    |> put_flash(:error, Errors.message(reason))
+    |> navigate_to_cart()
+  end
+
   # The billing details are missing deliverable-address fields — this is
   # the context refusing what the review step's own validation would have
   # caught, so return the customer to an EDITABLE billing form instead of
@@ -1659,7 +1666,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
                   countries={@countries}
                   subdivision_label={@subdivision_label}
                   require_address={@require_billing_address}
-                  phone_attrs={@billing_phone_attrs}
+                  require_phone={@require_phone}
                   save_profile_hint={@save_profile_hint?}
                   payment_options={@payment_options}
                 />
@@ -1805,7 +1812,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
             countries={@countries}
             subdivision_label={@subdivision_label}
             require_address={@require_address}
-            phone_attrs={@phone_attrs}
+            require_phone={@require_phone}
             show_save_profile={not @is_guest}
             save_profile_hint={@save_profile_hint}
           />
@@ -1937,7 +1944,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         show_options={false}
         require_email
         require_address={@require_address}
-        {@phone_attrs}
+        require_phone={@require_phone}
       >
         <.checkbox
           :if={@show_save_profile}

@@ -40,7 +40,8 @@ support_dir = Path.expand("support", __DIR__)
   "api_fixtures.ex",
   "api_case.ex",
   "order_fixtures.ex",
-  "fake_online_payment.ex"
+  "fake_online_payment.ex",
+  "stock_fixtures.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -133,6 +134,12 @@ repo_available =
       if Code.ensure_loaded?(PhoenixKitCatalogue.Migrations) do
         Enum.each(PhoenixKitEntities.Migrations.up_statements("public"), &TestRepo.query!/1)
         Enum.each(PhoenixKitCatalogue.Migrations.up_statements("public"), &TestRepo.query!/1)
+      end
+
+      # ...and warehouse's: core 3.x creates no warehouse tables, and the stock
+      # tests post real goods issues.
+      if Code.ensure_loaded?(PhoenixKitWarehouse.Migrations) do
+        Enum.each(PhoenixKitWarehouse.Migrations.up_statements("public"), &TestRepo.query!/1)
       end
 
       Ecto.Adapters.SQL.Sandbox.mode(TestRepo, :manual)

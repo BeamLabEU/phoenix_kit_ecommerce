@@ -600,6 +600,13 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     })
   end
 
+  # `max` is what this line may hold: the item's other lines take their share.
+  defp refusal(cart, plan, {:error, {:insufficient_stock, [short | _]}}) do
+    refused(cart, plan, :insufficient_stock, "That quantity is not in stock.", %{
+      allowed: %{max: max(0, short.available - (short.requested - plan.qty))}
+    })
+  end
+
   # Everything else fails closed. Some refusals are made inside `add_to_cart`'s
   # own transaction (a rollback in a nested transaction) and doom this one: no
   # further statement may run. That covers the option refusals, which mean the
@@ -618,9 +625,10 @@ defmodule PhoenixKitEcommerce.API.CartWriter do
     {:ok, cart, error_result(error), []}
   end
 
-  defp update_line(_cart, item, plan) do
+  defp update_line(cart, item, plan) do
     case Shop.update_cart_item(item, plan.qty) do
       {:ok, updated} -> {:ok, updated, result(plan, "updated", plan.qty), [{item, plan.product}]}
+      {:error, {:insufficient_stock, _lines}} = refused -> refusal(cart, plan, refused)
       other -> {:abort, other}
     end
   end

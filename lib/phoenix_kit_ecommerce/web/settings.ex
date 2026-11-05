@@ -2568,7 +2568,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp stock_tracking_hint(:ready) do
     %{
-      text: gettext("Stock is kept by the Warehouse module."),
+      text:
+        gettext(
+          "Stock is kept by the Warehouse module. Sales are limited to the stock of the default warehouse, and an item with no stock there is out of stock. A paid order is written off automatically."
+        ),
       label: gettext("Open stock"),
       href: Routes.path("/admin/warehouse"),
       button_class: "btn-outline"

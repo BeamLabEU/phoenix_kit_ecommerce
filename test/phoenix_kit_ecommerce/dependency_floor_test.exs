@@ -119,10 +119,15 @@ defmodule PhoenixKitEcommerce.DependencyFloorTest do
              Regex.run(~r/:phoenix_kit_billing,\s*"([^"]+)"/, File.read!("mix.exs"))
 
     refute Version.match?("0.19.0", requirement)
-    # 0.24 is the first billing whose own chain creates its tables (core 3.0 does not)
-    refute Version.match?("0.23.0", requirement)
-    assert Version.match?("0.24.0", requirement)
+    # 0.25 is the first billing with the order events that write stock off
+    refute Version.match?("0.24.0", requirement)
     assert Version.match?("0.25.0", requirement)
+    assert Version.match?("0.26.0", requirement)
+  end
+
+  test "the phoenix_kit_billing floor delivers order events" do
+    assert Code.ensure_loaded?(PhoenixKitBilling.OrderEvents)
+    assert PhoenixKitEcommerce.OrderStockHandler in PhoenixKitBilling.OrderEvents.handlers()
   end
 
   test "mint is a declared requirement, because PinnedAdapter calls it directly" do

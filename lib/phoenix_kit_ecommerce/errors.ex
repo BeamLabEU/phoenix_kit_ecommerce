@@ -249,6 +249,23 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:option_key_and_value_required),
     do: gettext("Option key and value are required")
 
+  # One line from the storefront's add or update: the shopper is looking at it.
+  # At checkout the lines carry their names, because the cart may hold others.
+  def message({:insufficient_stock, [%{name: _} | _] = lines}) do
+    gettext("Not enough stock for: %{items}.\nPlease change your cart.",
+      items: Enum.map_join(lines, ", ", & &1.name)
+    )
+  end
+
+  def message({:insufficient_stock, [%{available: 0} | _]}),
+    do: gettext("This item is out of stock.\nPlease try again later or choose another one.")
+
+  def message({:insufficient_stock, [%{available: count} | _]}) do
+    gettext("Insufficient stock (only %{count} available).\nPlease reduce quantity.",
+      count: count
+    )
+  end
+
   def message(:payment_unavailable),
     do: gettext("Online payment is not available right now. Please try again later.")
 

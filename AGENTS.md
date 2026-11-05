@@ -12,7 +12,7 @@ admin LiveViews and a public storefront. Module key `"shop"`, settings prefix
 `shop_`. Registers through `use PhoenixKit.Module`; core discovers modules
 from BEAM files and generates routes from tabs and `route_module/0`.
 
-- Required PhoenixKit deps: core `>= 2.65.0 and < 4.0.0`, billing `~> 0.24`.
+- Required PhoenixKit deps: core `>= 2.65.0 and < 4.0.0`, billing `~> 0.25`.
   Optional: AI `~> 0.27`, Warehouse `~> 0.7`, web analytics. Catalogue is
   duck-typed, with no declared dependency or version floor. Guard optional
   integrations so a host without them compiles and runs.
@@ -176,6 +176,11 @@ Repo-local aliases:
   stored `unit_price` (typically `0`) and renders "0.00" where the customer
   agreed to "price on request".
 - **Money is `Decimal`.** Never floats for currency.
+- **Warehouse is reached only through `StockTracking`.** The stock of a sale is
+  read there, the goods issue of a paid order is posted there, and a refusal is
+  `{:insufficient_stock, lines}`. Anything new that sells goes through
+  `add_to_cart/4` or `update_cart_item/2`, or reads the same limit. Read the
+  stock section of the guide before changing it.
 - **Cart option validation uses the fresh product inside the pricing
   transaction.** A caller's product can predate required options or removed
   values. Both add-to-cart paths validate the same product they price;

@@ -92,6 +92,7 @@ defmodule PhoenixKitEcommerce do
   alias PhoenixKitEcommerce.ShopConfig
   alias PhoenixKitEcommerce.Shopify.Provider, as: ShopifyProvider
   alias PhoenixKitEcommerce.SlugResolver
+  alias PhoenixKitEcommerce.StockTracking
   alias PhoenixKitEcommerce.StorefrontCache
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.TranslationSweepSettings
@@ -1023,6 +1024,13 @@ defmodule PhoenixKitEcommerce do
             default: true
           },
           %{
+            key: "stock",
+            label: "Stock problems",
+            description: "A paid order could not be written off the warehouse stock",
+            actions: ["shop.order_stock_short"],
+            default: true
+          },
+          %{
             key: "imports",
             label: "Catalog imports",
             description: "A CSV import finished or failed",
@@ -1378,6 +1386,15 @@ defmodule PhoenixKitEcommerce do
   """
   def billing_invoice_event_handlers do
     [PhoenixKitEcommerce.InvoicePaymentHandler]
+  end
+
+  @doc """
+  Order-event handlers this package contributes (duck-typed discovery by
+  `PhoenixKitBilling.OrderEvents`). The one handler writes a paid order's goods
+  off the warehouse stock.
+  """
+  def billing_order_event_handlers do
+    [PhoenixKitEcommerce.OrderStockHandler]
   end
 
   @doc """
@@ -3131,6 +3148,9 @@ defmodule PhoenixKitEcommerce do
     inside the pricing transaction — empty or not — so a product with
     a required option is refused with `{:error, :missing_required_option, key}`
     until every one is chosen.
+    A quantity stock tracking does not cover, this line and the cart's other
+    lines of the item together, is refused with
+    `{:error, {:insufficient_stock, [line]}}` (`:requested`, `:available`).
   - `:skip_spec_validation` - `true` skips that check (default `false`): the
     line is carted with whatever `:selected_specs` holds, even nothing for a
     product with required options, and priced from it. Trusted callers only.
@@ -3172,6 +3192,7 @@ defmodule PhoenixKitEcommerce do
     with :ok <- validate_shop_enabled(),
          :ok <- validate_quantity(quantity),
          :ok <- validate_cart_currency(cart, product),
+         :ok <- validate_stock_for_add(cart, product, quantity),
          {:ok, cart} <- rebase_cart(cart) do
       if map_size(selected_specs) > 0 do
         add_product_with_specs_to_cart(
@@ -3194,6 +3215,7 @@ defmodule PhoenixKitEcommerce do
     with :ok <- validate_shop_enabled(),
          :ok <- validate_quantity(quantity),
          :ok <- validate_cart_currency(cart, product),
+         :ok <- validate_stock_for_add(cart, product, quantity),
          {:ok, cart} <- rebase_cart(cart) do
       add_simple_product_to_cart(cart, product, quantity, nil, false, nil)
     end
@@ -3204,6 +3226,61 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp validate_quantity(_quantity), do: {:error, :invalid_quantity}
+
+  # Decided here, before `add_to_cart`'s own transaction opens: `API.CartWriter`
+  # and the claim's merge call it inside a transaction of theirs, which a rollback
+  # in the nested one would doom. No lock is taken, so two tabs can both pass;
+  # `validate_line_stock/1` has the last word at checkout.
+  defp validate_stock_for_add(%Cart{uuid: cart_uuid}, %Product{} = product, quantity) do
+    case StockTracking.item_uuid(product) do
+      nil -> :ok
+      item_uuid -> validate_stock(item_uuid, cart_uuid, quantity, nil)
+    end
+  end
+
+  # Lowering a quantity is always allowed, or a line left above the stock could
+  # only be removed.
+  defp validate_stock_for_update(%CartItem{quantity: current}, quantity)
+       when quantity <= current,
+       do: :ok
+
+  defp validate_stock_for_update(%CartItem{} = item, quantity) do
+    case StockTracking.item_uuid(item) do
+      nil -> :ok
+      item_uuid -> validate_stock(item_uuid, item.cart_uuid, quantity, item.uuid)
+    end
+  end
+
+  # Every line of the item counts, not only this one: two selections of one
+  # catalogue item draw on the same stock. `line_uuid` is the line being replaced.
+  defp validate_stock(item_uuid, cart_uuid, quantity, line_uuid) do
+    case StockTracking.on_hand([item_uuid]) do
+      :off ->
+        :ok
+
+      %{^item_uuid => available} ->
+        requested = quantity + quantity_on_other_lines(cart_uuid, item_uuid, line_uuid)
+
+        if requested > available do
+          short = %{item_uuid: item_uuid, requested: requested, available: available}
+          {:error, {:insufficient_stock, [short]}}
+        else
+          :ok
+        end
+    end
+  end
+
+  defp quantity_on_other_lines(cart_uuid, item_uuid, line_uuid) do
+    from(i in CartItem,
+      where: i.cart_uuid == ^cart_uuid,
+      where: fragment("?->>'catalogue_item_uuid'", i.metadata) == ^item_uuid,
+      select: {i.uuid, i.quantity}
+    )
+    |> repo().all()
+    |> Enum.reject(fn {uuid, _quantity} -> uuid == line_uuid end)
+    |> Enum.map(fn {_uuid, quantity} -> quantity end)
+    |> Enum.sum()
+  end
 
   # Adding to a line that already exists stops at the ceiling rather than
   # failing: the shopper asked for more of something already in the cart.
@@ -3980,12 +4057,15 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
-  Updates item quantity in cart.
+  Updates item quantity in cart. Raising it is refused as in `add_to_cart/4`.
   """
   def update_cart_item(%CartItem{} = item, 0), do: remove_from_cart(item)
 
   def update_cart_item(%CartItem{} = item, quantity) do
-    with :ok <- validate_quantity(quantity), do: do_update_cart_item(item, quantity)
+    with :ok <- validate_quantity(quantity),
+         :ok <- validate_stock_for_update(item, quantity) do
+      do_update_cart_item(item, quantity)
+    end
   end
 
   defp do_update_cart_item(item, quantity) do
@@ -5397,6 +5477,8 @@ defmodule PhoenixKitEcommerce do
     a carrier and its quote is missing, stale or unavailable, or the
     destination is not set (see `shipping_quote_blocks_checkout?/1`)
   - `{:error, :email_already_registered}` - Guest email belongs to confirmed user
+  - `{:error, {:insufficient_stock, lines}}` - Stock tracking is in force and
+    stock does not cover these lines (`:name`, `:requested`, `:available`)
   - `{:error, {:billing_incomplete, missing}}` - The billing details lack what
     the order needs; `missing` lists the fields (`"name"`, the address fields,
     `"country"`, and `"phone"` while `shop_require_phone_at_checkout` is on)
@@ -5438,6 +5520,7 @@ defmodule PhoenixKitEcommerce do
            # the pre-transaction validation window cannot slip a
            # no-longer-active product into the order.
            :ok <- validate_line_products_active(cart),
+           :ok <- validate_line_stock(cart),
            :ok <- validate_payment_option(cart),
            :ok <- validate_billing_completeness(cart, opts),
            # Snapshot the placing session from the LOCKED cart, before
@@ -5820,6 +5903,27 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  # Stock is checked on the cart as it stands, not on what each add saw: it can
+  # have sold out since, or two tabs can have passed `add_to_cart` together. It
+  # is not reserved here, see `StockTracking`.
+  defp validate_line_stock(%Cart{items: items}) do
+    lines = Enum.group_by(items, &StockTracking.item_uuid/1)
+
+    wanted =
+      for {item_uuid, item_lines} <- lines, item_uuid != nil, into: %{} do
+        {item_uuid, item_lines |> Enum.map(& &1.quantity) |> Enum.sum()}
+      end
+
+    case StockTracking.shortages(wanted) do
+      [] ->
+        :ok
+
+      short ->
+        named = Enum.map(short, &Map.put(&1, :name, hd(lines[&1.item_uuid]).product_title))
+        {:error, {:insufficient_stock, named}}
+    end
+  end
+
   defp partition_cart_item_products(items) do
     Enum.reduce(items, {[], [], []}, fn item, {legacy, catalogue, unresolved} ->
       cond do
@@ -6187,6 +6291,9 @@ defmodule PhoenixKitEcommerce do
       # line, matching the absent key on rows created before this
       # shipped.
       "catalogue_item_uuid" => metadata["catalogue_item_uuid"],
+      # Carried so a paid order writes off only what is goods. nil on a line
+      # whose cart row predates the snapshot; it counts as shipping.
+      "requires_shipping" => metadata["requires_shipping"],
       # Carried so invoices and the confirmation page can render the
       # unit the customer saw. Rides billing's existing line-item JSONB;
       # first-class linkage is a billing-side change.

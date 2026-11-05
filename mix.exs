@@ -146,7 +146,11 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `form_fields/0`, none of which exist in 0.19.x - there the checkout
       # page is an `UndefinedFunctionError` the moment a shopper opens it,
       # not a compile error.
-      pk_dep(:phoenix_kit_billing, "~> 0.24"),
+      #
+      # 0.25 raised it again: a paid order's stock is written off through
+      # `OrderEvents` (`billing_order_event_handlers/0`), which older billing
+      # never calls, so the write-off would silently not happen.
+      pk_dep(:phoenix_kit_billing, "~> 0.25"),
       # Optional: only the AI-translate UI/adapter use it, and both compile out
       # when it's absent (see ProductForm's @ai_translate? flag). Version tracks
       # the actual API used (Translatable behaviour, AITranslate components).

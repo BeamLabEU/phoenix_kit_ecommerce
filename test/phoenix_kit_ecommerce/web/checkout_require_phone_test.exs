@@ -1,9 +1,7 @@
 defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
   @moduledoc """
   The "Require a phone number at checkout" setting: off by default, and on it
-  makes the checkout billing step refuse a blank phone. Billing may or may not
-  know the `require_phone` option (`BillingSupport`); the checkout must behave
-  the same either way, only the input's required mark depends on billing.
+  makes the checkout billing step refuse a blank phone.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
@@ -11,20 +9,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
   alias PhoenixKit.Settings
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
-  alias PhoenixKitEcommerce.BillingSupport
   alias PhoenixKitEcommerce.DataCase
 
   @form "#checkout-billing-form"
   @phone "+3725555555"
 
-  # Decided before any test overrides the probe.
-  @billing_supports_phone BillingSupport.supported?()
-
   setup %{conn: conn} do
     # The settings cache is ETS-backed and is not rolled back by the sandbox.
     on_exit(fn ->
       Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", false, "shop")
-      Application.delete_env(:phoenix_kit_ecommerce, :billing_require_phone_support)
     end)
 
     user = DataCase.fixture_user()
@@ -36,7 +29,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
 
   test "the setting is off by default" do
     refute Shop.require_phone_at_checkout?()
-    assert BillingSupport.phone_attrs(Shop.require_phone_at_checkout?()) == []
   end
 
   describe "setting off" do
@@ -48,51 +40,34 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
     end
   end
 
-  for supported <- [false, true] do
-    describe "setting on, billing #{if supported, do: "with", else: "without"} the option" do
-      @describetag supported: supported
+  describe "setting on" do
+    setup do
+      Settings.update_boolean_setting_with_module("shop_require_phone_at_checkout", true, "shop")
+      :ok
+    end
 
-      if supported and not @billing_supports_phone do
-        @describetag skip: "the installed billing has no require_phone option"
-      end
+    test "a blank phone blocks the billing step, a phone lets it through", %{conn: conn} do
+      {:ok, blank, _html} = live(conn, "/checkout")
 
-      setup %{supported: supported} do
-        Application.put_env(:phoenix_kit_ecommerce, :billing_require_phone_support, supported)
+      assert continue(blank, %{}) =~ "Please fill in all required fields"
+      assert render(blank) =~ "can&#39;t be blank"
 
-        Settings.update_boolean_setting_with_module(
-          "shop_require_phone_at_checkout",
-          true,
-          "shop"
-        )
+      # A fresh session: the flash of the first attempt would outlive the fix.
+      {:ok, filled, _html} = live(conn, "/checkout")
 
-        :ok
-      end
+      refute continue(filled, %{"phone" => @phone}) =~ "Please fill in all required fields"
+    end
 
-      test "a blank phone blocks the billing step, a phone lets it through", %{conn: conn} do
-        {:ok, blank, _html} = live(conn, "/checkout")
+    test "a whitespace-only phone counts as blank", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
 
-        assert continue(blank, %{}) =~ "Please fill in all required fields"
-        assert render(blank) =~ "can&#39;t be blank"
+      assert continue(view, %{"phone" => "   "}) =~ "Please fill in all required fields"
+    end
 
-        # A fresh session: the flash of the first attempt would outlive the fix.
-        {:ok, filled, _html} = live(conn, "/checkout")
+    test "the input is marked required", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/checkout")
 
-        refute continue(filled, %{"phone" => @phone}) =~ "Please fill in all required fields"
-      end
-
-      test "a whitespace-only phone counts as blank", %{conn: conn} do
-        {:ok, view, _html} = live(conn, "/checkout")
-
-        assert continue(view, %{"phone" => "   "}) =~ "Please fill in all required fields"
-      end
-
-      if supported do
-        test "the input is marked required", %{conn: conn} do
-          {:ok, view, _html} = live(conn, "/checkout")
-
-          assert has_element?(view, "#checkout-billing-phone[required]")
-        end
-      end
+      assert has_element?(view, "#checkout-billing-phone[required]")
     end
   end
 
@@ -106,9 +81,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutRequirePhoneTest do
 
     assert has_element?(view, @form)
     assert has_element?(view, "#checkout-billing-phone.input-error")
-
-    if @billing_supports_phone,
-      do: assert(has_element?(view, "#checkout-billing-phone[required]"))
+    assert has_element?(view, "#checkout-billing-phone[required]")
   end
 
   describe "a saved profile without a phone" do

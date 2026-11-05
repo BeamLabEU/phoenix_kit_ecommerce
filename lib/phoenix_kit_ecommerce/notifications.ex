@@ -44,6 +44,7 @@ defmodule PhoenixKitEcommerce.Notifications do
 
   @order_action "shop.order_placed"
   @customer_order_action "shop.order_confirmed"
+  @stock_short_action "shop.order_stock_short"
   @import_completed_action "shop.import_completed"
   @import_failed_action "shop.import_failed"
   @cart_first_item_action "shop.cart_first_item_added"
@@ -81,6 +82,36 @@ defmodule PhoenixKitEcommerce.Notifications do
       {:ok, _notification_or_skipped} -> :ok
       result -> result
     end
+  end
+
+  @doc """
+  Tells the shop's operators and the warehouse keepers that a paid order could
+  not be written off the stock, so a goods issue is theirs to post. Called by
+  `PhoenixKitEcommerce.OrderStockHandler`, which records it with the delivery.
+  Not best-effort: a raise goes back to that durable handler, which retries.
+
+  `short` is a list of `%{name:, requested:, available:}`.
+  """
+  @spec order_stock_short(map(), [map()]) :: :ok
+  def order_stock_short(order, short) do
+    lines =
+      Enum.map_join(short, ", ", fn line ->
+        "#{line.name} (needs #{line.requested}, #{line.available} on hand)"
+      end)
+
+    {:ok, _created} =
+      Notifications.create_many(
+        Enum.uniq(admin_recipients("shop.manage_carts") ++ admin_recipients("warehouse")),
+        %{
+          action: @stock_short_action,
+          text: truncate("Order #{order.order_number} is paid but short of stock: #{lines}", 240),
+          icon: "hero-exclamation-triangle",
+          link: Routes.path("/admin/warehouse/goods-issues"),
+          metadata: %{"action" => @stock_short_action}
+        }
+      )
+
+    :ok
   end
 
   @doc """

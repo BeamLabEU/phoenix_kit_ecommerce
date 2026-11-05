@@ -108,21 +108,22 @@ defmodule PhoenixKitEcommerce.WarehouseSourceKind do
     with %Ecto.Query{} = query <- shop_order_query(uuid),
          %{line_items: line_items} <-
            RepoHelper.repo().one(from(o in query, select: %{line_items: o.line_items})) do
-      pairs = line_items |> List.wrap() |> Enum.flat_map(&product_line/1)
-      grouped = Enum.group_by(pairs, &elem(&1, 0), &elem(&1, 1))
-      facts = grouped |> Map.keys() |> catalogue_facts()
-
-      lines =
-        pairs
-        |> Enum.uniq_by(&elem(&1, 0))
-        |> Enum.map(fn {item_uuid, first} ->
-          line(item_uuid, first, grouped[item_uuid], facts)
-        end)
-
-      {:ok, lines}
+      {:ok, item_lines(line_items)}
     else
       _ -> :error
     end
+  end
+
+  @doc "`build_lines/2`'s lines, from the stored `line_items` of an order."
+  @spec item_lines([map()] | nil) :: [map()]
+  def item_lines(line_items) do
+    pairs = line_items |> List.wrap() |> Enum.flat_map(&product_line/1)
+    grouped = Enum.group_by(pairs, &elem(&1, 0), &elem(&1, 1))
+    facts = grouped |> Map.keys() |> catalogue_facts()
+
+    pairs
+    |> Enum.uniq_by(&elem(&1, 0))
+    |> Enum.map(fn {item_uuid, first} -> line(item_uuid, first, grouped[item_uuid], facts) end)
   end
 
   # A table named by string carries no `@schema_prefix`: it is taken from the

@@ -2,13 +2,12 @@ defmodule PhoenixKitEcommerce.Availability do
   @moduledoc """
   Whether a product can be offered to a shopper right now.
 
-  Today every listed product is available: the storefront has no stock to
-  consult (`PhoenixKitEcommerce.StockTracking` only says whether tracking is
-  on). This is the one place stock will be read, so the blocks that recommend
-  products (`PhoenixKitEcommerce.RelatedProducts`) ask here and a stock
-  feature changes this function, not them.
+  A product is available unless stock tracking counts it and none is on hand
+  (`PhoenixKitEcommerce.StockTracking`). The blocks that recommend products
+  (`PhoenixKitEcommerce.RelatedProducts`) ask here, so they stop offering what
+  cannot be bought.
 
-  An application can already supply the answer through
+  An application can supply the answer instead, stock included, through
   `config :phoenix_kit_ecommerce, :availability, {Module, :function}`; the
   function takes the product and returns a boolean (only `false` means
   unavailable). A hook that is missing, has the wrong arity, raises, exits
@@ -19,6 +18,8 @@ defmodule PhoenixKitEcommerce.Availability do
 
   require Logger
 
+  alias PhoenixKitEcommerce.StockTracking
+
   @spec available?(term()) :: boolean()
   def available?(product) do
     case Application.get_env(:phoenix_kit_ecommerce, :availability) do
@@ -26,7 +27,16 @@ defmodule PhoenixKitEcommerce.Availability do
         ask(module, function, product)
 
       _ ->
-        true
+        in_stock?(StockTracking.item_uuid(product))
+    end
+  end
+
+  defp in_stock?(nil), do: true
+
+  defp in_stock?(item_uuid) do
+    case StockTracking.on_hand([item_uuid]) do
+      %{^item_uuid => 0} -> false
+      _some_or_off -> true
     end
   end
 

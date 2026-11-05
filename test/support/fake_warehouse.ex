@@ -58,6 +58,15 @@ defmodule PhoenixKitEcommerce.Test.FakeWarehouse.StockLedger do
   def default_location_uuid, do: FakeWarehouse.state(:default_location, nil)
 end
 
+defmodule PhoenixKitEcommerce.Test.RaisingStockLedger do
+  @moduledoc false
+
+  alias PhoenixKitEcommerce.Test.FakeWarehouse
+
+  def default_location_uuid, do: FakeWarehouse.state(:default_location, nil)
+  def stock_for_items_at_location(_item_uuids, _location), do: raise("stock read failed")
+end
+
 defmodule PhoenixKitEcommerce.Test.RaisingWarehouse do
   @moduledoc false
 
