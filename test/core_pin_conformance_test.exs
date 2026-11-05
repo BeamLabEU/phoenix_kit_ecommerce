@@ -13,25 +13,28 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
   would notice, which is why the check is a test rather than a convention.
 
   What this does NOT forbid is raising the FLOOR. The floor tracks the
-  oldest core that has every API this module calls. It is `>= 2.43.0 and
-  < 3.0.0` now: `ImageFingerprint` runs ImageMagick through
-  `ImageProcessor.limit_args/0` and `pinned_input/2`, first shipped in core
-  2.43.0. Below that sits 2.38.0 — the actor and the activity log come from
-  `PhoenixKitWeb.Actor` and `Activity.log/3`, and the module does not
-  compile without them. That subsumes the earlier floors — `Slug.put_slug/3`
+  oldest core that has every API this module calls. It is `>= 2.65.0 and
+  < 4.0.0` now: `file_references/0` and `expected_schema/0` carry
+  `@impl PhoenixKit.Module`, callbacks first shipped in core 2.65.0. Below
+  that sits 2.43.0 — `ImageFingerprint` runs ImageMagick through
+  `ImageProcessor.limit_args/0` and `pinned_input/2` — and 2.38.0, where the
+  actor and the activity log come from `PhoenixKitWeb.Actor` and
+  `Activity.log/3`; the module does not compile without them. That subsumes
+  the earlier floors — `Slug.put_slug/3`
   (2.4.0), V171's shop slug projection pkeys (2.6.0) and V186's
   `base_currency`/`exchange_rate`/`base_unit_price` cart columns (2.16.0;
   below it every cart write raised `undefined_column`). Raise this alongside
   `mix.exs` whenever a newly-adopted core API sets a higher floor, keeping
   the compound form: patch-precise at the bottom, open through every later
-  2.x minor at the top.
+  minor of the supported majors at the top.
 
   Core 1.7 is deliberately excluded: core 2.0.0 squashed the migration chain to
   a V135 floor and this module is verified only against that baseline.
   """
 
-  # Floor: core 2.43.0. Everything above it, forever, must stay admitted.
-  # 2.42.0 is below the ImageMagick helpers; 2.37.5 is the last release
+  # Floor: core 2.65.0. Everything above it, up to the next major, must stay
+  # admitted. 2.64.9 is below the callbacks; 2.42.0 is below the ImageMagick
+  # helpers; 2.37.5 is the last release
   # without the toolkits; the older rejects are the earlier floors' own
   # boundaries, kept so a regression to any of them is named.
   @must_admit ["2.65.0", "2.65.1", "2.99.4", "3.0.0", "3.9.9"]

@@ -42,12 +42,6 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     shop_session_id =
       if session["shop_session_trusted"] == true, do: session["shop_session_id"]
 
-    # Subscribed BEFORE the order is read: a payment recorded in between would
-    # otherwise be missed and the page would wait for a message that is gone.
-    # The access check below still decides who sees what; a message reaching
-    # a page that then redirects is dropped with it.
-    if connected?(socket), do: Billing.Events.subscribe_orders()
-
     case Billing.get_order_by_uuid(uuid) do
       nil ->
         {:ok, redirect_with_error(socket, gettext("Order not found"))}
@@ -59,9 +53,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
 
   defp handle_order_access(socket, order, user, shop_session_id, payment_hint) do
     if has_order_access?(order, user, shop_session_id) do
-      # A paid-up order page must update the moment billing records the
-      # payment, which can come after the shopper is back (the provider's
-      # webhook is separate from their return).
+      order = follow_order(socket, order)
+
       {:ok,
        socket
        |> setup_order_assigns(order)
@@ -70,6 +63,22 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
        |> assign_awaiting(order)}
     else
       {:ok, redirect_with_error(socket, gettext("You don't have access to this order"))}
+    end
+  end
+
+  # A paid-up order page must update the moment billing records the payment,
+  # which can come after the shopper is back (the provider's webhook is separate
+  # from their return). The buyer's own topic, not the shop-wide one: this is a
+  # public page, and that topic would hand every open one every order in the
+  # shop. The topic is only known once the order is, so the order is read again
+  # after subscribing: a payment recorded in between would otherwise be missed
+  # and the page would wait for a message that is gone.
+  defp follow_order(socket, order) do
+    if connected?(socket) do
+      Billing.Events.subscribe_user_orders(order.user_uuid)
+      Billing.get_order_by_uuid(order.uuid) || order
+    else
+      order
     end
   end
 

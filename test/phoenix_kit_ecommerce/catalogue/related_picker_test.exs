@@ -65,6 +65,10 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
     item
   end
 
+  defp change!(item, changes), do: item |> Ecto.Changeset.change(changes) |> Repo.update!()
+
+  defp draft_data, do: %{"ecommerce" => %{"shop_status" => "draft"}}
+
   defp host(conn, item, ecommerce \\ %{}) do
     live_isolated(conn, Host, session: %{"item" => item, "ecommerce" => ecommerce})
   end
@@ -126,6 +130,28 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPickerTest do
 
     assert_push_event(view, "related_results", %{results: rows})
     assert Enum.map(rows, & &1.uuid) == [other.uuid]
+  end
+
+  test "the search leaves out deleted items and labels the rest as shoppers would see them", %{
+    conn: conn,
+    catalogue: catalogue
+  } do
+    main = item!(catalogue, "Yota main")
+    active = item!(catalogue, "Yota active")
+    retired = catalogue |> item!("Yota retired") |> change!(status: "inactive")
+    draft = catalogue |> item!("Yota draft") |> change!(data: draft_data())
+    catalogue |> item!("Yota deleted") |> change!(status: "deleted")
+
+    {:ok, view, _html} = host(conn, main)
+    hook(view, "related_search", %{"q" => "Yota"})
+
+    assert_push_event(view, "related_results", %{results: rows})
+
+    assert Map.new(rows, &{&1.uuid, &1.sublabel}) == %{
+             active.uuid => "Active",
+             retired.uuid => "Archived",
+             draft.uuid => "Draft"
+           }
   end
 
   test "pick, move and remove change what the form submits", %{conn: conn, catalogue: catalogue} do

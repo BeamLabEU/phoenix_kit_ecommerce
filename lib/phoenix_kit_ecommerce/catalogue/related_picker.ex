@@ -23,7 +23,9 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
   import PhoenixKitWeb.Components.Core.SearchPicker, only: [search_picker: 1]
 
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
+  alias PhoenixKitEcommerce.ProductSource.Catalogue.View
   alias PhoenixKitEcommerce.RelatedProducts
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   @kinds [:related, :cross_sell]
 
@@ -141,23 +143,31 @@ defmodule PhoenixKitEcommerce.Catalogue.RelatedPicker do
   defp search_rows(_socket, _kind, "", _fetch), do: []
 
   # The ones already chosen (and the item itself) are left out in the query,
-  # before the limit, so they cannot crowd out the matches that remain.
-  # `fetch` is how many rows to read (the caller's limit plus one, to know
-  # whether more follow).
+  # before the limit, so they cannot crowd out the matches that remain. So are
+  # deleted items: drafts may be picked ahead of time, trash may not. `fetch` is
+  # how many rows to read (the caller's limit plus one, to know whether more
+  # follow).
   defp search_rows(socket, kind, query, fetch) do
     taken = Enum.reject([socket.assigns.item_uuid | socket.assigns.lists[kind]], &is_nil/1)
 
-    [search: query, per_page: fetch, page: 1, exclude_uuids: taken]
+    [search: query, per_page: fetch, page: 1, exclude_uuids: taken, exclude_deleted: true]
     |> Query.list_items()
     |> Enum.map(fn item ->
       %{
         kind: "product",
         uuid: item.uuid,
         label: item.name,
-        sublabel: item.status,
+        sublabel: status_label(item),
         icon: "hero-cube"
       }
     end)
+  end
+
+  # The status a shopper's listing goes by, not the catalogue's own value: the
+  # card's hint speaks of drafts, and `item.status` has none.
+  defp status_label(item) do
+    ecommerce = Map.get(item.data || %{}, "ecommerce", %{})
+    item |> View.product_status(ecommerce) |> StatusLabels.product()
   end
 
   @impl true

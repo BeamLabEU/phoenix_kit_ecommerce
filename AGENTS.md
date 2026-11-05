@@ -12,8 +12,8 @@ admin LiveViews and a public storefront. Module key `"shop"`, settings prefix
 `shop_`. Registers through `use PhoenixKit.Module`; core discovers modules
 from BEAM files and generates routes from tabs and `route_module/0`.
 
-- Required PhoenixKit deps: core `>= 2.43.0 and < 3.0.0`, billing `~> 0.20`.
-  Optional: AI `~> 0.24`, Warehouse `~> 0.5`, web analytics. Catalogue is
+- Required PhoenixKit deps: core `>= 2.65.0 and < 4.0.0`, billing `~> 0.24`.
+  Optional: AI `~> 0.27`, Warehouse `~> 0.7`, web analytics. Catalogue is
   duck-typed, with no declared dependency or version floor. Guard optional
   integrations so a host without them compiles and runs.
 - Checkout hands orders, invoices, tax and payments to `PhoenixKitBilling`.
@@ -27,8 +27,9 @@ from BEAM files and generates routes from tabs and `route_module/0`.
   address or payment mutation.
 - The storefront uses the host's layout. No module JavaScript or hooks.
   Deprecated `compat/` delegates are for old hosts only; add no new delegates.
-- Core owns the ten baseline shop tables; this chain adopts and evolves them,
-  adding the search index (V4) and cart claims (V5).
+- Core 2.x creates the ten baseline shop tables and core 3.x does not: this
+  chain adopts them where they exist, builds them where they do not, and adds
+  the search index (V4) and cart claims (V5).
 
 ## Read before changing a subsystem
 
@@ -242,7 +243,7 @@ Repo-local aliases:
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
   Rows carry no PII.
-- **The core pin keeps the compound form (`>= 2.43.0 and < 3.0.0`) on
+- **The core pin keeps the compound form (`>= 2.65.0 and < 4.0.0`) on
   purpose.** A three-segment `~> 2.43.0` expands to `< 2.44.0` and breaks
   CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
   — while nothing in this repo's own run notices, which is why a test guards

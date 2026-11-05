@@ -821,6 +821,7 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     query
     |> filter_by_status(Keyword.get(opts, :status))
     |> filter_excluding(Keyword.get(opts, :exclude_uuids))
+    |> filter_not_deleted(Keyword.get(opts, :exclude_deleted, false))
     |> filter_by_product_type(Keyword.get(opts, :product_type))
     |> filter_by_category(Keyword.get(opts, :category_uuid))
     |> filter_by_visible_categories(Keyword.get(opts, :exclude_hidden_categories, false))
@@ -835,6 +836,10 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
     do: where(query, [i], i.uuid not in ^uuids)
 
   defp filter_excluding(query, _uuids), do: query
+
+  # The catalogue's trash, for a search that otherwise takes every status.
+  defp filter_not_deleted(query, true), do: where(query, [i], i.status != "deleted")
+  defp filter_not_deleted(query, _flag), do: query
 
   # Mirrors `View.product_status/2`'s fallback: with no `shop_status`
   # override, the derived status is "active" when `item.status ==

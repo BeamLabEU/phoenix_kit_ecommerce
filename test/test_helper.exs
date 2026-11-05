@@ -434,6 +434,18 @@ canonical_urls_exclude =
     [:requires_core_canonical_urls]
   end
 
+# The suite runs with the shop ON, committed once here. A settings write takes a
+# row lock (core's `History.lock_current/1`) and a sandbox holds it until its test
+# ends, so async tests writing this key in setup queue on the one row; whichever
+# waits past the 15s connection timeout fails with `query_canceled` or
+# `tcp recv: closed`, in a setup that looks nothing like the cause. Serial tests
+# still write it (DataCase, LiveCase), where there is nothing to queue behind.
+if repo_available do
+  Ecto.Adapters.SQL.Sandbox.unboxed_run(TestRepo, fn ->
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "true")
+  end)
+end
+
 # The typo fallback needs the pg_trgm extension. Without it those tests are
 # excluded (and counted in the summary), never silently passed.
 trigram_exclude =

@@ -241,7 +241,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       FakeOnlinePayment.put_old_billing()
       {:ok, placed} = real_order(ctx.stripe, ctx.buyer, "pending")
       assert :ok = Notifications.order_placed(placed)
-      {:ok, paid} = Billing.update_order(placed, %{"status" => "paid"})
+      paid = put_status!(placed, "paid")
 
       assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
       assert [_one_confirmation] = texts(ctx.buyer.uuid)
@@ -261,7 +261,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
 
       assert Decimal.equal?(free.total, 0)
       assert :ok = Notifications.order_placed(free)
-      {:ok, paid} = Billing.update_order(free, %{"status" => "paid"})
+      paid = put_status!(free, "paid")
 
       assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
       assert [_one_confirmation] = texts(ctx.buyer.uuid)
@@ -272,7 +272,7 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       assert :ok = Notifications.order_placed(placed)
       assert texts(ctx.buyer.uuid) == []
 
-      {:ok, paid} = Billing.update_order(placed, %{"status" => "paid"})
+      paid = put_status!(placed, "paid")
 
       assert :ok = InvoicePaymentHandler.handle_invoice_event(:paid, %{order_uuid: paid.uuid})
 
@@ -412,6 +412,13 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       ],
       "metadata" => metadata
     })
+  end
+
+  # Straight to the row: billing moves an order to paid through its own action
+  # and `update_order/2` refuses that, and these tests only need the status.
+  defp put_status!(order, status) do
+    Repo.update_all(from(o in Billing.Order, where: o.uuid == ^order.uuid), set: [status: status])
+    Billing.get_order_by_uuid(order.uuid)
   end
 
   defp create_admin_user do

@@ -51,8 +51,9 @@ defmodule PhoenixKitEcommerce.LiveCase do
 
     # Storefront mounts and purchase mutations are gated on the module being
     # enabled; the suite runs with the shop ON (see the same block in
-    # DataCase). Tests covering the disabled behaviour flip it off themselves.
-    PhoenixKit.Settings.update_setting("shop_enabled", "true")
+    # DataCase, also for why an async test does not write it). Tests covering
+    # the disabled behaviour flip it off themselves.
+    unless tags[:async], do: PhoenixKit.Settings.update_setting("shop_enabled", "true")
 
     conn =
       Phoenix.ConnTest.build_conn()

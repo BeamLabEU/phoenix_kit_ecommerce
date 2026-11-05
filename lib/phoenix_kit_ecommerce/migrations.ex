@@ -10,8 +10,8 @@ defmodule PhoenixKitEcommerce.Migrations do
 
   ## Ownership situation — read before touching
 
-  All ten tables are core V135(+later) baseline tables; core still creates
-  them today. V1 is purely an ADOPTION step (owner decision 2026-09-05: this
+  All ten tables are core V135(+later) baseline tables; core 2.x creates them
+  and core 3.x no longer does. V1 is purely an ADOPTION step (owner decision 2026-09-05: this
   chain adopts every shop table, including `phoenix_kit_shop_products` and
   `phoenix_kit_shop_categories`, so upstream `phoenix_kit_ecommerce` — which
   still owns products for hosts that have not switched to the catalogue —
@@ -184,6 +184,9 @@ defmodule PhoenixKitEcommerce.Migrations do
   is — nothing is re-run and the marker is not lowered. A `:version` above
   `current_version/0`, below 1 or not an integer raises: this code has no
   such step to apply, and stamping it would claim one.
+
+  Billing's chain runs first, to billing's current version whatever `N` is:
+  this chain's foreign key needs its `phoenix_kit_payment_options`.
   """
   def up(opts \\ []) do
     prefix = validated_prefix(opts)
@@ -193,8 +196,10 @@ defmodule PhoenixKitEcommerce.Migrations do
       # This chain's foreign key into `phoenix_kit_payment_options` needs
       # billing's table, which core no longer creates (3.x), and a host's
       # migration files can run this chain before billing's. Build billing's
-      # chain first; it leaves a database already at or past its current
-      # version as it is.
+      # chain first. Billing 0.24 has no marker guard, so this re-applies it on
+      # every run: its statements are idempotent and it seeds a table only when
+      # it creates it, so a rerun changes nothing. Later billing skips a
+      # database already past the target.
       PhoenixKitBilling.Migrations.up(prefix: prefix)
 
       prefix

@@ -103,7 +103,8 @@ pages.
   "Your order is confirmed" waits for `InvoicePaymentHandler` (billing's
   durable invoice-event handler, `billing_invoice_event_handlers/0`), and
   `CheckoutComplete` shows "Awaiting payment" with "Pay now", updating on
-  billing's `:order_paid` PubSub event. An abandoned online order stays
+  billing's `:order_paid` PubSub event on the buyer's own order topic (never the
+  shop-wide one, which carries every order). An abandoned online order stays
   `pending`: nothing times it out. Tests swap the billing module through the
   `:online_payment_module` app env (`FakeOnlinePayment`); the real chain
   (`online_payment_chain_test.exs`, tag `:billing_start_order_payment`) runs
@@ -841,13 +842,18 @@ Before its own statements `up/1` runs billing's chain (`PhoenixKitBilling.Migrat
 to billing's current version): this chain's foreign key points at
 `phoenix_kit_payment_options`, core 3.x no longer creates it, and a host's
 migration files written under core 2.x can run this chain before billing's.
-Billing's `up/1` leaves a database already at or past its target as it is, so
-the host's own billing files later find nothing to do. `up_statements/2`
-stays this chain's SQL only.
+Billing 0.24.0's `up/1` has no marker guard: every run re-applies billing's
+chain and stamps its current version. That changes nothing, because its
+statements are idempotent and it seeds a table only when it creates it
+(`migrations_up_version_test.exs` pins this); a host's older billing file can
+lower the marker only until its next file raises it. Billing's `main` leaves a
+database already past the target as it is, from its next release.
+`up_statements/2` stays this chain's SQL only.
 
-V1 is **adoptive**: all ten shop tables are core baseline tables that core
-still creates, so V1 changes no shape — it stamps the marker and claims future
-ownership. V2 is the chain's first deliberate divergence: it drops the
+V1 is **adoptive**: under core 2.x all ten shop tables are core baseline tables,
+so V1 changes no shape — it stamps the marker and claims future ownership. Core
+3.x no longer creates them, and the same `CREATE TABLE IF NOT EXISTS` statements
+build them. V2 is the chain's first deliberate divergence: it drops the
 `DEFAULT 'USD'` core declares on the `currency` column of
 `phoenix_kit_shop_carts`, `…_cart_items`, `…_products` and
 `…_shipping_methods`, so an insert that names no currency stores NULL.

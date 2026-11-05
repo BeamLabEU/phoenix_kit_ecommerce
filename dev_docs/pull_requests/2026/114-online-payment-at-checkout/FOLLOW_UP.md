@@ -37,3 +37,18 @@ variants/analytics. The locked billing also skips three phone-component
 compatibility cases; the local checkout supplies that component API.
 
 No version bump, CHANGELOG entry or release.
+
+## Claude review, 2026-11-05
+
+See [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md).
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| Public page subscribed to every order in the shop | IMPROVEMENT - MEDIUM | Fixed: the buyer's own topic, after the access check, with a re-read |
+| Online payment starts on orders with price-on-request lines | IMPROVEMENT - MEDIUM | **Open, needs a decision** (options in the review) |
+| Order-page tests would break on billing's next release | IMPROVEMENT - MEDIUM | Fixed: `put_status!/2` writes the row directly |
+| A failed start loses its reason on the first page | NITPICK | Left open |
+| One possible duplicate confirmation across a billing upgrade | NITPICK | Left open |
+
+Validation is recorded in [the #118 follow-up](../118-fresh-core-3x-chain/FOLLOW_UP.md),
+which covers the whole review batch.

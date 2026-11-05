@@ -214,7 +214,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}?payment=success")
       assert has_element?(view, "#payment-processing")
 
-      {:ok, paid} = Billing.update_order(order, %{"status" => "paid"})
+      paid = put_status!(order, "paid")
       Billing.Events.broadcast_order_paid(paid)
 
       refute has_element?(view, "#awaiting-payment")
@@ -228,10 +228,34 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
       {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
 
-      {:ok, paid} = Billing.update_order(other, %{"status" => "paid"})
+      paid = put_status!(other, "paid")
       Billing.Events.broadcast_order_paid(paid)
 
       assert has_element?(view, "#awaiting-payment")
+    end
+
+    test "the page follows its buyer's orders, not every order in the shop", ctx do
+      order = online_order!(ctx)
+
+      {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
+
+      topics = Registry.keys(:phoenix_kit_internal_pubsub, view.pid)
+
+      assert "phoenix_kit:billing:orders:user:#{ctx.user.uuid}" in topics
+      refute "phoenix_kit:billing:orders" in topics
+    end
+
+    test "a guest's page turns into the confirmation when the payment lands", ctx do
+      order = guest_order!(ctx, "guest-paying-session")
+
+      {:ok, view, _html} =
+        live(guest_conn("guest-paying-session"), "/checkout/complete/#{order.uuid}")
+
+      paid = put_status!(order, "paid")
+      Billing.Events.broadcast_order_paid(paid)
+
+      refute has_element?(view, "#awaiting-payment")
+      assert render(view) =~ "Order Confirmed!"
     end
 
     test "a cancelled order is not shown as confirmed", ctx do
@@ -240,7 +264,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
       assert has_element?(view, "#awaiting-payment")
 
-      {:ok, cancelled} = Billing.update_order(order, %{"status" => "cancelled"})
+      cancelled = put_status!(order, "cancelled")
       Billing.Events.broadcast_order_cancelled(cancelled)
 
       assert has_element?(view, "#order-closed")
@@ -334,7 +358,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
 
     test "Pay now pushed at a paid order is ignored", ctx do
       order = online_order!(ctx)
-      {:ok, _} = Billing.update_order(order, %{"status" => "paid"})
+      put_status!(order, "paid")
 
       {:ok, view, _html} = live(ctx.conn, "/checkout/complete/#{order.uuid}")
 
@@ -365,6 +389,14 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
     for option <- Billing.list_payment_options() do
       {:ok, _} = Billing.update_payment_option(option, %{"active" => false})
     end
+  end
+
+  # Straight to the row: billing moves an order to paid or cancelled through its
+  # own actions and `update_order/2` refuses those, and these tests only need the
+  # status and the message that follows it.
+  defp put_status!(order, status) do
+    Repo.update_all(from(o in Billing.Order, where: o.uuid == ^order.uuid), set: [status: status])
+    Billing.get_order_by_uuid(order.uuid)
   end
 
   defp online_order!(%{user: user, option: option}) do

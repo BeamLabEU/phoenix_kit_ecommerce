@@ -50,6 +50,22 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
     prefix
   end
 
+  # What a core 3.x schema holds: no billing tables, so `up/1` has to build them.
+  defp create_schema_without_billing(prefix) do
+    Repo.query!("CREATE SCHEMA #{prefix}")
+
+    Repo.query!("""
+    CREATE FUNCTION #{prefix}.uuid_generate_v7() RETURNS uuid
+    LANGUAGE sql AS 'SELECT public.uuid_generate_v7()'
+    """)
+
+    for table <- ~w(phoenix_kit_users phoenix_kit_settings) do
+      Repo.query!("CREATE TABLE #{prefix}.#{table} (LIKE public.#{table} INCLUDING ALL)")
+    end
+
+    prefix
+  end
+
   defp version(prefix), do: Migrations.migrated_version_runtime(prefix: prefix)
 
   # V2's effect: how many of the four `currency` columns still default to USD.
@@ -197,17 +213,7 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
     # migration files can run this chain before billing's. `up/1` builds
     # billing's chain first, so this chain's foreign key has its target.
     test "builds, with billing's payment options created first" do
-      prefix = "pke_up_no_billing"
-      Repo.query!("CREATE SCHEMA #{prefix}")
-
-      Repo.query!("""
-      CREATE FUNCTION #{prefix}.uuid_generate_v7() RETURNS uuid
-      LANGUAGE sql AS 'SELECT public.uuid_generate_v7()'
-      """)
-
-      for table <- ~w(phoenix_kit_users phoenix_kit_settings) do
-        Repo.query!("CREATE TABLE #{prefix}.#{table} (LIKE public.#{table} INCLUDING ALL)")
-      end
+      prefix = create_schema_without_billing("pke_up_no_billing")
 
       run_up(prefix: prefix, version: 2)
 
@@ -220,6 +226,21 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
                    "AND conrelid = '#{prefix}.phoenix_kit_shop_carts'::regclass " <>
                    "AND confrelid = '#{prefix}.phoenix_kit_payment_options'::regclass"
                )
+    end
+
+    # Billing 0.24 has no marker guard, so each run of this chain re-applies
+    # billing's. That is safe only while a rerun leaves the merchant's data alone.
+    test "a second run does not restore what the merchant deleted from billing's seeds" do
+      prefix = create_schema_without_billing("pke_up_billing_rerun")
+      cod = "SELECT count(*) FROM #{prefix}.phoenix_kit_payment_options WHERE code = 'cod'"
+
+      run_up(prefix: prefix, version: 2)
+      assert %{rows: [[1]]} = Repo.query!(cod)
+
+      Repo.query!("DELETE FROM #{prefix}.phoenix_kit_payment_options WHERE code = 'cod'")
+      run_up(prefix: prefix, version: 2)
+
+      assert %{rows: [[0]]} = Repo.query!(cod)
     end
   end
 

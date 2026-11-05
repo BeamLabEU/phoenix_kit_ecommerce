@@ -33,3 +33,16 @@ Integration checks use the disposable database
 `ecommerce_pr116_review_20261029`. The race fixtures clean up their committed
 carts/products and restore the shop setting. The database is removed after
 validation; pre-existing databases are unchanged. No release or dependency change.
+
+## Claude review, 2026-11-05
+
+See [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md).
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| Catalogue picker offered deleted items and showed raw statuses | BUG - MEDIUM | Fixed: `exclude_deleted: true`, label through `StatusLabels.product/1` |
+| The product page never passes `language:` | NITPICK | Left open: no visible effect |
+| `RelatedPicker` events are not permission-gated | NITPICK | Left open: it stages inputs and writes nothing |
+
+Validation is recorded in [the #118 follow-up](../118-fresh-core-3x-chain/FOLLOW_UP.md),
+which covers the whole review batch.

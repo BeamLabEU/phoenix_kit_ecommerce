@@ -50,8 +50,10 @@ defmodule PhoenixKitEcommerce.DataCase do
     # flipping the switch must stop a connected LiveView's add-to-cart,
     # not only new mounts), so the suite runs with the shop ON — the same
     # state every exercised code path assumes in production. Tests that
-    # cover the disabled behaviour flip it off themselves.
-    PhoenixKit.Settings.update_setting("shop_enabled", "true")
+    # cover the disabled behaviour flip it off themselves. An async test
+    # inherits the value `test_helper.exs` committed: writing it here would
+    # hold the setting's row lock until the test ends (see there).
+    unless tags[:async], do: PhoenixKit.Settings.update_setting("shop_enabled", "true")
 
     :ok
   end
