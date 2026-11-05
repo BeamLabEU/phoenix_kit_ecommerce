@@ -837,6 +837,14 @@ leaves a database already past N untouched; with no `:version` it goes to
 `current_version/0`. A target outside `1..current_version/0` raises.
 `up_statements/2` takes the same target.
 
+Before its own statements `up/1` runs billing's chain (`PhoenixKitBilling.Migrations.up/1`,
+to billing's current version): this chain's foreign key points at
+`phoenix_kit_payment_options`, core 3.x no longer creates it, and a host's
+migration files written under core 2.x can run this chain before billing's.
+Billing's `up/1` leaves a database already at or past its target as it is, so
+the host's own billing files later find nothing to do. `up_statements/2`
+stays this chain's SQL only.
+
 V1 is **adoptive**: all ten shop tables are core baseline tables that core
 still creates, so V1 changes no shape — it stamps the marker and claims future
 ownership. V2 is the chain's first deliberate divergence: it drops the

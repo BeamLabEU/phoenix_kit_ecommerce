@@ -190,6 +190,13 @@ defmodule PhoenixKitEcommerce.Migrations do
     target = validated_target(opts)
 
     if migrated_version(prefix: prefix) <= target do
+      # This chain's foreign key into `phoenix_kit_payment_options` needs
+      # billing's table, which core no longer creates (3.x), and a host's
+      # migration files can run this chain before billing's. Build billing's
+      # chain first; it leaves a database already at or past its current
+      # version as it is.
+      PhoenixKitBilling.Migrations.up(prefix: prefix)
+
       prefix
       |> up_statements(target)
       |> Enum.each(&execute/1)
