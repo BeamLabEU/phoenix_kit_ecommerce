@@ -130,10 +130,10 @@ defmodule PhoenixKitEcommerce.SearchFixtures do
     :ok
   end
 
-  @doc "Switches the shop to the catalogue source and creates its catalogue (`decor3dprint`)."
+  @doc "Switches the shop to the catalogue source and creates its catalogue."
   def catalogue_source! do
     set_product_source!("catalogue")
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
     catalogue
   end
 

@@ -39,6 +39,16 @@ defmodule PhoenixKitEcommerce.APIFixtures do
     catalogue
   end
 
+  @doc """
+  Creates a catalogue and names it in `shop_catalogue`, leaving the product
+  source alone. Answers what `Catalogue.create_catalogue/1` answers.
+  """
+  def create_shop_catalogue do
+    name = "shop-#{System.unique_integer([:positive])}"
+    put_config!("shop_catalogue", name)
+    Catalogue.create_catalogue(%{name: name})
+  end
+
   @doc "A catalogue the shop does not read."
   def other_catalogue! do
     {:ok, catalogue} =

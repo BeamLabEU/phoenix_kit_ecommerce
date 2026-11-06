@@ -10,10 +10,8 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopStatusColumnCatalogueIntegrationTest
   Needs `phoenix_kit_catalogue` loaded (with its own migrations applied)
   — excluded via `test_helper.exs`'s `:catalogue` tag whenever the
   optional dependency isn't present, same as every other `:catalogue`
-  test in this fork. Bridge in via
-  `PHOENIX_KIT_CATALOGUE_PATH`/`PHOENIX_KIT_ENTITIES_PATH` (see
-  `mix.exs`'s `catalogue_test_deps/0`) to run it locally; it also runs
-  automatically once a host declares the dependency for real.
+  test. Set `PHOENIX_KIT_CATALOGUE_PATH`/`PHOENIX_KIT_ENTITIES_PATH` to run
+  it against local checkouts.
 
   `PhoenixKitEcommerce.Catalogue.Extension` is discovered exactly the
   way production does it: `PhoenixKitEcommerce` is already registered

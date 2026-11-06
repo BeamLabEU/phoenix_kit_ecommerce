@@ -37,7 +37,7 @@ defmodule PhoenixKitEcommerce.API.CartWriterCatalogueTest do
     AttributeSets.register_deletion_guard()
     PhoenixKit.Settings.update_setting("entities_enabled", "true")
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, item} =
       Catalogue.create_item(%{

@@ -411,7 +411,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                   name="config[name]"
                   value={@form_data.name}
                   class="input"
-                  placeholder={gettext("e.g., decor_3d_default")}
+                  placeholder={gettext("e.g., main_catalog")}
                   required
                 />
               </div>
@@ -484,7 +484,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                   <textarea
                     name="config[include_keywords_text]"
                     class="textarea h-20"
-                    placeholder={gettext("shelf, mask, vase, planter, holder, stand, lamp")}
+                    placeholder={gettext("shirt, hoodie, mug, poster")}
                   >{@form_data.include_keywords_text}</textarea>
                   <label class="label">
                     <span class="fieldset-label text-base-content/60">
@@ -507,7 +507,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                   <textarea
                     name="config[exclude_keywords_text]"
                     class="textarea h-20"
-                    placeholder={gettext("decal, sticker, mural, wallpaper, poster")}
+                    placeholder={gettext("sample, clearance, discontinued")}
                   >{@form_data.exclude_keywords_text}</textarea>
                   <label class="label">
                     <span class="fieldset-label text-base-content/60">
@@ -529,7 +529,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                   <textarea
                     name="config[exclude_phrases_text]"
                     class="textarea h-16"
-                    placeholder={gettext("wall art, home decor stickers")}
+                    placeholder={gettext("gift card, free sample")}
                   >{@form_data.exclude_phrases_text}</textarea>
                   <label class="label">
                     <span class="fieldset-label text-base-content/60">
@@ -599,7 +599,7 @@ defmodule PhoenixKitEcommerce.Web.ImportConfigs do
                   name="config[default_category_slug]"
                   value={@form_data.default_category_slug}
                   class="input input-sm"
-                  placeholder={gettext("e.g., other-3d")}
+                  placeholder={gettext("e.g., other")}
                 />
                 <label class="label">
                   <span class="fieldset-label text-base-content/60">

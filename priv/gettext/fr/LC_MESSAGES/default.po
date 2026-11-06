@@ -4994,8 +4994,8 @@ msgstr "modifications"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1577
 #, elixir-autogen, elixir-format
-msgid "e.g. 3D Printed"
-msgstr "p. ex. 3D Printed"
+msgid "e.g. Handmade"
+msgstr "p. ex. Fait main"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:423
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:441
@@ -7522,8 +7522,8 @@ msgstr "Utilisé lorsqu'aucune règle de catégorie ne correspond"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:510
 #, elixir-autogen, elixir-format
-msgid "decal, sticker, mural, wallpaper, poster"
-msgstr "décalcomanie, autocollant, fresque, papier peint, affiche"
+msgid "sample, clearance, discontinued"
+msgstr "échantillon, déstockage, arrêté"
 
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:444
 #, elixir-autogen, elixir-format
@@ -7537,23 +7537,23 @@ msgstr "p. ex. cm, kg"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:414
 #, elixir-autogen, elixir-format
-msgid "e.g., decor_3d_default"
-msgstr "p. ex. decor_3d_default"
+msgid "e.g., main_catalog"
+msgstr "p. ex. main_catalog"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:602
 #, elixir-autogen, elixir-format
-msgid "e.g., other-3d"
-msgstr "p. ex. other-3d"
+msgid "e.g., other"
+msgstr "p. ex. other"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:487
 #, elixir-autogen, elixir-format
-msgid "shelf, mask, vase, planter, holder, stand, lamp"
-msgstr "étagère, masque, vase, jardinière, support, socle, lampe"
+msgid "shirt, hoodie, mug, poster"
+msgstr "chemise, sweat à capuche, tasse, affiche"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:532
 #, elixir-autogen, elixir-format
-msgid "wall art, home decor stickers"
-msgstr "décoration murale, autocollants déco"
+msgid "gift card, free sample"
+msgstr "carte cadeau, échantillon gratuit"
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1937
 #, elixir-autogen, elixir-format

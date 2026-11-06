@@ -14,7 +14,7 @@ defmodule PhoenixKitEcommerce.ProductSource.CatalogueUnstampedPricesTest do
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
 
   setup do
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
     {:ok, other} = Catalogue.create_catalogue(%{name: "not-the-shop"})
     %{catalogue: catalogue, other: other}
   end

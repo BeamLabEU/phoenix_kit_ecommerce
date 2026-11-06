@@ -34,7 +34,7 @@ defmodule PhoenixKitEcommerce.WholeSetAttachmentTest do
     PhoenixKit.Settings.update_setting("entities_enabled", "true")
     on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     session_id = "whole-set-#{System.unique_integer([:positive])}"
     conn = Plug.Test.init_test_session(conn, %{"shop_session_id" => session_id})

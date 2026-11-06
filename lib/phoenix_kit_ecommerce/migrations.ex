@@ -26,11 +26,10 @@ defmodule PhoenixKitEcommerce.Migrations do
       shape-identical to core's objects, with core's exact index,
       constraint, function and trigger names.
 
-  This deployment's `shop_products`/`shop_categories`/both slug
-  projections are deprecated in favor of `phoenix_kit_catalogue` later
-  (Block 3, after the storefront switch) via a host-side
-  `COMMENT ON TABLE … 'deprecated …'` — never a DROP, and not part of
-  this chain.
+  A host that moves to `phoenix_kit_catalogue` marks `shop_products`,
+  `shop_categories` and both slug projections deprecated itself, after its
+  storefront switch (Block 3), with a `COMMENT ON TABLE … 'deprecated …'`.
+  Never a DROP, and not part of this chain: a Legacy host still uses them.
 
   ## V2 — `DROP DEFAULT` on the four `currency` columns
 

@@ -450,11 +450,10 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCurrencyTest do
       }
     end
 
-    # "decor3dprint" is `Query.catalogue_uuid/0`'s own default name
-    # (`shop_catalogue` config unset) — `create_from_shopify/2` looks up
-    # the catalogue by that name, not by any catalogue existing.
+    # `create_from_shopify/2` looks up the catalogue the `shop_catalogue`
+    # config names, not any catalogue that exists.
     setup do
-      {:ok, _catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+      {:ok, _catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
       :ok
     end
 

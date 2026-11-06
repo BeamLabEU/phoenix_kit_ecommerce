@@ -3,6 +3,15 @@ defmodule PhoenixKitEcommerce.Schemas.ImportConfigTest do
 
   alias PhoenixKitEcommerce.ImportConfig
 
+  describe "ensure_default_import_config/0" do
+    test "seeds a config that takes every product" do
+      assert {:created, config} = PhoenixKitEcommerce.ensure_default_import_config()
+
+      assert %ImportConfig{is_default: true, include_keywords: [], category_rules: []} = config
+      assert PhoenixKitEcommerce.ensure_default_import_config() == :exists
+    end
+  end
+
   describe "changeset/2 validity and required fields" do
     test "is valid with a name" do
       assert ImportConfig.changeset(%ImportConfig{}, %{name: "general"}).valid?
@@ -120,8 +129,19 @@ defmodule PhoenixKitEcommerce.Schemas.ImportConfigTest do
   end
 
   describe "factory helpers" do
-    test "from_legacy_defaults/0 and no_filter_config/0 build valid structs" do
-      assert %ImportConfig{is_default: true} = ImportConfig.from_legacy_defaults()
+    test "default_config/0 filters nothing by title and sets no category" do
+      assert %ImportConfig{
+               is_default: true,
+               skip_filter: false,
+               include_keywords: [],
+               exclude_keywords: [],
+               exclude_phrases: [],
+               category_rules: [],
+               default_category_slug: nil
+             } = ImportConfig.default_config()
+    end
+
+    test "no_filter_config/0 builds a valid struct" do
       assert %ImportConfig{skip_filter: true} = ImportConfig.no_filter_config()
     end
   end

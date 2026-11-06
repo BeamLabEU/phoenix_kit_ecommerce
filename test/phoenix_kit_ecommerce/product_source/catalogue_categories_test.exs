@@ -4,10 +4,9 @@ defmodule PhoenixKitEcommerce.ProductSource.CatalogueCategoriesTest do
   # Needs `phoenix_kit_catalogue` loaded (with its own migrations applied
   # to the test DB) — excluded via `test_helper.exs`'s
   # `ExUnit.configure(exclude: ...)` whenever the optional dependency
-  # isn't present, same as `catalogue_query_test.exs`. `async: false`:
-  # `Query.catalogue_uuid/0` resolves the shop's one catalogue by NAME
-  # across the whole test DB, so two async tests both bootstrapping a
-  # catalogue named "decor3dprint" would race.
+  # isn't present, same as `catalogue_query_test.exs`. `async: false`: the
+  # shop's one catalogue is named in a single `phoenix_kit_shop_config` row,
+  # which two async tests would fight over.
   @moduletag :catalogue
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
@@ -17,7 +16,7 @@ defmodule PhoenixKitEcommerce.ProductSource.CatalogueCategoriesTest do
   alias PhoenixKitEcommerce.ProductSource.Catalogue, as: CatalogueSource
 
   setup do
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
     %{catalogue: catalogue}
   end
 

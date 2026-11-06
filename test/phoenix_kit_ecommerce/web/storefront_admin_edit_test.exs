@@ -130,8 +130,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
     # `Helpers.admin_edit_path/3` falls back to the legacy path whenever
     # `Code.ensure_loaded?(PhoenixKitCatalogue.Paths)` is false, which it
     # always is on a checkout without the optional `phoenix_kit_catalogue`
-    # dependency declared — same exclusion every other `:catalogue` test
-    # in this fork relies on.
+    # dependency — same exclusion every other `:catalogue` test relies on.
     @tag :catalogue
     test "with the catalogue source on, the link opens the catalogue category editor", %{
       category: category

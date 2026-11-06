@@ -113,7 +113,7 @@ defmodule PhoenixKitEcommerce.AITranslatable do
 
   # sha256(content) of every template this adapter has ever shipped BEFORE
   # PromptRollout's metadata scheme existed — consulted only to adopt a
-  # stand's pre-existing unversioned row (design §5.2). This one entry is
+  # host's pre-existing unversioned row (design §5.2). This one entry is
   # the "literal placeholder" template §2 diagnoses: it hardcoded one
   # `{{fieldname}}` slot per field, which let the model see its own
   # unbound `{{title}}` and skip the title as if it were a placeholder.

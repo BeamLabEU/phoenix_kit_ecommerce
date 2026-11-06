@@ -4,17 +4,12 @@ defmodule PhoenixKitEcommerce.Catalogue.SetSlug do
   bare attribute-set slug `Writer.sync_variants/2` looks the catalogue set
   up by (`"catalogue_set_" <> slug` is the blueprint's own `:name`).
 
-  Pure, ASCII-folding-free — a SUPERSET of the app's
-  `Decor3dprint.CatalogueMigration.Mapping.set_slug/1` algorithm
-  (downcase, collapse `_+`, trim `_`), generalized to start from an
-  arbitrary raw label instead of an already-underscored key: this
-  version ALSO collapses every run of non `[a-z0-9]` characters (not
-  only `_`) to a single `_` — the app's own migrated keys
-  (`main_color`, `cup_color`, `basket_main_color`) never contain any
-  other punctuation, so both algorithms agree on them, but they diverge
-  on option names with hyphens or accents (`"Größe"` mangles to
-  `"gr_e"` here — see `set_slug_test.exs`), which the app's version
-  never has to handle at all.
+  Pure and ASCII-folding-free: it downcases, collapses every run of non
+  `[a-z0-9]` characters to a single `_`, and trims `_`. A key that is already
+  underscored (`main_color`, `cup_color`) comes out unchanged, so a set
+  created from such a key during a data migration still matches. Hyphens and
+  accents do not survive (`"Größe"` mangles to `"gr_e"`, see
+  `set_slug_test.exs`).
   """
 
   @doc """

@@ -1,11 +1,11 @@
 defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
   @moduledoc """
   `PhoenixKitEcommerce.Shopify.CollectionSync.run/1` — Block 7 Task 4
-  (`docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`):
+  (`dev_docs/specs/catalogue-as-shop-product-list.md`):
   Shopify collections mapped onto catalogue categories with order
   preserved, and catalogue items placed into the right category at the
   right position from the collections' product lists; plus Block 7b
-  Task 2 (`docs/superpowers/plans/2026-09-06-block7b-shopify-live-fixes.md`):
+  Task 2 (`dev_docs/specs/catalogue-as-shop-product-list.md`):
   the `:filter` allowlist (collections not matching are skipped
   entirely) and most-specific-collection-wins assignment.
 
@@ -15,7 +15,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
   optional dependency isn't present, same as `writer_variants_test.exs`/
   `writer_images_test.exs`. `async: false`: flips the process-wide
   `shop_product_source` config key. `opts[:client]` is a stub module
-  (this test's own `@stub`) — no real HTTP, per Global Constraints.
+  (this test's own `@stub`) — no real HTTP.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
@@ -162,8 +162,8 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
   end
 
   # Four Shopify collections mimicking the live store's shape: two
-  # `3d-printed-*` categories that should pass an allowlist filter, an
-  # explicitly excluded `3d-printed-*` ("featured mix"), and an
+  # `shop-*` categories that should pass an allowlist filter, an
+  # explicitly excluded `shop-*` ("featured mix"), and an
   # unrelated collection that doesn't match the prefix at all.
   # `fetch_collection_product_ids/2` has NO clause for ids 2 or 3 —
   # calling it for either would raise, proving a filtered-out collection
@@ -174,10 +174,10 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
     def fetch_collections(_opts) do
       {:ok,
        [
-         %{"id" => 1, "handle" => "3d-printed-frames", "title" => "Frames", "position" => 0},
-         %{"id" => 2, "handle" => "3d-printed-items", "title" => "Items", "position" => 1},
+         %{"id" => 1, "handle" => "shop-frames", "title" => "Frames", "position" => 0},
+         %{"id" => 2, "handle" => "shop-items", "title" => "Items", "position" => 1},
          %{"id" => 3, "handle" => "imported-from-etsy", "title" => "Etsy", "position" => 2},
-         %{"id" => 4, "handle" => "3d-printed-gifts", "title" => "Gifts", "position" => 3}
+         %{"id" => 4, "handle" => "shop-gifts", "title" => "Gifts", "position" => 3}
        ]}
     end
 
@@ -541,7 +541,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
       create_item(catalogue.uuid, "Frame A", 111)
       create_item(catalogue.uuid, "Gift A", 222)
 
-      filter = %{"prefix" => "3d-printed-", "exclude" => ["3d-printed-items"]}
+      filter = %{"prefix" => "shop-", "exclude" => ["shop-items"]}
 
       assert {:ok, result} =
                CollectionSync.run(
@@ -550,7 +550,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
                  filter: filter
                )
 
-      # "3d-printed-items" (excluded) and "imported-from-etsy" (prefix
+      # "shop-items" (excluded) and "imported-from-etsy" (prefix
       # mismatch) are both skipped; had either been fetched for its
       # products, `FilterStub.fetch_collection_product_ids/2` (no clause
       # for ids 2/3) would have raised instead of returning `{:ok, _}`.
@@ -586,7 +586,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSyncTest do
       %ShopConfig{}
       |> ShopConfig.changeset(%{
         key: "shopify_collections_filter",
-        value: %{"value" => %{"prefix" => "3d-printed-", "exclude" => ["3d-printed-items"]}}
+        value: %{"value" => %{"prefix" => "shop-", "exclude" => ["shop-items"]}}
       })
       |> Repo.insert!()
 

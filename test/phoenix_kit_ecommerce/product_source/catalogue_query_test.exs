@@ -4,9 +4,9 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
   # Needs `phoenix_kit_catalogue` loaded (with its own migrations applied
   # to the test DB) — excluded via `test_helper.exs`'s
   # `ExUnit.configure(exclude: ...)` whenever the optional dependency
-  # isn't present. `async: false`: `Query.catalogue_uuid/0` resolves the
-  # shop's one catalogue by NAME across the whole test DB, so two async
-  # tests both bootstrapping a catalogue named "decor3dprint" would race.
+  # isn't present. `async: false`: the shop's one catalogue is named in a
+  # single `phoenix_kit_shop_config` row, which two async tests would fight
+  # over.
   @moduletag :catalogue
 
   # Quiets the compiler's static xref check for `mix test` runs where the
@@ -15,12 +15,17 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
   # so the calls below are never actually reached.
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 
+  import ExUnit.CaptureLog
+
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitEcommerce.APIFixtures
   alias PhoenixKitEcommerce.ProductSource.Catalogue.Query
   alias PhoenixKitEcommerce.ProductSource.Catalogue.View
+  alias PhoenixKitEcommerce.ShopConfig
+  alias PhoenixKitEcommerce.Test.Repo
 
   setup do
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = APIFixtures.create_shop_catalogue()
     %{catalogue: catalogue}
   end
 
@@ -29,6 +34,30 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.QueryTest do
       Catalogue.create_item(Map.merge(%{catalogue_uuid: catalogue.uuid}, attrs))
 
     item
+  end
+
+  describe "catalogue_uuid/0" do
+    test "answers the catalogue `shop_catalogue` names", %{catalogue: catalogue} do
+      {:ok, _other} = Catalogue.create_catalogue(%{name: "not-the-shop"})
+
+      assert Query.catalogue_uuid() == catalogue.uuid
+    end
+
+    test "guesses nothing when `shop_catalogue` is unset, even with one catalogue" do
+      Repo.delete!(Repo.get!(ShopConfig, "shop_catalogue"))
+
+      log = capture_log(fn -> assert Query.catalogue_uuid() == nil end)
+
+      assert log =~ "`shop_catalogue` names no catalogue: nil"
+    end
+
+    test "is nil and warns when `shop_catalogue` names no catalogue" do
+      APIFixtures.put_config!("shop_catalogue", "no-such-catalogue")
+
+      log = capture_log(fn -> assert Query.catalogue_uuid() == nil end)
+
+      assert log =~ ~s(`shop_catalogue` names no catalogue: "no-such-catalogue")
+    end
   end
 
   describe "list_items/1" do

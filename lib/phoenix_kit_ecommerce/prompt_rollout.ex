@@ -6,7 +6,7 @@ defmodule PhoenixKitEcommerce.PromptRollout do
   A translation prompt lives as a row in `phoenix_kit_ai_prompts`, keyed by
   slug. A prompt module (`AITranslatable`, and the category adapter that
   mirrors it) ships its *desired* content as an Elixir string; getting a
-  code change to actually reach the stand means writing that string over
+  code change to actually reach a host means writing that string over
   the stored row — but only when doing so is safe.
 
   There is no version number. The content itself is the version: a second

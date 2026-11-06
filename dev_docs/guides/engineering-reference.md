@@ -25,7 +25,7 @@ pages.
   `~> 0.20` (hard; 0.20 is the first release that ships
   `BillingProfileFields` and `BillingProfile.fields_changeset/3`, which
   checkout renders and validates over),
-  `phoenix_kit_ai` `~> 0.24` (optional — the
+  `phoenix_kit_ai` `~> 0.27` (optional — the
   AI-translate UI, both translation adapters, the sweep worker and the
   translations page use it, and all of them compile out when it is absent;
   0.20 is the first engine that binds `{{SourceFields}}` and forwards
@@ -40,16 +40,15 @@ pages.
   file names both).
   Also `phoenix`, `phoenix_live_view ~> 1.1`, `ecto_sql ~> 3.12`,
   `oban ~> 2.20`, `uuidv7`, `nimble_csv`, `req`, `jason`, `mdex`,
-  `gettext ~> 1.0`. There is deliberately **no** dep on
-  `phoenix_kit_catalogue`: the extension slot is discovered duck-typed, and
-  the code that does call `PhoenixKitCatalogue.*` directly (the
-  `ProductSource.Catalogue` adapter, `Catalogue.Writer`, the Shopify
-  variants/collections/media sync) only runs behind `Code.ensure_loaded?/1`
-  once a host declares the dep, with `@compile {:no_warn_undefined, …}`. Its
-  `:catalogue`-tagged tests need the test-only path bridge in `mix.exs`
-  (`catalogue_test_deps/0`), or they run by themselves when
-  `phoenix_kit_warehouse` is resolved, which brings `phoenix_kit_catalogue`
-  in transitively.
+  `gettext ~> 1.0`. `phoenix_kit_catalogue` `~> 0.50` and
+  `phoenix_kit_entities` `~> 0.7` are optional: a host on the Legacy product
+  source needs neither. The extension slot is discovered duck-typed. The code
+  that calls `PhoenixKitCatalogue.*` directly (the `ProductSource.Catalogue`
+  adapter, `Catalogue.Writer`, the Shopify variants/collections/media sync)
+  only runs behind `Code.ensure_loaded?/1` or `ProductSource.current/0`, with
+  `@compile {:no_warn_undefined, …}` for hosts without it. Its
+  `:catalogue`-tagged tests run whenever the package is loaded, which this
+  repo's own build always has.
 - **Consumed by:** no sibling declares a dependency on this module. Core
   calls `PhoenixKitEcommerce.*` by its own name (the route module, the
   session plug, the two customer order pages), and `phoenix_kit_catalogue`
@@ -138,9 +137,6 @@ pages.
   then owns their evolution. The only tables it creates itself are
   `phoenix_kit_shop_search_index` (V4) and `phoenix_kit_shop_cart_claims`
   (V5).
-- **No catalogue version floor.** No released `phoenix_kit_catalogue` ships
-  the extension slot the integration targets, so a `~>` floor could only be
-  inaccurate.
 
 ## Architecture
 
@@ -566,6 +562,13 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   value is memoized per process for `:product_source_memo_ms` (application
   env, default 1000, `0` in tests): nothing in this package writes the row,
   so there is no write to invalidate a shared cache on.
+- `shop_catalogue` — the name of the one catalogue the shop reads under the
+  Catalogue source; stored in `phoenix_kit_shop_config`. It has no default and
+  no writer here: a host on that source sets it. Unset, or naming no catalogue,
+  `Query.catalogue_uuid/0` answers `nil`: the storefront is empty, each
+  resolution logs a warning, and the admin API refuses with
+  `no_shop_catalogue`. It never picks a catalogue by itself, because creating
+  an unrelated catalogue must not change what the shop sells.
 - `shop_allow_price_override` — allow per-product price overrides (default: `false`)
 - `shop_enforce_product_currency` — refuse, rather than warn, when a product's
   currency does not match the shop's (default: `false`). Read through
@@ -1041,8 +1044,9 @@ core and pins the request's-host fallback, so it is not a skipped test). Run bot
 sides, a core with the helper and a released one, as `test/test_helper.exs` says.
 
 The admin API's tests need a core with the tool registry, a catalogue with the
-admin API and `phoenix_kit_warehouse` with source kinds, none of which this
-package declares as a requirement. Their families (`:core_api`, `:core_confirm`,
+admin API and `phoenix_kit_warehouse` with source kinds. A build can lack any of
+them, and the `:old_catalogue` and `:no_catalogue` families need the lack. Their
+families (`:core_api`, `:core_confirm`,
 `:core_no_confirm`, `:catalogue_api`, `:old_catalogue`, `:no_catalogue`,
 `:warehouse`) are excluded or included by what the build has (see
 `test/test_helper.exs`, which prints the excluded set): run the suite once per

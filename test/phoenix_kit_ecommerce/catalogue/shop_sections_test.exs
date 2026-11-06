@@ -22,7 +22,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ShopSectionsTest do
   alias PhoenixKitEcommerce.Catalogue.ShopSections
 
   setup do
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, category} =
       Catalogue.create_category(%{name: "Vases", catalogue_uuid: catalogue.uuid})

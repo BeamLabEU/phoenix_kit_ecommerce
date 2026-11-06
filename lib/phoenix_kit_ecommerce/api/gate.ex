@@ -161,5 +161,5 @@ defmodule PhoenixKitEcommerce.API.Gate do
     do: "The installed phoenix_kit_catalogue is too old for the admin API; update it."
 
   defp detail(:no_shop_catalogue),
-    do: "The catalogue the shop reads does not exist yet."
+    do: "The shop has no catalogue: the shop_catalogue setting is unset or names none."
 end

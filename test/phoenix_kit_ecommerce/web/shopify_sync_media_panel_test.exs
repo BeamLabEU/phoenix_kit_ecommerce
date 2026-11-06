@@ -1,8 +1,7 @@
 defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
   @moduledoc """
   The "Media & collections" panel on `PhoenixKitEcommerce.Web.ShopifySync`
-  (Block 7 Task 5, `docs/superpowers/plans/2026-09-06-block7-shopify-
-  media-collections.md`): three buttons that enqueue `ShopifyMediaSyncWorker`
+  (Block 7 Task 5, `dev_docs/specs/catalogue-as-shop-product-list.md`): three buttons that enqueue `ShopifyMediaSyncWorker`
   jobs, gated on the catalogue product source and the `shop.run_imports`
   permission, live progress via PubSub, and a button staying disabled
   while a job of ITS kind is in flight.
@@ -155,7 +154,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
       %ShopConfig{}
       |> ShopConfig.changeset(%{
         key: "shopify_collections_filter",
-        value: %{"value" => %{"prefix" => "3d-printed-", "exclude" => ["3d-printed-items"]}}
+        value: %{"value" => %{"prefix" => "shop-", "exclude" => ["shop-items"]}}
       })
       |> Repo.insert!()
 
@@ -163,8 +162,8 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncMediaPanelTest do
 
       filter_html = view |> element("#media-sync-collections-filter") |> render()
 
-      assert filter_html =~ "prefix 3d-printed-,"
-      assert filter_html =~ "excluding 3d-printed-items"
+      assert filter_html =~ "prefix shop-,"
+      assert filter_html =~ "excluding shop-items"
     end
 
     test "clicking a button enqueues a job with that kind and the current user", %{conn: conn} do

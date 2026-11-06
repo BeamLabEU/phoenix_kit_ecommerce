@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+**Upgrading.** A host on the Catalogue product source must set `shop_catalogue`
+in `phoenix_kit_shop_config` before taking this version: the shop no longer has
+a default catalogue name. Unset, the storefront is empty and a warning is logged.
+
+An import config created by an earlier version keeps its stored keywords. A
+config named `legacy_default` holds keywords for one kind of shop, so open it on
+`/admin/shop/settings/import-configs` and clear what does not apply to yours.
+
+### Changed
+
+- `phoenix_kit_catalogue` `~> 0.50` and `phoenix_kit_entities` `~> 0.7` are now
+  declared optional dependencies, so a host with an older catalogue gets a
+  version conflict instead of a run-time `UndefinedFunctionError`.
+- `Query.catalogue_uuid/0` has no default catalogue name and never guesses one.
+- `ImportConfig.from_legacy_defaults/0` is now `ImportConfig.default_config/0`.
+
+### Fixed
+
+- CSV import no longer drops most of a shop's products. The default import
+  config, created on the first visit to the import configs page, carried one
+  kind of shop's keywords, and with no config at all the filter used the same
+  list. A product whose title matched none of them was skipped without an error.
+  The default now takes every product. A product no rule places goes to `other`,
+  not `other-3d`.
+- The import config and name prefix forms no longer suggest one kind of shop's
+  keywords as their placeholders.
+
 ## 0.9.0 - 2026-11-06
 
 Stock limits and write-off, order emails, online payment at checkout, related

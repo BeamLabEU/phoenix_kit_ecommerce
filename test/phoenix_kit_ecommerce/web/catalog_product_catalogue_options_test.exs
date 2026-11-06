@@ -40,7 +40,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProductCatalogueOptionsTest do
     PhoenixKit.Settings.update_setting("entities_enabled", "true")
     on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, item} =
       Catalogue.create_item(%{

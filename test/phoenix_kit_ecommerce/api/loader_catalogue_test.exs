@@ -148,7 +148,7 @@ defmodule PhoenixKitEcommerce.API.LoaderCatalogueTest do
     refute Loader.source_resolvable?()
     refute Loader.catalogue_listed?()
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     assert Loader.source_resolvable?()
     assert Loader.catalogue_listed?()

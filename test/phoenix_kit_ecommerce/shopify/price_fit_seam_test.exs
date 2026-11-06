@@ -1,8 +1,6 @@
 defmodule PhoenixKitEcommerce.Shopify.PriceFitSeamTest do
   @moduledoc """
-  Seam tests for the Shopify variant price-fit chain (`docs/superpowers/
-  specs/2026-09-23-shopify-variant-price-fit-design.md`, "Тест стыка
-  (обязателен)"): one value travels through four places —
+  Seam tests for the Shopify variant price-fit chain: one value travels through four places —
   `VariantMapper.build/2` -> `Writer.finalize_variant_sync/5` -> the sync
   worker's own run record -> the sync page's template — and the item's
   own `price_fit_rule` travels the other way, from a form save into the
@@ -106,11 +104,9 @@ defmodule PhoenixKitEcommerce.Shopify.PriceFitSeamTest do
     set_product_source("catalogue")
     connect_shopify()
 
-    # Named "decor3dprint" — `Query.catalogue_uuid/0`'s own default,
-    # which is how the worker finds ITS catalogue (see
-    # `shopify_media_sync_worker_test.exs`'s own setup for the same
-    # reasoning).
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    # Named in `shop_catalogue`, which is how the worker finds ITS catalogue
+    # (see `shopify_media_sync_worker_test.exs`'s own setup).
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
     actor = PhoenixKitEcommerce.DataCase.fixture_user()
 
     {:ok, conn: put_test_scope(conn, fake_scope()), catalogue: catalogue, actor: actor}

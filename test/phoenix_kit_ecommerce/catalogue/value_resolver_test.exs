@@ -8,7 +8,7 @@ defmodule PhoenixKitEcommerce.Catalogue.ValueResolverTest do
   their migrations applied to the test DB) — excluded via
   `test_helper.exs`'s `ExUnit.configure(exclude: ...)` whenever the
   optional dependency isn't present, same as every other `:catalogue`
-  test in this fork.
+  test.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false

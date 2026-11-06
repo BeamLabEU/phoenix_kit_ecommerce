@@ -52,7 +52,7 @@ defmodule PhoenixKitEcommerce.DashboardStatsSourceTest do
   setup do
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
     {:ok, _} = Catalogue.create_category(%{catalogue_uuid: catalogue.uuid, name: "Vases"})
     {:ok, _} = Catalogue.create_category(%{catalogue_uuid: catalogue.uuid, name: "Bowls"})
 

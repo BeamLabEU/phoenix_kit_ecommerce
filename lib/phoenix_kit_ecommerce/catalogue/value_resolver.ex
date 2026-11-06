@@ -5,8 +5,8 @@ defmodule PhoenixKitEcommerce.Catalogue.ValueResolver do
   catalogue attribute set already uses for that same choice, creating a
   new `draft` value when the set has none matching.
 
-  Built for Block 7 (the Shopify sync writing catalogue attribute-set
-  selections instead of raw strings); nothing in this fork calls it yet.
+  Built for Block 7: the Shopify sync writes catalogue attribute-set
+  selections through it instead of raw strings.
 
   ## Lookup order
 

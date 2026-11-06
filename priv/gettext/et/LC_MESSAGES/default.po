@@ -4992,8 +4992,8 @@ msgstr "muudatust"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1577
 #, elixir-autogen, elixir-format
-msgid "e.g. 3D Printed"
-msgstr "nt 3D Printed"
+msgid "e.g. Handmade"
+msgstr "nt Käsitöö"
 
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:423
 #: lib/phoenix_kit_ecommerce/catalogue/shop_sections.ex:441
@@ -7520,8 +7520,8 @@ msgstr "Kasutatakse, kui ükski kategooriareegel ei sobi"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:510
 #, elixir-autogen, elixir-format
-msgid "decal, sticker, mural, wallpaper, poster"
-msgstr "kleebis, tarra, seinamaaling, tapeet, plakat"
+msgid "sample, clearance, discontinued"
+msgstr "näidis, väljamüük, lõpetatud"
 
 #: lib/phoenix_kit_ecommerce/web/options_settings.ex:444
 #, elixir-autogen, elixir-format
@@ -7535,23 +7535,23 @@ msgstr "nt cm, kg"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:414
 #, elixir-autogen, elixir-format
-msgid "e.g., decor_3d_default"
-msgstr "nt decor_3d_default"
+msgid "e.g., main_catalog"
+msgstr "nt main_catalog"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:602
 #, elixir-autogen, elixir-format
-msgid "e.g., other-3d"
-msgstr "nt other-3d"
+msgid "e.g., other"
+msgstr "nt other"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:487
 #, elixir-autogen, elixir-format
-msgid "shelf, mask, vase, planter, holder, stand, lamp"
-msgstr "riiul, mask, vaas, lillepott, hoidik, alus, lamp"
+msgid "shirt, hoodie, mug, poster"
+msgstr "särk, pusa, kruus, plakat"
 
 #: lib/phoenix_kit_ecommerce/web/import_configs.ex:532
 #, elixir-autogen, elixir-format
-msgid "wall art, home decor stickers"
-msgstr "seinakunst, kodukaunistuse kleebised"
+msgid "gift card, free sample"
+msgstr "kinkekaart, tasuta näidis"
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:1937
 #, elixir-autogen, elixir-format

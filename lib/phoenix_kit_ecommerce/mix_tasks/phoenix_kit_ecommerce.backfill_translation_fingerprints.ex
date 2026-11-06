@@ -50,11 +50,9 @@ defmodule Mix.Tasks.PhoenixKitEcommerce.BackfillTranslationFingerprints do
   `_translation_fingerprints` key within it) — it never writes
   translated content, slugs, or any other field. Each table gets exactly
   one `UPDATE`, matching the cost design §2 measured for a full-catalog
-  hash pass (tens of milliseconds, not a per-row loop). Run it against
-  the shared stand only as the project's own separate, explicitly
-  announced live-verification step (see the project's worktree
-  instructions) — never as a byproduct of running this package's tests,
-  and never against the dev database from a throwaway checkout.
+  hash pass (tens of milliseconds, not a per-row loop). Run it against a
+  live database only as a deliberate step, never as a byproduct of running
+  this package's tests, and never from a throwaway checkout.
   """
 
   use Mix.Task

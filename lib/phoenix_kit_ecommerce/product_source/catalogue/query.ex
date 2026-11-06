@@ -1,8 +1,10 @@
 defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   @moduledoc """
   Ecto queries over `phoenix_kit_catalogue`'s `Item`/`Category` schemas,
-  scoped to the one catalogue the shop reads (`get_config("shop_catalogue")`,
-  default name `"decor3dprint"`, resolved through `Catalogue.list_catalogues/0`).
+  scoped to the one catalogue the shop reads: the one named by
+  `get_config("shop_catalogue")`, resolved through
+  `Catalogue.list_catalogues/0`. There is no default name, so a host on this
+  source sets that key itself.
 
   Returns raw catalogue structs — `PhoenixKitEcommerce.ProductSource.Catalogue`
   turns them into view-structs via `Catalogue.View`. Nothing here is called
@@ -31,16 +33,16 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   alias PhoenixKitCatalogue.Schemas.ItemAttributeSet
   alias PhoenixKitEntities.EntityData
 
-  @default_catalogue_name "decor3dprint"
-
   # ============================================================
   # Catalogue resolution
   # ============================================================
 
   @doc """
   The uuid of the one catalogue the shop reads, or `nil` when it can't
-  be resolved (not yet bootstrapped, or the configured name matches
-  none). Resolved by name — a config read plus `Catalogue.list_catalogues/0`
+  be resolved (`shop_catalogue` is unset, or names no catalogue). A `nil`
+  here is an empty storefront, so it logs a warning. It never picks a
+  catalogue by itself: with a guess, creating an unrelated catalogue could
+  change what the shop sells. Resolved by name — a config read plus `Catalogue.list_catalogues/0`
   — so every public function here accepts a pre-resolved value as
   `opts[:catalogue_uuid]` (`nil` included, meaning "resolved, none")
   and only falls back to this when the caller passed nothing;
@@ -50,13 +52,17 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.Query do
   """
   @spec catalogue_uuid() :: Ecto.UUID.t() | nil
   def catalogue_uuid do
-    name = PhoenixKitEcommerce.get_config("shop_catalogue") || @default_catalogue_name
+    name = PhoenixKitEcommerce.get_config("shop_catalogue")
 
     Catalogue.list_catalogues()
     |> Enum.find(&(&1.name == name))
     |> case do
-      %{uuid: uuid} -> uuid
-      _ -> nil
+      %{uuid: uuid} ->
+        uuid
+
+      _ ->
+        Logger.warning("[Shop] `shop_catalogue` names no catalogue: #{inspect(name)}")
+        nil
     end
   end
 

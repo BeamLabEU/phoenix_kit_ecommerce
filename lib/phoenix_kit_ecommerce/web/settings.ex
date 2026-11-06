@@ -912,7 +912,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
              unlike translations above, the sync has no background actor to
              pair an "autonomy" setting against (design §12.4): it only ever
              runs from an operator on the sync page. Defaults to `true`, so
-             a stand that never touches this setting keeps behaving exactly
+             a host that never touches this setting keeps behaving exactly
              as it did before the toggle existed. Turning it off does NOT
              touch a saved Shopify connection or its access token — it only
              hides the sidebar entry, redirects the sync page, and drops
@@ -1574,7 +1574,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                   type="text"
                   name="prefixes"
                   value={@name_prefixes}
-                  placeholder={gettext("e.g. 3D Printed")}
+                  placeholder={gettext("e.g. Handmade")}
                   class="input input-bordered flex-1 max-w-md"
                 />
                 <button type="submit" phx-disable-with={gettext("Saving…")} class="btn btn-primary btn-sm">{gettext("Save")}</button>

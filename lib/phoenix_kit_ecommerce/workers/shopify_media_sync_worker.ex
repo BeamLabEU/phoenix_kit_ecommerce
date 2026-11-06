@@ -1,8 +1,7 @@
 defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   @moduledoc """
   Oban worker driving the three Block 7 catalogue writers as background
-  jobs — Task 5 of `docs/superpowers/plans/2026-09-06-block7-shopify-
-  media-collections.md`.
+  jobs (`dev_docs/specs/catalogue-as-shop-product-list.md`).
 
   ## Job arguments
 
@@ -147,7 +146,7 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker do
   needs to learn to file it under its own `"kind"`.
 
   `get_progress/0`/`get_progress/1` fall back to the legacy single
-  `"shopify_media_sync"` row for the one kind it names, so a stand that
+  `"shopify_media_sync"` row for the one kind it names, so a host that
   ran a sync before this change doesn't lose that last result the first
   time it reads progress under the new keys — nothing is ever written
   back to the legacy key again, only read from it as a fallback.

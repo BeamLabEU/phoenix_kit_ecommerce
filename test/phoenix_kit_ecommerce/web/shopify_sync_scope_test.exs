@@ -98,7 +98,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySyncScopeTest do
     set_product_source("catalogue")
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, conn: put_test_scope(conn, fake_scope()), catalogue: catalogue}
   end

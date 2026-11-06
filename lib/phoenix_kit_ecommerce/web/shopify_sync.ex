@@ -1394,7 +1394,7 @@ defmodule PhoenixKitEcommerce.Web.ShopifySync do
   # `counts_recorded?` is false for a LEGACY progress record — one
   # written before this change added `"matched"`/`"skipped"`/`"stats"`
   # (`get_progress/0`'s own fallback to the old single
-  # `"shopify_media_sync"` key, or any per-kind row a stand wrote before
+  # `"shopify_media_sync"` key, or any per-kind row a host wrote before
   # the deploy that added these fields). Such a record's matched/skipped
   # would otherwise always read as 0 — indistinguishable from a real run
   # that genuinely matched/skipped nothing — so the template must show

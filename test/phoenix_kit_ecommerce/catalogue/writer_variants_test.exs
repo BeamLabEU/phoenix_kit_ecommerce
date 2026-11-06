@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.Catalogue.WriterVariantsTest do
   @moduledoc """
   `PhoenixKitEcommerce.Catalogue.Writer.sync_variants/3` (Block 7 Task 2,
-  `docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`):
+  `dev_docs/specs/catalogue-as-shop-product-list.md`):
   Shopify options/variants attached to a catalogue item as attribute
   sets, unknown option values created as `draft`, slug-keyed price
   modifiers written to `data["ecommerce"]["price_modifiers"]`, and a

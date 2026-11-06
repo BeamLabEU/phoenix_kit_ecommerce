@@ -198,25 +198,18 @@ defmodule PhoenixKitEcommerce.ImportConfig do
   def default_required_columns, do: @default_required_columns
 
   @doc """
-  Builds a config struct from legacy hardcoded values (for backward compatibility).
+  Builds the default config: no keywords and no category rules, so an import
+  takes every product until an admin narrows it. `skip_filter` stays off, which
+  keeps dropping the pseudo-products `Import.Filter` skips by handle.
   """
-  def from_legacy_defaults do
+  def default_config do
     %__MODULE__{
-      name: "legacy_default",
-      include_keywords:
-        ~w(3d printed shelf mask vase planter holder stand lamp light figurine sculpture statue),
-      exclude_keywords: ~w(decal sticker mural wallpaper poster tapestry canvas),
-      exclude_phrases: ["wall art"],
+      name: "default",
+      include_keywords: [],
+      exclude_keywords: [],
+      exclude_phrases: [],
       skip_filter: false,
-      category_rules: [
-        %{"keywords" => ["shelf"], "slug" => "shelves"},
-        %{"keywords" => ["mask"], "slug" => "masks"},
-        %{"keywords" => ["vase", "planter"], "slug" => "vases-planters"},
-        %{"keywords" => ["holder", "stand"], "slug" => "holders-stands"},
-        %{"keywords" => ["lamp", "light"], "slug" => "lamps"},
-        %{"keywords" => ["figurine", "sculpture", "statue"], "slug" => "figurines"}
-      ],
-      default_category_slug: "other-3d",
+      category_rules: [],
       required_columns: @default_required_columns,
       is_default: true,
       active: true

@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
   @moduledoc """
   `PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorker` (Block 7 Task 5,
-  `docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`):
+  `dev_docs/specs/catalogue-as-shop-product-list.md`):
   the worker's own `run/3` — matching Shopify products to catalogue
   items (by `product_id`, falling back to `handle`), continuing past a
   per-product failure, delegating `"collections"` wholesale to
@@ -9,11 +9,11 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
   progress record (persisted AND broadcast on `Worker.topic/0`).
 
   Calls `Worker.run/3` directly — the same function `perform/1` calls —
-  never through `Oban.insert/1`: this fork's own test env has no Oban
+  never through `Oban.insert/1`: this repo's test env has no Oban
   supervisor running (see the sync-page LiveView test file for where
   enqueueing itself gets covered, with its own local Oban instance).
   `opts[:client]`/`opts[:downloader]` are stub modules/functions — no
-  real HTTP, per Global Constraints.
+  real HTTP.
 
   Needs `phoenix_kit_catalogue` (AND `phoenix_kit_entities` for the
   `"variants"` kind) loaded — tagged `:catalogue` and excluded via
@@ -45,14 +45,9 @@ defmodule PhoenixKitEcommerce.Workers.ShopifyMediaSyncWorkerTest do
   setup do
     on_exit(fn -> set_product_source("legacy") end)
 
-    # Named "decor3dprint" (the adapter's own default, `Query.
-    # catalogue_uuid/0`'s `@default_catalogue_name`) — not a unique
-    # per-test name: the worker resolves ITS catalogue by looking up the
-    # catalogue named `get_config("shop_catalogue") || "decor3dprint"`,
-    # so a differently-named catalogue here is invisible to it (each test
-    # still runs in its own rolled-back sandbox transaction, so reusing
-    # this name across tests in this file is safe).
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    # Named in `shop_catalogue`: the worker resolves ITS catalogue by that
+    # name, so a catalogue the config does not name is invisible to it.
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     %{catalogue: catalogue}
   end

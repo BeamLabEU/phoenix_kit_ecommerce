@@ -2,7 +2,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
   @moduledoc """
   `PhoenixKitEcommerce.Catalogue.Writer.update_from_shopify/3` coverage
   specific to the Shopify identity backfill (Block 7 Task 1,
-  `docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`).
+  `dev_docs/specs/catalogue-as-shop-product-list.md`).
   The broader update/create paths (title/price/tags/legacy_metadata
   survival) are covered by `Shopify.SyncCatalogueTest`; this file is
   narrower: `:handle`/`:product_id` merging into `data["ecommerce"]
@@ -14,7 +14,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
   as `sync_catalogue_test.exs`.
   """
 
-  use PhoenixKitEcommerce.DataCase, async: true
+  use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue
 
@@ -97,7 +97,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
     # "draft" produced from an absent key was always stored. Applying ANY
     # other field therefore silently reset the merchant status.
     #
-    # Measured on the decor3dprint stand (2026-09-22): the operator applied
+    # Measured on a live store (2026-09-22): the operator applied
     # `status` to 400 + 36 products, then applied `body_html`, `tags` and
     # `description` per field — each of those applies reset the statuses that
     # had just been synced, so the next check reported ~109 status diffs again
@@ -213,11 +213,11 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterTest do
   describe "create_from_shopify/2 — Shopify identity" do
     setup do
       # `create_from_shopify/2` resolves ITS catalogue internally
-      # (`Query.catalogue_uuid/0`, default name "decor3dprint") rather
+      # (`Query.catalogue_uuid/0`, by the `shop_catalogue` config) rather
       # than taking one as an argument — unlike this file's other
       # `setup`, which only needs SOME catalogue for `update_from_shopify/3`
       # (it never re-resolves one for an existing item).
-      {:ok, _catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+      {:ok, _catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
       :ok
     end
 

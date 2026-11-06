@@ -65,10 +65,8 @@ defmodule PhoenixKitEcommerce.ProductSourceTest do
     test "\"catalogue\" only selects the Catalogue adapter when phoenix_kit_catalogue is loaded" do
       put_product_source_config!("catalogue")
 
-      # This fork declares `phoenix_kit_catalogue` as an optional dependency
-      # (see mix.exs's `catalogue_test_deps/0`) — present under the
-      # `:catalogue`-tagged test bridge, absent from a plain `mix test` run.
-      # Either way, `ProductSource.current/0` must reflect it precisely:
+      # `phoenix_kit_catalogue` is an optional dependency, so a build can lack
+      # it. Either way, `ProductSource.current/0` must reflect it precisely:
       # falling back to `Legacy` without the dependency, switching to the
       # `Catalogue` adapter with it.
       expected = if Code.ensure_loaded?(PhoenixKitCatalogue), do: Catalogue, else: Legacy

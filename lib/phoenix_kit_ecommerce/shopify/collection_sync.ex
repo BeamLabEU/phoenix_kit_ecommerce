@@ -1,14 +1,12 @@
 defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   @moduledoc """
   Maps Shopify collections onto catalogue categories, preserving both
-  orders — Block 7 Task 4 (`docs/superpowers/plans/2026-09-06-block7-
-  shopify-media-collections.md`, §5 Блок 7 in the design spec), with the
-  live-store allowlist and most-specific assignment added by Block 7b
-  Task 2 (`docs/superpowers/plans/2026-09-06-block7b-shopify-live-fixes.md`)
-  — the real store has 143 collections, of which only ~12
-  `3d-printed-*` ones are our categories; the rest (an "all products",
-  a curated cross-category "featured" mix, per-tag collections, ...)
-  must never become categories or move an item at all.
+  orders (Block 7 in `dev_docs/specs/catalogue-as-shop-product-list.md`), with the
+  allowlist and most-specific assignment added after the first live run.
+  A real store can have well over a hundred collections of which only a
+  dozen are its categories; the rest (an "all products", a curated
+  cross-category "featured" mix, per-tag collections, ...) must never
+  become categories or move an item at all.
 
   `run/1` fetches every collection via `opts[:client]` (a module
   exposing `fetch_collections/1`/`fetch_collection_product_ids/2`,
@@ -46,9 +44,9 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   that collection's list position for the item. An item listed in only
   one allowed collection trivially gets that one. This replaces Block
   7's original "keep the item's current category when Shopify still
-  lists it there" rule outright: on the live store, several allowed
+  lists it there" rule outright: on a real store, several allowed
   categories can legitimately list the same item (e.g. a general
-  "3d-printed-decor" alongside a narrower "3d-printed-wall-frames"), and
+  "home-decor" alongside a narrower "wall-frames"), and
   always preferring whichever one happened to be assigned first —
   rather than the narrowest match — is the bug this task fixes. A
   product id with no matching item is collected into
@@ -70,7 +68,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   back on the next run.
 
   A no-op — `{:error, :catalogue_source_inactive}` — when
-  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  `ProductSource.current/0` isn't `Catalogue` (every
   new Block 7 writer is legacy-source-safe on its own).
 
   `opts[:catalogue_uuid]` is required — unlike `Writer`'s functions,
@@ -167,7 +165,7 @@ defmodule PhoenixKitEcommerce.Shopify.CollectionSync do
   end
 
   # ============================================================
-  # Phase 0: the live-store allowlist (Block 7b Task 2)
+  # Phase 0: the allowlist
   # ============================================================
 
   # Drops every collection `collection_allowed?/2` rejects, then

@@ -1,8 +1,7 @@
 defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
   @moduledoc """
   Shopify sync 6a against a catalogue-backed item — the write side of
-  Block 3 (`docs/superpowers/specs/2026-09-05-catalogue-as-shop-product-
-  list-design.md` §5 Блок 3). `PhoenixKitEcommerce.Shopify.ProductDiff`'s
+  Block 3 (`dev_docs/specs/catalogue-as-shop-product-list.md`). `PhoenixKitEcommerce.Shopify.ProductDiff`'s
   own pure unit coverage (compare_at_price, `metadata["_shopify"]`
   handle matching, `new_product_changes/3`) lives in
   `ProductDiffTest` — this file covers what needs a real catalogue item:
@@ -45,7 +44,7 @@ defmodule PhoenixKitEcommerce.Shopify.SyncCatalogueTest do
     set_product_source("catalogue")
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, item} =
       Catalogue.create_item(%{

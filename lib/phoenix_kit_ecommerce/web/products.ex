@@ -367,7 +367,7 @@ defmodule PhoenixKitEcommerce.Web.Products do
                 navigate={
                   Routes.path(
                     if @catalogue_source_active?,
-                      do: "/admin/catalogue",
+                      do: "/admin/catalogues",
                       else: "/admin/shop/products/new"
                   )
                 }

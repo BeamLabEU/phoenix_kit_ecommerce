@@ -61,7 +61,7 @@ defmodule PhoenixKitEcommerce.Test.Hooks do
   end
 
   # `on_mount` callback standing in for the HOST's own domain-currency hook
-  # (Э1-A2, e.g. `Decor3dprintWeb.DomainCurrencyHook`) — production sets the
+  # — production sets the
   # request-scoped display currency from the visitor's domain; this test
   # double sets it from `"phoenix_kit_test_currency"` in the session instead,
   # via `LiveCase.put_test_currency/2`. No-op (falls through to the base

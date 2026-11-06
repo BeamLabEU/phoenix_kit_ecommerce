@@ -186,40 +186,18 @@ defmodule PhoenixKitEcommerce.MixProject do
       # switch is shown disabled with a pointer to Modules -> Not installed
       # (see `PhoenixKitEcommerce.StockTracking`).
       pk_dep(:phoenix_kit_warehouse, "~> 0.7", optional: true),
-      # No declared dependency on `phoenix_kit_catalogue`, though this app
-      # DOES call into `PhoenixKitCatalogue` directly (the ProductSource
-      # catalogue adapter, `Catalogue.Writer`, and the Shopify-sync 6a
-      # path call `Catalogue.{get_item_by_slug/3, get_category_by_slug/3,
-      # get_item!/1, create_item/2, update_item/2, list_catalogues/0,
-      # translated_*}`, `Catalogue.AttributeSets.{resolve_for_item/2,
-      # resolve_for_items/2, list_sets/1}`, `Catalogue.Slugs.from_title/2`
-      # and several `Schemas.*` structs — none of that is duck-typed).
-      # It IS true for the older extension-slot integration
-      # (`PhoenixKitEcommerce.Catalogue.Extension`), which is fully
-      # duck-typed and calls nothing in `PhoenixKitCatalogue` directly.
-      # No released version yet ships the API the ProductSource adapter
-      # targets, several of which exist only on the fork's own
-      # `feature/shop-extensions` branch — so a `~>` floor here could
-      # only be inaccurate, and every one of those call sites is
-      # unreachable unless a host resolves that exact branch. Add
-      # `pk_dep(:phoenix_kit_catalogue, "~> 0.50", optional: true)`
-      # once a release carries the API.
-      #
-      # `catalogue_test_deps/0` below is the narrow exception: a
-      # TEST-ONLY, path-only, opt-in bridge so the `:catalogue`-tagged
-      # tests in this repo (`writer_images_test.exs`,
-      # `writer_variants_test.exs`, `collection_sync_test.exs`,
-      # `shopify_sync_media_panel_test.exs`, `product_source/catalogue/*`)
-      # can actually execute against a real local checkout instead of
-      # staying excluded forever — set `PHOENIX_KIT_CATALOGUE_PATH` and
-      # `PHOENIX_KIT_ENTITIES_PATH` (matching branches the host app
-      # itself pins) and run `mix test`; leave them unset and no dependency
-      # is added by the bridge. The bridge itself never resolves via Hex,
-      # so the "no released version" rationale above is untouched. Note
-      # that the optional `phoenix_kit_warehouse` dependency above pulls
-      # `phoenix_kit_catalogue` (and `phoenix_kit_entities`) in from Hex
-      # transitively; with it resolved `test_helper.exs` no longer excludes
-      # `:catalogue` and those tests run by default.
+      # Optional: a host on the Legacy product source needs neither. The
+      # Catalogue product source needs both. The floor is the first release
+      # with the admin API's batch writes (`update_items/2`,
+      # `preview_item_update/3`, `broadcast_item_batch_change/3`), on top of
+      # the slug lookups, attribute sets and form extension slot the adapter,
+      # `Catalogue.Writer` and the Shopify sync use. Those call
+      # `PhoenixKitCatalogue` directly, each behind `Code.ensure_loaded?/1` or
+      # `ProductSource.current/0`, so `@compile {:no_warn_undefined, ...}`
+      # stays for hosts without it. Only the extension slot is duck-typed.
+      # Entities is named because the adapter reads `EntityData` itself.
+      pk_dep(:phoenix_kit_catalogue, "~> 0.50", optional: true),
+      pk_dep(:phoenix_kit_entities, "~> 0.7", optional: true),
 
       # LiveView is needed for the admin and storefront pages.
       {:phoenix_live_view, "~> 1.1"},
@@ -272,28 +250,7 @@ defmodule PhoenixKitEcommerce.MixProject do
       # same package. Version matches the constraint `phoenix_kit`/`leaf`
       # already lock to.
       {:mdex, "~> 0.13"}
-    ] ++ catalogue_test_deps()
-  end
-
-  # See the comment above `pk_dep(:phoenix_kit_catalogue, ...)`. Returns
-  # `[]` (no dependency declared at all) unless BOTH path env vars are
-  # set to a non-blank value; a path dep here can never fall back to
-  # resolving from Hex the way `pk_dep/3` does for the other optional
-  # deps, so an unset var can only ever mean "excluded", never "resolve
-  # some floor version that may not have the API".
-  defp catalogue_test_deps do
-    catalogue_path = System.get_env("PHOENIX_KIT_CATALOGUE_PATH")
-    entities_path = System.get_env("PHOENIX_KIT_ENTITIES_PATH")
-
-    if is_binary(catalogue_path) and catalogue_path != "" and is_binary(entities_path) and
-         entities_path != "" do
-      [
-        {:phoenix_kit_catalogue, path: catalogue_path, only: :test, override: true},
-        {:phoenix_kit_entities, path: entities_path, only: :test, override: true}
-      ]
-    else
-      []
-    end
+    ]
   end
 
   defp package do

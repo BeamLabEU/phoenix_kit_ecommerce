@@ -1,9 +1,8 @@
 defmodule PhoenixKitEcommerce.Catalogue.Writer do
   @moduledoc """
   Writes Shopify sync changes into `phoenix_kit_catalogue` items — the
-  write side of Block 3's "sync 6a" (`docs/superpowers/specs/2026-09-05-
-  catalogue-as-shop-product-list-design.md` §5 Блок 3) and Block 7's 6b
-  (same doc, same §, "Блок 7"), active only when `ProductSource.
+  write side of Block 3's "sync 6a" and Block 7's 6b
+  (`dev_docs/specs/catalogue-as-shop-product-list.md`), active only when `ProductSource.
   current/0` is `Catalogue`. `update_from_shopify/3`/`create_from_shopify/2`
   are called by `PhoenixKitEcommerce.Shopify.Sync`; `sync_variants/2` (and
   the images/collections writers Block 7 adds alongside it) is called
@@ -209,7 +208,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   ["price_modifiers"][set_slug]`.
 
   A no-op — `{:error, :catalogue_source_inactive}` — when
-  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  `ProductSource.current/0` isn't `Catalogue` (every
   new Block 7 writer is legacy-source-safe on its own, not only via
   whatever caller happens to gate it).
 
@@ -483,7 +482,7 @@ defmodule PhoenixKitEcommerce.Catalogue.Writer do
   stays visible.
 
   A no-op — `{:error, :catalogue_source_inactive}` — when
-  `ProductSource.current/0` isn't `Catalogue` (Global Constraints: every
+  `ProductSource.current/0` isn't `Catalogue` (every
   new Block 7 writer is legacy-source-safe on its own).
 
   Idempotent: a second run against the same payload resolves every

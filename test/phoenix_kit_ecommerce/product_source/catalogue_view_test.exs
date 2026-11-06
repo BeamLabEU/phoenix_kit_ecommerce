@@ -7,13 +7,10 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.ViewTest do
   # STRUCTS), `product_view/2`/`category_view/2` unconditionally call
   # `PhoenixKitCatalogue.Catalogue.translated_name/2` and friends — a
   # real dependency on the `Catalogue` MODULE regardless of fixture
-  # shape. Verified empirically: `Code.ensure_loaded?(PhoenixKitCatalogue)`
-  # is `false` in this fork's own `mix test` (no dependency declared,
-  # see mix.exs), and calling `View.product_view/2` here without the
-  # guard raises `UndefinedFunctionError`. Excluded (via
-  # `test_helper.exs`'s `ExUnit.configure(exclude: ...)`) whenever the
-  # optional dependency isn't present, same as every other catalogue
-  # adapter test — see Global Constraints in the block-3 plan.
+  # shape: without the package, calling `View.product_view/2` raises
+  # `UndefinedFunctionError`. Excluded (via `test_helper.exs`'s
+  # `ExUnit.configure(exclude: ...)`) whenever the optional dependency
+  # isn't present, same as every other catalogue adapter test.
   @moduletag :catalogue
 
   alias PhoenixKitEcommerce.Category

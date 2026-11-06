@@ -8,9 +8,9 @@ defmodule PhoenixKitEcommerce.Catalogue.DuplicateDataCatalogueIntegrationTest do
   Needs `phoenix_kit_catalogue` with the `duplicate_data/2` hook —
   excluded via `test_helper.exs`'s `:catalogue` tag whenever the
   optional dependency isn't present, and skipped when the catalogue
-  loaded is older than the hook. Bridge in via
-  `PHOENIX_KIT_CATALOGUE_PATH`/`PHOENIX_KIT_ENTITIES_PATH` to run it
-  locally.
+  loaded is older than the hook. Set
+  `PHOENIX_KIT_CATALOGUE_PATH`/`PHOENIX_KIT_ENTITIES_PATH` to run it against
+  local checkouts.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false

@@ -34,7 +34,7 @@ defmodule PhoenixKitEcommerce.CartCatalogueTest do
     set_product_source("catalogue")
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     {:ok, item} =
       Catalogue.create_item(%{
@@ -136,12 +136,12 @@ defmodule PhoenixKitEcommerce.CartCatalogueTest do
 
       # `Query.catalogue_uuid/0` (what `CatalogueSource.get_product/2` scopes
       # every read to) resolves by NAME against the `shop_catalogue` config
-      # (defaulting to "decor3dprint") — not by whichever catalogue this
-      # item happens to live in. The module-level `setup` above already
+      # — not by whichever catalogue this item happens to live in. The module-level `setup` above already
       # created that one; reusing it here (instead of a second,
       # differently-named catalogue) is what makes this item visible to
       # `get_product/2` at all.
-      catalogue = Catalogue.list_catalogues() |> Enum.find(&(&1.name == "decor3dprint"))
+      shop_catalogue = PhoenixKitEcommerce.get_config("shop_catalogue")
+      catalogue = Catalogue.list_catalogues() |> Enum.find(&(&1.name == shop_catalogue))
       {:ok, set} = AttributeSets.create_set(%{name: "Color"}, actor_uuid: Ecto.UUID.generate())
 
       {:ok, red} =

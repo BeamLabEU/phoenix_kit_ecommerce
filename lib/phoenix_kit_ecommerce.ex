@@ -8365,14 +8365,14 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
-  Creates the legacy default import config if no configs exist.
+  Creates the default import config if no configs exist.
 
   Returns `{:created, config}` if a new config was created,
   or `:exists` if configs already exist.
   """
   def ensure_default_import_config do
     if repo().aggregate(ImportConfig, :count) == 0 do
-      attrs = Map.from_struct(ImportConfig.from_legacy_defaults())
+      attrs = Map.from_struct(ImportConfig.default_config())
       {:ok, config} = create_import_config(attrs)
       {:created, config}
     else

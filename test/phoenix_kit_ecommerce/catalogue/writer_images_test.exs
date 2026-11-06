@@ -1,7 +1,7 @@
 defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
   @moduledoc """
   `PhoenixKitEcommerce.Catalogue.Writer.sync_images/3` (Block 7 Task 3,
-  `docs/superpowers/plans/2026-09-06-block7-shopify-media-collections.md`):
+  `dev_docs/specs/catalogue-as-shop-product-list.md`):
   Shopify product images downloaded (via an injected `opts[:downloader]`
   stub — no real HTTP in this suite) and attached to the catalogue item
   in Shopify's own `position` order, deduped across runs by the Shopify
@@ -253,7 +253,7 @@ defmodule PhoenixKitEcommerce.Catalogue.WriterImagesTest do
     end
 
     # Block 7b Task 1
-    # (docs/superpowers/plans/2026-09-06-block7b-shopify-live-fixes.md):
+    # (dev_docs/specs/catalogue-as-shop-product-list.md):
     # migrated items carry plain Storage files (never Shopify-image-id
     # tagged) whose `metadata["source_url"]` still records the Shopify
     # CDN URL they were downloaded from — reuse those by URL, query

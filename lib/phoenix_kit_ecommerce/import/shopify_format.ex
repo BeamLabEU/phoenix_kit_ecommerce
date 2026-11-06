@@ -55,7 +55,7 @@ defmodule PhoenixKitEcommerce.Import.ShopifyFormat do
 
   @impl true
   def default_config_attrs do
-    config = ImportConfig.from_legacy_defaults()
+    config = ImportConfig.default_config()
 
     config
     |> Map.from_struct()

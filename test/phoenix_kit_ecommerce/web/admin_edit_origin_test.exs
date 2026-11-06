@@ -247,7 +247,7 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
       set_product_source("catalogue")
       enable_catalogue_module()
 
-      {:ok, catalogue} = PhoenixKitCatalogue.Catalogue.create_catalogue(%{name: "decor3dprint"})
+      {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
       slug = "origin-item-#{System.unique_integer([:positive])}"
 
       {:ok, item} =
@@ -298,7 +298,7 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
       set_product_source("catalogue")
       enable_catalogue_module()
 
-      {:ok, catalogue} = PhoenixKitCatalogue.Catalogue.create_catalogue(%{name: "decor3dprint"})
+      {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
       slug = "origin-category-#{System.unique_integer([:positive])}"
 
       {:ok, category} =

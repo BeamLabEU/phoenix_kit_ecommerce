@@ -31,7 +31,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategoryCatalogueStatusTest do
     set_product_source("catalogue")
     on_exit(fn -> set_product_source("legacy") end)
 
-    {:ok, catalogue} = Catalogue.create_catalogue(%{name: "decor3dprint"})
+    {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
 
     %{catalogue: catalogue}
   end

@@ -13,9 +13,10 @@ admin LiveViews and a public storefront. Module key `"shop"`, settings prefix
 from BEAM files and generates routes from tabs and `route_module/0`.
 
 - Required PhoenixKit deps: core `>= 2.65.0 and < 4.0.0`, billing `~> 0.25`.
-  Optional: AI `~> 0.27`, Warehouse `~> 0.7`, web analytics. Catalogue is
-  duck-typed, with no declared dependency or version floor. Guard optional
-  integrations so a host without them compiles and runs.
+  Optional: AI `~> 0.27`, Warehouse `~> 0.7`, Catalogue `~> 0.50` with Entities
+  `~> 0.7`, web analytics. Guard optional integrations so a host without them
+  compiles and runs. Only catalogue's form extension slot is duck-typed; the
+  Catalogue product source calls it directly.
 - Checkout hands orders, invoices, tax and payments to `PhoenixKitBilling`.
   The provider webhook confirms payment. Only supported positive-total online
   payments with no price-on-request line defer the buyer's confirmation; admins
@@ -50,6 +51,7 @@ contract changes.
 | Harness, support modules, environment and dependency-specific test tags | [Testing](dev_docs/guides/engineering-reference.md#testing) |
 | Shipping quote snapshots, public API visibility, search indexing, cart claims and ACP decision | [Feature notes](dev_docs/guides/engineering-reference.md#feature-notes) |
 | Storefront price display and i18n | [Storefront guide](dev_docs/guides/storefront.md) |
+| Catalogue as the product list: target, status per block, what is left | [Design spec](dev_docs/specs/catalogue-as-shop-product-list.md) |
 
 ## Commands
 
@@ -71,6 +73,7 @@ exported before the first `mix test` (a stale lock aborts on the optional
 PHOENIX_KIT_PATH=../phoenix_kit mix deps.get && PHOENIX_KIT_PATH=../phoenix_kit mix test
 PHOENIX_KIT_BILLING_PATH=../phoenix_kit_billing mix test
 PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
+PHOENIX_KIT_CATALOGUE_PATH=../phoenix_kit_catalogue PHOENIX_KIT_ENTITIES_PATH=../phoenix_kit_entities mix test
 ```
 
 Repo-local aliases:
@@ -315,8 +318,8 @@ Repo-local aliases:
   The symptom is an `undefined_column` on `rounding_rule` raised from a
   currency read, hundreds of tests deep and nowhere near anything about
   currencies. `test_helper.exs` runs core's chain, then this module's,
-  then billing's — and, when the catalogue path bridge is resolved,
-  entities' and catalogue's. The catalogue pair matters the same way:
+  then billing's — and, when catalogue is loaded, entities' and
+  catalogue's. The catalogue pair matters the same way:
   core's baseline creates `phoenix_kit_cat_*` in their V1 shape, catalogue's
   own V2 adds the `slug` column its schemas insert, so a database without
   that chain fails every `:catalogue` test with `undefined_column: slug`.
@@ -434,8 +437,6 @@ publish has succeeded.
   that ships it deprecated. Core no longer references
   `PhoenixKit.Modules.Shop`; what remains is checking each host for the old
   names.
-- **Add a `phoenix_kit_catalogue` floor** once a released catalogue ships the
-  `PhoenixKitCatalogue.Extension` slot the duck-typed integration targets.
 - **Deprecate `phoenix_kit_shop_products` / `phoenix_kit_shop_categories` and
   the two slug projections** in favour of `phoenix_kit_catalogue` once the
   storefront switches — by a host-side `COMMENT ON TABLE … 'deprecated …'`,

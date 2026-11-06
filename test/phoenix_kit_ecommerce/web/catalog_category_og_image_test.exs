@@ -163,7 +163,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogCategoryOgImageTest do
         |> Repo.update!()
       end)
 
-      {:ok, catalogue} = PhoenixKitCatalogue.Catalogue.create_catalogue(%{name: "decor3dprint"})
+      {:ok, catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
       %{catalogue: catalogue}
     end
 

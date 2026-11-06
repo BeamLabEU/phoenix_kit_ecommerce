@@ -123,8 +123,7 @@ repo_available =
       # them is idempotent.
       Enum.each(PhoenixKitEcommerce.Migrations.up_statements(), &TestRepo.query!/1)
 
-      # ...and, when the test-only catalogue bridge is resolved (see
-      # mix.exs's `catalogue_test_deps/0`), the entities and catalogue
+      # ...and, when catalogue is loaded, the entities and catalogue
       # chains — in that order, the same way catalogue's own test helper
       # runs them. Core's baseline creates the `phoenix_kit_cat_*` tables
       # in their V1 shape only; catalogue's V2 adds the per-language `slug`
@@ -174,10 +173,8 @@ Application.put_env(:phoenix_kit_ecommerce, :test_repo_available, repo_available
 # catalogue mutation) needs a `Phoenix.PubSub` server registered as
 # `PhoenixKit.PubSub` — the host app provides this in production, and
 # `phoenix_kit_catalogue`'s own test suite starts it the same way. Only
-# relevant when `phoenix_kit_catalogue` is actually resolved (the test-only
-# path bridge in mix.exs's `catalogue_test_deps/0`, or transitively through
-# the optional `phoenix_kit_warehouse`), so a run without it starts no extra
-# process.
+# relevant when `phoenix_kit_catalogue` is loaded, so a build without it starts
+# no extra process.
 if Code.ensure_loaded?(PhoenixKitCatalogue) do
   case Phoenix.PubSub.Supervisor.start_link(name: PhoenixKit.PubSub) do
     {:ok, _} -> :ok
@@ -283,30 +280,27 @@ single_language_exclude =
     [:requires_core_single_language]
   end
 
-# `phoenix_kit_catalogue` is an OPTIONAL dependency (see mix.exs's comment
-# by the `pk_dep(:phoenix_kit_ai, ...)` line for the sibling case) — the
+# `phoenix_kit_catalogue` is an OPTIONAL dependency — the
 # `ProductSource.Catalogue` adapter's own tests need it loaded (a real
 # `PhoenixKitCatalogue.Schemas.Item`/`Category` struct for the pure view
 # tests, a live catalogue DB for the query tests) and are tagged
-# `:catalogue` so they run automatically once the package is loaded, whether
-# a host declares the dep, the path bridge is set, or the optional
-# `phoenix_kit_warehouse` dependency brings it in transitively.
+# `:catalogue` so they run whenever the package is loaded, and are excluded
+# from a build that leaves it out.
 catalogue_exclude =
   if Code.ensure_loaded?(PhoenixKitCatalogue) do
     []
   else
     Logger.info(
       "[test_helper] phoenix_kit_catalogue not loaded — ProductSource.Catalogue " <>
-        "tests excluded. They will run automatically once a host declares the " <>
-        "optional dependency."
+        "tests excluded. They run in any build that has the package."
     )
 
     [:catalogue]
   end
 
-# The admin API's tests need three things this repo does not declare as
-# dependencies, so each family runs only against a build that has what it
-# needs. Run the suite once per build and read the excluded count.
+# The admin API's tests depend on what the build has, so each family runs only
+# against a build that has what it needs. Run the suite once per build and read
+# the excluded count.
 #
 #   :catalogue_api     a catalogue with the API (resolve_refs/2, update_items/2)
 #   :old_catalogue     a catalogue WITHOUT it
