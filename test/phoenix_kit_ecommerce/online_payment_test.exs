@@ -57,6 +57,24 @@ defmodule PhoenixKitEcommerce.OnlinePaymentTest do
       refute OnlinePayment.awaiting?(%{status: "pending", payment_option_uuid: nil})
     end
 
+    test "an order with a price-on-request line is not paid online", %{stripe: stripe} do
+      quoted = %{"name" => "Quoted", "price_on_request" => true}
+      priced = %{"name" => "Priced"}
+
+      order = %{
+        status: "pending",
+        payment_option_uuid: stripe.uuid,
+        metadata: %{"payment_option_type" => "online"},
+        total: Decimal.new("10.00"),
+        line_items: [priced, quoted]
+      }
+
+      refute OnlinePayment.required?(order)
+      refute OnlinePayment.awaiting?(order)
+
+      assert OnlinePayment.required?(%{order | line_items: [priced]})
+    end
+
     test "the payment type recorded at checkout survives option changes", %{stripe: stripe} do
       order = %{
         status: "pending",

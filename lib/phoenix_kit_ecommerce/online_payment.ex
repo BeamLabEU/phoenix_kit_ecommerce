@@ -24,6 +24,7 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
 
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitBilling, as: Billing
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Web.Helpers
 
@@ -111,13 +112,21 @@ defmodule PhoenixKitEcommerce.OnlinePayment do
 
   @doc "Whether this checkout requires a supported online payment, regardless of its status."
   @spec required?(map()) :: boolean()
-  def required?(order), do: payable_total?(order) and supported?() and online?(order)
+  def required?(order) do
+    payable_total?(order) and not quoted?(order) and supported?() and online?(order)
+  end
 
   @doc "Whether the order is an online order that has not been paid yet."
   @spec awaiting?(map()) :: boolean()
   def awaiting?(%{status: status} = order) when status in @unpaid, do: required?(order)
 
   def awaiting?(_order), do: false
+
+  # A price-on-request line counts 0 in the total, so a payment now would settle
+  # the priced lines only and make the order `paid`, which billing no longer lets
+  # anyone edit: the quoted amount could never be added. Such an order is placed
+  # unpaid, and the shop agrees the price and collects the whole amount itself.
+  defp quoted?(order), do: PriceDisplay.any_line_on_request?(Map.get(order, :line_items))
 
   # A free order (a full discount) has nothing to pay: a provider refuses a
   # zero session, which would strand the order on "Awaiting payment".

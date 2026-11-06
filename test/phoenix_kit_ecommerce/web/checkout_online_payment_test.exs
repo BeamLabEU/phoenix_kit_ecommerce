@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.DataCase
+  alias PhoenixKitEcommerce.PriceDisplay
   alias PhoenixKitEcommerce.Test.FakeOnlinePayment
   alias PhoenixKitEcommerce.Test.Repo
 
@@ -106,6 +107,22 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
       assert [order] = Billing.list_user_orders(user.uuid)
       assert path =~ "/checkout/complete/#{order.uuid}"
       assert path =~ "payment=failed"
+    end
+
+    test "a cart with a price-on-request line is placed without a payment", ctx do
+      FakeOnlinePayment.put_result({:ok, %{invoice: %{}, url: @provider_url}})
+      {:ok, _cart} = Shop.add_to_cart(ctx.cart, digital_product(on_request: true), 1)
+
+      {:ok, view, _html} = live(ctx.conn, "/checkout")
+      view |> element("#checkout-confirm-order") |> render_click()
+
+      {path, _flash} = assert_redirect(view)
+      assert path =~ "/checkout/complete/"
+      refute path =~ "payment="
+      refute_received {:start_order_payment, _, _}
+
+      assert [%{status: "pending", total: total}] = Billing.list_user_orders(ctx.user.uuid)
+      assert Decimal.compare(total, 0) == :gt
     end
 
     test "an order billing already holds as paid just opens its page", %{conn: conn} do
@@ -464,7 +481,12 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
     end
   end
 
-  defp digital_product do
+  defp digital_product(opts \\ []) do
+    metadata =
+      if opts[:on_request],
+        do: %{PriceDisplay.metadata_key() => %{"on_request" => true}},
+        else: %{}
+
     {:ok, product} =
       Shop.create_product(%{
         "title" => %{"en" => "Online Pay #{System.unique_integer([:positive])}"},
@@ -473,7 +495,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutOnlinePaymentTest do
         "currency" => "USD",
         "product_type" => "digital",
         "requires_shipping" => false,
-        "weight_grams" => 0
+        "weight_grams" => 0,
+        "metadata" => metadata
       })
 
     product

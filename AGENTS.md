@@ -18,7 +18,8 @@ from BEAM files and generates routes from tabs and `route_module/0`.
   integrations so a host without them compiles and runs.
 - Checkout hands orders, invoices, tax and payments to `PhoenixKitBilling`.
   The provider webhook confirms payment. Only supported positive-total online
-  payments defer the buyer's confirmation; admins are notified immediately.
+  payments with no price-on-request line defer the buyer's confirmation; admins
+  are notified immediately.
   `InvoicePaymentHandler` locks the order and commits the notification with
   its idempotency marker; failures roll both back. Snapshot checkout language
   and payment type. Read the payment contract in the guide before changing it.

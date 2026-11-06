@@ -116,7 +116,10 @@ pages.
   `_shop_payment_notified` marker with the notification; redelivery is a
   no-op. Only a supported, positive-total online payment defers the
   confirmation (`OnlinePayment.required?/1`); free orders and older billing
-  keep their immediate confirmation and the handler sends nothing more.
+  keep their immediate confirmation and the handler sends nothing more. So
+  does an order with a price-on-request line, which is placed without a
+  payment: the line counts 0 in the total, and a paid order can no longer be
+  edited to add the quoted amount. The shop collects the whole amount itself.
   That internal marker changes neither the business revision nor
   `updated_at`; a notification insertion error rolls both writes back so
   billing's worker can retry.
