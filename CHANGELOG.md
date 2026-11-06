@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.10.0 - 2026-11-06
+
+The shop no longer carries any one host's data: the default catalogue name and
+the import keywords are gone. Catalogue and entities are declared optional
+dependencies, and the catalogue design spec now lives in this repo.
 
 **Upgrading.** A host on the Catalogue product source must set `shop_catalogue`
 in `phoenix_kit_shop_config` before taking this version: the shop no longer has
@@ -32,6 +36,8 @@ config named `legacy_default` holds keywords for one kind of shop, so open it on
   not `other-3d`.
 - The import config and name prefix forms no longer suggest one kind of shop's
   keywords as their placeholders.
+- The shop's admin links to the Catalogues module now open `/admin/catalogues`.
+  They pointed at `/admin/catalogue`, a path that module does not have.
 
 ## 0.9.0 - 2026-11-06
 
