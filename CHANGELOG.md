@@ -4,6 +4,82 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.9.0 - 2026-11-06
+
+Stock limits and write-off, order emails, online payment at checkout, related
+products and cart cross-sells.
+
+**Upgrading.** `phoenix_kit_billing` is now `~> 0.25`: run `mix phoenix_kit.update`
+and apply billing's migration V8 before the new code takes traffic. Two things
+change for a live shop:
+
+- Buyers start getting order emails. A shop that sends its own should drop them or
+  turn these off under **Order emails** on the shop settings page. The shop's own
+  email goes out only once addresses are saved there.
+- Stock tracking now limits sales. With it on, a catalogue item with no stock at
+  the default warehouse is out of stock, so receive the goods first.
+
+### Added
+
+- **Stock is enforced while Stock tracking is on** (#82): `add_to_cart/4`,
+  `update_cart_item/2` and the order conversion refuse a quantity the default
+  warehouse does not hold, counting every cart line of the item, with
+  `{:error, {:insufficient_stock, lines}}`. Lowering a quantity always works. The
+  product page, cart and checkout say what is left, `shop.set_cart_items` answers
+  `insufficient_stock` with `allowed.max` on the line, and the claim's merge skips
+  and names the line. Related products and cross-sells stop offering what has sold
+  out. Only catalogue items that ship are counted: Legacy products have no
+  warehouse item. Stock is not reserved, so the last unit can be sold twice.
+- **A paid order is written off the stock** (#82): one goods issue through
+  billing's durable order event, with reason `sale`, the order number as
+  `external_ref` and a `shop_order` source reference. A short line posts nothing and
+  sends shop operators and warehouse keepers one notification, under a new "Stock
+  problems" type; the order stays paid. Refunds and cancellations give nothing back
+  yet.
+- **Order emails** (#117): `shop_order_confirmation` and `shop_order_paid` to the
+  buyer, in the language of the checkout, and `shop_order_received` to the addresses
+  saved on the settings page, with the buyer's contacts and a link to the admin
+  order. An order awaiting online payment mails nobody until it is paid. Each email
+  is an Oban job on `default`, sent once per order, and cannot fail the checkout.
+  The templates are overridable and listed in core's email preview, in the layout
+  group `shop`. A guest's email carries a link to the order only under the `:link`
+  lookup policy.
+- **Online payment at checkout** (#114): an order placed with a supported online
+  option goes straight to the provider, and the order page waits for the money and
+  updates when it arrives. The buyer's confirmation is held until then; admins are
+  told at once. An order with a price-on-request line is placed without a payment,
+  because a paid order could no longer take the quoted amount.
+- **Hand-picked related products** (#115, #116): a "You may also like" block on the
+  product page, edited on the product form or in the Shop section of a catalogue
+  item, with a category fallback and a block size in settings.
+- **Cross-sells in the cart** (#116): an "Add to your order" block from a second
+  hand-picked list.
+- **A setting to require a phone number at checkout** (#112), enforced by the order
+  conversion, a saved profile included.
+- **Settings to hide the catalog sidebar and show categories as buttons** (#113).
+
+### Changed
+
+- **`phoenix_kit_billing` raised to `~> 0.25`** for its order events, which the
+  write-off and the paid emails depend on. `BillingSupport` is removed, as its
+  documentation planned.
+- A new order line carries `requires_shipping`, so a write-off leaves out what does
+  not ship.
+- `Availability.available?/1` answers from stock while tracking is on, unless the
+  host's `:availability` hook answers instead.
+
+### Fixed
+
+- **The chain failed on a fresh core 3.x database** (#118): it runs billing's chain
+  first, because its foreign key needs a table core no longer creates.
+- Newest products were listed last when hidden categories were excluded (#111).
+- A cart addition racing a checkout could land on a cart already being converted,
+  and a stale cross-sell button could add what was no longer offered.
+- The order confirmation page subscribed to every order in the shop; it now follows
+  the buyer's own topic, after the access check (#114).
+- The catalogue picker offered deleted items and labelled rows with the catalogue's
+  status instead of the one a shopper's listing goes by (#116).
+
 ## 0.8.0 - 2026-10-27
 
 ### Added
