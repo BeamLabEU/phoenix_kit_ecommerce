@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.12.0 - 2026-11-15
+
+The rest of stock tracking (#82): what a refund does to stock, a low-stock
+reminder, and a product page that shows when an item is sold out or nearly so.
+PhoenixKit core 3.5.0 is now the minimum.
+
+**Upgrading.** The `phoenix_kit` requirement is now `>= 3.5.0 and < 4.0.0`
+(it was `>= 2.65.0`). A host on an older core must update core first. There is
+no migration. The two new settings start at their safe defaults: a refund only
+notifies, and "Only N left" is off.
+
+### Added
+
+- **What a refund does to stock**, under **When a paid order is refunded** on
+  the shop settings page (`shop_stock_refund_action`). A full refund of a paid
+  shop order whose sale was written off either notifies the shop's operators and
+  warehouse keepers once (`"notify"`, the default), or puts the same quantities
+  back at the warehouse they came from with one goods receipt (`"receipt"`).
+  The receipt is linked to the order, and its `external_ref` of
+  `<order number>/return` stops a retried event from posting it twice. A
+  refund does not say whether the goods came back, so notifying is the default.
+  A receipt Warehouse refuses notifies instead of retrying. An order that was
+  short of stock when paid always notifies.
+- **A low-stock reminder**: a write-off that takes an item to or below its
+  Warehouse minimum sends one `shop.stock_low` notification, once per crossing.
+- **Sold out and "Only N left" on the product page.** While stock tracking
+  counts an item, a sold-out one shows a disabled **Out of stock** button.
+  **Only N left** shows when N is at or below `shop_stock_low_threshold`
+  (**Show how many are left at or below**, default `0`, never). An open product
+  page updates when a write-off or a return changes the stock.
+- `Availability.offer/1` answers `:available`, `{:few_left, n}` or `:sold_out`.
+- The "Stock problems" notification type now also covers
+  `shop.order_refunded_stock` and `shop.stock_low`.
+
+### Changed
+
+- `phoenix_kit` `>= 3.5.0 and < 4.0.0`. The code paths for older cores are
+  gone: the API tools, the rate limit, the batch confirmation threshold and
+  the canonical links now call core 3.5's functions directly.
+
 ## 0.11.0 - 2026-11-11
 
 Copies of the buyer's order emails, a language for the shop's own order email,
