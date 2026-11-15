@@ -37,6 +37,12 @@ defmodule PhoenixKitEcommerce.OrderStockHandler do
   An order that was short when paid had nothing written off automatically; the
   keeper may have issued it by hand, so it is told whatever the setting.
 
+  The `:paid` and `:refunded` deliveries are separate jobs and can overlap, so a
+  `:refunded` can run before the sale it should give back is posted. The `:paid`
+  delivery therefore reads the order again once its write-off is settled, and a
+  refund that landed meanwhile is handled there. Both paths are idempotent, so
+  the refund is handled once whichever runs first.
+
   `:cancelled` changes nothing: only an unpaid order is cancelled, and nothing
   was written off for it.
   """
@@ -93,10 +99,32 @@ defmodule PhoenixKitEcommerce.OrderStockHandler do
 
   defp write_off(lines, order, location) do
     case StockTracking.post_sale(order, lines, location) do
-      {:ok, issue} -> after_posting(issue, :issued)
-      {:ok, :already_posted, _issue} -> :ok
-      {:error, {:insufficient_stock, short}} -> flag(order.uuid, named(short, lines))
-      {:error, reason} -> {:error, reason}
+      {:ok, issue} ->
+        after_posting(issue, :issued)
+        settle_refund(order.uuid)
+
+      {:ok, :already_posted, _issue} ->
+        settle_refund(order.uuid)
+
+      {:error, {:insufficient_stock, short}} ->
+        flag(order.uuid, named(short, lines))
+        settle_refund(order.uuid)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # The `:paid` and `:refunded` deliveries are separate jobs and can overlap. A
+  # refund that commits while this one is writing off sends a `:refunded` that
+  # may find neither the sale nor the short mark yet, and end. So the order is
+  # read again once the write-off is settled: refunded by now, its refund is
+  # handled here. Both steps are idempotent (`external_ref`, the told mark), so
+  # a `:refunded` that does see the sale changes nothing a second time.
+  defp settle_refund(order_uuid) do
+    case Billing.get_order(order_uuid) do
+      %{status: "refunded"} = refunded -> handle_order_event(:refunded, refunded)
+      _still_paid -> :ok
     end
   end
 
@@ -126,15 +154,26 @@ defmodule PhoenixKitEcommerce.OrderStockHandler do
         :ok
 
       {:error, reason} ->
-        Logger.warning(
-          "[Shop] the return of refunded order #{order.order_number} was refused: #{inspect(reason)}"
-        )
-
-        tell_refund(order, {:written_off, issued(issue)})
+        if posted_twice?(reason), do: :ok, else: refused(order, issue, reason)
     end
   end
 
   defp give_back(order, issue, _notify), do: tell_refund(order, {:written_off, issued(issue)})
+
+  # Two deliveries posting the return at once: the second loses to the unique
+  # `external_ref` of the first, which is the return already done.
+  defp posted_twice?(%Ecto.Changeset{errors: errors}),
+    do: match?({_message, [{:constraint, :unique} | _]}, errors[:external_ref])
+
+  defp posted_twice?(_reason), do: false
+
+  defp refused(order, issue, reason) do
+    Logger.warning(
+      "[Shop] the return of refunded order #{order.order_number} was refused: #{inspect(reason)}"
+    )
+
+    tell_refund(order, {:written_off, issued(issue)})
+  end
 
   defp issued(issue) do
     Enum.map(issue.lines, &%{name: &1["name"], quantity: units(&1["issued_quantity"])})

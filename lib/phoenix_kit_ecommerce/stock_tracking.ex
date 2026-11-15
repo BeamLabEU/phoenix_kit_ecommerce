@@ -327,6 +327,10 @@ defmodule PhoenixKitEcommerce.StockTracking do
     end
   end
 
+  @doc "The largest `low_stock_threshold/0` that can be stored."
+  @spec max_low_stock_threshold() :: pos_integer()
+  def max_low_stock_threshold, do: @max_low_threshold
+
   @doc "Stores `low_stock_threshold/0`. Takes a whole number or its string."
   @spec set_low_stock_threshold(integer() | String.t()) ::
           {:ok, non_neg_integer()}

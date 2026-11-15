@@ -1684,7 +1684,7 @@ msgstr "Valikute hinnad"
 msgid "Option added"
 msgstr "Valik lisatud"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:258
+#: lib/phoenix_kit_ecommerce/errors.ex:262
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:777
 #, elixir-autogen, elixir-format
 msgid "Option key and value are required"
@@ -2692,12 +2692,12 @@ msgstr "piltidega"
 msgid "— Standalone (no mapping) —"
 msgstr "— Eraldiseisev (ilma seoseta) —"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:156
+#: lib/phoenix_kit_ecommerce/errors.ex:160
 #, elixir-autogen, elixir-format
 msgid "A slug is required."
 msgstr "Slug on kohustuslik."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:157
+#: lib/phoenix_kit_ecommerce/errors.ex:161
 #, elixir-autogen, elixir-format
 msgid "A title is required."
 msgstr "Pealkiri on kohustuslik."
@@ -2717,12 +2717,12 @@ msgstr "Seadistage poe külgribal kuvatavad tootefiltrid. Kliendid saavad otsida
 msgid "Every image download failed."
 msgstr "Ühegi pildi allalaadimine ei õnnestunud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:159
+#: lib/phoenix_kit_ecommerce/errors.ex:163
 #, elixir-autogen, elixir-format
 msgid "No images could be downloaded."
 msgstr "Pilte ei õnnestunud alla laadida."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:160
+#: lib/phoenix_kit_ecommerce/errors.ex:164
 #, elixir-autogen, elixir-format
 msgid "No shipping method is available."
 msgstr "Ühtegi tarneviisi pole saadaval."
@@ -2752,12 +2752,12 @@ msgstr "CSV-faili vorming on vigane."
 msgid "The URL host is not allowed."
 msgstr "URL-i host ei ole lubatud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:166
+#: lib/phoenix_kit_ecommerce/errors.ex:170
 #, elixir-autogen, elixir-format
 msgid "The URL redirected too many times."
 msgstr "URL suunas liiga palju kordi ümber."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:146
+#: lib/phoenix_kit_ecommerce/errors.ex:150
 #, elixir-autogen, elixir-format
 msgid "The URL scheme is not allowed."
 msgstr "URL-i skeem ei ole lubatud."
@@ -2772,7 +2772,7 @@ msgstr "Ostukorv on tühi."
 msgid "The file could not be found."
 msgstr "Faili ei leitud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:174
+#: lib/phoenix_kit_ecommerce/errors.ex:178
 #, elixir-autogen, elixir-format
 msgid "The file format is not recognized."
 msgstr "Faili vormingut ei tuntud ära."
@@ -2787,42 +2787,42 @@ msgstr "Fail on tühi."
 msgid "The import log could not be found."
 msgstr "Impordilogi ei leitud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:173
+#: lib/phoenix_kit_ecommerce/errors.ex:177
 #, elixir-autogen, elixir-format
 msgid "The operation timed out."
 msgstr "Toiming aegus."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:163
+#: lib/phoenix_kit_ecommerce/errors.ex:167
 #, elixir-autogen, elixir-format
 msgid "The payment option could not be found."
 msgstr "Makseviisi ei leitud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:164
+#: lib/phoenix_kit_ecommerce/errors.ex:168
 #, elixir-autogen, elixir-format
 msgid "The product could not be found."
 msgstr "Toodet ei leitud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:161
+#: lib/phoenix_kit_ecommerce/errors.ex:165
 #, elixir-autogen, elixir-format
 msgid "The requested record was not found."
 msgstr "Soovitud kirjet ei leitud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:155
+#: lib/phoenix_kit_ecommerce/errors.ex:159
 #, elixir-autogen, elixir-format
 msgid "The response is missing a content type."
 msgstr "Vastusel puudub sisutüüp."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:167
+#: lib/phoenix_kit_ecommerce/errors.ex:171
 #, elixir-autogen, elixir-format
 msgid "The server returned an error."
 msgstr "Server tagastas vea."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:172
+#: lib/phoenix_kit_ecommerce/errors.ex:176
 #, elixir-autogen, elixir-format
 msgid "The temporary file is missing."
 msgstr "Ajutine fail on puudu."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:158
+#: lib/phoenix_kit_ecommerce/errors.ex:162
 #, elixir-autogen, elixir-format
 msgid "There are no images to process."
 msgstr "Töötlemiseks pole pilte."
@@ -2847,12 +2847,12 @@ msgstr "See e-posti aadress on juba registreeritud."
 msgid "This has already been migrated."
 msgstr "See on juba üle kantud."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:165
+#: lib/phoenix_kit_ecommerce/errors.ex:169
 #, elixir-autogen, elixir-format
 msgid "Too many requests. Please try again later."
 msgstr "Liiga palju päringuid. Proovige hiljem uuesti."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:305
+#: lib/phoenix_kit_ecommerce/errors.ex:309
 #, elixir-autogen, elixir-format
 msgid "Unexpected error: %{reason}"
 msgstr "Ootamatu viga: %{reason}"
@@ -4005,7 +4005,7 @@ msgstr "Muuda toodet"
 msgid "Failed to create order. Please try again."
 msgstr "Tellimuse loomine ebaõnnestus. Palun proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:272
+#: lib/phoenix_kit_ecommerce/errors.ex:276
 #, elixir-autogen, elixir-format
 msgid "Insufficient stock (only %{count} available).\nPlease reduce quantity."
 msgstr "Laos ei ole piisavalt (saadaval ainult %{count}).\nPalun vähenda kogust."
@@ -4105,7 +4105,7 @@ msgstr[1] "Vahesumma (%{count} kirjet)"
 msgid "The price has changed.\nPlease refresh to see the current price."
 msgstr "Hind on muutunud.\nPalun laadi leht uuesti, et näha praegust hinda."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:269
+#: lib/phoenix_kit_ecommerce/errors.ex:273
 #, elixir-autogen, elixir-format
 msgid "This item is out of stock.\nPlease try again later or choose another one."
 msgstr "See kirje on läbi müüdud.\nProovi hiljem uuesti või vali mõni teine."
@@ -6647,7 +6647,7 @@ msgstr "Tarneandmeid ei õnnestunud salvestada. Proovi uuesti."
 msgid "The delivery price could not be calculated. Please try again."
 msgstr "Tarnehinda ei õnnestunud arvutada. Proovi uuesti."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:170
+#: lib/phoenix_kit_ecommerce/errors.ex:174
 #, elixir-autogen, elixir-format
 msgid "The delivery price has to be calculated before the order can be placed."
 msgstr "Tarnehind tuleb enne tellimuse esitamist arvutada."
@@ -6896,12 +6896,12 @@ msgstr "Shopify vastus viitas teisele hostile — sünkroonimine peatati."
 msgid "Starting…"
 msgstr "Käivitamine…"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:162
+#: lib/phoenix_kit_ecommerce/errors.ex:166
 #, elixir-autogen, elixir-format
 msgid "That option no longer exists."
 msgstr "Seda valikut enam ei ole."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:141
+#: lib/phoenix_kit_ecommerce/errors.ex:145
 #, elixir-autogen, elixir-format
 msgid "That quantity is not available."
 msgstr "See kogus ei ole saadaval."
@@ -6916,7 +6916,7 @@ msgstr "Kontroll katkes ootamatult — proovi uuesti."
 msgid "The connection's shop domain must be the store's own address, like my-store.myshopify.com — no https://, path or custom domain."
 msgstr "Ühenduse poe domeen peab olema poe enda aadress, näiteks my-store.myshopify.com — ilma https://-i, tee ja kohandatud domeenita."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:302
+#: lib/phoenix_kit_ecommerce/errors.ex:306
 #, elixir-autogen, elixir-format
 msgid "The data could not be saved. Check the values and try again."
 msgstr "Andmeid ei õnnestunud salvestada. Kontrolli väärtusi ja proovi uuesti."
@@ -6972,7 +6972,7 @@ msgstr "Sul pole selleks õigust"
 msgid "\"%{name}\" set as default"
 msgstr "\"%{name}\" määrati vaikimisi seadistuseks"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:198
+#: lib/phoenix_kit_ecommerce/errors.ex:202
 #, elixir-autogen, elixir-format
 msgid "\"Allow multiple slots\" must be on or off."
 msgstr "\"Luba mitu pesa\" peab olema sees või väljas."
@@ -7008,17 +7008,17 @@ msgid_plural "%{count} rules"
 msgstr[0] "%{count} reegel"
 msgstr[1] "%{count} reeglit"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:211
+#: lib/phoenix_kit_ecommerce/errors.ex:215
 #, elixir-autogen, elixir-format
 msgid "A %{type} option needs at least one value."
 msgstr "Tüüpi %{type} valik vajab vähemalt ühte väärtust."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:214
+#: lib/phoenix_kit_ecommerce/errors.ex:218
 #, elixir-autogen, elixir-format
 msgid "A %{type} option needs its values."
 msgstr "Tüüpi %{type} valik vajab väärtusi."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:192
+#: lib/phoenix_kit_ecommerce/errors.ex:196
 #, elixir-autogen, elixir-format
 msgid "A localized label must map language codes to text."
 msgstr "Lokaliseeritud silt peab seostama keelekoodid tekstiga."
@@ -7074,17 +7074,17 @@ msgstr "Kõik tooted imporditakse ilma märksõnafiltrita"
 msgid "Allow Override Per-Product"
 msgstr "Luba tootepõhine ülekirjutamine"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:177
+#: lib/phoenix_kit_ecommerce/errors.ex:181
 #, elixir-autogen, elixir-format
 msgid "An option must be a map."
 msgstr "Valik peab olema võtme-väärtuse kogum."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:248
+#: lib/phoenix_kit_ecommerce/errors.ex:252
 #, elixir-autogen, elixir-format
 msgid "An option with the key \"%{key}\" already exists in this category."
 msgstr "Valik võtmega \"%{key}\" on selles kategoorias juba olemas."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:244
+#: lib/phoenix_kit_ecommerce/errors.ex:248
 #, elixir-autogen, elixir-format
 msgid "An option with the key \"%{key}\" already exists."
 msgstr "Valik võtmega \"%{key}\" on juba olemas."
@@ -7320,7 +7320,7 @@ msgstr "Kaasavad märksõnad"
 msgid "Input Types"
 msgstr "Sisenditüübid"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:202
+#: lib/phoenix_kit_ecommerce/errors.ex:206
 #, elixir-autogen, elixir-format
 msgid "Invalid type \"%{type}\". Must be one of: %{types}"
 msgstr "Vigane tüüp \"%{type}\". Lubatud on: %{types}"
@@ -7346,12 +7346,12 @@ msgstr "Märksõnad (komadega eraldatud)"
 msgid "Lowercase with underscores, auto-generated from label"
 msgstr "Väiketähed ja alakriipsud, luuakse automaatselt sildi põhjal"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:230
+#: lib/phoenix_kit_ecommerce/errors.ex:234
 #, elixir-autogen, elixir-format
 msgid "Missing price modifiers for options: %{values}"
 msgstr "Hinnamuutjad puuduvad väärtustel: %{values}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:181
+#: lib/phoenix_kit_ecommerce/errors.ex:185
 #, elixir-autogen, elixir-format
 msgid "Missing required keys: %{keys}"
 msgstr "Puuduvad kohustuslikud võtmed: %{keys}"
@@ -7376,12 +7376,12 @@ msgstr "Valikuid pole veel määratud"
 msgid "Option Types Reference"
 msgstr "Valikutüüpide ülevaade"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:217
+#: lib/phoenix_kit_ecommerce/errors.ex:221
 #, elixir-autogen, elixir-format
 msgid "Option values must be text, or maps with a \"value\" key."
 msgstr "Valiku väärtused peavad olema tekst või kogumid võtmega \"value\"."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:178
+#: lib/phoenix_kit_ecommerce/errors.ex:182
 #, elixir-autogen, elixir-format
 msgid "Options must be a list."
 msgstr "Valikud peavad olema loend."
@@ -7411,22 +7411,22 @@ msgstr "Hinnamuutjad"
 msgid "Price Modifiers (Default Values)"
 msgstr "Hinnamuutjad (vaikeväärtused)"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:226
+#: lib/phoenix_kit_ecommerce/errors.ex:230
 #, elixir-autogen, elixir-format
 msgid "Price modifiers are only supported for select and multiselect types."
 msgstr "Hinnamuutjad on toetatud ainult tüüpidel select ja multiselect."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:241
+#: lib/phoenix_kit_ecommerce/errors.ex:245
 #, elixir-autogen, elixir-format
 msgid "Price modifiers are required when the option affects the price."
 msgstr "Hinnamuutjad on kohustuslikud, kui valik mõjutab hinda."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:238
+#: lib/phoenix_kit_ecommerce/errors.ex:242
 #, elixir-autogen, elixir-format
 msgid "Price modifiers must be a map."
 msgstr "Hinnamuutjad peavad olema võtme-väärtuse kogum."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:235
+#: lib/phoenix_kit_ecommerce/errors.ex:239
 #, elixir-autogen, elixir-format
 msgid "Price modifiers must be valid decimal numbers (e.g., \"5.00\")."
 msgstr "Hinnamuutjad peavad olema korrektsed kümnendarvud (nt \"5.00\")."
@@ -7474,37 +7474,37 @@ msgstr "Jäta filter vahele"
 msgid "Success"
 msgstr "Õnnestus"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:185
+#: lib/phoenix_kit_ecommerce/errors.ex:189
 #, elixir-autogen, elixir-format
 msgid "The key must be lowercase letters, digits and underscores, starting with a letter."
 msgstr "Võti peab koosnema väiketähtedest, numbritest ja alakriipsudest ning algama tähega."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:189
+#: lib/phoenix_kit_ecommerce/errors.ex:193
 #, elixir-autogen, elixir-format
 msgid "The key must be text."
 msgstr "Võti peab olema tekst."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:195
+#: lib/phoenix_kit_ecommerce/errors.ex:199
 #, elixir-autogen, elixir-format
 msgid "The label must be text or a localized map."
 msgstr "Silt peab olema tekst või lokaliseeritud kogum."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:221
+#: lib/phoenix_kit_ecommerce/errors.ex:225
 #, elixir-autogen, elixir-format
 msgid "The modifier type must be one of: %{types}"
 msgstr "Muutja tüüp peab olema üks järgmistest: %{types}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:255
+#: lib/phoenix_kit_ecommerce/errors.ex:259
 #, elixir-autogen, elixir-format
 msgid "The value \"%{value}\" already exists."
 msgstr "Väärtus \"%{value}\" on juba olemas."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:252
+#: lib/phoenix_kit_ecommerce/errors.ex:256
 #, elixir-autogen, elixir-format
 msgid "The value cannot be empty."
 msgstr "Väärtus ei tohi olla tühi."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:208
+#: lib/phoenix_kit_ecommerce/errors.ex:212
 #, elixir-autogen, elixir-format
 msgid "The values of a %{type} option must be a list."
 msgstr "Tüüpi %{type} valiku väärtused peavad olema loend."
@@ -7569,7 +7569,7 @@ msgstr "Shopify poe esikülg suunas ümber lubamatule aadressile — sünkroonim
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr "Shopify poe esikülg suunas liiga mitu korda ümber — sünkroonimine peatati."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:294
+#: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
 msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
 msgstr "Kataloogipõhise poe baasvaluutat ei saa veel muuta. Midagi ei muudetud ja kõik hinnad on endiselt praeguses baasvaluutas."
@@ -7579,7 +7579,7 @@ msgstr "Kataloogipõhise poe baasvaluutat ei saa veel muuta. Midagi ei muudetud 
 msgid "Set a base currency in the currency settings."
 msgstr "Määra baasvaluuta valuutaseadetes."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:151
+#: lib/phoenix_kit_ecommerce/errors.ex:155
 #, elixir-autogen, elixir-format
 msgid "This shop has no base currency yet, so prices from Shopify cannot be written. Set a base currency first."
 msgstr "Sellel poel pole veel baasvaluutat, seega ei saa Shopify hindu salvestada. Määra esmalt baasvaluuta."
@@ -7645,7 +7645,6 @@ msgstr "Ava API seaded →"
 msgid "Price change threshold updated"
 msgstr "Hinnamuutuste lävi uuendatud"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:139
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2015
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2021
 #, elixir-autogen, elixir-format
@@ -7895,7 +7894,7 @@ msgstr "Nõua kassas telefoninumbrit"
 msgid "Awaiting payment"
 msgstr "Ootab makset"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:285
+#: lib/phoenix_kit_ecommerce/errors.ex:289
 #, elixir-autogen, elixir-format
 msgid "Online payment is not available right now. Please try again later."
 msgstr "Veebimaksed pole praegu saadaval. Palun proovige hiljem uuesti."
@@ -7925,7 +7924,7 @@ msgstr "Makset ei viidud lõpule. Saate nüüd maksta või sellele lehele hiljem
 msgid "Waiting for payment"
 msgstr "Ootame makset"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:288
+#: lib/phoenix_kit_ecommerce/errors.ex:292
 #, elixir-autogen, elixir-format
 msgid "We could not start the payment. Please try again."
 msgstr "Makset ei õnnestunud algatada. Palun proovige uuesti."
@@ -8042,7 +8041,7 @@ msgstr "Pakutakse ostukorvis, kui see toode seal on (\"Lisa oma tellimusele\"), 
 msgid "How many products each block shows at most: related products on the product page, cross-sells in the cart."
 msgstr "Mitu toodet iga plokk kõige rohkem näitab: seotud tooted tootelehel, lisamüük ostukorvis."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:263
+#: lib/phoenix_kit_ecommerce/errors.ex:267
 #, elixir-autogen, elixir-format
 msgid "Not enough stock for: %{items}.\nPlease change your cart."
 msgstr "Laos pole piisavalt kaupa: %{items}.\nPalun muuda oma ostukorvi."
@@ -8123,7 +8122,7 @@ msgstr "Uus tellimus poele"
 msgid "New order {{order_number}}"
 msgstr "Uus tellimus {{order_number}}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:278
+#: lib/phoenix_kit_ecommerce/errors.ex:282
 #, elixir-autogen, elixir-format
 msgid "Not an email address: %{addresses}"
 msgstr "Ei ole e-posti aadress: %{addresses}"
@@ -8259,7 +8258,7 @@ msgstr "Saidi põhikeel (%{language})"
 msgid "The buyer's emails are in the language they checked out in. The shop's email is in this one."
 msgstr "Ostja e-kirjad on keeles, milles ta tellimuse vormistas. Poe e-kiri on selles keeles."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:282
+#: lib/phoenix_kit_ecommerce/errors.ex:286
 #, elixir-autogen, elixir-format
 msgid "This language is not enabled on the site."
 msgstr "See keel pole saidil lubatud."
@@ -8269,7 +8268,7 @@ msgstr "See keel pole saidil lubatud."
 msgid "A refund does not say whether the goods came back. Telling the keeper leaves the stock as it is; putting the goods back posts a goods receipt for what the order took out."
 msgstr "Raha tagastamine ei näita, kas kaup tuli tagasi. Laohoidja teavitamisel jääb laoseis samaks; kauba lattu tagasi panemisel postitatakse sissetulek selle kohta, mis tellimusega laost välja läks."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:144
+#: lib/phoenix_kit_ecommerce/errors.ex:148
 #, elixir-autogen, elixir-format
 msgid "Choose what a refund does to the stock."
 msgstr "Vali, mida raha tagastamine laoseisuga teeb."
@@ -8312,7 +8311,7 @@ msgstr "Teavita laohoidjat"
 msgid "The product page reads \"Only 3 left\" when this many or fewer are in stock. 0 never shows it."
 msgstr "Tootelehel on kiri „Jäänud ainult 3“, kui laos on nii palju või vähem. 0 puhul seda ei näidata."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:147
+#: lib/phoenix_kit_ecommerce/errors.ex:151
 #, elixir-autogen, elixir-format
 msgid "The stock setting could not be saved."
 msgstr "Laoseadistust ei õnnestunud salvestada."
@@ -8321,3 +8320,8 @@ msgstr "Laoseadistust ei õnnestunud salvestada."
 #, elixir-autogen, elixir-format
 msgid "When a paid order is refunded"
 msgstr "Kui makstud tellimuse eest raha tagastatakse"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:141
+#, elixir-autogen, elixir-format
+msgid "Enter a whole number from 0 to %{max}."
+msgstr "Sisesta täisarv vahemikus 0 kuni %{max}."

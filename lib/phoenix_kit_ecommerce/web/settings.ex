@@ -1115,7 +1115,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                     type="number"
                     name="threshold"
                     min="0"
-                    max="1000"
+                    max={StockTracking.max_low_stock_threshold()}
                     step="1"
                     value={@stock_low_threshold}
                     class="input input-bordered w-32"

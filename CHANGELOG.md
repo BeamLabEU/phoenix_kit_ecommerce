@@ -26,7 +26,9 @@ notifies, and "Only N left" is off.
   `<order number>/return` stops a retried event from posting it twice. A
   refund does not say whether the goods came back, so notifying is the default.
   A receipt Warehouse refuses notifies instead of retrying. An order that was
-  short of stock when paid always notifies.
+  short of stock when paid always notifies. A refund that lands while the sale
+  is still being written off is handled once, by whichever delivery comes
+  second.
 - **A low-stock reminder**: a write-off that takes an item to or below its
   Warehouse minimum sends one `shop.stock_low` notification, once per crossing.
 - **Sold out and "Only N left" on the product page.** While stock tracking

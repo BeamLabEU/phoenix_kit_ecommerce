@@ -916,6 +916,12 @@ settings-layer error.
   performer. A receipt Warehouse refuses is logged and notifies instead, so the
   job does not retry a refusal. An order flagged short at payment had nothing
   written off automatically and always notifies. `:cancelled` changes nothing.
+  The `:paid` and `:refunded` deliveries are separate jobs on billing's queue
+  and can overlap, so a `:refunded` may run before the sale is posted and find
+  nothing. The `:paid` delivery re-reads the order after its write-off (posted,
+  already posted or flagged short) and handles a refund that landed meanwhile;
+  a return posted twice at once loses to the unique `external_ref` and counts
+  as done.
   Every posting broadcasts `{:inventory_updated, item_uuid, :issued | :returned}`
   so an open product page re-reads its stock.
 - **The product page.** `Availability.offer/1` answers `:available`,

@@ -1686,7 +1686,7 @@ msgstr "Optionspreise"
 msgid "Option added"
 msgstr "Option hinzugefügt"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:258
+#: lib/phoenix_kit_ecommerce/errors.ex:262
 #: lib/phoenix_kit_ecommerce/web/product_form.ex:777
 #, elixir-autogen, elixir-format
 msgid "Option key and value are required"
@@ -2694,12 +2694,12 @@ msgstr "mit Bildern"
 msgid "— Standalone (no mapping) —"
 msgstr "— Eigenständig (keine Zuordnung) —"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:156
+#: lib/phoenix_kit_ecommerce/errors.ex:160
 #, elixir-autogen, elixir-format
 msgid "A slug is required."
 msgstr "Ein Slug ist erforderlich."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:157
+#: lib/phoenix_kit_ecommerce/errors.ex:161
 #, elixir-autogen, elixir-format
 msgid "A title is required."
 msgstr "Ein Titel ist erforderlich."
@@ -2719,12 +2719,12 @@ msgstr "Konfigurieren Sie die im Shop-Seitenbereich angezeigten Produktfilter. K
 msgid "Every image download failed."
 msgstr "Der Download aller Bilder ist fehlgeschlagen."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:159
+#: lib/phoenix_kit_ecommerce/errors.ex:163
 #, elixir-autogen, elixir-format
 msgid "No images could be downloaded."
 msgstr "Es konnten keine Bilder heruntergeladen werden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:160
+#: lib/phoenix_kit_ecommerce/errors.ex:164
 #, elixir-autogen, elixir-format
 msgid "No shipping method is available."
 msgstr "Keine Versandmethode verfügbar."
@@ -2754,12 +2754,12 @@ msgstr "Das CSV-Dateiformat ist ungültig."
 msgid "The URL host is not allowed."
 msgstr "Der URL-Host ist nicht zulässig."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:166
+#: lib/phoenix_kit_ecommerce/errors.ex:170
 #, elixir-autogen, elixir-format
 msgid "The URL redirected too many times."
 msgstr "Die URL wurde zu oft weitergeleitet."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:146
+#: lib/phoenix_kit_ecommerce/errors.ex:150
 #, elixir-autogen, elixir-format
 msgid "The URL scheme is not allowed."
 msgstr "Das URL-Schema ist nicht zulässig."
@@ -2774,7 +2774,7 @@ msgstr "Der Warenkorb ist leer."
 msgid "The file could not be found."
 msgstr "Die Datei konnte nicht gefunden werden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:174
+#: lib/phoenix_kit_ecommerce/errors.ex:178
 #, elixir-autogen, elixir-format
 msgid "The file format is not recognized."
 msgstr "Das Dateiformat wurde nicht erkannt."
@@ -2789,42 +2789,42 @@ msgstr "Die Datei ist leer."
 msgid "The import log could not be found."
 msgstr "Das Importprotokoll konnte nicht gefunden werden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:173
+#: lib/phoenix_kit_ecommerce/errors.ex:177
 #, elixir-autogen, elixir-format
 msgid "The operation timed out."
 msgstr "Die Zeit für den Vorgang ist abgelaufen."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:163
+#: lib/phoenix_kit_ecommerce/errors.ex:167
 #, elixir-autogen, elixir-format
 msgid "The payment option could not be found."
 msgstr "Die Zahlungsoption konnte nicht gefunden werden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:164
+#: lib/phoenix_kit_ecommerce/errors.ex:168
 #, elixir-autogen, elixir-format
 msgid "The product could not be found."
 msgstr "Das Produkt konnte nicht gefunden werden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:161
+#: lib/phoenix_kit_ecommerce/errors.ex:165
 #, elixir-autogen, elixir-format
 msgid "The requested record was not found."
 msgstr "Der angeforderte Datensatz wurde nicht gefunden."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:155
+#: lib/phoenix_kit_ecommerce/errors.ex:159
 #, elixir-autogen, elixir-format
 msgid "The response is missing a content type."
 msgstr "Der Antwort fehlt ein Content-Type."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:167
+#: lib/phoenix_kit_ecommerce/errors.ex:171
 #, elixir-autogen, elixir-format
 msgid "The server returned an error."
 msgstr "Der Server hat einen Fehler zurückgegeben."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:172
+#: lib/phoenix_kit_ecommerce/errors.ex:176
 #, elixir-autogen, elixir-format
 msgid "The temporary file is missing."
 msgstr "Die temporäre Datei fehlt."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:158
+#: lib/phoenix_kit_ecommerce/errors.ex:162
 #, elixir-autogen, elixir-format
 msgid "There are no images to process."
 msgstr "Es sind keine Bilder zu verarbeiten."
@@ -2849,12 +2849,12 @@ msgstr "Diese E-Mail-Adresse ist bereits registriert."
 msgid "This has already been migrated."
 msgstr "Dies wurde bereits migriert."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:165
+#: lib/phoenix_kit_ecommerce/errors.ex:169
 #, elixir-autogen, elixir-format
 msgid "Too many requests. Please try again later."
 msgstr "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:305
+#: lib/phoenix_kit_ecommerce/errors.ex:309
 #, elixir-autogen, elixir-format
 msgid "Unexpected error: %{reason}"
 msgstr "Unerwarteter Fehler: %{reason}"
@@ -4007,7 +4007,7 @@ msgstr "Produkt bearbeiten"
 msgid "Failed to create order. Please try again."
 msgstr "Bestellung konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:272
+#: lib/phoenix_kit_ecommerce/errors.ex:276
 #, elixir-autogen, elixir-format
 msgid "Insufficient stock (only %{count} available).\nPlease reduce quantity."
 msgstr "Unzureichender Lagerbestand (nur %{count} verfügbar).\nBitte reduzieren Sie die Menge."
@@ -4107,7 +4107,7 @@ msgstr[1] "Zwischensumme (%{count} Artikel)"
 msgid "The price has changed.\nPlease refresh to see the current price."
 msgstr "Der Preis hat sich geändert.\nBitte aktualisieren Sie die Seite, um den aktuellen Preis zu sehen."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:269
+#: lib/phoenix_kit_ecommerce/errors.ex:273
 #, elixir-autogen, elixir-format
 msgid "This item is out of stock.\nPlease try again later or choose another one."
 msgstr "Dieser Artikel ist nicht auf Lager.\nBitte versuchen Sie es später erneut oder wählen Sie einen anderen aus."
@@ -6649,7 +6649,7 @@ msgstr "Die Lieferdaten konnten nicht gespeichert werden. Bitte versuchen Sie es
 msgid "The delivery price could not be calculated. Please try again."
 msgstr "Die Lieferkosten konnten nicht berechnet werden. Bitte versuchen Sie es erneut."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:170
+#: lib/phoenix_kit_ecommerce/errors.ex:174
 #, elixir-autogen, elixir-format
 msgid "The delivery price has to be calculated before the order can be placed."
 msgstr "Der Lieferpreis muss berechnet werden, bevor die Bestellung aufgegeben werden kann."
@@ -6898,12 +6898,12 @@ msgstr "Die Antwort von Shopify verwies auf einen anderen Host — die Synchroni
 msgid "Starting…"
 msgstr "Wird gestartet…"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:162
+#: lib/phoenix_kit_ecommerce/errors.ex:166
 #, elixir-autogen, elixir-format
 msgid "That option no longer exists."
 msgstr "Diese Option existiert nicht mehr."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:141
+#: lib/phoenix_kit_ecommerce/errors.ex:145
 #, elixir-autogen, elixir-format
 msgid "That quantity is not available."
 msgstr "Diese Menge ist nicht verfügbar."
@@ -6918,7 +6918,7 @@ msgstr "Die Prüfung wurde unerwartet beendet — bitte erneut versuchen."
 msgid "The connection's shop domain must be the store's own address, like my-store.myshopify.com — no https://, path or custom domain."
 msgstr "Die Shop-Domain der Verbindung muss die eigene Adresse des Shops sein, z. B. my-store.myshopify.com — ohne https://, Pfad oder eigene Domain."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:302
+#: lib/phoenix_kit_ecommerce/errors.ex:306
 #, elixir-autogen, elixir-format
 msgid "The data could not be saved. Check the values and try again."
 msgstr "Die Daten konnten nicht gespeichert werden. Prüfen Sie die Werte und versuchen Sie es erneut."
@@ -6974,7 +6974,7 @@ msgstr "Sie haben keine Berechtigung dafür"
 msgid "\"%{name}\" set as default"
 msgstr "\"%{name}\" als Standard festgelegt"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:198
+#: lib/phoenix_kit_ecommerce/errors.ex:202
 #, elixir-autogen, elixir-format
 msgid "\"Allow multiple slots\" must be on or off."
 msgstr "\"Mehrere Slots erlauben\" muss ein- oder ausgeschaltet sein."
@@ -7010,17 +7010,17 @@ msgid_plural "%{count} rules"
 msgstr[0] "%{count} Regel"
 msgstr[1] "%{count} Regeln"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:211
+#: lib/phoenix_kit_ecommerce/errors.ex:215
 #, elixir-autogen, elixir-format
 msgid "A %{type} option needs at least one value."
 msgstr "Eine Option vom Typ %{type} braucht mindestens einen Wert."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:214
+#: lib/phoenix_kit_ecommerce/errors.ex:218
 #, elixir-autogen, elixir-format
 msgid "A %{type} option needs its values."
 msgstr "Eine Option vom Typ %{type} braucht ihre Werte."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:192
+#: lib/phoenix_kit_ecommerce/errors.ex:196
 #, elixir-autogen, elixir-format
 msgid "A localized label must map language codes to text."
 msgstr "Eine lokalisierte Bezeichnung muss Sprachcodes Text zuordnen."
@@ -7076,17 +7076,17 @@ msgstr "Alle Produkte werden ohne Schlüsselwortfilter importiert"
 msgid "Allow Override Per-Product"
 msgstr "Überschreiben pro Produkt erlauben"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:177
+#: lib/phoenix_kit_ecommerce/errors.ex:181
 #, elixir-autogen, elixir-format
 msgid "An option must be a map."
 msgstr "Eine Option muss eine Schlüssel-Wert-Zuordnung sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:248
+#: lib/phoenix_kit_ecommerce/errors.ex:252
 #, elixir-autogen, elixir-format
 msgid "An option with the key \"%{key}\" already exists in this category."
 msgstr "Eine Option mit dem Schlüssel \"%{key}\" existiert in dieser Kategorie bereits."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:244
+#: lib/phoenix_kit_ecommerce/errors.ex:248
 #, elixir-autogen, elixir-format
 msgid "An option with the key \"%{key}\" already exists."
 msgstr "Eine Option mit dem Schlüssel \"%{key}\" existiert bereits."
@@ -7322,7 +7322,7 @@ msgstr "Einschließende Schlüsselwörter"
 msgid "Input Types"
 msgstr "Eingabetypen"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:202
+#: lib/phoenix_kit_ecommerce/errors.ex:206
 #, elixir-autogen, elixir-format
 msgid "Invalid type \"%{type}\". Must be one of: %{types}"
 msgstr "Ungültiger Typ \"%{type}\". Erlaubt sind: %{types}"
@@ -7348,12 +7348,12 @@ msgstr "Schlüsselwörter (durch Kommas getrennt)"
 msgid "Lowercase with underscores, auto-generated from label"
 msgstr "Kleinbuchstaben mit Unterstrichen, wird automatisch aus der Bezeichnung erzeugt"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:230
+#: lib/phoenix_kit_ecommerce/errors.ex:234
 #, elixir-autogen, elixir-format
 msgid "Missing price modifiers for options: %{values}"
 msgstr "Preisaufschläge fehlen für die Werte: %{values}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:181
+#: lib/phoenix_kit_ecommerce/errors.ex:185
 #, elixir-autogen, elixir-format
 msgid "Missing required keys: %{keys}"
 msgstr "Erforderliche Schlüssel fehlen: %{keys}"
@@ -7378,12 +7378,12 @@ msgstr "Noch keine Optionen definiert"
 msgid "Option Types Reference"
 msgstr "Übersicht der Optionstypen"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:217
+#: lib/phoenix_kit_ecommerce/errors.ex:221
 #, elixir-autogen, elixir-format
 msgid "Option values must be text, or maps with a \"value\" key."
 msgstr "Optionswerte müssen Text oder Zuordnungen mit dem Schlüssel \"value\" sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:178
+#: lib/phoenix_kit_ecommerce/errors.ex:182
 #, elixir-autogen, elixir-format
 msgid "Options must be a list."
 msgstr "Optionen müssen eine Liste sein."
@@ -7413,22 +7413,22 @@ msgstr "Preisaufschläge"
 msgid "Price Modifiers (Default Values)"
 msgstr "Preisaufschläge (Standardwerte)"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:226
+#: lib/phoenix_kit_ecommerce/errors.ex:230
 #, elixir-autogen, elixir-format
 msgid "Price modifiers are only supported for select and multiselect types."
 msgstr "Preisaufschläge werden nur für die Typen select und multiselect unterstützt."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:241
+#: lib/phoenix_kit_ecommerce/errors.ex:245
 #, elixir-autogen, elixir-format
 msgid "Price modifiers are required when the option affects the price."
 msgstr "Preisaufschläge sind erforderlich, wenn die Option den Preis beeinflusst."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:238
+#: lib/phoenix_kit_ecommerce/errors.ex:242
 #, elixir-autogen, elixir-format
 msgid "Price modifiers must be a map."
 msgstr "Preisaufschläge müssen eine Schlüssel-Wert-Zuordnung sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:235
+#: lib/phoenix_kit_ecommerce/errors.ex:239
 #, elixir-autogen, elixir-format
 msgid "Price modifiers must be valid decimal numbers (e.g., \"5.00\")."
 msgstr "Preisaufschläge müssen gültige Dezimalzahlen sein (z. B. \"5.00\")."
@@ -7476,37 +7476,37 @@ msgstr "Filter überspringen"
 msgid "Success"
 msgstr "Erfolgreich"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:185
+#: lib/phoenix_kit_ecommerce/errors.ex:189
 #, elixir-autogen, elixir-format
 msgid "The key must be lowercase letters, digits and underscores, starting with a letter."
 msgstr "Der Schlüssel darf nur Kleinbuchstaben, Ziffern und Unterstriche enthalten und muss mit einem Buchstaben beginnen."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:189
+#: lib/phoenix_kit_ecommerce/errors.ex:193
 #, elixir-autogen, elixir-format
 msgid "The key must be text."
 msgstr "Der Schlüssel muss Text sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:195
+#: lib/phoenix_kit_ecommerce/errors.ex:199
 #, elixir-autogen, elixir-format
 msgid "The label must be text or a localized map."
 msgstr "Die Bezeichnung muss Text oder eine lokalisierte Zuordnung sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:221
+#: lib/phoenix_kit_ecommerce/errors.ex:225
 #, elixir-autogen, elixir-format
 msgid "The modifier type must be one of: %{types}"
 msgstr "Der Aufschlagstyp muss einer der folgenden sein: %{types}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:255
+#: lib/phoenix_kit_ecommerce/errors.ex:259
 #, elixir-autogen, elixir-format
 msgid "The value \"%{value}\" already exists."
 msgstr "Der Wert \"%{value}\" existiert bereits."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:252
+#: lib/phoenix_kit_ecommerce/errors.ex:256
 #, elixir-autogen, elixir-format
 msgid "The value cannot be empty."
 msgstr "Der Wert darf nicht leer sein."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:208
+#: lib/phoenix_kit_ecommerce/errors.ex:212
 #, elixir-autogen, elixir-format
 msgid "The values of a %{type} option must be a list."
 msgstr "Die Werte einer Option vom Typ %{type} müssen eine Liste sein."
@@ -7571,7 +7571,7 @@ msgstr "Die Storefront von Shopify hat auf eine nicht erlaubte Adresse weitergel
 msgid "Shopify's storefront redirected too many times — the sync was stopped."
 msgstr "Die Storefront von Shopify hat zu oft weitergeleitet — die Synchronisierung wurde gestoppt."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:294
+#: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
 msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
 msgstr "Katalogbasierte Shops können ihre Basiswährung noch nicht ändern. Es wurde nichts geändert, alle Preise sind weiterhin in der aktuellen Basiswährung."
@@ -7581,7 +7581,7 @@ msgstr "Katalogbasierte Shops können ihre Basiswährung noch nicht ändern. Es 
 msgid "Set a base currency in the currency settings."
 msgstr "Lege die Basiswährung in den Währungseinstellungen fest."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:151
+#: lib/phoenix_kit_ecommerce/errors.ex:155
 #, elixir-autogen, elixir-format
 msgid "This shop has no base currency yet, so prices from Shopify cannot be written. Set a base currency first."
 msgstr "Dieser Shop hat noch keine Basiswährung, daher können keine Preise aus Shopify gespeichert werden. Lege zuerst eine Basiswährung fest."
@@ -7647,7 +7647,6 @@ msgstr "API-Einstellungen öffnen →"
 msgid "Price change threshold updated"
 msgstr "Schwelle für Preisänderungen aktualisiert"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:139
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2015
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2021
 #, elixir-autogen, elixir-format
@@ -7897,7 +7896,7 @@ msgstr "Telefonnummer an der Kasse verlangen"
 msgid "Awaiting payment"
 msgstr "Zahlung ausstehend"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:285
+#: lib/phoenix_kit_ecommerce/errors.ex:289
 #, elixir-autogen, elixir-format
 msgid "Online payment is not available right now. Please try again later."
 msgstr "Die Online-Zahlung ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut."
@@ -7927,7 +7926,7 @@ msgstr "Die Zahlung wurde nicht abgeschlossen. Sie können jetzt bezahlen oder s
 msgid "Waiting for payment"
 msgstr "Warten auf Zahlung"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:288
+#: lib/phoenix_kit_ecommerce/errors.ex:292
 #, elixir-autogen, elixir-format
 msgid "We could not start the payment. Please try again."
 msgstr "Die Zahlung konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
@@ -8044,7 +8043,7 @@ msgstr "Wird im Warenkorb angeboten, wenn dieses Produkt darin liegt (\"Zu Ihrer
 msgid "How many products each block shows at most: related products on the product page, cross-sells in the cart."
 msgstr "Wie viele Produkte jeder Block höchstens zeigt: verwandte Produkte auf der Produktseite, Cross-Selling im Warenkorb."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:263
+#: lib/phoenix_kit_ecommerce/errors.ex:267
 #, elixir-autogen, elixir-format
 msgid "Not enough stock for: %{items}.\nPlease change your cart."
 msgstr "Nicht genügend auf Lager: %{items}.\nBitte ändern Sie Ihren Warenkorb."
@@ -8125,7 +8124,7 @@ msgstr "Neue Bestellung für den Shop"
 msgid "New order {{order_number}}"
 msgstr "Neue Bestellung {{order_number}}"
 
-#: lib/phoenix_kit_ecommerce/errors.ex:278
+#: lib/phoenix_kit_ecommerce/errors.ex:282
 #, elixir-autogen, elixir-format
 msgid "Not an email address: %{addresses}"
 msgstr "Keine E-Mail-Adresse: %{addresses}"
@@ -8261,7 +8260,7 @@ msgstr "Hauptsprache der Website (%{language})"
 msgid "The buyer's emails are in the language they checked out in. The shop's email is in this one."
 msgstr "Die E-Mails an den Käufer sind in der Sprache, in der er bestellt hat. Die E-Mail an den Shop ist in dieser."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:282
+#: lib/phoenix_kit_ecommerce/errors.ex:286
 #, elixir-autogen, elixir-format
 msgid "This language is not enabled on the site."
 msgstr "Diese Sprache ist auf der Website nicht aktiviert."
@@ -8271,7 +8270,7 @@ msgstr "Diese Sprache ist auf der Website nicht aktiviert."
 msgid "A refund does not say whether the goods came back. Telling the keeper leaves the stock as it is; putting the goods back posts a goods receipt for what the order took out."
 msgstr "Eine Erstattung sagt nicht, ob die Ware zurückkam. Beim Benachrichtigen des Lagerverwalters bleibt der Bestand unverändert; beim Wiedereinlagern wird ein Wareneingang für das gebucht, was die Bestellung entnommen hat."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:144
+#: lib/phoenix_kit_ecommerce/errors.ex:148
 #, elixir-autogen, elixir-format
 msgid "Choose what a refund does to the stock."
 msgstr "Wählen Sie, was eine Erstattung mit dem Bestand macht."
@@ -8314,7 +8313,7 @@ msgstr "Lagerverwalter benachrichtigen"
 msgid "The product page reads \"Only 3 left\" when this many or fewer are in stock. 0 never shows it."
 msgstr "Die Produktseite zeigt „Nur noch 3 verfügbar“, wenn so viele oder weniger auf Lager sind. Bei 0 erscheint der Hinweis nie."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:147
+#: lib/phoenix_kit_ecommerce/errors.ex:151
 #, elixir-autogen, elixir-format
 msgid "The stock setting could not be saved."
 msgstr "Die Lagereinstellung konnte nicht gespeichert werden."
@@ -8323,3 +8322,8 @@ msgstr "Die Lagereinstellung konnte nicht gespeichert werden."
 #, elixir-autogen, elixir-format
 msgid "When a paid order is refunded"
 msgstr "Wenn eine bezahlte Bestellung erstattet wird"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:141
+#, elixir-autogen, elixir-format
+msgid "Enter a whole number from 0 to %{max}."
+msgstr "Geben Sie eine ganze Zahl von 0 bis %{max} ein."

@@ -437,6 +437,60 @@ defmodule PhoenixKitEcommerce.OrderStockHandlerTest do
     end
   end
 
+  describe "a refund that lands while the sale is being written off" do
+    setup ctx do
+      keeper = keeper!()
+
+      Application.put_env(:phoenix_kit_ecommerce, :stock_tracking_modules,
+        goods_issues: PhoenixKitEcommerce.OrderStockHandlerTest.RefundDuringWriteOff
+      )
+
+      on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :stock_tracking_modules) end)
+
+      %{keeper: keeper, order: paid_order(ctx.user, [product_line(ctx.vase, 2)])}
+    end
+
+    test "is told to the keeper by the write-off", ctx do
+      assert :ok = Handler.handle_order_event(:paid, ctx.order)
+
+      assert [%{status: "posted"}] = issues()
+      assert Billing.get_order(ctx.order.uuid).status == "refunded"
+      assert [text | _] = notification_texts_for_action(@refund_action)
+      assert text =~ "Vase × 2"
+    end
+
+    test "is told once, whichever delivery comes second", ctx do
+      assert :ok = Handler.handle_order_event(:paid, ctx.order)
+      once = count_notifications(@refund_action)
+      assert once > 0
+
+      assert :ok = Handler.handle_order_event(:refunded, Billing.get_order(ctx.order.uuid))
+
+      assert count_notifications(@refund_action) == once
+    end
+
+    test "puts the goods back once, when set to", ctx do
+      {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+
+      assert :ok = Handler.handle_order_event(:paid, ctx.order)
+      assert :ok = Handler.handle_order_event(:refunded, Billing.get_order(ctx.order.uuid))
+
+      assert [%{status: "posted"}] = issues()
+      assert [%{status: "posted"}] = receipts()
+      assert Decimal.equal?(on_hand(ctx.vase.uuid), 5)
+    end
+
+    test "is told for an order that was short", ctx do
+      put_stock!(ctx.vase.uuid, 1)
+
+      assert :ok = Handler.handle_order_event(:paid, ctx.order)
+
+      assert issues() == []
+      assert [text | _] = notification_texts_for_action(@refund_action)
+      assert text =~ "short of stock when paid"
+    end
+  end
+
   # Stands in for `GoodsReceipts` in the refused-receipt test.
   def create_and_post(_attrs, _performed_by), do: {:error, :invalid_lines}
 
@@ -466,5 +520,20 @@ defmodule PhoenixKitEcommerce.OrderStockHandlerTest do
     {:ok, _} = Roles.assign_role(user, "Admin")
     {:ok, _} = Permissions.grant_permission(role.uuid, "shop.manage_carts")
     user
+  end
+end
+
+defmodule PhoenixKitEcommerce.OrderStockHandlerTest.RefundDuringWriteOff do
+  @moduledoc false
+  # Stands in for `GoodsIssues`: the order is refunded while its sale is being
+  # posted, the overlap of two deliveries in the order they can really run.
+
+  @compile {:no_warn_undefined, PhoenixKitWarehouse.GoodsIssues}
+
+  def create_and_post(%{source_refs: [%{"uuid" => order_uuid}]} = attrs, performed_by) do
+    {:ok, _refunded} =
+      order_uuid |> PhoenixKitBilling.get_order() |> PhoenixKitBilling.mark_order_refunded()
+
+    PhoenixKitWarehouse.GoodsIssues.create_and_post(attrs, performed_by)
   end
 end

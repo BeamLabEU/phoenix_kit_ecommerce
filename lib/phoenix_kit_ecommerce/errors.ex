@@ -137,7 +137,10 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:invalid_host), do: gettext("The URL host is not allowed.")
 
   def message(:invalid_low_stock_threshold),
-    do: gettext("Enter a whole number from 0 to 1000.")
+    do:
+      gettext("Enter a whole number from 0 to %{max}.",
+        max: PhoenixKitEcommerce.StockTracking.max_low_stock_threshold()
+      )
 
   def message(:invalid_quantity), do: gettext("That quantity is not available.")
 
