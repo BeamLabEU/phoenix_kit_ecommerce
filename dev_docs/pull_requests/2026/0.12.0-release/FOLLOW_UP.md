@@ -55,3 +55,18 @@ not core's, so they need checking against billing 0.25.0 before removal.
 
 **No change needed.** A `<select>` fires `change` only when the value changes,
 so choosing the option already selected sends no event and logs nothing.
+
+## Codex release recheck
+
+Findings from `CODEX_REVIEW.md`:
+
+- **BUG - HIGH: optional AI compilation. Fixed.** `ProductForm` evaluates the
+  quoted AI setup after its capability check so the missing package's `use`
+  macro is never expanded. The authorization hook still precedes Embed.
+  Added a regression that compiles the real form against a missing AI
+  namespace; the focused form/authorization suite passes (38 tests).
+  An isolated build without AI, Warehouse, Catalogue or Entities also compiles
+  with warnings as errors and passes the availability/refund smoke checks.
+- **IMPROVEMENT - MEDIUM: stale dependency and test documentation. Fixed.**
+  The engineering guide now gives core 3.5.0 as the minimum and lists only the
+  capability exclusions that the current harness actually uses.

@@ -17,12 +17,12 @@ and checkout hands off to `phoenix_kit_billing` for orders and payment. It
 ships admin LiveViews for the whole workflow plus the public storefront
 pages.
 
-- **Depends on:** `phoenix_kit` `>= 2.65.0 and < 4.0.0` (Hex — the release
-  with the module callbacks `file_references/0` and `expected_schema/0`, above
-  2.43.0's `ImageProcessor.limit_args/0` and `pinned_input/2`, which
-  `ImageFingerprint` runs ImageMagick through, above 2.38.0's
-  `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound form
-  keeps the ceiling open across later 2.x minors and core 3.x), `phoenix_kit_billing`
+- **Depends on:** `phoenix_kit` `>= 3.5.0 and < 4.0.0` (Hex — the ecosystem's
+  minimum core, including the module callbacks `file_references/0` and
+  `expected_schema/0`, the public API tool registry and confirmation flow,
+  canonical language-domain URLs, `ImageProcessor.limit_args/0` and
+  `pinned_input/2`, `PhoenixKitWeb.Actor` and `Activity.log/3`; the compound
+  form keeps the ceiling open across later core 3.x minors), `phoenix_kit_billing`
   `~> 0.25` (hard; 0.25 supplies durable order events for stock write-off and
   paid-order emails, above 0.20's
   `BillingProfileFields` and `BillingProfile.fields_changeset/3`, which
@@ -30,6 +30,8 @@ pages.
   `phoenix_kit_ai` `~> 0.27` (optional — the
   AI-translate UI, both translation adapters, the sweep worker and the
   translations page use it, and all of them compile out when it is absent;
+  `ProductForm` evaluates the quoted Embed setup only after the capability
+  check, since a bare `use` inside an `if` still expands without the package;
   0.20 is the first engine that binds `{{SourceFields}}` and forwards
   `opts[:source_fields]`, `test/ai_pin_conformance_test.exs` guards it),
   `phoenix_kit_warehouse` `~> 0.7` (optional — only `StockTracking` calls
@@ -1084,43 +1086,27 @@ Postgres connection settings come from `PGUSER` (default `postgres`),
 machine whose Postgres has no `postgres` role, export `PGUSER` or integration
 tests fail as pool timeouts that look like flakiness.
 
-These tag families are excluded when their prerequisite is missing, and start
-running by themselves once the dep is upgraded: `:integration` (no database),
-`:requires_phoenix_kit_i18n_api` (core without
-`Dashboard.Tab.localized_label/1`), `:requires_core_transliteration` (core
-without `Utils.Slug` transliteration), `:requires_core_user_menu` (core
-without `Dashboard.Tab.user_menu?/2`, the avatar-dropdown flag),
-`:requires_billing_user_menu` (billing without `user_menu_with_shop?/1`, the
-gate on its own avatar-dropdown tabs) and `:requires_core_single_language`
-(core without `Languages.set_primary_language/1`, i.e. before the URL
-language policy: a switched-off multi-language site's primary language is
-then `"en"`, not the stored default). The single-language link tests
-(`single_language_links_test.exs`) are written to pass on both kinds of core;
-run them against a core with the policy too (`PHOENIX_KIT_PATH=…`).
+Core 3.5.0 supplies the i18n, transliteration, avatar-menu, single-language,
+public API, MCP, confirmation and canonical URL APIs unconditionally. Their
+tests no longer have old-core capability exclusions. The language-domain API
+link tests always exercise canonical URLs.
 
-Four more are excluded the same way: `:requires_core_api` (core without
-`PhoenixKit.API.Tool` or `PhoenixKit.ObanCrons`, i.e. without the public API; it
-gates every test of the public read and cart tools, a few hundred of them),
-`:mcp` (core without the MCP plug), `:analytics` (no `phoenix_kit_web_analytics`)
-and `:requires_pg_trgm` (a database without the `pg_trgm` extension). To run the
-API tests, point `PHOENIX_KIT_PATH` at a core checkout that carries the public API;
-against a released core without it they show up in the `excluded` count.
+These tag families are excluded when their prerequisite is missing:
+`:integration` (no database), `:catalogue` (no catalogue package),
+`:requires_billing_user_menu` (billing without `user_menu_with_shop?/1`),
+`:billing_order_sync` (billing without `put_order_sync/2`),
+`:billing_start_order_payment` (billing without `start_order_payment/2`),
+`:analytics` (no `phoenix_kit_web_analytics`) and `:requires_pg_trgm` (a database
+without the `pg_trgm` extension). Billing capability checks remain because its
+minimum is independent of core's.
 
-Two tags split the language-domain API links by core: `:requires_core_canonical_urls`
-(excluded when core lacks `Routes.canonical_absolute_or_nil/2`) and its inverse
-`:core_without_canonical_urls` (excluded when core has it; it runs only on an older
-core and pins the request's-host fallback, so it is not a skipped test). Run both
-sides, a core with the helper and a released one, as `test/test_helper.exs` says.
-
-The admin API's tests need a core with the tool registry, a catalogue with the
-admin API and `phoenix_kit_warehouse` with source kinds. A build can lack any of
-them, and the `:old_catalogue` and `:no_catalogue` families need the lack. Their
-families (`:core_api`, `:core_confirm`,
-`:core_no_confirm`, `:catalogue_api`, `:old_catalogue`, `:no_catalogue`,
-`:warehouse`) are excluded or included by what the build has (see
-`test/test_helper.exs`, which prints the excluded set): run the suite once per
-build and read the excluded count. `test/support/api_case.ex` and
-`api_fixtures.ex` are the shared case and fixtures.
+The admin API's dependency-specific families are `:catalogue_api`,
+`:old_catalogue`, `:no_catalogue` and `:warehouse`. They are excluded or
+included by what the build has (`test/test_helper.exs` prints the excluded
+set); `:old_catalogue` and `:no_catalogue` exercise the corresponding missing
+capability. Run the suite once per applicable build and read the excluded
+count. `test/support/api_case.ex` and `api_fixtures.ex` are the shared case
+and fixtures.
 
 Three conformance tests run without a database and guard cross-repo contracts:
 `core_pin_conformance_test.exs` (the two-segment core floor),
