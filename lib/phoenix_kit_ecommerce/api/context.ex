@@ -20,8 +20,6 @@ defmodule PhoenixKitEcommerce.API.Context do
   and written as a string with the currency's decimal places.
   """
 
-  @compile {:no_warn_undefined, [{PhoenixKit.Utils.Routes, :canonical_absolute_or_nil, 2}]}
-
   alias PhoenixKit.Modules.Languages
   alias PhoenixKit.Modules.Languages.DialectMapper
   alias PhoenixKit.Utils.Routes
@@ -144,8 +142,8 @@ defmodule PhoenixKitEcommerce.API.Context do
   `:canonical_host_resolver`) is linked on that domain, and the language
   segment goes: the domain is the language. Core removes only the segment of
   that language, straight after the mount prefix; the storefront builds it from
-  the base code (`Shop.url_locale/1`), so `en-US` and `en-GB` share `/en`. A language without a domain, a URL, `nil`, and a
-  core that has no such helper all give `absolute/2`: the request's own host,
+  the base code (`Shop.url_locale/1`), so `en-US` and `en-GB` share `/en`. A language without a domain, a URL and `nil`
+  all give `absolute/2`: the request's own host,
   the path as it is. The resolver is asked once per link, with the language as
   given (`de-AT`), so it decides which dialects share a domain.
   """
@@ -156,13 +154,8 @@ defmodule PhoenixKitEcommerce.API.Context do
 
   def absolute(context, other, _language), do: absolute(context, other)
 
-  # The function is not in a core older than the helper (hence
-  # `no_warn_undefined`), so it is only reached once it is exported.
-  defp language_domain_url(path, language) do
-    if Code.ensure_loaded?(Routes) and function_exported?(Routes, :canonical_absolute_or_nil, 2) do
-      Routes.canonical_absolute_or_nil(path, language)
-    end
-  end
+  defp language_domain_url(path, language),
+    do: Routes.canonical_absolute_or_nil(path, language)
 
   # --- language --------------------------------------------------------------
 

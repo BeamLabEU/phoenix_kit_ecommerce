@@ -10,7 +10,6 @@ defmodule PhoenixKitEcommerce.API.Public.SearchCatalogueTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue
-  @moduletag :requires_core_api
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 

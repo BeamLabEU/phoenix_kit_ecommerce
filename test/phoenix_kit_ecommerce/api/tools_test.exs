@@ -4,16 +4,9 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
   permissions, schemas that core's own validator accepts and that accept what
   they should and refuse what they should, and the rule that the write tools
   exist only on a core that can hold a dangerous call for confirmation.
-
-  Needs core's tool registry: tagged `:core_api`. The tests of the write tools
-  are tagged `:core_confirm` (core also has the confirmation flow); the one
-  that pins the reduced list is `:core_no_confirm`.
-  `test_helper.exs` excludes what does not apply to the core in use.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
-
-  @moduletag :core_api
 
   @compile {:no_warn_undefined,
             [PhoenixKit.API.Tool, PhoenixKit.API.Executor, PhoenixKit.API.ToolLint]}
@@ -119,17 +112,7 @@ defmodule PhoenixKitEcommerce.API.ToolsTest do
     end
   end
 
-  describe "without core's confirmation flow" do
-    @describetag :core_no_confirm
-
-    test "only the read tool is offered: a write tool would run a 90 percent price cut on the first call" do
-      assert Map.keys(tools()) == ["ecommerce.get_prices"]
-    end
-  end
-
   describe "with core's confirmation flow" do
-    @describetag :core_confirm
-
     test "with every marker present the write tools are offered" do
       names = [{Enum, :map, 2}] |> PhoenixKitEcommerce.API.tools() |> Enum.map(& &1.name)
 

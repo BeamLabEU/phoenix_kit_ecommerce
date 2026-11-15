@@ -5,8 +5,6 @@ defmodule PhoenixKitEcommerce.API.PublicToolsTest do
   """
   use PhoenixKitEcommerce.DataCase, async: true
 
-  @moduletag :requires_core_api
-
   @compile {:no_warn_undefined,
             [PhoenixKit.API.Registry, PhoenixKit.API.Tool, PhoenixKit.API.ToolLint]}
 

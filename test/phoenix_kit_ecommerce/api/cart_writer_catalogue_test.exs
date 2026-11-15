@@ -12,7 +12,6 @@ defmodule PhoenixKitEcommerce.API.CartWriterCatalogueTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :requires_core_api
   @moduletag :catalogue
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}

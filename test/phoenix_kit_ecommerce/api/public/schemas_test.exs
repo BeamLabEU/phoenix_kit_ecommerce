@@ -13,7 +13,6 @@ defmodule PhoenixKitEcommerce.API.Public.SchemasTest do
     assert Enum.all?(fields, fn {_name, schema} -> schema["type"] == "string" end)
   end
 
-  @tag :requires_core_api
   test "money, list item and card schemas accept what the cards build" do
     money = %{"amount" => "12.50", "currency" => "EUR"}
 

@@ -32,7 +32,6 @@ defmodule PhoenixKitEcommerce.API.SetPricesRaceTest do
 
   @moduletag :integration
   @moduletag :catalogue_api
-  @moduletag :core_confirm
 
   @config_keys ["shop_product_source", "shop_catalogue"]
 

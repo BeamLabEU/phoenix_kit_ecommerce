@@ -8,7 +8,6 @@ defmodule PhoenixKitEcommerce.API.CartShippingCalculatedTest do
 
   # async: false - the provider registry is application env.
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   import PhoenixKitEcommerce.CartApiFixtures
 

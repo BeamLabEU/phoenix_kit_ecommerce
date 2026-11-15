@@ -12,10 +12,7 @@ defmodule PhoenixKitEcommerce.Web.SingleLanguageLinksTest do
 
   Every link the storefront builds goes through `Shop.url_locale/1`, which
   passes `:none` itself while multi-language support is off — so the
-  locale-free assertions hold on a core that predates the single-language
-  policy too. Only the tests tagged `:requires_core_single_language` need the
-  newer core (the primary language of a switched-off site being its stored
-  default language).
+  locale-free assertions do not depend on core's single-language policy.
   """
   use PhoenixKitEcommerce.LiveCase, async: false
 
@@ -293,7 +290,6 @@ defmodule PhoenixKitEcommerce.Web.SingleLanguageLinksTest do
       assert Shop.url_locale("en-US") == :none
     end
 
-    @tag :requires_core_single_language
     test "the primary language is the stored one, not a hardcoded en" do
       assert Shop.get_default_language() == "uk"
     end

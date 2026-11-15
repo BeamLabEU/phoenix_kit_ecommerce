@@ -12,7 +12,6 @@ defmodule PhoenixKitEcommerce.API.OrderToolsTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :core_api
   @moduletag :billing_order_sync
 
   @compile {:no_warn_undefined, [PhoenixKit.API.ToolLint]}
@@ -519,8 +518,6 @@ defmodule PhoenixKitEcommerce.API.OrderToolsTest do
   end
 
   describe "ecommerce.set_order_sync" do
-    @describetag :core_confirm
-
     defp mark(order, extra \\ %{}) do
       Map.merge(
         %{"ref" => %{"number" => order.order_number}, "revision" => 1, "state" => "synced"},

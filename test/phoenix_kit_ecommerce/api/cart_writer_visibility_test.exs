@@ -9,7 +9,6 @@ defmodule PhoenixKitEcommerce.API.CartWriterVisibilityTest do
 
   # async: false - the product source setting and the Hammer counters are shared.
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 

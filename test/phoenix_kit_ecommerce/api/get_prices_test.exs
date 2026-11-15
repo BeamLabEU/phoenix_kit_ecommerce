@@ -8,7 +8,6 @@ defmodule PhoenixKitEcommerce.API.GetPricesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_api
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}
 

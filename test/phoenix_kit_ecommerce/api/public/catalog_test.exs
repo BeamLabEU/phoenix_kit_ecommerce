@@ -99,7 +99,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert url =~ "https://shop.test/en/shop/product/"
     end
 
-    @tag :requires_core_canonical_urls
     test "get_products links to a language that has a domain on that domain, whoever asks", t do
       put_canonical_host_resolver!()
 
@@ -113,7 +112,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       end
     end
 
-    @tag :requires_core_canonical_urls
     test "get_products keeps the request's host for a language without a domain", t do
       put_canonical_host_resolver!()
       out = get!(%{"ids" => [t.product.uuid], "language" => "en"}, language: "de")
@@ -121,7 +119,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert hd(out["results"])["product"]["url"] =~ "https://shop.test/en/shop/product/"
     end
 
-    @tag :requires_core_canonical_urls
     test "list_categories links to a language that has a domain on that domain", t do
       put_canonical_host_resolver!()
 
@@ -134,7 +131,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       refute node["url"] =~ "/de/"
     end
 
-    @tag :requires_core_canonical_urls
     test "similar_products links to a language that has a domain on that domain", t do
       put_canonical_host_resolver!()
       out = similar!(%{"id" => t.product.uuid, "language" => "de"}, language: "en")
@@ -244,7 +240,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert out == out |> JSON.encode!() |> JSON.decode!()
     end
 
-    @tag :requires_core_api
     test "the schemas accept the answer, a stub and a not_found row included, and refuse too many ids or a stray field",
          t do
       old = legacy_product!(%{"en" => "Old Lamp"}, %{status: "archived"})
@@ -371,7 +366,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       |> Map.fetch!("product_count")
     end
 
-    @tag :requires_core_api
     test "the answer satisfies its schema and the input schema is closed" do
       assert {:ok, _} =
                Validator.validate(Catalog.list_categories_output_schema(), list!())
@@ -431,7 +425,6 @@ defmodule PhoenixKitEcommerce.API.Public.CatalogTest do
       assert Enum.map(similar!(%{"id" => t.a, "limit" => 1})["items"], & &1["id"]) == [t.c]
     end
 
-    @tag :requires_core_api
     test "the answer satisfies its schema; the input needs an id and refuses a limit below 1",
          t do
       assert {:ok, _} =

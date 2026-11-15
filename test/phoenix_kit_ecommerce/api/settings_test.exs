@@ -74,21 +74,17 @@ defmodule PhoenixKitEcommerce.API.SettingsTest do
     end
   end
 
-  test "admin_enabled?/0 is false without core's API, and follows core's switch with it" do
-    if ApiSettings.core_available?() do
-      previous = ApiSettings.admin_enabled?()
+  test "admin_enabled?/0 follows core's switch" do
+    previous = ApiSettings.admin_enabled?()
 
-      on_exit(fn ->
-        Settings.update_boolean_setting_with_module("api_admin_enabled", previous, "api")
-      end)
+    on_exit(fn ->
+      Settings.update_boolean_setting_with_module("api_admin_enabled", previous, "api")
+    end)
 
-      Settings.update_boolean_setting_with_module("api_admin_enabled", false, "api")
-      refute ApiSettings.admin_enabled?()
+    Settings.update_boolean_setting_with_module("api_admin_enabled", false, "api")
+    refute ApiSettings.admin_enabled?()
 
-      Settings.update_boolean_setting_with_module("api_admin_enabled", true, "api")
-      assert ApiSettings.admin_enabled?()
-    else
-      refute ApiSettings.admin_enabled?()
-    end
+    Settings.update_boolean_setting_with_module("api_admin_enabled", true, "api")
+    assert ApiSettings.admin_enabled?()
   end
 end

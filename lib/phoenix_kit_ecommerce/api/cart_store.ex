@@ -21,11 +21,6 @@ defmodule PhoenixKitEcommerce.API.CartStore do
 
   import Ecto.Query, warn: false
 
-  # Core's API modules exist only in the core release that carries the shop API;
-  # until the package's core floor follows it, the package must still compile
-  # against the core it is built with.
-  @compile {:no_warn_undefined, PhoenixKit.API.RateLimit}
-
   alias PhoenixKit.API.RateLimit
   alias PhoenixKit.RepoHelper
   alias PhoenixKitBilling.Currency
@@ -229,21 +224,10 @@ defmodule PhoenixKitEcommerce.API.CartStore do
   defp charge_row(ctx, true) do
     ip = (ctx[:actor] && ctx[:actor].ip) || "unknown"
 
-    case check_new_rows(ip) do
+    case RateLimit.check_new_rows(ip) do
       :ok -> :ok
       {:error, retry_after} -> {:error, :rate_limited, retry_after}
     end
-  end
-
-  # `check_new_rows/1` is the shared new-rows quota of a core with the module-neutral API;
-  # an older core has it as `check_cart_rows/1`, which a newer one deprecates, so the old
-  # name is called dynamically (no deprecation warning on the new core). Either way the
-  # quota is core's, with core's settings keys.
-  defp check_new_rows(ip) do
-    if Code.ensure_loaded?(RateLimit) and function_exported?(RateLimit, :check_new_rows, 1),
-      do: RateLimit.check_new_rows(ip),
-      # credo:disable-for-next-line Credo.Check.Refactor.Apply
-      else: apply(RateLimit, :check_cart_rows, [ip])
   end
 
   # `create_cart/1` freezes the request's display currency into the cart. The

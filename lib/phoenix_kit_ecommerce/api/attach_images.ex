@@ -64,7 +64,7 @@ defmodule PhoenixKitEcommerce.API.AttachImages do
   @doc """
   Rate-limit units of one call: one per picture asked for, at least one and
   at most `max_images/0` (a call over that limit is refused anyway, and must
-  not be charged more than a full one). It is the tool's `cost` on a core that has the field: core's default rule
+  not be charged more than a full one). It is the tool's `cost`: core's default rule
   prices a write by rows (`max(1, ceil(rows / 50))`), which would make a call
   that downloads up to 20 pictures cost one unit.
 

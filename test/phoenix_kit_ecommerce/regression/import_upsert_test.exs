@@ -189,7 +189,6 @@ defmodule PhoenixKitEcommerce.Regression.ImportUpsertTest do
              })
   end
 
-  @tag :requires_core_transliteration
   test "a Cyrillic title yields a stable slug, so a re-import matches it" do
     suffix = System.unique_integer([:positive])
 

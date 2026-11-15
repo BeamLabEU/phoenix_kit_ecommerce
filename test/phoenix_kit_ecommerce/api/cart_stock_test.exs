@@ -8,7 +8,6 @@ defmodule PhoenixKitEcommerce.API.CartStockTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :requires_core_api
   @moduletag :catalogue
   @moduletag :warehouse
 

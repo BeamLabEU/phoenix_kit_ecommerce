@@ -15,7 +15,6 @@ defmodule PhoenixKitEcommerce.API.ExecutorTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_confirm
 
   @compile {:no_warn_undefined,
             [

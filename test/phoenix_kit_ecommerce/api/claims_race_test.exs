@@ -30,7 +30,6 @@ defmodule PhoenixKitEcommerce.API.ClaimsRaceTest do
   alias PhoenixKitEcommerce.Test.Repo
 
   @moduletag :integration
-  @moduletag :requires_core_api
 
   @rounds 5
 

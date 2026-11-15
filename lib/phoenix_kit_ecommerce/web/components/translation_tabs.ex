@@ -467,6 +467,6 @@ defmodule PhoenixKitEcommerce.Web.Components.TranslationTabs do
   end
 
   defp languages_enabled? do
-    Code.ensure_loaded?(Languages) and Languages.enabled?()
+    Languages.enabled?()
   end
 end

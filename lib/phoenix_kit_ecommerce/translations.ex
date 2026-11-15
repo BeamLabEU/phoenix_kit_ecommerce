@@ -96,8 +96,7 @@ defmodule PhoenixKitEcommerce.Translations do
   """
   @spec languages_enabled?() :: boolean()
   def languages_enabled? do
-    Code.ensure_loaded?(Languages) and function_exported?(Languages, :enabled?, 0) and
-      Languages.enabled?()
+    Languages.enabled?()
   end
 
   # ============================================================================

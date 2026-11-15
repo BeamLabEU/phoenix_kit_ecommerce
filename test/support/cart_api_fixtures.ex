@@ -17,11 +17,8 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
   alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.SearchFixtures
 
-  # This module is loaded by `test_helper.exs` on every run, also against a core
-  # that does not have the public API (the tests that need it carry
-  # `@moduletag :requires_core_api` and are excluded then). Core's API modules are
-  # therefore only named at run time here: no struct literal, no compile-time
-  # reference.
+  # Core's API modules are only named at run time here: no struct literal, no
+  # compile-time reference.
   @compile {:no_warn_undefined,
             [
               PhoenixKit.API.Actor,
@@ -263,34 +260,20 @@ defmodule PhoenixKitEcommerce.CartApiFixtures do
   end
 
   @doc """
-  A public caller, built without naming the struct at compile time. The hash
-  lives in `client_token_hash` of a core with the module-neutral API and in
-  `cart_token_hash` of an older one.
+  A public caller, built without naming the struct at compile time.
   """
   def build_actor(ip, token_hash) do
-    struct!(PhoenixKit.API.Actor, [{:kind, :anonymous}, {:ip, ip}, {token_field(), token_hash}])
+    struct!(PhoenixKit.API.Actor, kind: :anonymous, ip: ip, client_token_hash: token_hash)
   end
 
   @doc "The same caller with another client token hash."
-  def put_token_hash(actor, token_hash), do: Map.put(actor, token_field(), token_hash)
-
-  defp token_field do
-    if Map.has_key?(struct(PhoenixKit.API.Actor), :client_token_hash),
-      do: :client_token_hash,
-      else: :cart_token_hash
-  end
+  def put_token_hash(actor, token_hash), do: Map.put(actor, :client_token_hash, token_hash)
 
   @doc """
-  The setting key of one new-rows limit (`:per_ip_hour` or `:global_hour`). A core with the
-  module-neutral API reads `api_public_new_rows_*` and falls back to the old
-  `api_public_cart_rows_*`; a core from before `check_new_rows/1` reads only the old one.
+  The setting key of one new-rows limit (`:per_ip_hour` or `:global_hour`).
   """
-  def new_rows_key(limit) when limit in [:per_ip_hour, :global_hour] do
-    if Code.ensure_loaded?(PhoenixKit.API.RateLimit) and
-         function_exported?(PhoenixKit.API.RateLimit, :check_new_rows, 1),
-       do: "api_public_new_rows_#{limit}",
-       else: "api_public_cart_rows_#{limit}"
-  end
+  def new_rows_key(limit) when limit in [:per_ip_hour, :global_hour],
+    do: "api_public_new_rows_#{limit}"
 
   @doc "Writes a setting the way the admin pages do (string value)."
   def put_setting!(key, value) do

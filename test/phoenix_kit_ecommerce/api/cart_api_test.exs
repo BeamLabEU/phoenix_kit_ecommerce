@@ -7,7 +7,6 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
 
   # async: false - settings, the key-less public buckets and the signing secret are shared.
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   # Core's API modules exist only in the core that carries the shop API; this file is
   # compiled (and its tests excluded) against a core that has none.
@@ -1148,7 +1147,6 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
       refute first == second
     end
 
-    @tag :core_replay
     test "create_cart offers no idempotency_key, so one in the body is refused (core with :replay)" do
       assert CartTools.replay_available?()
       key = "create-cart-0123456789"
@@ -1157,7 +1155,6 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
                call("shop.create_cart", %{"idempotency_key" => key})
     end
 
-    @tag :core_replay
     test "get_checkout_link offers no idempotency_key either (core with :replay)", %{p1: p1} do
       assert CartTools.replay_available?()
       token = new_cart_token()
@@ -1561,8 +1558,6 @@ defmodule PhoenixKitEcommerce.API.CartApiTest do
   # Every tool through both transports. REST is above; this is MCP (`POST /mcp/public`).
   # Excluded when the core in use has no MCP plug.
   describe "through MCP" do
-    @describetag :mcp
-
     defp rpc_result({200, %{"result" => result}, _conn}), do: result
 
     defp mcp_ok(name, arguments, opts \\ []) do

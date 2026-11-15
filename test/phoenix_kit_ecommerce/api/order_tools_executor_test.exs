@@ -12,7 +12,6 @@ defmodule PhoenixKitEcommerce.API.OrderToolsExecutorTest do
 
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :core_confirm
   @moduletag :billing_order_sync
 
   @compile {:no_warn_undefined,

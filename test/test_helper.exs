@@ -51,31 +51,24 @@ db_name =
   Application.get_env(:phoenix_kit_ecommerce, TestRepo, [])[:database] ||
     "phoenix_kit_ecommerce_test"
 
-# The preflight ships in core, and older cores this helper has run against
-# predate it — so it is used when the running core has it, and otherwise
-# this falls through to exactly the previous behaviour.
+# One classified connection attempt, with the repo's OWN credentials and
+# transport, before anything starts the pool.
+#
+# This replaces a `psql -lqt` listing. That check asked the wrong question:
+# it ran as the shell's user over a unix socket, so it reported "the
+# database is there" and said nothing about whether the CONFIGURED role
+# could reach it over TCP. When it could not, the answer arrived minutes
+# later as a pool checkout timeout that reads like a flaky test.
 db_check =
-  if Code.ensure_loaded?(PhoenixKit.TestSupport.PostgresPreflight) do
-    # One classified connection attempt, with the repo's OWN credentials and
-    # transport, before anything starts the pool.
-    #
-    # This replaces a `psql -lqt` listing. That check asked the wrong question:
-    # it ran as the shell's user over a unix socket, so it reported "the
-    # database is there" and said nothing about whether the CONFIGURED role
-    # could reach it over TCP. When it could not, the answer arrived minutes
-    # later as a pool checkout timeout that reads like a flaky test.
-    case PhoenixKit.TestSupport.PostgresPreflight.check(
-           Application.get_env(:phoenix_kit_ecommerce, PhoenixKitEcommerce.Test.Repo, [])
-         ) do
-      :ok ->
-        :exists
+  case PhoenixKit.TestSupport.PostgresPreflight.check(
+         Application.get_env(:phoenix_kit_ecommerce, PhoenixKitEcommerce.Test.Repo, [])
+       ) do
+    :ok ->
+      :exists
 
-      {:error, _reason, message} ->
-        IO.puts(:stderr, "\n" <> message)
-        :not_found
-    end
-  else
-    :try_connect
+    {:error, _reason, message} ->
+      IO.puts(:stderr, "\n" <> message)
+      :not_found
   end
 
 repo_available =
@@ -222,63 +215,7 @@ if repo_available do
   {:ok, _} = Oban.start_link(Application.fetch_env!(:phoenix_kit_ecommerce, Oban))
 end
 
-# i18n tests require phoenix_kit with the `gettext_backend` API
-# (see BeamLabEU/phoenix_kit#522). When building against an older
-# published phoenix_kit lacking `PhoenixKit.Dashboard.Tab.localized_label/1`,
-# exclude those tests — they run automatically once the dep resolves to a
-# release that includes the API.
-i18n_exclude =
-  if Code.ensure_loaded?(PhoenixKit.Dashboard.Tab) and
-       function_exported?(PhoenixKit.Dashboard.Tab, :localized_label, 1) do
-    []
-  else
-    Logger.info(
-      "[test_helper] PhoenixKit.Dashboard.Tab.localized_label/1 not available — " <>
-        "i18n tests excluded. They will run automatically once `phoenix_kit` is " <>
-        "upgraded to a release that ships the gettext_backend API."
-    )
-
-    [:requires_phoenix_kit_i18n_api]
-  end
-
 integration_exclude = if repo_available, do: [], else: [:integration]
-
-# Cyrillic slug generation needs `PhoenixKit.Utils.Slug`'s `:transliterate`
-# option. An older published phoenix_kit ignores the option and returns the
-# ASCII-only result, which is exactly the behavior these tests assert is gone
-# - so they run once the dep resolves to a release that ships it.
-transliteration_exclude =
-  if PhoenixKit.Utils.Slug.slugify("Кашпо", transliterate: true) == "" do
-    Logger.info(
-      "[test_helper] PhoenixKit.Utils.Slug transliteration not available - " <>
-        "Cyrillic slug tests excluded. They will run automatically once " <>
-        "`phoenix_kit` is upgraded to a release that ships it."
-    )
-
-    [:requires_core_transliteration]
-  else
-    []
-  end
-
-# A switched-off multi-language site is single-language only on a core that
-# ships the URL language policy: its primary language is the stored default
-# language (`Languages.set_primary_language/1` arrived with it). An older core
-# answers "en" there, so the tests asserting the stored primary language wait
-# for the release that has it. The storefront's own links do not depend on it
-# (`Shop.url_locale/1`), and their tests run everywhere.
-single_language_exclude =
-  if Code.ensure_loaded?(PhoenixKit.Modules.Languages) and
-       function_exported?(PhoenixKit.Modules.Languages, :set_primary_language, 1) do
-    []
-  else
-    Logger.info(
-      "[test_helper] Languages.set_primary_language/1 not available - " <>
-        "single-language primary-language tests excluded. They will run " <>
-        "automatically once `phoenix_kit` is upgraded to a release that ships it."
-    )
-
-    [:requires_core_single_language]
-  end
 
 # `phoenix_kit_catalogue` is an OPTIONAL dependency — the
 # `ProductSource.Catalogue` adapter's own tests need it loaded (a real
@@ -305,44 +242,20 @@ catalogue_exclude =
 #   :catalogue_api     a catalogue with the API (resolve_refs/2, update_items/2)
 #   :old_catalogue     a catalogue WITHOUT it
 #   :no_catalogue      no phoenix_kit_catalogue at all
-#   :core_api          a core with the tool registry (PhoenixKit.API.Tool)
-#   :core_confirm      ... and the confirmation gate (Keys.active?/1 and Flow.gate/1)
-#   :core_no_confirm   ... and not the confirmation flow
 #   :warehouse         phoenix_kit_warehouse with SourceKinds
 catalogue_loaded? = Code.ensure_loaded?(PhoenixKitCatalogue)
 catalogue_api? = PhoenixKitEcommerce.API.Gate.catalogue_api_ready?()
-core_api? = Code.ensure_loaded?(PhoenixKit.API.Tool)
-core_confirm? = PhoenixKitEcommerce.API.confirmation_available?()
 
 admin_api_exclude =
   [
     if(catalogue_api?, do: nil, else: :catalogue_api),
     if(catalogue_loaded? and not catalogue_api?, do: nil, else: :old_catalogue),
     if(catalogue_loaded?, do: :no_catalogue, else: nil),
-    if(core_api?, do: nil, else: :core_api),
-    if(core_confirm?, do: :core_no_confirm, else: :core_confirm),
     if(Code.ensure_loaded?(PhoenixKitWarehouse.SourceKinds), do: nil, else: :warehouse)
   ]
   |> Enum.reject(&is_nil/1)
 
 IO.puts("[test_helper] admin API test families excluded: #{inspect(admin_api_exclude)}")
-
-# The avatar-dropdown flag (`Tab` option `:user_menu`, read by
-# `Tab.user_menu?/2`). An older core ignores the option, so the tests about
-# it run once the dep resolves to a release that ships it.
-user_menu_exclude =
-  if Code.ensure_loaded?(PhoenixKit.Dashboard.Tab) and
-       function_exported?(PhoenixKit.Dashboard.Tab, :user_menu?, 2) do
-    []
-  else
-    Logger.info(
-      "[test_helper] PhoenixKit.Dashboard.Tab.user_menu?/2 not available - avatar-dropdown " <>
-        "tab tests excluded. They will run automatically once `phoenix_kit` is " <>
-        "upgraded to a release that ships it."
-    )
-
-    [:requires_core_user_menu]
-  end
 
 # Billing's avatar-dropdown gate (`PhoenixKitBilling.user_menu_with_shop?/1`).
 # Billing releases up to 0.21.0 do not define it, so the test that drives it
@@ -395,46 +308,6 @@ billing_start_order_payment_exclude =
     [:billing_start_order_payment]
   end
 
-# The shop API registers tools and cron entries through callbacks that exist only in
-# a core with the public API (`PhoenixKit.API.*`, `PhoenixKit.ObanCrons`). Tests of
-# those are tagged :requires_core_api and are EXCLUDED AT RUN TIME on a core
-# without the API. The tag does not stop a test file from being COMPILED, so
-# those files must not use `%PhoenixKit.API.Actor{}` / `%PhoenixKit.API.Tool{}`
-# struct literals (a CompileError aborts the whole `mix test` run on a released
-# core); they build structs with `struct/2` and match on maps.
-api_exclude =
-  if Code.ensure_loaded?(PhoenixKit.API.Tool) and Code.ensure_loaded?(PhoenixKit.ObanCrons) do
-    []
-  else
-    Logger.info(
-      "[test_helper] PhoenixKit.API.Tool / PhoenixKit.ObanCrons not available - " <>
-        "public API tests excluded. They run once `phoenix_kit` resolves to a core " <>
-        "with the public API."
-    )
-
-    [:requires_core_api]
-  end
-
-# The API links a page of a language that has a domain on that domain through
-# core's `Routes.canonical_absolute_or_nil/2`. A core without it keeps the
-# request's host; the tests of each side run on their own core.
-canonical_urls? =
-  Code.ensure_loaded?(PhoenixKit.Utils.Routes) and
-    function_exported?(PhoenixKit.Utils.Routes, :canonical_absolute_or_nil, 2)
-
-canonical_urls_exclude =
-  if canonical_urls? do
-    [:core_without_canonical_urls]
-  else
-    Logger.info(
-      "[test_helper] PhoenixKit.Utils.Routes.canonical_absolute_or_nil/2 not available - " <>
-        "language-domain API link tests excluded. They run once `phoenix_kit` resolves to a " <>
-        "core with it."
-    )
-
-    [:requires_core_canonical_urls]
-  end
-
 # The suite runs with the shop ON, committed once here. A settings write takes a
 # row lock (core's `History.lock_current/1`) and a sandbox holds it until its test
 # ends, so async tests writing this key in setup queue on the one row; whichever
@@ -479,70 +352,13 @@ analytics_exclude =
     [:analytics]
   end
 
-# The MCP tests (tagged `:mcp`) need the MCP plug of the public API as well.
-mcp_exclude =
-  if Code.ensure_loaded?(PhoenixKit.API.MCP) do
-    []
-  else
-    Logger.info("[test_helper] PhoenixKit.API.MCP not loaded - the MCP tests (:mcp) excluded.")
-    [:mcp]
-  end
-
-# The tests of `replay: false` (a tool that gives up the idempotency key) need a
-# core that exports `ControlFields.replay_tool?/1`. They are excluded, and so
-# counted, on a core without it; the run never reports them as passed.
-replay_exclude =
-  if PhoenixKitEcommerce.API.CartTools.replay_available?() do
-    []
-  else
-    Logger.info(
-      "[test_helper] PhoenixKit.API.ControlFields.replay_tool?/1 not available - " <>
-        "the replay: false tests (:core_replay) excluded."
-    )
-
-    [:core_replay]
-  end
-
-# The builds-alone test needs `PhoenixKit.TestSupport.ModuleChainCheck`, which
-# ships in the first core release after 2.64.1; against an older core it is
-# excluded.
-chain_check_exclude =
-  if Code.ensure_loaded?(PhoenixKit.TestSupport.ModuleChainCheck),
-    do: [],
-    else: [:requires_module_chain_check]
-
-# The file-references test compares against core's own list, which the first
-# core release after 2.64.1 exposes as `Storage.builtin_file_references/0`;
-# against an older core it is excluded.
-file_refs_exclude =
-  if Code.ensure_loaded?(PhoenixKit.Modules.Storage) and
-       function_exported?(PhoenixKit.Modules.Storage, :builtin_file_references, 0),
-     do: [],
-     else: [:requires_core_file_references]
-
 ExUnit.start(
   exclude:
-    chain_check_exclude ++
-      file_refs_exclude ++
-      i18n_exclude ++
-      integration_exclude ++
-      transliteration_exclude ++
-      single_language_exclude ++
+    integration_exclude ++
       catalogue_exclude ++
       admin_api_exclude ++
-      user_menu_exclude ++
       billing_user_menu_exclude ++
       billing_order_sync_exclude ++
       billing_start_order_payment_exclude ++
-      api_exclude ++
-      canonical_urls_exclude ++
-      trigram_exclude ++ analytics_exclude ++ mcp_exclude ++ replay_exclude
+      trigram_exclude ++ analytics_exclude
 )
-
-# The manifest test builds the module's tables with `ModuleChainCheck.build_alone/4`
-# and hands the manifest to repair (`PhoenixKit.Module.expected_schema/0`); both
-# arrive in the first core release after 2.64.1.
-unless Code.ensure_loaded?(PhoenixKit.TestSupport.ModuleChainCheck) and
-         function_exported?(PhoenixKit.TestSupport.ModuleChainCheck, :build_alone, 4) do
-  ExUnit.configure(exclude: [:requires_core_expected_schema | ExUnit.configuration()[:exclude]])
-end

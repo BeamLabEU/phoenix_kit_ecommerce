@@ -26,14 +26,12 @@ defmodule PhoenixKitEcommerce.Regression.PromUaSlugTest do
     |> Enum.map(fn attrs -> attrs.slug |> Map.values() |> List.first() end)
   end
 
-  @tag :requires_core_transliteration
   test "a Cyrillic listing gets a real slug" do
     [slug] = slugs_for(["Кашпо,100,12,,"]) |> Enum.uniq() |> then(&[List.first(&1)])
 
     assert slug =~ "kashpo", "a Cyrillic name used to slugify to an empty string"
   end
 
-  @tag :requires_core_transliteration
   test "listings that transliterate the same still get distinct slugs" do
     # Transliteration is lossy: Ганок and Ґанок both give "ganok". The upsert
     # matches on this slug, so without a discriminator the second listing
@@ -43,7 +41,6 @@ defmodule PhoenixKitEcommerce.Regression.PromUaSlugTest do
     assert length(Enum.uniq(slugs)) == 2, "two distinct listings collapsed onto one slug"
   end
 
-  @tag :requires_core_transliteration
   test "the same listing slugs identically on a second import" do
     assert slugs_for(["Кашпо керамічне,100,12,,"]) ==
              slugs_for(["Кашпо керамічне,100,12,,"])

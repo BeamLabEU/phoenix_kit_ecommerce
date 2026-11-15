@@ -9,8 +9,6 @@ defmodule PhoenixKitEcommerce.API.PublicExecutorTest do
   """
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :requires_core_api
-
   @compile {:no_warn_undefined, PhoenixKit.API.Executor}
 
   import PhoenixKitEcommerce.SearchFixtures

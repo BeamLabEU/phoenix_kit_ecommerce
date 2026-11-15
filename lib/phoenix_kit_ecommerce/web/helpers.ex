@@ -715,8 +715,6 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   # Admin edit link (storefront -> admin)
   # ---------------------------------------------------------------------------
 
-  @admin_edit_helper_mod PhoenixKitWeb.AdminEditHelper
-
   @doc """
   Assigns `:admin_edit_url`/`:admin_edit_label` on `socket` for an admin
   visitor, via core's `PhoenixKitWeb.AdminEditHelper.assign_admin_edit/3`.
@@ -738,23 +736,19 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   handed the last of them, the one most specific to the editor. `nil` or an
   empty list names no permission and yields no link.
 
-  Guarded with `Code.ensure_loaded?/1` + `function_exported?/3` rather than
-  calling the helper directly: ecommerce pins `phoenix_kit` with a `~>`
-  requirement, not an exact version, so a host running an older core that
-  predates the helper must not crash storefront pages. Returns `socket`
-  unchanged when the helper isn't available or the visitor isn't an admin.
+  Returns `socket` unchanged when the visitor isn't an admin.
   """
   def maybe_assign_admin_edit(socket, path, label, opts \\ []) do
-    mod = @admin_edit_helper_mod
     permissions = opts |> Keyword.get(:permission, "shop.manage_catalog") |> List.wrap()
 
     # `[]` is "no permission named", which `Enum.all?/2` would read as
     # "every one held" — a link for anybody who can reach the admin area.
     # An absent requirement must fail closed.
-    if permissions != [] and Code.ensure_loaded?(mod) and
-         function_exported?(mod, :assign_admin_edit, 3) and
-         Enum.all?(permissions, &can?(socket, &1)) do
-      mod.assign_admin_edit(socket, path, label: label, permission: List.last(permissions))
+    if permissions != [] and Enum.all?(permissions, &can?(socket, &1)) do
+      PhoenixKitWeb.AdminEditHelper.assign_admin_edit(socket, path,
+        label: label,
+        permission: List.last(permissions)
+      )
     else
       socket
     end

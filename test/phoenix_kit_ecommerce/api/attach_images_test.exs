@@ -15,7 +15,6 @@ defmodule PhoenixKitEcommerce.API.AttachImagesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_confirm
   @moduletag skip:
                if(System.find_executable("convert"),
                  do: false,

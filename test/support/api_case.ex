@@ -20,9 +20,6 @@ defmodule PhoenixKitEcommerce.APICase do
   This is NOT core's `Executor.call/4`: it never authenticates, rate-limits,
   checks a scope, confirms or claims an idempotency key. `executor_test.exs`
   runs the same tools through the real `Executor.call/4`.
-
-  Needs core's tool registry: the tests that use it are tagged `:core_api`
-  (the read tool) or `:core_confirm` (the write tools).
   """
 
   @compile {:no_warn_undefined, PhoenixKit.API.Executor}

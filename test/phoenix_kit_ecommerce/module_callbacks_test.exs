@@ -30,23 +30,18 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     assert PhoenixKitEcommerce.css_sources() == [:phoenix_kit_ecommerce]
   end
 
-  test "api_tools/0 hands core the admin, the public read and the cart tools, and nothing on a core without the registry" do
+  test "api_tools/0 hands core the admin, the public read and the cart tools" do
     tools = PhoenixKitEcommerce.api_tools()
     names = Enum.map(tools, & &1.name)
 
     assert is_list(tools)
 
-    if Code.ensure_loaded?(PhoenixKit.API.Tool) do
-      # Each group is whatever its own module offers on this core (the admin
-      # write tools only on a core with the confirmation flow, the cart tools
-      # that need it likewise), so the expectation is derived, not counted.
-      offered = for group <- groups(), tool <- group.tools(), do: tool.name
+    # Each group is whatever its own module offers, so the expectation is
+    # derived, not counted.
+    offered = for group <- groups(), tool <- group.tools(), do: tool.name
 
-      assert Enum.sort(names) == Enum.sort(offered)
-      assert names == Enum.uniq(names), "a tool name is offered twice"
-    else
-      assert tools == []
-    end
+    assert Enum.sort(names) == Enum.sort(offered)
+    assert names == Enum.uniq(names), "a tool name is offered twice"
   end
 
   # The module hands over its tools from one clause. A second `def api_tools`
@@ -67,8 +62,7 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     assert clauses == 1
   end
 
-  @tag :requires_core_api
-  test "on a core with the shop API every group of tools is offered" do
+  test "every group of tools is offered" do
     names = Enum.map(PhoenixKitEcommerce.api_tools(), & &1.name)
 
     # The order tools need a billing that keeps the order revision.
@@ -149,7 +143,6 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
   # The avatar dropdown carries the shopper's own pages, not the catalogue:
   # "My Cart" sits there beside billing's "My Orders", "Shop" stays in the nav.
-  @tag :requires_core_user_menu
   test "user_dashboard_tabs/0 offers My Cart, and only My Cart, in the avatar dropdown" do
     menu_ids =
       for tab <- PhoenixKitEcommerce.user_dashboard_tabs(),
@@ -165,7 +158,6 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
     assert Enum.any?(specs, &(&1.name == :shop_search and &1.limit == 2 and &1.kind == :batch))
   end
 
-  @tag :requires_core_api
   test "oban_crons/0 declares the nightly search rebuild and the three cart jobs, without conflicts" do
     assert {entries, []} = PhoenixKit.ObanCrons.declared([PhoenixKitEcommerce])
 

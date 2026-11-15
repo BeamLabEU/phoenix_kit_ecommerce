@@ -4,13 +4,9 @@ defmodule PhoenixKitEcommerce.Web.SettingsApiTest do
   live, whether the API is on, what it means for a shop with and without
   Shopify, and the one e-commerce setting of the API, the confirmation
   threshold for price changes.
-
-  The card exists only on a core that ships the API: `:core_api`.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
-
-  @moduletag :core_api
 
   alias PhoenixKit.Settings
   alias PhoenixKit.Utils.Routes

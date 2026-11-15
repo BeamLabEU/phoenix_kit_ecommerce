@@ -281,8 +281,7 @@ defmodule PhoenixKitEcommerce do
   defp refresh_integration_providers, do: IntegrationProviders.clear_cache()
 
   defp refresh_dashboard_tabs do
-    if Code.ensure_loaded?(PhoenixKit.Dashboard.Registry) and
-         PhoenixKit.Dashboard.Registry.initialized?() do
+    if PhoenixKit.Dashboard.Registry.initialized?() do
       PhoenixKit.Dashboard.Registry.load_defaults()
     end
   end

@@ -8,7 +8,6 @@ defmodule PhoenixKitEcommerce.API.SetAvailabilityTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_confirm
 
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.APICase

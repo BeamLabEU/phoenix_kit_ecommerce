@@ -18,7 +18,6 @@ defmodule PhoenixKitEcommerce.API.DetachImagesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_confirm
 
   import Ecto.Query, only: [from: 2]
   import ExUnit.CaptureLog, only: [with_log: 1]

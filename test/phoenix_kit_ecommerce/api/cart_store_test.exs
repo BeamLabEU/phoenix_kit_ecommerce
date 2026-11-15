@@ -9,7 +9,6 @@ defmodule PhoenixKitEcommerce.API.CartStoreTest do
 
   # async: false - settings and the Hammer counters are shared.
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   import PhoenixKitEcommerce.CartApiFixtures
 

@@ -51,7 +51,6 @@ defmodule PhoenixKitEcommerce.API.CartStoreRaceTest do
     :ok
   end
 
-  @tag :requires_core_api
   test "parallel first writes of one cart token create one cart, once" do
     for _round <- 1..@rounds do
       {:ok, hash} = CartToken.verify(new_token!())

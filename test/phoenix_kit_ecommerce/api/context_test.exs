@@ -213,15 +213,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
       assert Context.absolute(context, "", "de-DE") == nil
     end
 
-    @tag :core_without_canonical_urls
-    test "ignores the host resolver on a core that has no language-domain helpers" do
-      put_canonical_host_resolver!()
-
-      assert Context.absolute(build!(), "/de/shop/product/vase", "de-DE") ==
-               "https://shop.test/de/shop/product/vase"
-    end
-
-    @tag :requires_core_canonical_urls
     test "puts a language that has a domain on it, without the language segment" do
       put_canonical_host_resolver!()
       context = build!()
@@ -235,7 +226,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
                "https://shop.example.fr/shop/category/lampes"
     end
 
-    @tag :requires_core_canonical_urls
     test "a path that the request's own domain serves without a segment is left as it is" do
       put_canonical_host_resolver!()
 
@@ -243,7 +233,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
                "https://shop.example.de/shop/product/vase"
     end
 
-    @tag :requires_core_canonical_urls
     test "a page named like the language is not mistaken for the language segment" do
       put_canonical_host_resolver!()
 
@@ -251,7 +240,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
                "https://shop.example.de/shop/product/de"
     end
 
-    @tag :requires_core_canonical_urls
     test "a language without a domain keeps the request's host and its segment" do
       put_canonical_host_resolver!()
       context = build!()
@@ -263,7 +251,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
                "https://shop.test/shop/product/vase"
     end
 
-    @tag :requires_core_canonical_urls
     test "the resolver is asked once per link, with a domain or without" do
       put_canonical_host_resolver!(:host_counted)
       context = build!()
@@ -278,7 +265,6 @@ defmodule PhoenixKitEcommerce.API.ContextTest do
       end
     end
 
-    @tag :requires_core_canonical_urls
     test "a URL and nil are left alone whatever the resolver says" do
       put_canonical_host_resolver!()
       context = build!()

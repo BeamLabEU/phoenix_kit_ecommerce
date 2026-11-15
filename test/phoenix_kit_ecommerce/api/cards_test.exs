@@ -517,7 +517,6 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     assert Enum.map(item["category_path"], & &1["name"]) == ["Visible Child"]
   end
 
-  @tag :requires_core_canonical_urls
   test "list_item/2 puts the url on the domain of the language of the answer" do
     enable_languages!(["en-US", "de-DE"])
     put_canonical_host_resolver!()
@@ -537,7 +536,6 @@ defmodule PhoenixKitEcommerce.API.CardsTest do
     assert url == "https://shop.test" <> Shop.product_url(product, "en-US")
   end
 
-  @tag :requires_core_canonical_urls
   test "list_item/2 takes the domain from the answer's language, not the request's default" do
     enable_languages!(["en-US", "de-DE"])
     put_canonical_host_resolver!()

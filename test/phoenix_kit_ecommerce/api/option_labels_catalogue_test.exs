@@ -13,7 +13,6 @@ defmodule PhoenixKitEcommerce.API.OptionLabelsCatalogueTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
-  @moduletag :requires_core_api
   @moduletag :catalogue
 
   @compile {:no_warn_undefined, PhoenixKitCatalogue.Catalogue}

@@ -12,7 +12,7 @@ admin LiveViews and a public storefront. Module key `"shop"`, settings prefix
 `shop_`. Registers through `use PhoenixKit.Module`; core discovers modules
 from BEAM files and generates routes from tabs and `route_module/0`.
 
-- Required PhoenixKit deps: core `>= 2.65.0 and < 4.0.0`, billing `~> 0.25`.
+- Required PhoenixKit deps: core `>= 3.5.0 and < 4.0.0`, billing `~> 0.25`.
   Optional: AI `~> 0.27`, Warehouse `~> 0.7`, Catalogue `~> 0.50` with Entities
   `~> 0.7`, web analytics. Guard optional integrations so a host without them
   compiles and runs. Only catalogue's form extension slot is duck-typed; the
@@ -254,8 +254,8 @@ Repo-local aliases:
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
   Rows carry no PII.
-- **The core pin keeps the compound form (`>= 2.65.0 and < 4.0.0`) on
-  purpose.** A three-segment `~> 2.43.0` expands to `< 2.44.0` and breaks
+- **The core pin keeps the compound form (`>= 3.5.0 and < 4.0.0`) on
+  purpose.** A three-segment `~> 3.5.0` expands to `< 3.6.0` and breaks
   CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
   — while nothing in this repo's own run notices, which is why a test guards
   it. Raising the floor is fine and expected; raise it in `mix.exs` and in

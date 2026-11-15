@@ -2,7 +2,6 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
   @moduledoc "The definitions of the seven cart tools, and that the module offers them."
 
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   # Core's API modules exist only in the core that carries the shop API; this file is
   # compiled (and its tests excluded) against a core that has none, so they are named
@@ -65,8 +64,7 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
                "Each call issues a new link"
     end
 
-    @tag :core_replay
-    test "on a core that can give up replay, neither is offered an idempotency_key" do
+    test "neither is offered an idempotency_key" do
       assert CartTools.replay_available?()
 
       for name <- @no_replay do
@@ -78,7 +76,6 @@ defmodule PhoenixKitEcommerce.API.CartToolsTest do
       end
     end
 
-    @tag :core_replay
     test "the other write tools keep their idempotency_key" do
       assert CartTools.replay_available?()
 

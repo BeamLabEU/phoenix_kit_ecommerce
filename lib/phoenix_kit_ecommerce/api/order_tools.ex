@@ -61,12 +61,12 @@ defmodule PhoenixKitEcommerce.API.OrderTools do
   def include(names), do: Enum.filter(OrderExport.sections(), &(Atom.to_string(&1) in names))
 
   @doc """
-  The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the
-  tool registry or a billing without `put_order_sync/2`.
+  The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a billing without
+  `put_order_sync/2`.
   """
   @spec tools(boolean(), boolean()) :: [struct()]
   def tools(available? \\ available?(), confirmation? \\ confirmation_available?()) do
-    if available? and Code.ensure_loaded?(Tool),
+    if available?,
       do:
         [list_orders_tool(), get_orders_tool(), get_order_customers_tool()] ++
           if(confirmation?, do: [set_order_sync_tool()], else: []),

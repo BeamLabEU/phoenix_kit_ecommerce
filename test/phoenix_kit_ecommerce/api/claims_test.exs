@@ -7,7 +7,6 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
 
   # async: false - settings are shared.
   use PhoenixKitEcommerce.DataCase, async: false
-  @moduletag :requires_core_api
 
   import PhoenixKitEcommerce.CartApiFixtures
 

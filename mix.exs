@@ -102,22 +102,13 @@ defmodule PhoenixKitEcommerce.MixProject do
 
   defp deps do
     [
-      # The floor is 2.43.0: `ImageFingerprint` runs ImageMagick through
-      # core's `ImageProcessor.limit_args/0` and `pinned_input/2` (resource
-      # limits, decoder pinned to the sniffed format), first shipped there.
-      # That subsumes 2.38.0 — the actor and the activity log
-      # (`PhoenixKitWeb.Actor`, `PhoenixKit.Activity.log/3`), not
-      # feature-detected, so a lower core fails to compile.
-      # Everything the earlier floors guaranteed is subsumed: V186's
-      # `base_currency`/`exchange_rate`/`base_unit_price` cart columns (2.16.0
-      # — below it every cart write raised `undefined_column`),
-      # `Slug.put_slug/3` (2.4.0) and V171's projection pkeys (2.6.0).
+      # PhoenixKit core. Floor 3.5.0, the ecosystem-wide minimum; it carries
+      # everything this module calls (the `file_references/0` and
+      # `expected_schema/0` callbacks, the public API tool registry, the
+      # `ImageProcessor` limits, `PhoenixKitWeb.Actor`, `Activity.log/3`).
       # Patch-precise floor in the compound form, so the ceiling stays open
-      # through every later 2.x minor (a three-segment `~> 2.43.0` would pin
-      # one minor; see test/core_pin_conformance_test.exs).
-      # Floor 2.65.0: the first core with the `file_references/0` and `expected_schema/0`
-      # callbacks this module implements (`@impl`). The ceiling is open through core 3.x.
-      pk_dep(:phoenix_kit, ">= 2.65.0 and < 4.0.0"),
+      # through every core 3.x (see test/core_pin_conformance_test.exs).
+      pk_dep(:phoenix_kit, ">= 3.5.0 and < 4.0.0"),
 
       # Gettext for per-module i18n of sidebar tab labels.
       {:gettext, "~> 1.0"},

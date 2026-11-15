@@ -8,7 +8,6 @@ defmodule PhoenixKitEcommerce.API.SetPricesTest do
   use PhoenixKitEcommerce.DataCase, async: false
 
   @moduletag :catalogue_api
-  @moduletag :core_confirm
 
   alias PhoenixKit.Settings
   alias PhoenixKitCatalogue.Catalogue

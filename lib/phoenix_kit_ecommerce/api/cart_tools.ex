@@ -2,8 +2,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   @moduledoc """
   Definitions of the seven public cart tools. Audience `:public`: no key, no
   scope, no permission; the cart token in the input identifies the cart, and is
-  the module's client token (`client_token: "cart_token"`, declared on a core
-  whose `PhoenixKit.API.Tool` has the field): core hashes it for the caller's
+  the module's client token (`client_token: "cart_token"`): core hashes it for the caller's
   rate limit, idempotency scope and confirmation, and never keeps it in clear.
   Names are dotted here; core derives the underscored MCP names.
 
@@ -16,8 +15,7 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   error with the allowed range, not a refusal of the whole request, and the
   handler checks it.
 
-  `tools/0` is `[]` against a core without the tool registry, the way
-  `PhoenixKitEcommerce.API.PublicTools.tools/0` is. It fails closed without
+  `tools/0` fails closed without
   core's confirmation gate: `shop.clear_cart` declares a `danger` check, which a
   core without the gate ignores, so the tool is withheld unless
   `gate_available?/0` finds the gate's marker, `PhoenixKit.API.Keys.active?/1`
@@ -25,7 +23,6 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   loaded code, not on a version number.
   """
 
-  alias PhoenixKit.API.Tool
   alias PhoenixKitEcommerce.API.Public.Schemas
   alias PhoenixKitEcommerce.API.PublicTools
 
@@ -117,40 +114,30 @@ defmodule PhoenixKitEcommerce.API.CartTools do
   """
   @spec tools(boolean(), boolean()) :: [struct()]
   def tools(gate? \\ gate_available?(), replay? \\ replay_available?()) do
-    if Code.ensure_loaded?(Tool) do
-      all = [
-        create_cart(replay?),
-        get_cart(),
-        set_cart_items(),
-        clear_cart(),
-        get_shipping_options(),
-        set_shipping(),
-        get_checkout_link(replay?)
-      ]
+    all = [
+      create_cart(replay?),
+      get_cart(),
+      set_cart_items(),
+      clear_cart(),
+      get_shipping_options(),
+      set_shipping(),
+      get_checkout_link(replay?)
+    ]
 
-      specs = if gate?, do: all, else: Enum.reject(all, &(not is_nil(&1[:danger])))
+    specs = if gate?, do: all, else: Enum.reject(all, &(not is_nil(&1[:danger])))
 
-      # A tool that core refuses is left out and logged once; it never takes
-      # the other tools (or the module's other API tools) down with it.
-      client_fields? = Map.has_key?(struct(Tool), :client_token)
-
-      specs
-      |> Enum.map(&declare_client_fields(&1, client_fields?))
-      |> PublicTools.build_all()
-    else
-      []
-    end
+    # A tool that core refuses is left out and logged once; it never takes
+    # the other tools (or the module's other API tools) down with it.
+    specs
+    |> Enum.map(&declare_client_fields/1)
+    |> PublicTools.build_all()
   end
 
-  # A core with the module-neutral API reads the caller's identity from the input
-  # field a public tool declares as its `client_token`, and redacts the output fields
-  # named in `credentials` from stored replays. An older core rejects a `Tool` with
-  # fields it does not know, and finds the cart token by name; so the fields are
-  # declared only where `Tool` has them.
-  defp declare_client_fields(spec, true),
+  # Core reads the caller's identity from the input field a public tool declares
+  # as its `client_token`, and redacts the output fields named in `credentials`
+  # from stored replays.
+  defp declare_client_fields(spec),
     do: Keyword.merge(spec, client_token_field(spec) ++ credentials_field(spec))
-
-  defp declare_client_fields(spec, false), do: spec
 
   defp client_token_field(spec) do
     if Map.has_key?(spec[:input_schema]["properties"], "cart_token"),

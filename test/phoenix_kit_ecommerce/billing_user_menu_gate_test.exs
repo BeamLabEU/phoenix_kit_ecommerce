@@ -9,7 +9,6 @@ defmodule PhoenixKitEcommerce.BillingUserMenuGateTest do
 
   alias PhoenixKit.Dashboard.Tab
 
-  @moduletag :requires_core_user_menu
   @moduletag :requires_billing_user_menu
 
   test "billing's user tabs reach the dropdown while the shop is enabled, not after" do

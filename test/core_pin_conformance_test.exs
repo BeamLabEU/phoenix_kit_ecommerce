@@ -5,54 +5,24 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
   Guards the `:phoenix_kit` requirement against being re-narrowed to a single
   core MINOR, and against a local path override reaching a commit.
 
-  The trap is the three-segment form: `~> 2.6.x` expands to
-  `>= 2.6.x and < 2.7.0`, so no 2.7 or later core satisfies it. The breakage
+  The trap is the three-segment form: `~> 3.5.x` expands to
+  `>= 3.5.x and < 3.6.0`, so no 3.6 or later core satisfies it. The breakage
   lands on CONSUMERS, never here — a host depending on both this module and a
   newer core minor gets an unsolvable dependency set and `mix deps.get` fails
   outright, with no degraded mode. Nothing else in this repo's own test run
   would notice, which is why the check is a test rather than a convention.
 
-  What this does NOT forbid is raising the FLOOR. The floor tracks the
-  oldest core that has every API this module calls. It is `>= 2.65.0 and
-  < 4.0.0` now: `file_references/0` and `expected_schema/0` carry
-  `@impl PhoenixKit.Module`, callbacks first shipped in core 2.65.0. Below
-  that sits 2.43.0 — `ImageFingerprint` runs ImageMagick through
-  `ImageProcessor.limit_args/0` and `pinned_input/2` — and 2.38.0, where the
-  actor and the activity log come from `PhoenixKitWeb.Actor` and
-  `Activity.log/3`; the module does not compile without them. That subsumes
-  the earlier floors — `Slug.put_slug/3`
-  (2.4.0), V171's shop slug projection pkeys (2.6.0) and V186's
-  `base_currency`/`exchange_rate`/`base_unit_price` cart columns (2.16.0;
-  below it every cart write raised `undefined_column`). Raise this alongside
-  `mix.exs` whenever a newly-adopted core API sets a higher floor, keeping
-  the compound form: patch-precise at the bottom, open through every later
-  minor of the supported majors at the top.
-
-  Core 1.7 is deliberately excluded: core 2.0.0 squashed the migration chain to
-  a V135 floor and this module is verified only against that baseline.
+  The requirement is `>= 3.5.0 and < 4.0.0`. The floor is the ecosystem-wide
+  minimum core; it carries every API this module calls. Raising the floor is
+  fine: raise it here alongside `mix.exs` whenever a newly-adopted core API
+  needs it, keeping the compound form — patch-precise at the bottom, open
+  through every core 3.x at the top.
   """
 
-  # Floor: core 2.65.0. Everything above it, up to the next major, must stay
-  # admitted. 2.64.9 is below the callbacks; 2.42.0 is below the ImageMagick
-  # helpers; 2.37.5 is the last release
-  # without the toolkits; the older rejects are the earlier floors' own
-  # boundaries, kept so a regression to any of them is named.
-  @must_admit ["2.65.0", "2.65.1", "2.99.4", "3.0.0", "3.9.9"]
-  @must_reject [
-    "2.38.0",
-    "2.42.0",
-    "1.7.236",
-    "2.0.0",
-    "2.6.0",
-    "2.15.1",
-    "2.16.0",
-    "2.22.15",
-    "2.37.5",
-    "2.64.9",
-    "4.0.0"
-  ]
+  @must_admit ["3.5.0", "3.5.1", "3.6.0", "3.9.9"]
+  @must_reject ["1.7.236", "2.0.0", "2.65.0", "2.99.4", "3.0.0", "3.4.0", "3.4.9", "4.0.0"]
 
-  test "the :phoenix_kit requirement admits every core >= 2.65.0 minor and nothing else" do
+  test "the :phoenix_kit requirement admits every core >= 3.5.0 minor and nothing else" do
     requirement = core_requirement()
 
     assert match?({:ok, _parsed}, Version.parse_requirement(requirement)),
@@ -62,7 +32,9 @@ defmodule PhoenixKitEcommerce.CorePinConformanceTest do
       assert Version.match?(version, requirement),
              "`:phoenix_kit` requirement #{inspect(requirement)} rejects core #{version}. " <>
                "A pin that excludes a core minor at or above the floor breaks `mix deps.get` " <>
-               "for every host running this module alongside that core. Keep it two-segment."
+               "for every host running this module alongside that core. Keep the floor " <>
+               "patch-precise and the ceiling open (`>= 3.5.0 and < 4.0.0`), never a " <>
+               "three-segment `~>`."
     end
 
     for version <- @must_reject do

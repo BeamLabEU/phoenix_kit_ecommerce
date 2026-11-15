@@ -8,8 +8,6 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
   """
   use PhoenixKitEcommerce.DataCase, async: false
 
-  @moduletag :requires_core_api
-
   @compile {:no_warn_undefined, PhoenixKit.API.Validator}
 
   import ExUnit.CaptureLog
@@ -395,7 +393,6 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
       assert item_url(block, t.product) =~ "https://shop.test/en/shop/product/"
     end
 
-    @tag :requires_core_canonical_urls
     test "search_products links to a language that has a domain on that domain, whoever asks",
          t do
       put_canonical_host_resolver!()
@@ -410,7 +407,6 @@ defmodule PhoenixKitEcommerce.API.Public.SearchTest do
       end
     end
 
-    @tag :requires_core_canonical_urls
     test "search_products_batch links to a language that has a domain on that domain", t do
       put_canonical_host_resolver!()
 

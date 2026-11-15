@@ -47,17 +47,12 @@ defmodule PhoenixKitEcommerce.API do
   @retry_note " A validation_failed error with context.reason database_error, storage_error or unexpected is not a problem with the request and is worth retrying; any other validation_failed should be fixed first."
 
   @doc """
-  The tools for `PhoenixKitEcommerce.api_tools/0`; `[]` on a core without the
-  tool registry. `markers` are the `{module, function, arity}` triples that
+  The tools for `PhoenixKitEcommerce.api_tools/0`. `markers` are the `{module, function, arity}` triples that
   must exist for the write tools to be offered; none at all means they are not.
   """
   @spec tools([{module(), atom(), arity()}]) :: [struct()]
   def tools(markers \\ @markers) do
-    if Code.ensure_loaded?(Tool) do
-      [get_prices_tool()] ++ if(confirmation_available?(markers), do: write_tools(), else: [])
-    else
-      []
-    end
+    [get_prices_tool()] ++ if(confirmation_available?(markers), do: write_tools(), else: [])
   end
 
   # Whether core enforces the confirmation gate the write tools depend on:
@@ -169,23 +164,24 @@ defmodule PhoenixKitEcommerce.API do
 
   defp attach_images_tool do
     Tool.new!(
-      [
-        name: "ecommerce.attach_images",
-        audience: :admin,
-        scope: "ecommerce.images:write",
-        permission: "shop.manage_catalog",
-        title: "Attach product images",
-        description:
-          "Downloads pictures from public http(s) URLs (at most 10 MB each) and attaches them to products after the pictures they already have. " <>
-            "At most 20 pictures per call. Addresses on private networks are always refused. Mark one picture featured to make it the main one. " <>
-            "A dry run answers requires_confirmation (whether the real call would be held: a batch over the confirmation threshold is) and confirmation_rules; it never creates a confirmation code." <>
-            shopify_note() <> @retry_note,
-        input_schema: Schemas.attach_images_input(),
-        output_schema: Schemas.batch_output(),
-        handler: {__MODULE__, :attach_images},
-        annotations: %{idempotent: true, open_world: true},
-        max_items: AttachImages.max_images()
-      ] ++ cost_option()
+      name: "ecommerce.attach_images",
+      audience: :admin,
+      scope: "ecommerce.images:write",
+      permission: "shop.manage_catalog",
+      title: "Attach product images",
+      description:
+        "Downloads pictures from public http(s) URLs (at most 10 MB each) and attaches them to products after the pictures they already have. " <>
+          "At most 20 pictures per call. Addresses on private networks are always refused. Mark one picture featured to make it the main one. " <>
+          "A dry run answers requires_confirmation (whether the real call would be held: a batch over the confirmation threshold is) and confirmation_rules; it never creates a confirmation code." <>
+          shopify_note() <> @retry_note,
+      input_schema: Schemas.attach_images_input(),
+      output_schema: Schemas.batch_output(),
+      handler: {__MODULE__, :attach_images},
+      annotations: %{idempotent: true, open_world: true},
+      max_items: AttachImages.max_images(),
+      # A call that downloads is priced by the pictures it downloads
+      # (`{Module, :function}` called with the raw input).
+      cost: {AttachImages, :cost}
     )
   end
 
@@ -208,16 +204,6 @@ defmodule PhoenixKitEcommerce.API do
       danger: {__MODULE__, :detach_images_danger},
       max_items: Schemas.max_rows()
     )
-  end
-
-  # A call that downloads is priced by the pictures it downloads, on a core
-  # whose `Tool` has the `cost` field (`{Module, :function}` called
-  # with the raw input). A core without the field is not told about it:
-  # `Tool.new!/1` would refuse an unknown key.
-  defp cost_option do
-    if :cost in Map.keys(Tool.__struct__()),
-      do: [cost: {AttachImages, :cost}],
-      else: []
   end
 
   # A sentence only while the Shopify sync exists: on a shop without it the

@@ -7,7 +7,6 @@ defmodule PhoenixKitEcommerce.Web.ClaimControllerTest do
 
   # async: false - the signing secret and settings are shared.
   use PhoenixKitEcommerce.LiveCase, async: false
-  @moduletag :requires_core_api
 
   import Ecto.Query
   import PhoenixKitEcommerce.CartApiFixtures
