@@ -46,6 +46,13 @@ notifies, and "Only N left" is off.
   gone: the API tools, the rate limit, the batch confirmation threshold and
   the canonical links now call core 3.5's functions directly.
 
+### Fixed
+
+- A host without the optional `phoenix_kit_ai` package can compile the shop
+  again. The product form's AI translation setup was expanded even when the
+  package was missing, so compilation failed with
+  `module ...AITranslate.Embed is not loaded`.
+
 ## 0.11.0 - 2026-11-11
 
 Copies of the buyer's order emails, a language for the shop's own order email,
