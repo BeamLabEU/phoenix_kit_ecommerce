@@ -9,6 +9,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
 
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Availability
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Errors
   alias PhoenixKitEcommerce.Events
@@ -147,6 +148,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       )
       |> assign(:specifications, build_specifications(product))
       |> assign(:related_products, RelatedProducts.for_product(product))
+      |> assign(:offer, Availability.offer(product))
       |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
       |> assign(:selectable_specs, selectable_specs)
       |> assign(:selected_specs, selected_specs)
@@ -337,6 +339,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
       |> assign(:cart_item, cart_item)
       |> assign(:specifications, specifications)
       |> assign(:related_products, RelatedProducts.for_product(product))
+      |> assign(:offer, Availability.offer(product))
       |> assign(:price_affecting_specs, price_affecting_specs)
       |> assign(:selectable_specs, selectable_specs)
       |> assign(:selected_specs, selected_specs)
@@ -581,6 +584,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
         {:noreply,
          socket
          |> assign(:adding_to_cart, false)
+         |> assign(:offer, Availability.offer(socket.assigns.product))
          |> put_flash(:error, Errors.message(reason))}
 
       {:error, reason} ->
@@ -1116,22 +1120,37 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   </div>
                 <% end %>
 
+                <%!-- How many are left, from `Availability.offer/1`: only while
+                      stock tracking counts the item and few enough are on hand
+                      (`shop_stock_low_threshold`). --%>
+                <p
+                  :if={match?({:few_left, _}, @offer)}
+                  id="product-stock-left"
+                  class="text-sm font-medium text-warning"
+                >
+                  <.icon name="hero-exclamation-circle" class="w-4 h-4 inline" />
+                  {ngettext("Only %{count} left", "Only %{count} left", elem(@offer, 1))}
+                </p>
+
                 <%!-- Add to Cart Button --%>
                 <button
+                  id="product-add-to-cart"
                   phx-click="add_to_cart"
                   phx-disable-with={gettext("Adding...")}
                   class={["btn btn-primary btn-lg w-full"]}
-                  disabled={@adding_to_cart}
+                  disabled={@adding_to_cart or @offer == :sold_out}
                 >
-                  <%= if @adding_to_cart do %>
-                    <span class="loading loading-spinner loading-sm"></span> {gettext("Adding...")}
-                  <% else %>
-                    <.icon name="hero-shopping-cart" class="w-5 h-5 mr-2" />
-                    <%= if @cart_item do %>
+                  <%= cond do %>
+                    <% @offer == :sold_out -> %>
+                      {gettext("Out of stock")}
+                    <% @adding_to_cart -> %>
+                      <span class="loading loading-spinner loading-sm"></span> {gettext("Adding...")}
+                    <% @cart_item -> %>
+                      <.icon name="hero-shopping-cart" class="w-5 h-5 mr-2" />
                       {gettext("Add More to Cart")}
-                    <% else %>
+                    <% true -> %>
+                      <.icon name="hero-shopping-cart" class="w-5 h-5 mr-2" />
                       {gettext("Add to Cart")}
-                    <% end %>
                   <% end %>
                 </button>
 
@@ -1709,6 +1728,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
     |> assign(:localized_body, Translations.get(product, :body_html, current_language))
     |> assign(:specifications, build_specifications(product))
     |> assign(:related_products, RelatedProducts.for_product(product))
+    |> assign(:offer, Availability.offer(product))
     |> assign(:price_affecting_specs, Shop.get_price_affecting_specs(product))
     |> assign(:selectable_specs, selectable_specs)
     |> assign(:selected_specs, selected_specs)

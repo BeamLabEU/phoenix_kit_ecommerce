@@ -139,6 +139,23 @@ defmodule PhoenixKitEcommerce.Web.AuthzTest do
       refute PhoenixKitEcommerce.StockTracking.setting_enabled?()
       refute_activity_logged("shop.stock_tracking_changed")
     end
+
+    @tag :integration
+    test "manage_catalog does not unlock the stock settings", %{conn: conn} do
+      conn = put_test_scope(conn, scope_with(["shop", "shop.manage_catalog"]))
+
+      {:ok, view, _html} = live_narrowed(conn, "/en/admin/shop/settings")
+
+      assert render_hook(view, "save_stock_low_threshold", %{"threshold" => "5"}) =~ "permission"
+
+      assert render_hook(view, "save_stock_refund_action", %{"action" => "receipt"}) =~
+               "permission"
+
+      assert PhoenixKitEcommerce.StockTracking.low_stock_threshold() == 0
+      assert PhoenixKitEcommerce.StockTracking.refund_action() == "notify"
+      refute_activity_logged("shop.stock_low_threshold_changed")
+      refute_activity_logged("shop.stock_refund_action_changed")
+    end
   end
 
   describe "granted mutations still work" do

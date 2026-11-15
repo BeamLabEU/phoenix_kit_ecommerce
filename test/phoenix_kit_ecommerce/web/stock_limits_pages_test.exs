@@ -53,13 +53,53 @@ defmodule PhoenixKitEcommerce.Web.StockLimitsPagesTest do
 
   test "the product page says when it is gone", %{conn: conn, item: item} do
     {conn, cart} = session_conn(conn)
-    put_stock!(item.uuid, 0)
 
     {:ok, view, _html} = live(conn, "/shop/product/#{@slug}")
-    html = view |> element("button[phx-click=add_to_cart]") |> render_click()
+    put_stock!(item.uuid, 0)
+    html = view |> element("#product-add-to-cart") |> render_click()
 
     assert html =~ "This item is out of stock"
     assert [] = Shop.get_cart(cart.uuid).items
+    assert view |> element("#product-add-to-cart[disabled]", "Out of stock") |> has_element?()
+  end
+
+  test "a sold-out product cannot be added", %{conn: conn, item: item} do
+    {conn, _cart} = session_conn(conn)
+    put_stock!(item.uuid, 0)
+
+    {:ok, view, _html} = live(conn, "/shop/product/#{@slug}")
+
+    assert view |> element("#product-add-to-cart[disabled]", "Out of stock") |> has_element?()
+    refute has_element?(view, "#product-stock-left")
+  end
+
+  test "the product page says how few are left", %{conn: conn} do
+    {conn, _cart} = session_conn(conn)
+    {:ok, 2} = PhoenixKitEcommerce.StockTracking.set_low_stock_threshold(2)
+
+    {:ok, view, _html} = live(conn, "/shop/product/#{@slug}")
+
+    assert view |> element("#product-stock-left") |> render() =~ "Only 2 left"
+    refute has_element?(view, "#product-add-to-cart[disabled]")
+  end
+
+  test "more than the threshold says nothing of how many", %{conn: conn} do
+    {conn, _cart} = session_conn(conn)
+    {:ok, 1} = PhoenixKitEcommerce.StockTracking.set_low_stock_threshold(1)
+
+    {:ok, view, _html} = live(conn, "/shop/product/#{@slug}")
+
+    refute has_element?(view, "#product-stock-left")
+  end
+
+  test "a stock change reaches an open product page", %{conn: conn, item: item} do
+    {conn, _cart} = session_conn(conn)
+    {:ok, view, _html} = live(conn, "/shop/product/#{@slug}")
+
+    put_stock!(item.uuid, 0)
+    PhoenixKitEcommerce.Events.broadcast_inventory_updated(item.uuid, :issued)
+
+    assert view |> element("#product-add-to-cart[disabled]", "Out of stock") |> has_element?()
   end
 
   test "the cart refuses a quantity above the stock", %{conn: conn, product: product} do

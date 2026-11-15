@@ -200,4 +200,81 @@ defmodule PhoenixKitEcommerce.StockTrackingTest do
       end
     end
   end
+
+  describe "low_stock_threshold/0" do
+    test "is 0 until it is set" do
+      assert StockTracking.low_stock_threshold() == 0
+    end
+
+    test "is what was stored" do
+      assert {:ok, 3} = StockTracking.set_low_stock_threshold(" 3 ")
+      assert StockTracking.low_stock_threshold() == 3
+
+      assert {:ok, 0} = StockTracking.set_low_stock_threshold(0)
+      assert StockTracking.low_stock_threshold() == 0
+    end
+
+    test "refuses what is not a whole number from 0 to 1000" do
+      for value <- ["-1", "1001", "2.5", "a few", "", nil] do
+        assert {:error, :invalid_low_stock_threshold} =
+                 StockTracking.set_low_stock_threshold(value)
+      end
+    end
+
+    test "a malformed stored value is 0" do
+      {:ok, _} = Settings.update_setting_with_module("shop_stock_low_threshold", "lots", "shop")
+      assert StockTracking.low_stock_threshold() == 0
+
+      {:ok, _} = Settings.update_setting_with_module("shop_stock_low_threshold", "5000", "shop")
+      assert StockTracking.low_stock_threshold() == 0
+    end
+
+    test "a settings read that fails is 0" do
+      Application.put_env(:phoenix_kit_ecommerce, :stock_tracking_modules,
+        settings: PhoenixKitEcommerce.Test.RaisingSettings
+      )
+
+      assert StockTracking.low_stock_threshold() == 0
+    end
+  end
+
+  describe "refund_action/0" do
+    test "tells the keeper until it is set" do
+      assert StockTracking.refund_action() == "notify"
+    end
+
+    test "is what was stored" do
+      assert {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+      assert StockTracking.refund_action() == "receipt"
+
+      assert {:ok, "notify"} = StockTracking.set_refund_action("notify")
+      assert StockTracking.refund_action() == "notify"
+    end
+
+    test "refuses anything else" do
+      assert {:error, :invalid_refund_action} = StockTracking.set_refund_action("restock")
+      assert {:error, :invalid_refund_action} = StockTracking.set_refund_action(nil)
+    end
+
+    test "anything else stored, or a failed read, tells the keeper" do
+      {:ok, _} =
+        Settings.update_setting_with_module("shop_stock_refund_action", "restock", "shop")
+
+      assert StockTracking.refund_action() == "notify"
+
+      Application.put_env(:phoenix_kit_ecommerce, :stock_tracking_modules,
+        settings: PhoenixKitEcommerce.Test.ExitingSettings
+      )
+
+      assert StockTracking.refund_action() == "notify"
+    end
+  end
+
+  test "sale_issue/1 finds nothing while Warehouse is not installed" do
+    Application.put_env(:phoenix_kit_ecommerce, :stock_tracking_modules,
+      goods_issue: PhoenixKitEcommerce.Test.WarehouseNotInstalled
+    )
+
+    assert StockTracking.sale_issue("ORD-1") == nil
+  end
 end

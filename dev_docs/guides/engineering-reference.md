@@ -505,7 +505,8 @@ the narrow scope is now refused before any event can be sent.
 
 `notification_types/0` declares five sub-types under `"shop"`: admin `orders`,
 customer `order_confirmations`, `stock` (a paid order that could not be written
-off), `imports`, and `cart_activity`. They are
+off, a refunded order whose goods were not put back, a sale that reached an
+item's minimum), `imports`, and `cart_activity`. They are
 separate so an operator can mute the order firehose without silencing their
 own receipts.
 
@@ -895,10 +896,38 @@ settings-layer error.
   held to one by `metadata["_shop_stock_short"]` on the locked order. The keeper
   posts the issue by hand. Order events reach the handler on billing's `billing`
   queue.
+- **The low-stock reminder.** A write-off that takes an item to or below its
+  Warehouse minimum (`MinStockSettings`, compared with the item's stock in every
+  warehouse together, as Warehouse's deficits are) sends one `shop.stock_low`
+  notification to the same audience (`StockTracking.crossed_minimum/1`). It is
+  sent when the issue crosses the line, so further sales below the minimum say
+  nothing until stock comes back above it. Best-effort: a failed read is logged,
+  and a redelivery that finds the sale already posted sends none. Two orders
+  posted at the same moment can both see the crossing.
+- **A refund.** Billing moves a paid order only to `refunded` (never to
+  `cancelled`), with no word on whether the goods came back. When
+  `StockTracking.sale_issue/1` finds the order's sale,
+  `shop_stock_refund_action` decides (`StockTracking.refund_action/0`, default
+  `"notify"`, anything else stored reads as `"notify"`): `"notify"` sends one
+  `shop.order_refunded_stock` notification, held to one by
+  `metadata["_shop_refund_stock_told"]`; `"receipt"` posts a goods receipt with
+  the issue's items and quantities at the issue's location, `external_ref`
+  `"<order number>/return"` (idempotent), a `shop_order` source reference and no
+  performer. A receipt Warehouse refuses is logged and notifies instead, so the
+  job does not retry a refusal. An order flagged short at payment had nothing
+  written off automatically and always notifies. `:cancelled` changes nothing.
+  Every posting broadcasts `{:inventory_updated, item_uuid, :issued | :returned}`
+  so an open product page re-reads its stock.
+- **The product page.** `Availability.offer/1` answers `:available`,
+  `{:few_left, n}` or `:sold_out`. Sold out disables Add to Cart and labels it
+  "Out of stock"; `{:few_left, n}` shows "Only n left" while `n` is at most
+  `shop_stock_low_threshold` (`StockTracking.low_stock_threshold/0`, a whole
+  number from 0 to 1000, default `0` = never; a malformed value reads as 0). An
+  application's `:availability` hook answers instead and never says how many.
 - **Not there yet (#82).** Nothing is reserved: a cart or an unpaid order holds
   no stock, so the last unit can be sold twice and the second order is flagged.
-  A refund or a cancellation gives nothing back, there is no low-stock reminder,
-  the product page shows no "N left", and native per-variant stock does not exist.
+  The catalog cards show no stock. Native (Legacy) products are never limited:
+  per-variant stock means one catalogue item per variant.
 
 **AI translations — read through `PhoenixKitEcommerce.TranslationSweepSettings`**
 

@@ -24,6 +24,8 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
     # The settings cache is ETS-backed and is not rolled back by the sandbox.
     on_exit(fn ->
       Settings.update_boolean_setting_with_module("shop_stock_tracking_enabled", false, "shop")
+      Settings.update_setting_with_module("shop_stock_low_threshold", "0", "shop")
+      Settings.update_setting_with_module("shop_stock_refund_action", "notify", "shop")
       FakeWarehouse.reset()
     end)
 
@@ -186,6 +188,79 @@ defmodule PhoenixKitEcommerce.Web.SettingsStockTrackingTest do
       assert has_element?(view, @toggle <> "[disabled]")
       assert Settings.get_boolean_setting("shop_stock_tracking_enabled", false)
       refute Shop.stock_tracking_enabled?()
+    end
+  end
+
+  describe "the stock settings" do
+    setup do
+      FakeWarehouse.put_state(enabled: true, default_location: "loc-1")
+      :ok
+    end
+
+    test "show only while tracking is on", %{conn: conn} do
+      {:ok, view, _html} = live(conn, @settings_path)
+      refute has_element?(view, "#shop-stock-low-threshold-form")
+      refute has_element?(view, "#shop-stock-refund-action-form")
+
+      render_click(element(view, @toggle))
+
+      assert has_element?(view, "#shop-stock-low-threshold[value=\"0\"]")
+      assert has_element?(view, "#shop-stock-refund-action option[value=notify][selected]")
+    end
+
+    test "save how few are left before the page says so", %{conn: conn} do
+      {:ok, true} = PhoenixKitEcommerce.StockTracking.set_enabled(true)
+      {:ok, view, _html} = live(conn, @settings_path)
+
+      html =
+        view
+        |> element("#shop-stock-low-threshold-form")
+        |> render_submit(%{"threshold" => "5"})
+
+      assert html =~ "Stock setting updated"
+      assert PhoenixKitEcommerce.StockTracking.low_stock_threshold() == 5
+      assert has_element?(view, "#shop-stock-low-threshold[value=\"5\"]")
+
+      assert_activity_logged("shop.stock_low_threshold_changed",
+        metadata_has: %{"threshold" => 5}
+      )
+    end
+
+    test "refuse a threshold that is not a whole number", %{conn: conn} do
+      {:ok, true} = PhoenixKitEcommerce.StockTracking.set_enabled(true)
+      {:ok, view, _html} = live(conn, @settings_path)
+
+      html =
+        view
+        |> element("#shop-stock-low-threshold-form")
+        |> render_submit(%{"threshold" => "2.5"})
+
+      assert html =~ "Enter a whole number from 0 to 1000."
+      assert PhoenixKitEcommerce.StockTracking.low_stock_threshold() == 0
+    end
+
+    test "choose what a refund does", %{conn: conn} do
+      {:ok, true} = PhoenixKitEcommerce.StockTracking.set_enabled(true)
+      {:ok, view, _html} = live(conn, @settings_path)
+
+      view
+      |> element("#shop-stock-refund-action-form")
+      |> render_change(%{"action" => "receipt"})
+
+      assert PhoenixKitEcommerce.StockTracking.refund_action() == "receipt"
+      assert has_element?(view, "#shop-stock-refund-action option[value=receipt][selected]")
+
+      assert_activity_logged("shop.stock_refund_action_changed",
+        metadata_has: %{"action" => "receipt"}
+      )
+
+      html =
+        view
+        |> element("#shop-stock-refund-action-form")
+        |> render_change(%{"action" => "restock"})
+
+      assert html =~ "Choose what a refund does to the stock."
+      assert PhoenixKitEcommerce.StockTracking.refund_action() == "receipt"
     end
   end
 end

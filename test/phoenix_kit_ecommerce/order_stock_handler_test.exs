@@ -10,7 +10,12 @@ defmodule PhoenixKitEcommerce.OrderStockHandlerTest do
   @moduletag :catalogue
   @moduletag :warehouse
 
-  @compile {:no_warn_undefined, PhoenixKitWarehouse.GoodsIssues}
+  @compile {:no_warn_undefined,
+            [
+              PhoenixKitWarehouse.GoodsIssues,
+              PhoenixKitWarehouse.GoodsReceipts,
+              PhoenixKitWarehouse.MinStockSettings
+            ]}
 
   import Ecto.Query, only: [from: 2]
   import PhoenixKitEcommerce.SearchFixtures, only: [catalogue_item!: 2, catalogue_source!: 0]
@@ -27,8 +32,12 @@ defmodule PhoenixKitEcommerce.OrderStockHandlerTest do
   alias PhoenixKitEcommerce.ProductSource.Catalogue, as: CatalogueSource
   alias PhoenixKitEcommerce.StockTracking
   alias PhoenixKitWarehouse.GoodsIssues
+  alias PhoenixKitWarehouse.GoodsReceipts
+  alias PhoenixKitWarehouse.MinStockSettings
 
   @action "shop.order_stock_short"
+  @refund_action "shop.order_refunded_stock"
+  @low_action "shop.stock_low"
 
   setup do
     catalogue = catalogue_source!()
@@ -260,16 +269,178 @@ defmodule PhoenixKitEcommerce.OrderStockHandlerTest do
       assert issues() == []
     end
 
-    test "on a refund or a cancellation, which give nothing back yet", ctx do
+    test "on a cancellation", ctx do
       order = paid_order(ctx.user, [product_line(ctx.vase, 1)])
 
-      assert :ok = Handler.handle_order_event(:refunded, order)
       assert :ok = Handler.handle_order_event(:cancelled, order)
 
       assert issues() == []
       assert Decimal.equal?(on_hand(ctx.vase.uuid), 5)
     end
   end
+
+  describe "a refunded order whose goods were written off" do
+    setup ctx do
+      keeper = keeper!()
+      order = paid_order(ctx.user, [product_line(ctx.vase, 2), product_line(ctx.plate, 1)])
+      :ok = Handler.handle_order_event(:paid, order)
+      {:ok, refunded} = Billing.mark_order_refunded(Billing.get_order(order.uuid))
+
+      %{keeper: keeper, order: refunded}
+    end
+
+    test "tells the keeper by default, and leaves the stock", ctx do
+      assert StockTracking.refund_action() == "notify"
+
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+
+      assert receipts() == []
+      assert Decimal.equal?(on_hand(ctx.vase.uuid), 3)
+      assert [text | _] = notification_texts_for_action(@refund_action)
+      assert text =~ "Order #{ctx.order.order_number} was refunded"
+      assert text =~ "Vase × 2"
+      assert text =~ "Plate × 1"
+    end
+
+    test "tells nobody twice", ctx do
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+      once = count_notifications(@refund_action)
+      assert once > 0
+
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+
+      assert count_notifications(@refund_action) == once
+    end
+
+    test "puts the goods back where they were taken from, when set to", ctx do
+      {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+
+      assert [receipt] = receipts()
+      assert receipt.status == "posted"
+      assert receipt.external_ref == ctx.order.order_number <> "/return"
+      assert receipt.location_uuid == ctx.location
+      assert receipt.source_refs == [%{"type" => "shop_order", "uuid" => ctx.order.uuid}]
+      assert Decimal.equal?(on_hand(ctx.vase.uuid), 5)
+      assert Decimal.equal?(on_hand(ctx.plate.uuid), 5)
+      assert count_notifications(@refund_action) == 0
+    end
+
+    test "a second delivery puts nothing back twice", ctx do
+      {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+      assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+
+      assert [_one] = receipts()
+      assert Decimal.equal?(on_hand(ctx.vase.uuid), 5)
+    end
+
+    test "a receipt Warehouse refuses tells the keeper instead", ctx do
+      {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+
+      Application.put_env(:phoenix_kit_ecommerce, :stock_tracking_modules,
+        goods_receipts: __MODULE__
+      )
+
+      on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :stock_tracking_modules) end)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = Handler.handle_order_event(:refunded, ctx.order)
+        end)
+
+      assert log =~ "was refused"
+      assert Decimal.equal?(on_hand(ctx.vase.uuid), 3)
+      assert [text | _] = notification_texts_for_action(@refund_action)
+      assert text =~ "Vase × 2"
+    end
+
+    test "a :refunded for an order that is not refunded changes nothing", ctx do
+      assert :ok = Handler.handle_order_event(:refunded, %{ctx.order | status: "paid"})
+
+      assert count_notifications(@refund_action) == 0
+    end
+  end
+
+  describe "a refunded order with nothing written off" do
+    setup ctx do
+      %{keeper: keeper!(), order: paid_order(ctx.user, [product_line(ctx.vase, 2)])}
+    end
+
+    test "tells nobody when its sale was never written off", ctx do
+      {:ok, refunded} = Billing.mark_order_refunded(ctx.order)
+
+      assert :ok = Handler.handle_order_event(:refunded, refunded)
+
+      assert receipts() == []
+      assert count_notifications(@refund_action) == 0
+    end
+
+    test "tells the keeper when it was short, whatever the setting", ctx do
+      {:ok, "receipt"} = StockTracking.set_refund_action("receipt")
+      put_stock!(ctx.vase.uuid, 1)
+      :ok = Handler.handle_order_event(:paid, ctx.order)
+      {:ok, refunded} = Billing.mark_order_refunded(Billing.get_order(ctx.order.uuid))
+
+      assert :ok = Handler.handle_order_event(:refunded, refunded)
+
+      assert receipts() == []
+      assert [text | _] = notification_texts_for_action(@refund_action)
+      assert text =~ "short of stock when paid"
+    end
+  end
+
+  describe "a write-off that reaches the minimum" do
+    setup ctx do
+      keeper = keeper!()
+      {:ok, _} = MinStockSettings.set_min_quantity(ctx.vase.uuid, 3)
+      %{keeper: keeper}
+    end
+
+    test "tells the keeper", ctx do
+      order = paid_order(ctx.user, [product_line(ctx.vase, 2)])
+
+      assert :ok = Handler.handle_order_event(:paid, order)
+
+      assert [text] = notification_texts_for_action(@low_action) |> Enum.uniq()
+      assert text == "Low stock: Vase (3 on hand, minimum 3)"
+    end
+
+    test "once per crossing, not on every sale below it", ctx do
+      :ok = Handler.handle_order_event(:paid, paid_order(ctx.user, [product_line(ctx.vase, 2)]))
+      once = count_notifications(@low_action)
+      assert once > 0
+
+      :ok = Handler.handle_order_event(:paid, paid_order(ctx.user, [product_line(ctx.vase, 1)]))
+
+      assert count_notifications(@low_action) == once
+    end
+
+    test "says nothing above the minimum, or for an item without one", ctx do
+      order = paid_order(ctx.user, [product_line(ctx.vase, 1), product_line(ctx.plate, 4)])
+
+      assert :ok = Handler.handle_order_event(:paid, order)
+
+      assert count_notifications(@low_action) == 0
+    end
+
+    test "a redelivery says nothing again", ctx do
+      order = paid_order(ctx.user, [product_line(ctx.vase, 2)])
+      :ok = Handler.handle_order_event(:paid, order)
+      once = count_notifications(@low_action)
+
+      :ok = Handler.handle_order_event(:paid, order)
+
+      assert count_notifications(@low_action) == once
+    end
+  end
+
+  # Stands in for `GoodsReceipts` in the refused-receipt test.
+  def create_and_post(_attrs, _performed_by), do: {:error, :invalid_lines}
+
+  defp receipts, do: GoodsReceipts.list_goods_receipts()
 
   test "an order placed at the checkout carries what the write-off needs", %{vase: vase} do
     product = CatalogueSource.get_product(vase.uuid, [])

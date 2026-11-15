@@ -1026,8 +1026,9 @@ defmodule PhoenixKitEcommerce do
           %{
             key: "stock",
             label: "Stock problems",
-            description: "A paid order could not be written off the warehouse stock",
-            actions: ["shop.order_stock_short"],
+            description:
+              "A paid order could not be written off the warehouse stock, a refunded order's goods were not put back, or a sale took an item to its minimum",
+            actions: ["shop.order_stock_short", "shop.order_refunded_stock", "shop.stock_low"],
             default: true
           },
           %{

@@ -135,8 +135,17 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:invalid_csv_format), do: gettext("The CSV file format is invalid.")
   def message(:invalid_destination), do: gettext("The delivery details are not valid.")
   def message(:invalid_host), do: gettext("The URL host is not allowed.")
+
+  def message(:invalid_low_stock_threshold),
+    do: gettext("Enter a whole number from 0 to 1000.")
+
   def message(:invalid_quantity), do: gettext("That quantity is not available.")
+
+  def message(:invalid_refund_action),
+    do: gettext("Choose what a refund does to the stock.")
+
   def message(:invalid_scheme), do: gettext("The URL scheme is not allowed.")
+  def message(:stock_setting_update_failed), do: gettext("The stock setting could not be saved.")
 
   def message(:missing_base_currency),
     do:

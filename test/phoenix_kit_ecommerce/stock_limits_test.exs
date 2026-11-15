@@ -301,5 +301,51 @@ defmodule PhoenixKitEcommerce.StockLimitsTest do
     end
   end
 
+  describe "Availability.offer/1" do
+    test "says how many are left at or below the threshold", ctx do
+      {:ok, 3} = StockTracking.set_low_stock_threshold(3)
+
+      assert Availability.offer(ctx.product) == {:few_left, 3}
+
+      put_stock!(ctx.item.uuid, 4)
+      assert Availability.offer(ctx.product) == :available
+
+      put_stock!(ctx.item.uuid, 0)
+      assert Availability.offer(ctx.product) == :sold_out
+    end
+
+    test "never says it at the default threshold", ctx do
+      put_stock!(ctx.item.uuid, 1)
+      assert Availability.offer(ctx.product) == :available
+    end
+
+    test "what stock does not count is available", %{catalogue: catalogue} do
+      {:ok, 3} = StockTracking.set_low_stock_threshold(3)
+      data = %{"ecommerce" => %{"shop_status" => "active", "requires_shipping" => false}}
+      e_book = catalogue_item!(catalogue, "E-book", %{data: data})
+      never_received = catalogue_item!(catalogue, "Bowl")
+
+      assert Availability.offer(CatalogueSource.get_product(e_book.uuid, [])) == :available
+
+      {:ok, false} = StockTracking.set_enabled(false)
+
+      assert Availability.offer(CatalogueSource.get_product(never_received.uuid, [])) ==
+               :available
+    end
+
+    test "an application's hook answers, and says nothing of how many", ctx do
+      {:ok, 3} = StockTracking.set_low_stock_threshold(3)
+      Application.put_env(:phoenix_kit_ecommerce, :availability, {__MODULE__, :never_available})
+      on_exit(fn -> Application.delete_env(:phoenix_kit_ecommerce, :availability) end)
+
+      assert Availability.offer(ctx.product) == :sold_out
+
+      Application.put_env(:phoenix_kit_ecommerce, :availability, {__MODULE__, :always_available})
+      assert Availability.offer(ctx.product) == :available
+    end
+  end
+
+  def never_available(_product), do: false
+
   def always_available(_product), do: true
 end

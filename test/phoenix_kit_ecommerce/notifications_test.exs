@@ -34,7 +34,8 @@ defmodule PhoenixKitEcommerce.NotificationsTest do
     test "a stock problem can be muted apart from the order firehose" do
       [%{sub_types: subs}] = PhoenixKitEcommerce.notification_types()
 
-      assert %{actions: ["shop.order_stock_short"]} = Enum.find(subs, &(&1.key == "stock"))
+      assert %{actions: ["shop.order_stock_short", "shop.order_refunded_stock", "shop.stock_low"]} =
+               Enum.find(subs, &(&1.key == "stock"))
     end
 
     test "every action belongs to exactly one sub-type" do

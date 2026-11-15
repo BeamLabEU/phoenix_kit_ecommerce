@@ -28,13 +28,19 @@ defmodule PhoenixKitEcommerce.StockTracking do
   which is why no `@compile {:no_warn_undefined, ...}` is needed and why a host
   without the package compiles and runs this module unchanged.
 
+  A full refund of a paid order either tells the keeper or puts the goods back
+  (`refund_action/0`), and a sale that takes an item to or below its Warehouse
+  minimum is named for a reminder (`crossed_minimum/1`).
+
   The Warehouse modules and the settings reader can be replaced through the
   `:stock_tracking_modules` application env (keys `:warehouse`,
-  `:stock_ledger`, `:goods_issues`, `:settings`); tests use it to simulate a
-  missing package.
+  `:stock_ledger`, `:goods_issues`, `:goods_issue`, `:goods_receipts`,
+  `:min_stock`, `:settings`); tests use it to simulate a missing package.
   """
 
   require Logger
+
+  import Ecto.Query, only: [from: 2]
 
   alias PhoenixKit.Settings
   alias PhoenixKitEcommerce.CartItem
@@ -42,6 +48,10 @@ defmodule PhoenixKitEcommerce.StockTracking do
   alias PhoenixKitEcommerce.WarehouseSourceKind
 
   @setting_key "shop_stock_tracking_enabled"
+  @low_threshold_key "shop_stock_low_threshold"
+  @max_low_threshold 1000
+  @refund_action_key "shop_stock_refund_action"
+  @refund_actions ~w(notify receipt)
 
   @type warehouse_status :: :not_installed | :disabled | :no_default_location | :ready
 
@@ -184,6 +194,196 @@ defmodule PhoenixKitEcommerce.StockTracking do
       nil
     )
   end
+
+  @doc """
+  The posted sale that `post_sale/3` made for the order numbered
+  `order_number`, or `nil` when there is none (it was never paid while tracking
+  was in force, it was short and nothing was posted, or Warehouse is not
+  installed). An issue the keeper posted by hand carries no such `external_ref`
+  and is not found.
+  """
+  @spec sale_issue(String.t()) :: struct() | nil
+  def sale_issue(order_number) when is_binary(order_number) do
+    schema = module(:goods_issue, PhoenixKitWarehouse.GoodsIssue)
+
+    if Code.ensure_loaded?(schema) do
+      PhoenixKit.RepoHelper.repo().one(
+        from(i in schema,
+          where:
+            i.external_ref == ^order_number and i.reason == "sale" and i.status == "posted" and
+              is_nil(i.deleted_at),
+          limit: 1
+        )
+      )
+    end
+  end
+
+  @doc """
+  Posts the goods receipt that puts back what the sale `issue` of a refunded
+  order took out: the same items and quantities, at the same location, with
+  `"<order number>/return"` as `external_ref` (a second call is
+  `{:ok, :already_posted, receipt}`) and the order as a source reference.
+  """
+  @spec post_return(map(), struct()) ::
+          {:ok, struct()} | {:ok, :already_posted, struct()} | {:error, term()}
+  def post_return(%{uuid: uuid, order_number: order_number}, issue) do
+    lines =
+      Enum.map(issue.lines, fn line ->
+        line
+        |> Map.take(["item_uuid", "name"])
+        |> Map.put("received_quantity", line["issued_quantity"])
+      end)
+
+    module(:goods_receipts, PhoenixKitWarehouse.GoodsReceipts).create_and_post(
+      %{
+        location_uuid: issue.location_uuid,
+        lines: lines,
+        external_ref: return_ref(order_number),
+        note: "Return of refunded shop order #{order_number}",
+        source_refs: [%{"type" => WarehouseSourceKind.kind(), "uuid" => uuid}]
+      },
+      nil
+    )
+  end
+
+  @doc "The `external_ref` of the return receipt of the order numbered `order_number`."
+  @spec return_ref(String.t()) :: String.t()
+  def return_ref(order_number), do: order_number <> "/return"
+
+  @doc """
+  The items of a just-posted `issue` that it took to or below their minimum
+  (Warehouse's per-item `MinStockSettings`, compared, as Warehouse's deficits
+  are, with the stock of every warehouse together). An item is named only when
+  the issue crossed the line, so a later sale of an item already below it
+  names it again only after stock came back above.
+
+  Best-effort: a failed read is logged and names nothing, because the write-off
+  it follows has already been posted.
+  """
+  @spec crossed_minimum(struct()) :: [
+          %{
+            item_uuid: String.t(),
+            name: String.t() | nil,
+            on_hand: Decimal.t(),
+            minimum: Decimal.t()
+          }
+        ]
+  def crossed_minimum(issue) do
+    minimums = module(:min_stock, PhoenixKitWarehouse.MinStockSettings)
+    ledger = module(:stock_ledger, PhoenixKitWarehouse.StockLedger)
+
+    totals =
+      issue.lines
+      |> Enum.map(& &1["item_uuid"])
+      |> ledger.stock_for_items()
+      |> Enum.reduce(%{}, fn row, acc ->
+        Map.update(acc, row.item_uuid, decimal(row.quantity), &Decimal.add(&1, row.quantity))
+      end)
+
+    Enum.flat_map(issue.lines, fn line ->
+      item_uuid = line["item_uuid"]
+      minimum = decimal(minimums.get_min_quantity(item_uuid))
+      on_hand = Map.get(totals, item_uuid, Decimal.new(0))
+      before = Decimal.add(on_hand, decimal(line["issued_quantity"]))
+
+      if Decimal.gt?(minimum, 0) and not Decimal.gt?(on_hand, minimum) and
+           Decimal.gt?(before, minimum),
+         do: [%{item_uuid: item_uuid, name: line["name"], on_hand: on_hand, minimum: minimum}],
+         else: []
+    end)
+  rescue
+    error ->
+      Logger.warning("[Shop] low stock could not be checked: #{Exception.message(error)}")
+      []
+  end
+
+  defp decimal(%Decimal{} = value), do: value
+  defp decimal(value) when is_integer(value), do: Decimal.new(value)
+  defp decimal(value) when is_binary(value), do: Decimal.new(value)
+  defp decimal(_other), do: Decimal.new(0)
+
+  @doc """
+  At or below how many units on hand the product page says how many are left
+  (`shop_stock_low_threshold`). `0`, the default, never says it. A stored value
+  that is not a whole number from `0` to `#{@max_low_threshold}`, or a read that
+  fails, is `0`.
+  """
+  @spec low_stock_threshold() :: non_neg_integer()
+  def low_stock_threshold do
+    case module(:settings, Settings).get_setting_cached(@low_threshold_key, "0") do
+      value when is_binary(value) -> parse_threshold(value)
+      _other -> 0
+    end
+  rescue
+    _ -> 0
+  catch
+    :exit, _ -> 0
+  end
+
+  defp parse_threshold(value) do
+    case Integer.parse(String.trim(value)) do
+      {n, ""} when n in 0..@max_low_threshold -> n
+      _other -> 0
+    end
+  end
+
+  @doc "Stores `low_stock_threshold/0`. Takes a whole number or its string."
+  @spec set_low_stock_threshold(integer() | String.t()) ::
+          {:ok, non_neg_integer()}
+          | {:error, :invalid_low_stock_threshold | :stock_setting_update_failed}
+  def set_low_stock_threshold(value) when is_integer(value),
+    do: set_low_stock_threshold(Integer.to_string(value))
+
+  def set_low_stock_threshold(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {n, ""} when n in 0..@max_low_threshold ->
+        case Settings.update_setting_with_module(@low_threshold_key, Integer.to_string(n), "shop") do
+          {:ok, _} -> {:ok, n}
+          _error -> {:error, :stock_setting_update_failed}
+        end
+
+      _other ->
+        {:error, :invalid_low_stock_threshold}
+    end
+  end
+
+  def set_low_stock_threshold(_value), do: {:error, :invalid_low_stock_threshold}
+
+  @doc """
+  What a full refund of a paid order does to the goods its sale took out
+  (`shop_stock_refund_action`): `"notify"`, the default, tells the shop's
+  operators and the warehouse keepers, who know whether the goods came back;
+  `"receipt"` puts them back in stock with a goods receipt. A refund does not
+  say whether the goods came back, so anything else stored, or a read that
+  fails, is `"notify"`.
+  """
+  @spec refund_action() :: String.t()
+  def refund_action do
+    case module(:settings, Settings).get_setting_cached(@refund_action_key, "notify") do
+      "receipt" -> "receipt"
+      _other -> "notify"
+    end
+  rescue
+    _ -> "notify"
+  catch
+    :exit, _ -> "notify"
+  end
+
+  @doc "The values `refund_action/0` answers."
+  @spec refund_actions() :: [String.t()]
+  def refund_actions, do: @refund_actions
+
+  @doc "Stores `refund_action/0`."
+  @spec set_refund_action(String.t()) ::
+          {:ok, String.t()} | {:error, :invalid_refund_action | :stock_setting_update_failed}
+  def set_refund_action(action) when action in @refund_actions do
+    case Settings.update_setting_with_module(@refund_action_key, action, "shop") do
+      {:ok, _} -> {:ok, action}
+      _error -> {:error, :stock_setting_update_failed}
+    end
+  end
+
+  def set_refund_action(_action), do: {:error, :invalid_refund_action}
 
   @doc """
   Stores the setting. Turning it on while Warehouse is missing or off is

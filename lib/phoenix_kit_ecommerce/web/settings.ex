@@ -457,6 +457,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   @impl true
+  def handle_event("save_stock_low_threshold", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_stock_low_threshold", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("save_stock_refund_action", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("save_stock_refund_action", params, socket)
+    end)
+  end
+
+  @impl true
   def handle_event("update_category_icon", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_category_icon", params, socket)
@@ -1084,6 +1098,60 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               >
                 {@stock_tracking_hint.label}
               </.link>
+            </div>
+
+            <div :if={@stock_tracking_enabled} class="mt-4 space-y-4">
+              <form
+                id="shop-stock-low-threshold-form"
+                phx-submit="save_stock_low_threshold"
+                class="flex flex-wrap gap-2 items-end"
+              >
+                <label class="flex flex-col gap-1">
+                  <span class="text-sm font-medium">
+                    {gettext("Show how many are left at or below")}
+                  </span>
+                  <input
+                    id="shop-stock-low-threshold"
+                    type="number"
+                    name="threshold"
+                    min="0"
+                    max="1000"
+                    step="1"
+                    value={@stock_low_threshold}
+                    class="input input-bordered w-32"
+                  />
+                </label>
+                <button type="submit" class="btn btn-primary btn-sm">{gettext("Save")}</button>
+                <p class="text-xs text-base-content/60 w-full">
+                  {gettext(
+                    "The product page reads \"Only 3 left\" when this many or fewer are in stock. 0 never shows it."
+                  )}
+                </p>
+              </form>
+
+              <form
+                id="shop-stock-refund-action-form"
+                phx-change="save_stock_refund_action"
+              >
+                <h3 class="font-medium mb-1">{gettext("When a paid order is refunded")}</h3>
+                <p class="text-xs text-base-content/60 mb-2">
+                  {gettext(
+                    "A refund does not say whether the goods came back. Telling the keeper leaves the stock as it is; putting the goods back posts a goods receipt for what the order took out."
+                  )}
+                </p>
+                <select
+                  name="action"
+                  id="shop-stock-refund-action"
+                  class="select select-bordered w-full max-w-xs"
+                >
+                  <option value="notify" selected={@stock_refund_action == "notify"}>
+                    {gettext("Tell the warehouse keeper")}
+                  </option>
+                  <option value="receipt" selected={@stock_refund_action == "receipt"}>
+                    {gettext("Put the goods back in stock")}
+                  </option>
+                </select>
+              </form>
             </div>
           </div>
         </div>
@@ -2305,6 +2373,46 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
+  defp gated_event("save_stock_low_threshold", params, socket) do
+    case StockTracking.set_low_stock_threshold(to_string(Map.get(params, "threshold", ""))) do
+      {:ok, threshold} ->
+        Activity.log("shop.stock_low_threshold_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"threshold" => threshold}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:stock_low_threshold, threshold)
+         |> put_flash(:info, gettext("Stock setting updated"))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
+    end
+  end
+
+  defp gated_event("save_stock_refund_action", params, socket) do
+    case StockTracking.set_refund_action(to_string(Map.get(params, "action", ""))) do
+      {:ok, action} ->
+        Activity.log("shop.stock_refund_action_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"action" => action}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:stock_refund_action, action)
+         |> put_flash(:info, gettext("Stock setting updated"))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
+    end
+  end
+
   defp gated_event("update_catalog_vocabulary", %{"vocabulary" => vocabulary}, socket) do
     if vocabulary in Vocabulary.options() do
       case Settings.update_setting(Vocabulary.setting_key(), vocabulary) do
@@ -2728,6 +2836,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     |> assign(:warehouse_status, status)
     |> assign(:stock_tracking_enabled, StockTracking.enabled?(status))
     |> assign(:stock_tracking_hint, stock_tracking_hint(status))
+    |> assign(:stock_low_threshold, StockTracking.low_stock_threshold())
+    |> assign(:stock_refund_action, StockTracking.refund_action())
   end
 
   defp stock_tracking_error(:warehouse_not_installed),

@@ -66,6 +66,24 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
         )
 
+    test ":invalid_low_stock_threshold",
+      do:
+        assert(
+          Errors.message(:invalid_low_stock_threshold) == "Enter a whole number from 0 to 1000."
+        )
+
+    test ":invalid_refund_action",
+      do:
+        assert(
+          Errors.message(:invalid_refund_action) == "Choose what a refund does to the stock."
+        )
+
+    test ":stock_setting_update_failed",
+      do:
+        assert(
+          Errors.message(:stock_setting_update_failed) == "The stock setting could not be saved."
+        )
+
     test ":invalid_quantity",
       do: assert(Errors.message(:invalid_quantity) == "That quantity is not available.")
 

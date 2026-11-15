@@ -45,6 +45,8 @@ defmodule PhoenixKitEcommerce.Notifications do
   @order_action "shop.order_placed"
   @customer_order_action "shop.order_confirmed"
   @stock_short_action "shop.order_stock_short"
+  @refund_stock_action "shop.order_refunded_stock"
+  @stock_low_action "shop.stock_low"
   @import_completed_action "shop.import_completed"
   @import_failed_action "shop.import_failed"
   @cart_first_item_action "shop.cart_first_item_added"
@@ -101,7 +103,7 @@ defmodule PhoenixKitEcommerce.Notifications do
 
     {:ok, _created} =
       Notifications.create_many(
-        Enum.uniq(admin_recipients("shop.manage_carts") ++ admin_recipients("warehouse")),
+        stock_recipients(),
         %{
           action: @stock_short_action,
           text: truncate("Order #{order.order_number} is paid but short of stock: #{lines}", 240),
@@ -113,6 +115,80 @@ defmodule PhoenixKitEcommerce.Notifications do
 
     :ok
   end
+
+  @doc """
+  Tells the shop's operators and the warehouse keepers that a paid order was
+  fully refunded and its goods were not put back in stock, so a goods receipt is
+  theirs to post if the goods came back. Called by
+  `PhoenixKitEcommerce.OrderStockHandler`, which records it with the delivery;
+  not best-effort, as for `order_stock_short/2`.
+
+  `{:written_off, lines}` names what the sale took out (`%{name:, quantity:}`);
+  `:not_written_off` is an order that was short when it was paid, whose goods
+  the keeper may have issued by hand.
+  """
+  @spec order_refunded_stock(map(), {:written_off, [map()]} | :not_written_off) :: :ok
+  def order_refunded_stock(order, what) do
+    {:ok, _created} =
+      Notifications.create_many(
+        stock_recipients(),
+        %{
+          action: @refund_stock_action,
+          text: truncate(refund_stock_text(order, what), 240),
+          icon: "hero-arrow-uturn-left",
+          link: Routes.path("/admin/warehouse/goods-receipts"),
+          metadata: %{"action" => @refund_stock_action}
+        }
+      )
+
+    :ok
+  end
+
+  defp refund_stock_text(order, {:written_off, lines}) do
+    goods = Enum.map_join(lines, ", ", &"#{&1.name} × #{&1.quantity}")
+
+    "Order #{order.order_number} was refunded. Its goods were written off the stock " <>
+      "(#{goods}); post a goods receipt if they came back."
+  end
+
+  defp refund_stock_text(order, :not_written_off) do
+    "Order #{order.order_number} was refunded. It was short of stock when paid, so nothing " <>
+      "was written off for it; if its goods were issued by hand and came back, post a goods receipt."
+  end
+
+  @doc """
+  Tells the shop's operators and the warehouse keepers that a sale took items
+  to or below their Warehouse minimum. `items` is a list of
+  `%{name:, on_hand:, minimum:}`. Best-effort: the write-off it follows is
+  already posted.
+  """
+  @spec stock_low([map()]) :: :ok
+  def stock_low([]), do: :ok
+
+  def stock_low(items) do
+    safely(fn ->
+      text =
+        Enum.map_join(items, ", ", fn item ->
+          "#{item.name} (#{units(item.on_hand)} on hand, minimum #{units(item.minimum)})"
+        end)
+
+      Notifications.create_many(stock_recipients(), %{
+        action: @stock_low_action,
+        text: truncate("Low stock: #{text}", 240),
+        icon: "hero-arrow-trending-down",
+        link: Routes.path("/admin/warehouse"),
+        metadata: %{"action" => @stock_low_action}
+      })
+    end)
+
+    :ok
+  end
+
+  defp units(%Decimal{} = quantity),
+    do: quantity |> Decimal.normalize() |> Decimal.to_string(:normal)
+
+  defp stock_recipients,
+    do: Enum.uniq(admin_recipients("shop.manage_carts") ++ admin_recipients("warehouse"))
 
   @doc """
   Storefront signal: an item landed in a cart.
