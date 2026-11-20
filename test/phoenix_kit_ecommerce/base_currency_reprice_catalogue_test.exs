@@ -765,6 +765,9 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
   # The row-lock statements (`FOR UPDATE` / `FOR SHARE`) the code under test
   # runs in this process, in order: `{table, mode, [uuid, ...]}` where the
   # uuids are the statement's parameters.
+  #
+  # The catalogue's advisory lock (`pg_advisory_xact_lock(class, hashtext(uuid))`)
+  # shows up as `{"advisory", "catalogue", [catalogue_uuid]}`.
   defp lock_trace(fun) do
     id = {__MODULE__, make_ref()}
     test = self()
@@ -775,8 +778,19 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       fn _event, _measurements, meta, _config ->
         mode = Enum.find(["FOR UPDATE", "FOR SHARE"], &String.ends_with?(meta.query, &1))
 
-        if self() == test and mode,
-          do: send(test, {:lock, {meta.source, mode, uuid_params(meta.params)}})
+        cond do
+          self() != test ->
+            :ok
+
+          mode ->
+            send(test, {:lock, {meta.source, mode, uuid_params(meta.params)}})
+
+          meta.query =~ "pg_advisory_xact_lock($1::int, hashtext($2::text))" ->
+            send(test, {:lock, {"advisory", "catalogue", [List.last(meta.params)]}})
+
+          true ->
+            :ok
+        end
       end,
       nil
     )
@@ -808,6 +822,63 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
   end
 
   defp ecommerce_of(item_uuid), do: Catalogue.get_item!(item_uuid).data["ecommerce"]
+
+  # The uuids of the catalogue items UPDATEd by `fun`, one list per statement,
+  # next to what `fun` returned. Shows that a write really was made before
+  # the failure a rollback test provokes.
+  defp item_updates(fun) do
+    id = {__MODULE__, make_ref()}
+    test = self()
+
+    :telemetry.attach(
+      id,
+      [:phoenix_kit_ecommerce, :test, :repo, :query],
+      fn _event, _measurements, meta, _config ->
+        if self() == test and meta.source == "phoenix_kit_cat_items" and
+             String.starts_with?(meta.query, "UPDATE"),
+           do: send(test, {:item_update, uuid_params(meta.params)})
+      end,
+      nil
+    )
+
+    result =
+      try do
+        fun.()
+      after
+        :telemetry.detach(id)
+      end
+
+    {result, drain_item_updates([])}
+  end
+
+  defp drain_item_updates(acc) do
+    receive do
+      {:item_update, uuids} -> drain_item_updates([uuids | acc])
+    after
+      0 -> acc |> Enum.reverse() |> List.flatten()
+    end
+  end
+
+  # Two items of the shop in the order the pass handles them (uuid order):
+  # the first is written before the second one's write is attempted.
+  defp earlier_and_later_item!(shop, ecommerce) do
+    [earlier, later] =
+      Enum.sort_by(
+        for(_ <- 1..2, do: create_item!(shop, %{base_price: Decimal.new("100.00")}, ecommerce)),
+        & &1.uuid
+      )
+
+    {earlier, later}
+  end
+
+  defp rebuild_jobs do
+    Repo.all(
+      from(j in Oban.Job,
+        where: j.worker == "PhoenixKitEcommerce.Workers.SearchRebuildWorker",
+        select: %{args: j.args, state: j.state}
+      )
+    )
+  end
 
   describe "scope" do
     test "leaves a catalogue other than the shop's byte-for-byte untouched" do
@@ -903,7 +974,7 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
   end
 
   describe "writes" do
-    test "are attributed to the operation, logged as automatic and announced by no one" do
+    test "are attributed to the operation and logged as automatic; the catalogue stays silent and a rebuild job tells the search index" do
       {:ok, shop} = APIFixtures.create_shop_catalogue()
 
       {:ok, category} =
@@ -939,6 +1010,10 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
         )
 
       assert category_entry.mode == "auto"
+
+      # The catalogue announced nothing, so the search index hears of the
+      # new prices through the one rebuild job the operation queued itself.
+      assert [%{args: %{}, state: "scheduled"}] = rebuild_jobs()
 
       # The subscription works (control), and the operation sent nothing.
       refute_received {:catalogue_data_changed, _kind, _uuid, _catalogue}
@@ -1319,8 +1394,15 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       category_before = Catalogue.get_category!(category.uuid)
       settled_before = Catalogue.get_item!(settled.uuid)
 
-      assert {:ok, %{catalogue_items: 4, catalogue_items_relabelled_from_other: 0}} =
-               Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+      # Nothing was changed, so nothing is counted as changed.
+      assert {:ok,
+              %{
+                catalogue_items: 4,
+                catalogue_items_relabelled_from_other: 0,
+                catalogue_item_modifiers: 0,
+                catalogue_category_modifiers: 0,
+                global_modifiers: 0
+              }} = Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
 
       ecommerce = ecommerce_of(item.uuid)
       assert ecommerce["currency"] == "EUR"
@@ -1420,6 +1502,162 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
     end
   end
 
+  describe "the search index" do
+    test "a run that changed amounts queues one rebuild of the whole index" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+      create_item!(shop, %{base_price: Decimal.new("200.00")}, %{"currency" => "USD"})
+
+      assert rebuild_jobs() == []
+
+      assert {:ok, %{catalogue_items: 2}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+      # One job for both items; no catalogue uuid, so it is the job billing's
+      # own `currencies_changed` announcement asks for too.
+      assert [%{args: %{}, state: "scheduled"}] = rebuild_jobs()
+    end
+
+    test "is queued inside the transaction: a caller that rolls back leaves no job" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      item = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+      item_before = Catalogue.get_item!(item.uuid)
+
+      assert {:error, :undone} =
+               Repo.transaction(fn ->
+                 assert {:ok, _} =
+                          Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+                 assert [%{args: %{}}] = rebuild_jobs()
+                 Repo.rollback(:undone)
+               end)
+
+      assert rebuild_jobs() == []
+      assert Catalogue.get_item!(item.uuid) == item_before
+    end
+
+    test "a relabel moves no indexed amount and queues nothing" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      item = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+
+      assert {:ok, %{catalogue_items: 1}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+
+      # The item was written (its label), the index holds no label.
+      assert ecommerce_of(item.uuid)["currency"] == "EUR"
+      assert rebuild_jobs() == []
+    end
+
+    test "a run that wrote no item queues nothing" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      create_item!(shop, %{base_price: nil}, %{"currency" => "EUR"})
+
+      assert {:ok, %{catalogue_items: 1}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+      assert rebuild_jobs() == []
+    end
+  end
+
+  describe "the late pass" do
+    setup do
+      {:ok, _} = Options.update_global_options([material_schema()])
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      first = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+
+      # Read before the hook below exists: it fires on the first item SELECT.
+      first_before = Catalogue.get_item!(first.uuid)
+      test = self()
+
+      # Created after the worklist was read: only the late pass sees it, and
+      # its override claims "percent" for an option the schema has as fixed.
+      after_first_query("SELECT", "phoenix_kit_cat_items", fn ->
+        late =
+          create_item!(shop, %{}, %{
+            "currency" => "USD",
+            "price_modifiers" => %{
+              "material" => %{"petg" => %{"type" => "percent", "value" => "5"}}
+            }
+          })
+
+        send(test, {:late_item, late})
+      end)
+
+      %{first: first, first_before: first_before}
+    end
+
+    test "refuses an ambiguous override after earlier writes, and a direct call undoes them", %{
+      first: first,
+      first_before: first_before
+    } do
+      {result, updated} =
+        item_updates(fn ->
+          Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+        end)
+
+      assert_received {:late_item, late}
+
+      assert {:error, {:ambiguous_modifier_overrides, [mismatch]}} = result
+      assert mismatch.item_uuid == late.uuid
+      assert {mismatch.stored_type, mismatch.schema_type} == {"percent", "fixed"}
+
+      # The first item was written before the late pass refused...
+      assert first.uuid in updated
+      refute late.uuid in updated
+
+      # ...and everything is rolled back.
+      assert Catalogue.get_item!(first.uuid) == first_before
+      assert rebuild_jobs() == []
+    end
+
+    test "rolls the base switch back when billing made the call", %{
+      first: first,
+      first_before: first_before
+    } do
+      {result, updated} =
+        item_updates(fn ->
+          Billing.change_base_currency("EUR",
+            catalog_size: 2,
+            reprice: &Shop.reprice_for_base_change/3
+          )
+        end)
+
+      assert_received {:late_item, late}
+      assert {:error, {:ambiguous_modifier_overrides, [%{item_uuid: late_uuid}]}} = result
+      assert late_uuid == late.uuid
+      assert first.uuid in updated
+
+      PhoenixKit.Cache.clear(:billing_currencies)
+      assert Billing.get_base_currency().code == "USD"
+      assert Catalogue.get_item!(first.uuid) == first_before
+      assert rebuild_jobs() == []
+    end
+  end
+
+  describe "the advisory lock" do
+    test "is taken on the shop catalogue before any row is locked" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+
+      {:ok, category} =
+        Catalogue.create_category(%{
+          name: "Locked",
+          catalogue_uuid: shop.uuid,
+          data: %{"ecommerce" => %{"option_schema" => [material_schema()]}}
+        })
+
+      create_item!(shop, %{category_uuid: category.uuid}, %{"currency" => "USD"})
+
+      trace =
+        lock_trace(fn -> Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091")) end)
+
+      assert [{"advisory", "catalogue", [shop_uuid]} | row_locks] = trace
+      assert shop_uuid == shop.uuid
+      assert Enum.any?(row_locks, &match?({"phoenix_kit_cat_categories", "FOR UPDATE", _}, &1))
+      assert Enum.any?(row_locks, &match?({"phoenix_kit_cat_items", "FOR UPDATE", _}, &1))
+      refute Enum.any?(row_locks, &match?({"advisory", _, _}, &1))
+    end
+  end
+
   describe "through PhoenixKitBilling.change_base_currency/2" do
     test "reprices the catalogue and promotes the new base in one transaction" do
       {:ok, shop} = APIFixtures.create_shop_catalogue()
@@ -1443,6 +1681,8 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
 
       PhoenixKit.Cache.clear(:billing_currencies)
       assert Billing.get_base_currency().code == "EUR"
+
+      assert [%{args: %{}, state: "scheduled"}] = rebuild_jobs()
     end
 
     test "a failing item rolls back the base switch and every earlier write" do
@@ -1460,8 +1700,8 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
           data: %{"ecommerce" => %{"option_schema" => [material_schema()]}}
         })
 
-      good = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
-      bad = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+      {good, bad} = earlier_and_later_item!(shop, %{"currency" => "USD"})
+      assert good.uuid < bad.uuid
 
       Repo.update_all(
         from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^bad.uuid),
@@ -1474,13 +1714,22 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       usd_before = Billing.get_currency_by_code("USD")
       eur_before = Billing.get_currency_by_code("EUR")
 
-      assert {:error, {:catalogue_item_reprice_failed, failed_uuid, _reason}} =
-               Billing.change_base_currency("EUR",
-                 catalog_size: 2,
-                 reprice: &Shop.reprice_for_base_change/3
-               )
+      {result, updated} =
+        item_updates(fn ->
+          Billing.change_base_currency("EUR",
+            catalog_size: 2,
+            reprice: &Shop.reprice_for_base_change/3
+          )
+        end)
 
+      assert {:error, {:catalogue_item_reprice_failed, failed_uuid, _reason}} = result
       assert failed_uuid == bad.uuid
+
+      # The good item was written before the bad one failed: the rollback
+      # below undoes a real write.
+      assert good.uuid in updated
+      refute bad.uuid in updated
+      assert rebuild_jobs() == []
 
       PhoenixKit.Cache.clear(:billing_currencies)
       assert Billing.get_base_currency().code == "USD"
@@ -1510,8 +1759,8 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
           data: %{"ecommerce" => %{"option_schema" => [material_schema()]}}
         })
 
-      good = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
-      bad = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+      {good, bad} = earlier_and_later_item!(shop, %{"currency" => "USD"})
+      assert good.uuid < bad.uuid
 
       # A negative price cannot be written back through the changeset.
       Repo.update_all(
@@ -1524,11 +1773,21 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       category_before = Catalogue.get_category!(category.uuid)
       global_before = Options.get_global_options()
 
+      {result, updated} =
+        item_updates(fn ->
+          Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+        end)
+
       assert {:error,
               {:catalogue_item_reprice_failed, failed_uuid, %Ecto.Changeset{valid?: false}}} =
-               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+               result
 
       assert failed_uuid == bad.uuid
+
+      # The good item was written before the bad one failed.
+      assert good.uuid in updated
+      refute bad.uuid in updated
+      assert rebuild_jobs() == []
       assert Catalogue.get_item!(good.uuid) == good_before
       assert Catalogue.get_item!(bad.uuid) == bad_before
 

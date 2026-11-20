@@ -162,6 +162,15 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
     |> Repo.insert!()
   end
 
+  defp rebuild_jobs do
+    Repo.all(
+      from(j in Oban.Job,
+        where: j.worker == "PhoenixKitEcommerce.Workers.SearchRebuildWorker",
+        select: %{args: j.args, state: j.state}
+      )
+    )
+  end
+
   defp billing_data(n) do
     %{
       "email" => "reprice-#{n}@example.com",
@@ -456,8 +465,15 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
     method_before = Shop.get_shipping_method!(method.uuid)
     global_before = Options.get_global_options()
 
-    assert {:ok, %{products: 1, shipping_methods: 1}} =
-             Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+    # Nothing was changed, so nothing is counted as changed.
+    assert {:ok,
+            %{
+              products: 1,
+              shipping_methods: 1,
+              global_modifiers: 0,
+              category_modifiers: 0,
+              product_modifiers: 0
+            }} = Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
 
     assert money_snapshot_product(product.uuid) == %{before | currency: "EUR"}
     assert Options.get_global_options() == global_before
@@ -477,5 +493,125 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
              Shop.reprice_for_base_change("USD", "EUR", Decimal.new("-1"))
 
     assert Shop.get_shipping_method!(method.uuid).price == method.price
+  end
+
+  describe "a multiplier of 1 and stored data" do
+    test "an explicit override map in a product's metadata is not put back through the normalizer" do
+      n = System.unique_integer([:positive])
+
+      product =
+        insert_product_with_raw_metadata!(%{
+          "title" => %{"en" => "Explicit #{n}", lang() => "Explicit #{n}"},
+          "slug" => %{lang() => "reprice-explicit-#{n}"},
+          "price" => Decimal.new("70.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "requires_shipping" => false,
+          "metadata" => %{
+            "_price_modifiers" => %{
+              "material" => %{"PETG" => %{"type" => "fixed", "value" => "12.00"}}
+            }
+          }
+        })
+
+      before = Shop.get_product!(product.uuid).metadata
+
+      assert before["_price_modifiers"]["material"]["PETG"] == %{
+               "type" => "fixed",
+               "value" => "12.00"
+             }
+
+      assert {:ok, %{products: 1, product_modifiers: 0}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+
+      reloaded = Shop.get_product!(product.uuid)
+      assert reloaded.currency == "EUR"
+      assert reloaded.metadata == before
+    end
+
+    test "a stored option list that fails validation does not abort a relabel" do
+      n = System.unique_integer([:positive])
+
+      invalid = %{
+        "key" => "Not A Key",
+        "label" => "Broken",
+        "type" => "select",
+        "options" => ["a"],
+        "affects_price" => true,
+        "modifier_type" => "fixed",
+        "price_modifiers" => %{"a" => "3.00"}
+      }
+
+      Repo.get!(PhoenixKitEcommerce.ShopConfig, "global_option_schema")
+      |> PhoenixKitEcommerce.ShopConfig.changeset(%{value: %{"options" => [invalid]}})
+      |> Repo.update!()
+
+      {:ok, category} =
+        Shop.create_category(%{
+          "name" => %{"en" => "Cat #{n}", lang() => "Cat #{n}"},
+          "slug" => %{lang() => "cat-#{n}"}
+        })
+
+      Repo.update_all(
+        from(c in PhoenixKitEcommerce.Category, where: c.uuid == ^category.uuid),
+        set: [option_schema: [invalid]]
+      )
+
+      assert {:error, :option_key_invalid} = Options.update_global_options([invalid])
+
+      assert {:ok, %{global_modifiers: 0, category_modifiers: 0}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+
+      assert Options.get_global_options() == [invalid]
+      assert Repo.get!(PhoenixKitEcommerce.Category, category.uuid).option_schema == [invalid]
+    end
+  end
+
+  describe "the search index" do
+    test "a run that repriced products enqueues one rebuild of the whole index" do
+      n = System.unique_integer([:positive])
+
+      {:ok, _product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Indexed #{n}", lang() => "Indexed #{n}"},
+          "slug" => %{lang() => "reprice-indexed-#{n}"},
+          "price" => Decimal.new("100.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "requires_shipping" => false
+        })
+
+      assert rebuild_jobs() == []
+
+      assert {:ok, %{products: 1}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+      assert [%{args: args, state: "scheduled"}] = rebuild_jobs()
+      assert args == %{}
+    end
+
+    test "a relabel moves no indexed amount and enqueues nothing" do
+      n = System.unique_integer([:positive])
+
+      {:ok, _product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Relabelled #{n}", lang() => "Relabelled #{n}"},
+          "slug" => %{lang() => "reprice-relabelled-#{n}"},
+          "price" => Decimal.new("100.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "requires_shipping" => false
+        })
+
+      assert {:ok, %{products: 1}} = Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+      assert rebuild_jobs() == []
+    end
+
+    test "a run that wrote no product enqueues nothing" do
+      assert {:ok, %{products: 0}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+      assert rebuild_jobs() == []
+    end
   end
 end

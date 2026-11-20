@@ -6874,10 +6874,12 @@ defmodule PhoenixKitEcommerce do
   the new base (the base was switched without this operation) and only the
   currency labels are stale. Every amount is then left exactly as stored —
   not rounded, and a catalogue amount keeps its JSON type (a number stays a
-  number) — and only the labels change. The legacy product write still runs
-  the normalizer described under "GUARDED HAZARD", which collapses an explicit
-  override map to a bare string on any save, this one included; that is the
-  one re-serialisation a multiplier of 1 does not avoid.
+  number) — and only the labels change. A legacy product's metadata is not
+  put back at all, so the normalizer described under "GUARDED HAZARD" never
+  sees its overrides: an explicit override map keeps its shape. An option
+  list (global, a legacy category's or a catalogue category's) that comes out
+  as it went in is not written back, so a stored list that fails validation
+  does not stop a relabel. The modifier counts in the result are 0.
 
   Touches, regardless of a product's own currency:
 
@@ -6981,6 +6983,15 @@ defmodule PhoenixKitEcommerce do
   `catalogue_items_relabelled_from_other` so an operator can see how many
   there were; an item already labelled `new_base_code` is not counted.
 
+  Search index: the index holds the base-currency `price`, `compare_at_price`
+  and `discount_pct`, and the silent writes above reach it through no event,
+  so after the last write the operation queues one rebuild of the whole index
+  (`Search.Jobs.enqueue_rebuild/1`) when it wrote a legacy product or a
+  catalogue item. The job is inserted inside the transaction: it exists only if
+  the change commits. A multiplier of 1 queues none, as it moves no amount and
+  the index holds no currency label. The rebuild runs a few seconds after the
+  commit; until then the index still answers in old-base terms.
+
   Locks are taken in one order: the shop catalogue's advisory lock, then every
   catalogue category FOR UPDATE (by uuid), then each item (by uuid) with its
   category FOR SHARE and itself FOR UPDATE, all held until the transaction
@@ -6995,12 +7006,16 @@ defmodule PhoenixKitEcommerce do
   are broken out per store — rather than a single total — because the admin
   confirmation screen (§4.9's first required consequence) has to show an
   operator the blast radius of what they are about to commit to. Each is the
-  number of individual FIXED price-modifier VALUES touched in that store;
-  percent entries are never counted because they are never touched.
+  number of individual FIXED price-modifier VALUES changed in that store;
+  percent entries are never counted because they are never touched, and a
+  multiplier of 1 changes no value, so every count is 0.
   `catalogue_items` counts every catalogue item processed (its `currency`
   label is always set, like `products`). Returns `{:error, term}` on the
   first failure encountered — including `{:error, {:ambiguous_modifier_overrides, _}}`
-  from either pre-flight override scan, raised before any write happens. A
+  from an override scan. The scans of the legacy products and of the catalogue
+  worklist refuse before any write; the one of the late pass (items created
+  during the run) runs after the earlier writes, so it can refuse after them,
+  and everything written so far is rolled back with the transaction. A
   failed catalogue write comes back as
   `{:error, {:catalogue_item_reprice_failed, item_uuid, reason}}` or
   `{:error, {:catalogue_category_reprice_failed, category_uuid, reason}}`,
@@ -7060,8 +7075,9 @@ defmodule PhoenixKitEcommerce do
     global_options = Options.get_enabled_global_options()
     catalogue_items = fetch_catalogue_items(catalogue_uuid)
 
-    # Both pre-flight scans run BEFORE either store's writes start — see
-    # the doc's "GUARDED HAZARD" paragraph.
+    # Both pre-flight scans of the worklists run BEFORE either store's writes
+    # start — see the doc's "GUARDED HAZARD" paragraph. The late pass scans its
+    # own items after the earlier writes; a refusal there rolls them back.
     with :ok <- reject_ambiguous_modifier_overrides(products),
          :ok <- reject_ambiguous_catalogue_modifier_overrides(catalogue_items, global_options),
          {:ok, decimal_places} <- fetch_currency_decimal_places(new_base_code),
@@ -7094,7 +7110,9 @@ defmodule PhoenixKitEcommerce do
                decimal_places: decimal_places,
                global_options: global_options
              }
-           ) do
+           ),
+         :ok <-
+           enqueue_search_rebuild(multiplier, product_count + catalogue_totals.written) do
       {:ok,
        %{
          products: product_count,
@@ -7108,6 +7126,21 @@ defmodule PhoenixKitEcommerce do
          catalogue_items_relabelled_from_other: catalogue_totals.relabelled_from_other
        }}
     end
+  end
+
+  # The search index holds the base-currency `price`, `compare_at_price` and
+  # `discount_pct` of every product, and the writes above are silent (the
+  # catalogue broadcast is off), so the index is rebuilt: inside the
+  # transaction, so the job exists only if the change commits. The whole
+  # index rather than one catalogue: it covers the shop's one product source
+  # only, and a rebuild with no arguments is the job billing's
+  # `currencies_changed` announcement asks for after the commit, so the two
+  # are one job. A relabel moves no amount and the index holds no currency
+  # label, so it has nothing to rebuild.
+  defp enqueue_search_rebuild(multiplier, written) do
+    if written > 0 and not relabel_only?(multiplier), do: SearchJobs.enqueue_rebuild(nil)
+
+    :ok
   end
 
   # Pre-flight, before any write: refuses the WHOLE operation if any
@@ -7217,6 +7250,10 @@ defmodule PhoenixKitEcommerce do
 
   # A multiplier of 1 only relabels: amounts stay as stored, unrounded.
   defp relabel_only?(multiplier), do: Decimal.equal?(multiplier, 1)
+
+  # What a recognised fixed modifier value adds to a counter: the counters say
+  # how many values were CHANGED, and a relabel changes none.
+  defp changed_values(multiplier), do: if(relabel_only?(multiplier), do: 0, else: 1)
 
   defp maybe_put_repriced(attrs, _field, nil, _multiplier, _decimal_places), do: attrs
 
@@ -7364,7 +7401,7 @@ defmodule PhoenixKitEcommerce do
             do: modifier,
             else: put_modifier_amount(modifier, new_amount)
 
-        {Map.put(acc, value, repriced), count + 1}
+        {Map.put(acc, value, repriced), count + changed_values(multiplier)}
 
       :skip ->
         {Map.put(acc, value, modifier), count}
@@ -7429,8 +7466,9 @@ defmodule PhoenixKitEcommerce do
           {:unchanged, 0}
 
         options ->
-          {new_options, count} = reprice_option_definitions(options, multiplier, decimal_places)
-          {:ok, new_options, count}
+          options
+          |> reprice_option_definitions(multiplier, decimal_places)
+          |> write_if_changed(options)
       end)
 
     case result do
@@ -7456,8 +7494,9 @@ defmodule PhoenixKitEcommerce do
   defp reprice_one_category(%Category{} = category, count, multiplier, decimal_places) do
     result =
       Options.transform_category_options(category, fn current ->
-        {new_options, changed} = reprice_option_definitions(current, multiplier, decimal_places)
-        {:ok, new_options, changed}
+        current
+        |> reprice_option_definitions(multiplier, decimal_places)
+        |> write_if_changed(current)
       end)
 
     case result do
@@ -7468,6 +7507,12 @@ defmodule PhoenixKitEcommerce do
         {:halt, {:error, {:category_options_reprice_failed, category.uuid, reason}}}
     end
   end
+
+  # A list that comes out as it went in (a relabel, or nothing fixed in it) is
+  # not written back, so a stored list that no longer passes validation does
+  # not stop the operation.
+  defp write_if_changed({options, count}, options), do: {:unchanged, count}
+  defp write_if_changed({new_options, count}, _stored), do: {:ok, new_options, count}
 
   defp reprice_option_definitions(options, multiplier, decimal_places) do
     Enum.map_reduce(options, 0, fn opt, count ->
@@ -7485,8 +7530,11 @@ defmodule PhoenixKitEcommerce do
   defp reprice_modifier_map(modifiers, multiplier, decimal_places) do
     Enum.reduce(modifiers, {%{}, 0}, fn {value, amount_str}, {acc, count} ->
       case reprice_modifier_string(amount_str, multiplier, decimal_places) do
-        {:ok, new_amount} -> {Map.put(acc, value, new_amount), count + 1}
-        :skip -> {Map.put(acc, value, amount_str), count}
+        {:ok, new_amount} ->
+          {Map.put(acc, value, new_amount), count + changed_values(multiplier)}
+
+        :skip ->
+          {Map.put(acc, value, amount_str), count}
       end
     end)
   end
@@ -7580,15 +7628,9 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  # `nil`: no catalogue package, or nothing to reprice (`resolve_catalogue_scope/0`).
   defp lock_shop_catalogue(nil), do: :ok
-
-  # `lock_catalogue!/1` is `@doc false` in the catalogue, so a release may
-  # not have it: skip the advisory lock rather than crash.
-  defp lock_shop_catalogue(catalogue_uuid) do
-    if Code.ensure_loaded?(Catalogue) and function_exported?(Catalogue, :lock_catalogue!, 1),
-      do: Catalogue.lock_catalogue!(catalogue_uuid),
-      else: :ok
-  end
+  defp lock_shop_catalogue(catalogue_uuid), do: Catalogue.lock_catalogue!(catalogue_uuid)
 
   # No status filter: see the doc. Used for the pre-flight scan and as the
   # worklist; every row is re-read under its lock before it is written.
@@ -7634,7 +7676,7 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp reprice_catalogue_item_list(items, ctx) do
-    initial = %{items: 0, modifiers: 0, relabelled_from_other: 0}
+    initial = %{items: 0, written: 0, modifiers: 0, relabelled_from_other: 0}
 
     Enum.reduce_while(items, {:ok, initial}, fn item, {:ok, totals} ->
       case reprice_one_catalogue_item(item, ctx) do
@@ -7653,6 +7695,7 @@ defmodule PhoenixKitEcommerce do
   defp add_item_outcome(totals, outcome) do
     %{
       items: totals.items + 1,
+      written: totals.written + if(outcome.written?, do: 1, else: 0),
       modifiers: totals.modifiers + outcome.modifiers,
       relabelled_from_other:
         totals.relabelled_from_other + if(outcome.other_label?, do: 1, else: 0)
@@ -7690,6 +7733,7 @@ defmodule PhoenixKitEcommerce do
 
     outcome = %{
       modifiers: modifiers,
+      written?: false,
       other_label?: Map.get(ecommerce, "currency") not in [ctx.old_base_code, ctx.new_base_code]
     }
 
@@ -7708,7 +7752,7 @@ defmodule PhoenixKitEcommerce do
 
       case Catalogue.update_item(fresh, %{"data" => new_data, "base_price" => new_price}, opts) do
         {:ok, _updated} ->
-          {:ok, outcome}
+          {:ok, %{outcome | written?: true}}
 
         {:error, reason} = error ->
           Process.put(@item_write_failure_key, reason)
@@ -7807,9 +7851,10 @@ defmodule PhoenixKitEcommerce do
   # Also an uncategorised item (`nil`).
   defp catalogue_category_option_schema(_category), do: []
 
-  # Pre-flight, before any write: same contract as
-  # `reject_ambiguous_modifier_overrides/1`, with `item_uuid:` in the
-  # mismatches so the two sources are never conflated.
+  # Pre-flight: same contract as `reject_ambiguous_modifier_overrides/1`,
+  # with `item_uuid:` in the mismatches so the two sources are never
+  # conflated. Before any write for the worklist; the late pass runs it after
+  # the earlier writes, which the transaction then rolls back.
   defp reject_ambiguous_catalogue_modifier_overrides(items, global_options) do
     case Enum.flat_map(items, &catalogue_item_modifier_mismatches(&1, global_options)) do
       [] -> :ok
