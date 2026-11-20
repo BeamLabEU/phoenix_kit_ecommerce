@@ -7631,8 +7631,13 @@ msgstr "Витрина Shopify слишком много раз перенапр
 
 #: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
-msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
-msgstr "Магазины на основе каталога пока не могут менять базовую валюту. Ничего не изменено, все цены остаются в текущей базовой валюте."
+msgid "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+msgstr "Источник товаров этого магазина пока не может менять базовую валюту. Ничего не изменено, все цены остаются в текущей базовой валюте."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:306
+#, elixir-autogen, elixir-format
+msgid "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
+msgstr "Каталог магазина не найден, поэтому его цены нельзя изменить. Ничего не изменено, все цены остаются в текущей базовой валюте."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2249
 #, elixir-autogen, elixir-format

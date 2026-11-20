@@ -8,14 +8,9 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
   directly — the ecommerce half is unit-tested independent of that
   transaction.
 
-  NOTE ON SCOPE: only the LEGACY `PhoenixKitEcommerce.Product` store is
-  repriced. The catalogue product source
-  (`PhoenixKitEcommerce.ProductSource.Catalogue`, backed by
-  `phoenix_kit_catalogue`) is not repriced yet, and the function refuses
-  with `{:error, {:unsupported_product_source, _}}` while it is the active
-  source rather than doing a partial job. This suite runs against the
-  legacy source (the default); catalogue-item repricing needs its own
-  coverage once it is implemented.
+  NOTE ON SCOPE: this suite runs against the LEGACY
+  `PhoenixKitEcommerce.Product` store (the default source). The catalogue
+  product source has its own suite, `base_currency_reprice_catalogue_test.exs`.
 
   Carts are left alone here by design; the lazy catch-up of a cart that
   outlives the switch is `rebase_cart/1`, covered by `CartRebaseTest`.
@@ -419,5 +414,68 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceTest do
 
     override = reloaded.metadata["_price_modifiers"]["material"]["PETG"]
     assert Decimal.equal?(Decimal.new(override), Decimal.new("10.91"))
+  end
+
+  # The columns hold two decimals, so a column value cannot show rounding by
+  # itself; the JSON modifier strings (three decimals, a bare "0") do.
+  test "a multiplier of 1 relabels only: modifier strings keep their text, columns their value" do
+    n = System.unique_integer([:positive])
+
+    {:ok, _} =
+      Options.update_global_options([
+        %{
+          "key" => "material",
+          "label" => "Material",
+          "type" => "select",
+          "options" => ["PLA", "PETG"],
+          "affects_price" => true,
+          "modifier_type" => "fixed",
+          "price_modifiers" => %{"PLA" => "0", "PETG" => "9.999"}
+        }
+      ])
+
+    {:ok, product} =
+      Shop.create_product(%{
+        "title" => %{"en" => "Exact #{n}", lang() => "Exact #{n}"},
+        "slug" => %{lang() => "reprice-exact-#{n}"},
+        "price" => Decimal.new("19.99"),
+        "compare_at_price" => Decimal.new("25.01"),
+        "status" => "active",
+        "currency" => "USD",
+        "requires_shipping" => false,
+        "metadata" => %{"_price_modifiers" => %{"material" => %{"PLA" => "0", "PETG" => "9.999"}}}
+      })
+
+    {:ok, method} =
+      Shop.create_shipping_method(%{"name" => "Exact#{n}", "price" => Decimal.new("4.50")})
+
+    before = money_snapshot_product(product.uuid)
+    assert before.price == Decimal.new("19.99")
+    assert before.metadata["_price_modifiers"]["material"]["PETG"] == "9.999"
+
+    method_before = Shop.get_shipping_method!(method.uuid)
+    global_before = Options.get_global_options()
+
+    assert {:ok, %{products: 1, shipping_methods: 1}} =
+             Shop.reprice_for_base_change("USD", "EUR", Decimal.new(1))
+
+    assert money_snapshot_product(product.uuid) == %{before | currency: "EUR"}
+    assert Options.get_global_options() == global_before
+    assert Shop.get_shipping_method!(method.uuid).price == method_before.price
+  end
+
+  test "a multiplier of 0 or below is refused and nothing is written" do
+    n = System.unique_integer([:positive])
+
+    {:ok, method} =
+      Shop.create_shipping_method(%{"name" => "Guard#{n}", "price" => Decimal.new("10.00")})
+
+    assert {:error, {:invalid_multiplier, _}} =
+             Shop.reprice_for_base_change("USD", "EUR", Decimal.new(0))
+
+    assert {:error, {:invalid_multiplier, _}} =
+             Shop.reprice_for_base_change("USD", "EUR", Decimal.new("-1"))
+
+    assert Shop.get_shipping_method!(method.uuid).price == method.price
   end
 end

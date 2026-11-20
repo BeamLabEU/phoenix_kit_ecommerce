@@ -7573,8 +7573,13 @@ msgstr "La vitrine Shopify a redirigé trop de fois — la synchronisation a ét
 
 #: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
-msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
-msgstr "Les boutiques basées sur le catalogue ne peuvent pas encore changer leur devise de base. Rien n'a été modifié et tous les prix restent dans la devise de base actuelle."
+msgid "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+msgstr "La source de produits de cette boutique ne peut pas encore changer sa devise de base. Rien n'a été modifié et tous les prix restent dans la devise de base actuelle."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:306
+#, elixir-autogen, elixir-format
+msgid "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
+msgstr "Le catalogue de la boutique est introuvable, ses prix ne peuvent donc pas être modifiés. Rien n'a été modifié et tous les prix restent dans la devise de base actuelle."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2249
 #, elixir-autogen, elixir-format

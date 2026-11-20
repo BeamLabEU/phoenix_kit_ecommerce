@@ -853,10 +853,21 @@ settings-layer error.
   banner. An amount stored with no currency is read as whatever the base
   later becomes. `mix phoenix_kit_ecommerce.list_unstamped_prices` lists the
   catalogue items that already carry one; it stamps nothing.
-- **A base-currency change is refused on a catalogue-backed shop**
-  (`reprice_for_base_change/3` reprices the shop's own tables only). A
-  screen offering the change asks `base_currency_change_supported/0` before
-  its confirmation step and shows `Errors.message/1` of the reason.
+- **A base-currency change reprices the catalogue source too.**
+  `reprice_for_base_change/3` reprices the legacy tables and the shop's
+  catalogue (the one `shop_catalogue` names, a trashed one included): items'
+  `base_price` and their `data["ecommerce"]` money (`compare_at_price`,
+  `cost_per_item`, `currency`, fixed `price_modifiers`, the `price_fit`
+  amounts) and the catalogue categories' option schemas. Other catalogues are
+  not touched. Each row is locked and re-read before it is written, and the
+  write is attributed (`via: "base_currency_change"`, mode `auto`) and not
+  broadcast. A multiplier of 1 relabels only and leaves every amount as
+  stored; that is the repair for a base that was switched without the
+  operation. A direct call is one transaction. With the catalogue source
+  active and no resolvable shop catalogue it refuses with
+  `:no_shop_catalogue`. A screen offering the change asks
+  `base_currency_change_supported/0` before its confirmation step and shows
+  `Errors.message/1` of the reason.
 
 **Stock tracking — read through `PhoenixKitEcommerce.StockTracking`**
 

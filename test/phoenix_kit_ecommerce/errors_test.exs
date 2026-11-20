@@ -63,7 +63,14 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
           Errors.message(
             {:unsupported_product_source, PhoenixKitEcommerce.ProductSource.Catalogue}
           ) ==
-            "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
+            "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+        )
+
+    test ":no_shop_catalogue — the base-currency change refusal",
+      do:
+        assert(
+          Errors.message(:no_shop_catalogue) ==
+            "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
         )
 
     test ":invalid_low_stock_threshold",

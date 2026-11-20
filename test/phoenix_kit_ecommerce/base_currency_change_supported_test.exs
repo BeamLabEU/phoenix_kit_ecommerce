@@ -1,8 +1,9 @@
 defmodule PhoenixKitEcommerce.BaseCurrencyChangeSupportedTest do
   @moduledoc """
-  A base-currency change is refused on a catalogue-backed shop, and a screen
-  offering the change can learn that — with the same reason — before its
-  confirmation step.
+  A screen offering a base-currency change can learn, before its
+  confirmation step, whether `reprice_for_base_change/3` would refuse. Both
+  the legacy and the catalogue product source are supported; the catalogue
+  source needs the shop's catalogue to be resolvable.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
@@ -30,16 +31,14 @@ defmodule PhoenixKitEcommerce.BaseCurrencyChangeSupportedTest do
   end
 
   @tag :catalogue
-  test "the catalogue source refuses, with the reason reprice_for_base_change/3 gives" do
+  test "the catalogue source supports the change once the shop's catalogue resolves" do
     set_product_source("catalogue")
     on_exit(fn -> set_product_source("legacy") end)
 
-    refusal = {:error, {:unsupported_product_source, ProductSource.Catalogue}}
+    assert ProductSource.current() == ProductSource.Catalogue
+    assert Shop.base_currency_change_supported() == {:error, :no_shop_catalogue}
 
-    assert Shop.base_currency_change_supported() == refusal
-    assert Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.9")) == refusal
-
-    assert Shop.Errors.message(elem(refusal, 1)) =~
-             "Catalogue-backed shops cannot change their base currency yet"
+    {:ok, _catalogue} = PhoenixKitEcommerce.APIFixtures.create_shop_catalogue()
+    assert Shop.base_currency_change_supported() == :ok
   end
 end

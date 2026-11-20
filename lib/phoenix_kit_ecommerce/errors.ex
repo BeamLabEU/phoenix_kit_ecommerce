@@ -95,6 +95,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :timeout
           | :unknown_format
           | {:unsupported_product_source, module()}
+          | :no_shop_catalogue
 
   @doc """
   Translates an error reason (atom, string, or any term) into a
@@ -291,12 +292,18 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:payment_start_failed),
     do: gettext("We could not start the payment. Please try again.")
 
-  # `reprice_for_base_change/3`'s refusal: only the shop's own tables are
-  # repriced, so the change is refused before any write.
+  # `reprice_for_base_change/3`'s refusal: a product source it does not know
+  # how to reprice (neither legacy nor catalogue) is refused before any write.
   def message({:unsupported_product_source, _source}),
     do:
       gettext(
-        "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
+        "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+      )
+
+  def message(:no_shop_catalogue),
+    do:
+      gettext(
+        "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
       )
 
   def message(reason) when is_binary(reason), do: reason

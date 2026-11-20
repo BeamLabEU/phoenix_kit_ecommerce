@@ -7572,7 +7572,12 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
-msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
+msgid "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:306
+#, elixir-autogen, elixir-format
+msgid "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2249
