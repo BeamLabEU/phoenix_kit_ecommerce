@@ -544,15 +544,16 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   # the option silently non-price-affecting. Numbers are rendered the way
   # an admin would have typed them — `Decimal.to_string/2`'s `:normal`
   # form, never scientific notation, so `"9.0"` stays parseable.
-  defp normalize_amount(amount) when is_integer(amount), do: Integer.to_string(amount)
+  @doc false
+  def normalize_amount(amount) when is_integer(amount), do: Integer.to_string(amount)
 
-  defp normalize_amount(amount) when is_float(amount),
+  def normalize_amount(amount) when is_float(amount),
     do: amount |> Decimal.from_float() |> Decimal.to_string(:normal)
 
-  defp normalize_amount(%{"value" => value} = amount) when is_number(value),
+  def normalize_amount(%{"value" => value} = amount) when is_number(value),
     do: %{amount | "value" => normalize_amount(value)}
 
-  defp normalize_amount(amount), do: amount
+  def normalize_amount(amount), do: amount
 
   defp value_labels(set, language) do
     set
@@ -668,19 +669,21 @@ defmodule PhoenixKitEcommerce.ProductSource.Catalogue.View do
   # Decimal
   # ============================================================
 
-  defp to_decimal(nil), do: nil
-  defp to_decimal(""), do: nil
-  defp to_decimal(%Decimal{} = decimal), do: decimal
+  # Also how the base-currency reprice reads a stored amount.
+  @doc false
+  def to_decimal(nil), do: nil
+  def to_decimal(""), do: nil
+  def to_decimal(%Decimal{} = decimal), do: decimal
 
-  defp to_decimal(value) when is_binary(value) do
+  def to_decimal(value) when is_binary(value) do
     case Decimal.parse(value) do
       {decimal, _rest} -> decimal
       :error -> nil
     end
   end
 
-  defp to_decimal(value) when is_number(value), do: Decimal.new(to_string(value))
-  defp to_decimal(_), do: nil
+  def to_decimal(value) when is_number(value), do: Decimal.new(to_string(value))
+  def to_decimal(_), do: nil
 
   # The shop's base currency code when the facade exposes it. Nil — not
   # `"USD"` — when nothing is configured: a last-resort dollar stamp is

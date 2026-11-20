@@ -63,7 +63,14 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
           Errors.message(
             {:unsupported_product_source, PhoenixKitEcommerce.ProductSource.Catalogue}
           ) ==
-            "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
+            "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+        )
+
+    test ":no_shop_catalogue — the base-currency change refusal",
+      do:
+        assert(
+          Errors.message(:no_shop_catalogue) ==
+            "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
         )
 
     test ":invalid_low_stock_threshold",
@@ -305,6 +312,11 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
              }) ==
                {:option_price_modifiers_unsupported,
                 "Price modifiers are only supported for select and multiselect types."}
+    end
+
+    test "a base currency change that could not queue its search rebuild" do
+      assert Errors.message({:search_rebuild_failed, :oban_unavailable}) ==
+               "The search index rebuild could not be queued. The base currency change was rolled back."
     end
 
     test "duplicate keys" do

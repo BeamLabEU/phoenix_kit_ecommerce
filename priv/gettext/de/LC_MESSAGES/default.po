@@ -7573,8 +7573,18 @@ msgstr "Die Storefront von Shopify hat zu oft weitergeleitet — die Synchronisi
 
 #: lib/phoenix_kit_ecommerce/errors.ex:298
 #, elixir-autogen, elixir-format
-msgid "Catalogue-backed shops cannot change their base currency yet. Nothing was changed and every price is still in the current base currency."
-msgstr "Katalogbasierte Shops können ihre Basiswährung noch nicht ändern. Es wurde nichts geändert, alle Preise sind weiterhin in der aktuellen Basiswährung."
+msgid "This shop's product source cannot change its base currency yet. Nothing was changed and every price is still in the current base currency."
+msgstr "Die Produktquelle dieses Shops kann ihre Basiswährung noch nicht ändern. Es wurde nichts geändert, alle Preise sind weiterhin in der aktuellen Basiswährung."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:306
+#, elixir-autogen, elixir-format
+msgid "The shop's catalogue could not be found, so its prices cannot be changed. Nothing was changed and every price is still in the current base currency."
+msgstr "Der Katalog des Shops wurde nicht gefunden, daher können seine Preise nicht geändert werden. Es wurde nichts geändert, alle Preise sind weiterhin in der aktuellen Basiswährung."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:312
+#, elixir-autogen, elixir-format
+msgid "The search index rebuild could not be queued. The base currency change was rolled back."
+msgstr "Der Neuaufbau des Suchindex konnte nicht in die Warteschlange gestellt werden. Die Änderung der Basiswährung wurde rückgängig gemacht."
 
 #: lib/phoenix_kit_ecommerce/web/shopify_sync.ex:2249
 #, elixir-autogen, elixir-format
