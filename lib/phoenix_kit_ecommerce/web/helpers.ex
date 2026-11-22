@@ -188,6 +188,39 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   @doc "Clears the `schedule_fx_reload/2` flag; call first in `handle_info(:fx_reload, _)`."
   def fx_reload_done(socket), do: Phoenix.Component.assign(socket, :fx_reload_pending, false)
 
+  @doc """
+  The cart in the request's display currency, for a page that is about to
+  show it (`PhoenixKitEcommerce.cart_in_request_currency/1`): `{socket, cart}`.
+
+  When the cart cannot be brought over (its currency is not available right
+  now, a line has no base price to re-derive from) the cart is returned as it
+  is, with the "currency not available" notice on the socket, and the mount
+  goes on: the shopper sees the cart in the currency it was frozen in. A cart
+  that stopped being active in the meantime is returned as it is, silently.
+  """
+  @spec cart_in_request_currency(Phoenix.LiveView.Socket.t(), PhoenixKitEcommerce.Cart.t()) ::
+          {Phoenix.LiveView.Socket.t(), PhoenixKitEcommerce.Cart.t()}
+  def cart_in_request_currency(socket, %PhoenixKitEcommerce.Cart{} = cart) do
+    case PhoenixKitEcommerce.cart_in_request_currency(cart) do
+      {:ok, aligned} ->
+        {socket, aligned}
+
+      {:error, :cart_not_active} ->
+        {socket, cart}
+
+      {:error, reason} ->
+        Logger.warning(
+          "[Shop] cart #{cart.uuid} could not be brought into the request currency: #{inspect(reason)}"
+        )
+
+        {Phoenix.LiveView.put_flash(
+           socket,
+           :error,
+           PhoenixKitEcommerce.Errors.message(:currency_unavailable)
+         ), cart}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Current user
   # ---------------------------------------------------------------------------

@@ -3943,6 +3943,32 @@ defmodule PhoenixKitEcommerce do
   defp redenominate_discount(%Cart{discount_amount: amount}, _rate, _target), do: amount
 
   @doc """
+  The cart a page is about to show, in the REQUEST's display currency
+  (`Billing.get_display_currency/0`, which the host sets per domain): a
+  signed-in shopper's cart is found by user on every domain, and a cart is
+  paid in the currency of the site it is paid on.
+
+  A cart in another currency, empty or not, goes through `redenominate_cart/2`
+  and its answer is returned as it is. A cart already in the request's
+  currency keeps its frozen rate and is not written (§4.4), and neither is a
+  cart that is not active (converting, converted, merged, abandoned), nor one
+  asked for while no display currency resolves: all `{:ok, cart}`, the struct
+  handed in.
+
+  The cart page and the checkout page call this on mount, through
+  `Web.Helpers.cart_in_request_currency/2`. It is not called on every read.
+  """
+  @spec cart_in_request_currency(Cart.t()) :: {:ok, Cart.t()} | {:error, atom()}
+  def cart_in_request_currency(%Cart{status: "active", currency: current} = cart) do
+    case Billing.get_display_currency() do
+      %Currency{code: code} when code != current -> redenominate_cart(cart, code)
+      _same_or_unresolved -> {:ok, cart}
+    end
+  end
+
+  def cart_in_request_currency(%Cart{} = cart), do: {:ok, cart}
+
+  @doc """
   Brings a cart frozen against a PREVIOUS base currency onto the current
   one. `reprice_for_base_change/3` deliberately leaves carts alone (§4.9
   step 6), but a cart that outlives a base change is then frozen against

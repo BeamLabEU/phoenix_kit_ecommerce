@@ -90,6 +90,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp mount_with_cart(socket, cart, session_id, current_language) do
+    {socket, cart} = Helpers.cart_in_request_currency(socket, cart)
     cart = cart |> rebase_cart() |> refresh_pay_on_delivery_shipping()
 
     # Shipping selection only happens on this page when it hasn't been

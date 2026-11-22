@@ -79,6 +79,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         {:ok, redirect_without_cart(socket, user_uuid, session)}
 
       cart ->
+        {socket, cart} = Helpers.cart_in_request_currency(socket, cart)
         cart = cart |> rebase_cart() |> refresh_pay_on_delivery_shipping()
         handle_cart_validation(socket, cart, user)
     end
