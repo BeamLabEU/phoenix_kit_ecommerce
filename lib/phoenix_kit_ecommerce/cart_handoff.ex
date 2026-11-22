@@ -5,18 +5,21 @@ defmodule PhoenixKitEcommerce.CartHandoff do
   # `function_exported?/3` with plain maps and no core types; the same maps
   # are accepted that a caller of this module would build by hand.
   #
-  # The cart uuid in a payload is a bearer secret that travelled through a
-  # redirect, so the cart it names is adopted only if it is a live GUEST cart
-  # (`guest_source/1`, and again under the row lock by
-  # `PhoenixKitEcommerce.move_cart_lines/3`). Nothing here trusts the payload
-  # beyond that, and nothing here raises: the caller is a redirect endpoint.
+  # A payload is data, whoever produced it: the cart it names is adopted only
+  # if it is a live GUEST cart (`guest_source/1`, and again under the row lock
+  # by `PhoenixKitEcommerce.move_cart_lines/3`), because the state it was read
+  # in may be many events old and the uuid is all that identifies the cart.
+  # Nothing here trusts the payload beyond that, and nothing here raises: the
+  # caller is a redirect endpoint.
 
   use Gettext, backend: PhoenixKitEcommerce.Gettext
 
   import Ecto.Query, warn: false
 
+  alias PhoenixKit.RepoHelper
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.CartMove
   alias PhoenixKitEcommerce.Web.Plugs.ShopSession
 
@@ -35,7 +38,7 @@ defmodule PhoenixKitEcommerce.CartHandoff do
       _nothing_to_carry -> nil
     end
   rescue
-    error -> failed(:handoff_snapshot, error, nil)
+    error -> failed(:handoff_snapshot, error, __STACKTRACE__, nil)
   catch
     :exit, _reason -> nil
   end
@@ -43,43 +46,85 @@ defmodule PhoenixKitEcommerce.CartHandoff do
   # --- apply -------------------------------------------------------------------
 
   def apply_payload(context, payload) do
-    case identity(context) do
-      {:ok, identity} ->
-        case guest_source(payload) do
-          %Cart{} = source -> apply_for(identity, source)
-          nil -> follow_currency(identity)
-        end
-
-      :error ->
-        {:ok, @nothing}
+    with {:ok, identity} <- identity(context),
+         %Cart{} = source <- guest_source(payload) do
+      apply_for(identity, source)
+    else
+      _nothing_to_carry -> {:ok, @nothing}
     end
   rescue
-    error -> failed(:handoff_apply, error, {:ok, @nothing})
+    error -> failed(:handoff_apply, error, __STACKTRACE__, {:ok, @nothing})
   catch
     :exit, _reason -> {:ok, @nothing}
   end
 
-  # Nothing to carry. A signed-in shopper's own cart is found by user on every
-  # domain, so it only has to be in this domain's currency (when the request
-  # names one); a guest has nothing here to look after.
-  defp follow_currency(%{user_uuid: user_uuid, currency: currency} = identity)
-       when is_binary(user_uuid) and is_binary(currency) do
-    with %Cart{} = cart <-
-           Shop.find_active_cart(user_uuid: user_uuid, session_id: identity.session_id) do
-      _ = Shop.redenominate_cart(cart, currency)
-    end
-
-    {:ok, @nothing}
-  end
-
-  defp follow_currency(_identity), do: {:ok, @nothing}
-
   # A signed-in shopper's cart is found by user on every domain; a guest
   # arriving for the first time has no session here and is given one.
   defp apply_for(identity, source) do
-    with :ok <- usable_currency(identity.currency),
-         {:ok, session_id, cookies} <- target_session(identity),
-         {:ok, target} <- target_cart(identity, session_id),
+    case usable_currency(identity.currency) do
+      :ok -> carry(identity, source)
+      {:error, reason} -> refused(source, reason, identity.locale)
+    end
+  end
+
+  defp carry(identity, source) do
+    case target_session(identity) do
+      {:ok, session_id, cookies} ->
+        into_session(identity, source, session_id, cookies)
+
+      # Nothing is minted and nothing moves: the cookie may well be the
+      # browser's own cart, and an id made now would overwrite it.
+      {:error, :cookie_unverifiable} ->
+        {:ok, @nothing}
+    end
+  end
+
+  # The cart made under an id minted for this call is kept only if something
+  # moved into it: with no lines the cookie is not set either, and the empty
+  # cart would stay under an id nobody holds.
+  defp into_session(identity, source, session_id, cookies) do
+    outcome = move_guarded(identity, source, session_id, cookies)
+
+    case outcome do
+      {:ok, %{moved: moved} = report} when moved > 0 ->
+        {:ok, finish(report, cookies, identity.locale)}
+
+      {:ok, report} ->
+        discard_minted(cookies, session_id)
+        {:ok, finish(report, [], identity.locale)}
+
+      # Lost a race with whoever else ended one of the carts, or the payload
+      # named the target's own cart: nothing left to carry.
+      {:error, reason}
+      when reason in [
+             :cart_not_active,
+             :same_cart,
+             :cart_not_found,
+             :not_a_guest_cart,
+             :cart_empty
+           ] ->
+        discard_minted(cookies, session_id)
+        {:ok, @nothing}
+
+      # The source is eligible but cannot be carried right now: it stays where
+      # it is, with every line, and the shopper is told so.
+      {:error, reason} ->
+        discard_minted(cookies, session_id)
+        refused(source, refusal_reason(reason), identity.locale)
+    end
+  end
+
+  # An exception or an exit leaves the minted id's cart behind as well.
+  defp move_guarded(identity, source, session_id, cookies) do
+    move_into_target(identity, source, session_id)
+  catch
+    kind, reason ->
+      discard_minted(cookies, session_id)
+      :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  defp move_into_target(identity, source, session_id) do
+    with {:ok, target} <- target_cart(identity, session_id),
          {:ok, target} <- into_currency(target, identity.currency),
          {:ok, _target, report} <-
            Shop.move_cart_lines(source, target,
@@ -93,25 +138,29 @@ defmodule PhoenixKitEcommerce.CartHandoff do
              # A line that cannot be moved is not lost: it stays in the source.
              keep_skipped: true
            ) do
-      {:ok, finish(report, cookies_for(report, cookies), identity.locale)}
-    else
-      # Lost a race with whoever else ended one of the carts, or the payload
-      # named the target's own cart: nothing left to carry.
-      {:error, reason}
-      when reason in [
-             :cart_not_active,
-             :same_cart,
-             :cart_not_found,
-             :not_a_guest_cart,
-             :cart_empty
-           ] ->
-        {:ok, @nothing}
-
-      # The source is eligible but cannot be carried right now: it stays where
-      # it is, with every line, and the shopper is told so.
-      {:error, reason} ->
-        refused(source, refusal_reason(reason), identity.locale)
+      {:ok, report}
     end
+  end
+
+  # Only for an id minted by this call (`cookies` is not empty): a session the
+  # visitor already had, and an account's cart, are never touched. Nobody else
+  # knows a minted id (32 random bytes), so what is under it is this call's
+  # alone; the cart goes only if it is still active, a guest's and has no lines.
+  defp discard_minted([], _session_id), do: :ok
+
+  defp discard_minted(_cookies, session_id) do
+    from(c in Cart,
+      as: :cart,
+      where: c.session_id == ^session_id and is_nil(c.user_uuid) and c.status == "active",
+      where: not exists(from(i in CartItem, where: i.cart_uuid == parent_as(:cart).uuid))
+    )
+    |> RepoHelper.repo().delete_all()
+
+    :ok
+  rescue
+    _error -> :ok
+  catch
+    :exit, _reason -> :ok
   end
 
   defp refusal_reason(reason) when is_atom(reason), do: reason
@@ -143,21 +192,33 @@ defmodule PhoenixKitEcommerce.CartHandoff do
   # module's is in the session or in a verified cookie) is given a fresh id,
   # minted and set exactly as `Web.Plugs.ShopSession` does, so the next request
   # of that browser finds the cart. A signed-in shopper's cart is found by user.
+  #
+  # The exception: the browser sent the cookie but it cannot be verified
+  # because the endpoint's secret is not to be found. It reads as no cookie
+  # whatever it holds, so an id minted for it would replace the browser's own
+  # one: one warning, no id. A cookie that fails verification with the secret
+  # at hand is a forged or expired one and is no session.
   defp target_session(%{session_id: session_id}) when is_binary(session_id),
     do: {:ok, session_id, []}
 
   defp target_session(%{user_uuid: user_uuid}) when is_binary(user_uuid),
     do: {:ok, nil, []}
 
+  defp target_session(%{cookie_unverifiable?: true}) do
+    Logger.warning(
+      "[Shop] handoff_apply: the shop_session_id cookie cannot be verified " <>
+        "(the host endpoint or its secret_key_base was not found); " <>
+        "nothing was moved, and no new shop session was made"
+    )
+
+    {:error, :cookie_unverifiable}
+  end
+
   defp target_session(_identity) do
     session_id = ShopSession.generate_session_id()
     cookie = {ShopSession.cookie_name(), session_id, ShopSession.cookie_options(true)}
     {:ok, session_id, [cookie]}
   end
-
-  # A cookie for an id nothing was moved into is of no use to the browser.
-  defp cookies_for(%{moved: moved}, cookies) when moved > 0, do: cookies
-  defp cookies_for(_report, _cookies), do: []
 
   # The cart a payload names, if and only if it is a live guest cart.
   defp guest_source(payload) do
@@ -184,16 +245,20 @@ defmodule PhoenixKitEcommerce.CartHandoff do
 
   # --- the context ---------------------------------------------------------------
 
-  # `session_id` is nil when the visitor has none yet; the currency is the one
-  # the caller names, else the request's display currency when the request
-  # names one the shop prices in, else none (the target cart keeps its own).
+  # `session_id` is nil when the visitor has none yet. The currency is the one
+  # the caller names, else none: an existing target cart keeps the currency it
+  # has, a new one is made as `Shop.create_cart/1` makes it (in the display
+  # currency of the CALLING process, if one is set there; core runs the hook
+  # in a task of its own, which has none, so: the base currency), and the cart
+  # page brings it into the domain's currency on its next mount.
   defp identity(context) when is_map(context) do
     with {:ok, user_uuid} <- user_uuid(context) do
       {:ok,
        %{
          user_uuid: user_uuid,
          session_id: shop_session_id(context),
-         currency: present(fetch(context, :currency)) || Shop.request_display_currency_code(),
+         cookie_unverifiable?: context |> fetch(:cookies) |> ShopSession.unverifiable_cookie?(),
+         currency: present(fetch(context, :currency)),
          language: present(fetch(context, :language)) || present(fetch(context, :locale)),
          locale: present(fetch(context, :locale))
        }}
@@ -244,12 +309,33 @@ defmodule PhoenixKitEcommerce.CartHandoff do
   defp present(value) when is_binary(value) and value != "", do: value
   defp present(_value), do: nil
 
-  # Nothing may raise, but what raised is worth knowing: the kind only, never a
-  # message (those can carry what the hook was handed).
-  defp failed(hook, error, answer) do
-    Logger.error("[Shop] #{hook} failed: #{inspect(error.__struct__)}")
+  # Nothing may raise, but what raised is worth knowing: the kind and where
+  # (the top frame of this application's own code: module, function/arity,
+  # line), never a message or an argument (those can carry what the hook was
+  # handed).
+  defp failed(hook, error, stacktrace, answer) do
+    Logger.error("[Shop] #{hook} failed: #{inspect(error.__struct__)}#{where(stacktrace)}")
     answer
   end
+
+  defp where(stacktrace) do
+    case Enum.find(stacktrace, &shop_frame?/1) do
+      {module, function, arity, location} ->
+        " at #{inspect(module)}.#{function}/#{arity_of(arity)} (line #{location[:line]})"
+
+      nil ->
+        ""
+    end
+  end
+
+  defp shop_frame?({module, _function, _arity, _location}) when is_atom(module),
+    do: module |> Atom.to_string() |> String.starts_with?("Elixir.PhoenixKitEcommerce")
+
+  defp shop_frame?(_frame), do: false
+
+  # A frame carries the arity, or the arguments of the call: never print those.
+  defp arity_of(arguments) when is_list(arguments), do: length(arguments)
+  defp arity_of(arity), do: arity
 
   # --- what the shopper is told ------------------------------------------------
 
@@ -275,8 +361,8 @@ defmodule PhoenixKitEcommerce.CartHandoff do
 
   defp moved_notice(count) do
     ngettext(
-      "Your cart came with you: %{count} item.",
-      "Your cart came with you: %{count} items.",
+      "Your cart came with you: %{count} product.",
+      "Your cart came with you: %{count} products.",
       count
     )
   end

@@ -8336,44 +8336,44 @@ msgstr "Kui makstud tellimuse eest raha tagastatakse"
 msgid "Enter a whole number from 0 to %{max}."
 msgstr "Sisesta täisarv vahemikus 0 kuni %{max}."
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:277
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:363
 #, elixir-autogen, elixir-format
-msgid "Your cart came with you: %{count} item."
-msgid_plural "Your cart came with you: %{count} items."
+msgid "Your cart came with you: %{count} product."
+msgid_plural "Your cart came with you: %{count} products."
 msgstr[0] "Teie ostukorv tuli kaasa: %{count} toode."
 msgstr[1] "Teie ostukorv tuli kaasa: %{count} toodet."
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:290
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:376
 #, elixir-autogen, elixir-format
 msgid "These stayed in your cart on the other site: %{products}."
 msgstr "Need jäid teie ostukorvi teisel saidil: %{products}."
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:296
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:382
 #, elixir-autogen, elixir-format
 msgid "%{name} (%{reason})"
 msgstr "%{name} (%{reason})"
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:297
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:383
 #, elixir-autogen, elixir-format
 msgid "an item"
 msgstr "toode"
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:303
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:389
 #, elixir-autogen, elixir-format
 msgid "no longer available"
 msgstr "pole enam saadaval"
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:305
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:391
 #, elixir-autogen, elixir-format
 msgid "not enough in stock"
 msgstr "laos pole piisavalt"
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:306
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:392
 #, elixir-autogen, elixir-format
 msgid "quantity limit reached"
 msgstr "koguse piirang on täis"
 
-#: lib/phoenix_kit_ecommerce/cart_handoff.ex:307
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:393
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "praegu ei saa siia lisada"

@@ -192,11 +192,13 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   The cart in the request's display currency, for a page that is about to
   show it (`PhoenixKitEcommerce.cart_in_request_currency/1`): `{socket, cart}`.
 
-  When the cart cannot be brought over (its currency is not available right
-  now, a line has no base price to re-derive from) the cart is returned as it
-  is, with the "currency not available" notice on the socket, and the mount
-  goes on: the shopper sees the cart in the currency it was frozen in. A cart
-  that stopped being active in the meantime is returned as it is, silently.
+  When the cart cannot be brought over it is returned as it is and the mount
+  goes on: the shopper sees the cart in the currency it was frozen in. Only
+  `:currency_unavailable` says so (the "currency not available" notice on the
+  socket); any other reason (a line with no base price to re-derive from, say)
+  is the shop's to fix, so the shopper is shown nothing new and it is logged
+  once at warning. A cart that stopped being active in the meantime is
+  returned as it is, silently.
   """
   @spec cart_in_request_currency(Phoenix.LiveView.Socket.t(), PhoenixKitEcommerce.Cart.t()) ::
           {Phoenix.LiveView.Socket.t(), PhoenixKitEcommerce.Cart.t()}
@@ -213,13 +215,19 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
           "[Shop] cart #{cart.uuid} could not be brought into the request currency: #{inspect(reason)}"
         )
 
-        {Phoenix.LiveView.put_flash(
-           socket,
-           :error,
-           PhoenixKitEcommerce.Errors.message(:currency_unavailable)
-         ), cart}
+        {tell_shopper(socket, reason), cart}
     end
   end
+
+  defp tell_shopper(socket, :currency_unavailable) do
+    Phoenix.LiveView.put_flash(
+      socket,
+      :error,
+      PhoenixKitEcommerce.Errors.message(:currency_unavailable)
+    )
+  end
+
+  defp tell_shopper(socket, _other_reason), do: socket
 
   # ---------------------------------------------------------------------------
   # Current user

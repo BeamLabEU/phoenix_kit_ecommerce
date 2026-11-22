@@ -7,14 +7,16 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
   contexts core builds (`:user_uuid`, `:session`, `:cookies`, and on the target
   `:host` and `:locale`).
 
-  A guest cart's uuid in the payload is a bearer secret: only a cart that is
-  still active, belongs to no user and is not an API cart is ever adopted. A
-  line that cannot be carried is not lost: it stays in the guest's cart.
+  The payload names a guest cart by uuid, and a payload is data: only a cart
+  that is still active, belongs to no user and is not an API cart is ever
+  adopted. A line that cannot be carried is not lost: it stays in the guest's
+  cart.
   Neither function raises, whatever it is handed.
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
 
+  import ExUnit.CaptureLog
   import PhoenixKitEcommerce.CartApiFixtures
 
   alias PhoenixKitBilling.Currency
@@ -23,6 +25,15 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Test.Endpoint
   alias PhoenixKitEcommerce.Web.Plugs.ShopSession
+
+  # Russian and Ukrainian wording as code points: no Cyrillic outside the
+  # catalogues.
+  @ru_came "\u{412}\u{430}\u{448}\u{430} \u{43A}\u{43E}\u{440}\u{437}\u{438}\u{43D}\u{430} \u{43F}\u{435}\u{440}\u{435}\u{43D}\u{435}\u{441}\u{435}\u{43D}\u{430}:"
+  @ru_forms {"\u{442}\u{43E}\u{432}\u{430}\u{440}", "\u{442}\u{43E}\u{432}\u{430}\u{440}\u{430}",
+             "\u{442}\u{43E}\u{432}\u{430}\u{440}\u{43E}\u{432}"}
+  @uk_came "\u{412}\u{430}\u{448} \u{43A}\u{43E}\u{448}\u{438}\u{43A} \u{43F}\u{435}\u{440}\u{435}\u{43D}\u{435}\u{441}\u{435}\u{43D}\u{43E}:"
+  @uk_forms {"\u{442}\u{43E}\u{432}\u{430}\u{440}", "\u{442}\u{43E}\u{432}\u{430}\u{440}\u{438}",
+             "\u{442}\u{43E}\u{432}\u{430}\u{440}\u{456}\u{432}"}
 
   setup do
     ensure_currencies!()
@@ -370,22 +381,6 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       assert cart_count() == before
     end
 
-    test "with no currency the request's display currency is used", ctx do
-      source = guest_cart!([{ctx.p1, 1}])
-      target_session = session()
-
-      Currency.put_request_currency("EUR")
-
-      assert {:ok, %{moved: 1}} =
-               Shop.handoff_apply(
-                 %{user_uuid: nil, shop_session_id: target_session},
-                 payload(source)
-               )
-
-      Currency.put_request_currency(nil)
-      assert [%{currency: "EUR"}] = active_carts_of(target_session)
-    end
-
     test "a currency the shop does not price in: nothing moves, the guest's cart stays whole",
          ctx do
       source = guest_cart!([{ctx.p1, 1}, {ctx.p2, 2}])
@@ -537,25 +532,133 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
             :signed_under_another_key -> signed_cookie(victim_session, String.duplicate("x", 64))
           end
 
-        assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} =
-                 Shop.handoff_apply(
-                   core_apply_context(cookies: %{"shop_session_id" => cookie}),
-                   payload(source)
-                 )
+        log =
+          capture_log(fn ->
+            assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} =
+                     Shop.handoff_apply(
+                       core_apply_context(cookies: %{"shop_session_id" => cookie}),
+                       payload(source)
+                     )
 
-        assert id != victim_session
+            assert id != victim_session
+          end)
+
         assert quantities(victim) == %{ctx.p2.uuid => 1}
+        # the secret is findable: this is a cookie that does not verify, not a
+        # secret that is missing
+        refute log =~ "cannot be verified"
       end
+    end
+
+    # With the secret unavailable even a genuine cookie reads as "no cookie",
+    # and a fresh identity minted then would overwrite the browser's own.
+    test "a cookie that cannot be verified because the secret is missing: nothing is minted",
+         ctx do
+      source = guest_cart!([{ctx.p1, 2}])
+      browser_session = session()
+      own = "USD" |> cart_in(session_id: browser_session) |> fill!([{ctx.p2, 1}])
+      cookie = signed_cookie(browser_session)
+      before = {stored(source.uuid), stored(own.uuid), cart_count()}
+
+      log =
+        capture_log(fn ->
+          assert {:ok, nothing()} ==
+                   Shop.handoff_apply(
+                     core_apply_context(cookies: %{"shop_session_id" => cookie}),
+                     payload(source)
+                   )
+        end)
+
+      assert {stored(source.uuid), stored(own.uuid), cart_count()} == before
+      assert [_one_warning, _after] = String.split(log, "[warning]")
+      assert log =~ "secret_key_base"
+      refute log =~ cookie
+      refute log =~ browser_session
+      refute log =~ source.uuid
+    end
+
+    test "with the secret missing, an identity the session names is still used", ctx do
+      source = guest_cart!([{ctx.p1, 2}])
+      browser_session = session()
+      own = "USD" |> cart_in(session_id: browser_session) |> fill!([{ctx.p2, 1}])
+
+      context =
+        core_apply_context(
+          session: %{"shop_session_id" => browser_session},
+          cookies: %{"shop_session_id" => signed_cookie(browser_session)}
+        )
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{moved: 1} = report} = Shop.handoff_apply(context, payload(source))
+          refute Map.has_key?(report, :cookies)
+        end)
+
+      refute log =~ "cannot be verified"
+      assert quantities(own) == %{ctx.p1.uuid => 2, ctx.p2.uuid => 1}
+    end
+
+    test "with the secret missing and no cookie, there is nothing to overwrite", ctx do
+      source = guest_cart!([{ctx.p1, 1}])
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{moved: 1, cookies: [{"shop_session_id", _, _}]}} =
+                   Shop.handoff_apply(core_apply_context(), payload(source))
+        end)
+
+      refute log =~ "cannot be verified"
     end
 
     test "a cookie is set only when something was moved into the new identity", ctx do
       source = guest_cart!([{ctx.p1, 1}])
       {:ok, _} = Shop.update_product(ctx.p1, %{"status" => "archived"})
+      carts_before = cart_count()
 
       assert {:ok, report} = Shop.handoff_apply(core_apply_context(), payload(source))
 
       assert %{moved: 0, skipped: [_]} = report
       refute Map.has_key?(report, :cookies)
+      # and no cart is left under an id nobody holds
+      assert cart_count() == carts_before
+    end
+
+    test "a first visit with some lines moved keeps the cart it made, under the cookie's id",
+         ctx do
+      source = guest_cart!([{ctx.p1, 1}, {ctx.p2, 1}])
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+      carts_before = cart_count()
+
+      assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} =
+               Shop.handoff_apply(core_apply_context(), payload(source))
+
+      assert cart_count() == carts_before + 1
+      assert [_kept] = active_carts_of(id)
+    end
+
+    test "a cart the target session already has is never deleted, whatever moves", ctx do
+      source = guest_cart!([{ctx.p1, 1}])
+      {:ok, _} = Shop.update_product(ctx.p1, %{"status" => "archived"})
+      target_session = session()
+      empty = cart_in("USD", session_id: target_session)
+      context = core_apply_context(session: %{"shop_session_id" => target_session})
+      carts_before = cart_count()
+
+      assert {:ok, %{moved: 0, skipped: [_]}} = Shop.handoff_apply(context, payload(source))
+
+      assert cart_count() == carts_before
+      assert Repo.get!(Cart, empty.uuid).status == "active"
+    end
+
+    test "a signed-in account's cart is never deleted when nothing moves", ctx do
+      user = fixture_user()
+      source = guest_cart!([{ctx.p1, 1}])
+      {:ok, _} = Shop.update_product(ctx.p1, %{"status" => "archived"})
+
+      assert {:ok, %{moved: 0}} =
+               Shop.handoff_apply(core_apply_context(user_uuid: user.uuid), payload(source))
+
+      assert Repo.exists?(from(c in Cart, where: c.user_uuid == ^user.uuid))
     end
 
     test "a signed-in account's cart is found by user, with no cookie", ctx do
@@ -572,25 +675,52 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
   end
 
   describe "handoff_apply/2 currency" do
-    # The currency on the target is the request's display currency if the
-    # request names one the shop prices in. It is never guessed from the host
-    # or the locale: without one the target cart keeps the currency it has.
-    test "the request's display currency, when it resolves", ctx do
-      source = guest_cart!([{ctx.p1, 1}])
+    # The shop does not know a host's currency, and neither does core's context
+    # (`:host` and `:locale` only). Core runs the hook in a task of its own,
+    # without the request's process dictionary, which is where Billing keeps the
+    # request's display currency. So through core the target cart is created in
+    # the base currency, and the cart and checkout pages bring it into the
+    # domain's currency when the shopper opens them (`redenominate_cart/2`).
+    test "inside a task, as core runs it, a first visit's cart is made in the base currency",
+         ctx do
+      source = guest_cart!([{ctx.p1, 1}], "EUR")
+
+      # The request process names EUR; the task does not inherit it.
       Currency.put_request_currency("EUR")
-
-      assert {:ok, %{cookies: [{_, id, _}]}} =
-               Shop.handoff_apply(core_apply_context(), payload(source))
-
+      context = core_apply_context(host: "shop.de", locale: "de")
+      task = Task.async(fn -> Shop.handoff_apply(context, payload(source)) end)
+      result = Task.await(task)
       Currency.put_request_currency(nil)
-      assert [%{currency: "EUR"}] = active_carts_of(id)
+
+      assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} = result
+      assert [target] = active_carts_of(id)
+      assert %{currency: "USD", base_currency: "USD"} = target
+      assert Decimal.equal?(target.exchange_rate, Decimal.new("1"))
+
+      assert [%{currency: "USD", unit_price: unit_price}] = reload(target).items
+      assert Decimal.equal?(unit_price, Decimal.new("10.00"))
     end
 
-    test "no request currency: the target cart's own currency is left as it is", ctx do
+    test "inside a task the target cart a guest already has keeps its own currency", ctx do
       source = guest_cart!([{ctx.p1, 1}])
       target_session = session()
       existing = "EUR" |> cart_in(session_id: target_session) |> fill!([{ctx.p2, 1}])
-      Currency.put_request_currency(nil)
+      context = core_apply_context(session: %{"shop_session_id" => target_session})
+
+      assert {:ok, %{moved: 1}} =
+               Task.await(Task.async(fn -> Shop.handoff_apply(context, payload(source)) end))
+
+      cart = reload(existing)
+      assert cart.currency == "EUR"
+      assert Enum.all?(cart.items, &(&1.currency == "EUR"))
+      assert Decimal.equal?(cart.exchange_rate, Decimal.new("0.909091"))
+    end
+
+    test "the target cart's own currency is left as it is; host and locale are not believed",
+         ctx do
+      source = guest_cart!([{ctx.p1, 1}])
+      target_session = session()
+      existing = "EUR" |> cart_in(session_id: target_session) |> fill!([{ctx.p2, 1}])
 
       # The host and the locale name a USD shop: neither is believed.
       context =
@@ -608,63 +738,84 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       assert Decimal.equal?(cart.exchange_rate, Decimal.new("0.909091"))
     end
 
-    test "a request currency that fell back to the base is not a request to move the cart", ctx do
+    # What a caller that does know the currency says outright.
+    test "an explicit :currency makes the target cart, and brings an existing one, into it",
+         ctx do
       source = guest_cart!([{ctx.p1, 1}])
+
+      assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} =
+               Shop.handoff_apply(core_apply_context(currency: "EUR"), payload(source))
+
+      assert [%{currency: "EUR"}] = active_carts_of(id)
+
+      second = guest_cart!([{ctx.p1, 1}])
       target_session = session()
-      existing = "EUR" |> cart_in(session_id: target_session) |> fill!([{ctx.p2, 1}])
-
-      {:ok, _} =
-        PhoenixKitBilling.update_currency(PhoenixKitBilling.get_currency_by_code("EUR"), %{
-          enabled: false
-        })
-
-      Currency.put_request_currency("EUR")
+      existing = "USD" |> cart_in(session_id: target_session) |> fill!([{ctx.p2, 1}])
 
       assert {:ok, %{moved: 1}} =
                Shop.handoff_apply(
-                 core_apply_context(session: %{"shop_session_id" => target_session}),
-                 payload(source)
+                 %{user_uuid: nil, shop_session_id: target_session, currency: "EUR"},
+                 payload(second)
                )
 
-      Currency.put_request_currency(nil)
       assert reload(existing).currency == "EUR"
     end
 
-    test "an explicit currency in a plain map wins over the request's", ctx do
+    # Not the hook's doing: a new cart is made as `create_cart/1` makes it, in
+    # the display currency of the process it runs in.
+    test "a direct caller in a request process that names a currency gets a cart in it", ctx do
       source = guest_cart!([{ctx.p1, 1}])
-      Currency.put_request_currency("USD")
+      Currency.put_request_currency("EUR")
 
-      assert {:ok, %{moved: 1}} =
-               Shop.handoff_apply(
-                 %{user_uuid: nil, shop_session_id: session(), currency: "EUR"},
-                 payload(source)
-               )
+      assert {:ok, %{cookies: [{_, id, _}]}} =
+               Shop.handoff_apply(core_apply_context(), payload(source))
 
       Currency.put_request_currency(nil)
+      assert [%{currency: "EUR"}] = active_carts_of(id)
     end
   end
 
   describe "handoff_apply/2 notices" do
-    test "a cart that came along says how many items, in the language of the target", ctx do
+    # The count is the report's `moved`: lines of the cart, one per product and
+    # option choice, whatever the quantity of each.
+    test "a cart that came along says how many products, in the language of the target", ctx do
       one = guest_cart!([{ctx.p1, 3}])
-      two = guest_cart!([{ctx.p1, 1}, {ctx.p2, 1}])
+      two = guest_cart!([{ctx.p1, 1}, {ctx.p2, 5}])
 
-      assert {:ok, %{notices: ["Your cart came with you: 1 item."]}} =
+      assert {:ok, %{moved: 1, notices: ["Your cart came with you: 1 product."]}} =
                Shop.handoff_apply(core_apply_context(locale: "en"), payload(one))
 
-      assert {:ok, %{notices: ["Your cart came with you: 2 items."]}} =
+      assert {:ok, %{moved: 2, notices: ["Your cart came with you: 2 products."]}} =
                Shop.handoff_apply(core_apply_context(locale: "en"), payload(two))
+    end
+
+    test "ru and uk use their three plural forms" do
+      backend = PhoenixKitEcommerce.Gettext
+
+      for {locale, came, forms} <- [{"ru", @ru_came, @ru_forms}, {"uk", @uk_came, @uk_forms}],
+          {count, form} <- [{1, 0}, {21, 0}, {2, 1}, {3, 1}, {5, 2}, {11, 2}] do
+        Gettext.with_locale(backend, locale, fn ->
+          assert Gettext.dngettext(
+                   backend,
+                   "default",
+                   "Your cart came with you: %{count} product.",
+                   "Your cart came with you: %{count} products.",
+                   count
+                 ) == "#{came} #{count} #{elem(forms, form)}."
+        end)
+      end
     end
 
     test "translated, with the plural of the language", ctx do
       for {locale, one, many} <- [
-            {"de", "Ihr Warenkorb ist mitgekommen: 1 Artikel.",
-             "Ihr Warenkorb ist mitgekommen: 2 Artikel."},
-            {"fr", "Votre panier vous a suivi : 1 article.",
-             "Votre panier vous a suivi : 2 articles."},
+            {"de", "Ihr Warenkorb ist mitgekommen: 1 Produkt.",
+             "Ihr Warenkorb ist mitgekommen: 2 Produkte."},
+            {"fr", "Votre panier vous a suivi : 1 produit.",
+             "Votre panier vous a suivi : 2 produits."},
             {"et", "Teie ostukorv tuli kaasa: 1 toode.", "Teie ostukorv tuli kaasa: 2 toodet."},
-            {"ru", "Ваша корзина перенесена: 1 товар.", "Ваша корзина перенесена: 2 товара."},
-            {"uk", "Ваш кошик перенесено: 1 товар.", "Ваш кошик перенесено: 2 товари."}
+            {"ru", "#{@ru_came} 1 #{elem(@ru_forms, 0)}.",
+             "#{@ru_came} 2 #{elem(@ru_forms, 1)}."},
+            {"uk", "#{@uk_came} 1 #{elem(@uk_forms, 0)}.", "#{@uk_came} 2 #{elem(@uk_forms, 1)}."}
           ] do
         one_cart = guest_cart!([{ctx.p1, 1}])
         two_carts = guest_cart!([{ctx.p1, 1}, {ctx.p2, 1}])
@@ -680,7 +831,7 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
     test "a dialect picks the catalogue of its base language", ctx do
       source = guest_cart!([{ctx.p1, 1}])
 
-      assert {:ok, %{notices: ["Ihr Warenkorb ist mitgekommen: 1 Artikel."]}} =
+      assert {:ok, %{notices: ["Ihr Warenkorb ist mitgekommen: 1 Produkt."]}} =
                Shop.handoff_apply(core_apply_context(locale: "de-DE"), payload(source))
     end
 
@@ -702,7 +853,7 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       assert {:ok, %{moved: 1, skipped: [_], notices: [moved, left]}} =
                Shop.handoff_apply(core_apply_context(locale: "en"), payload(source))
 
-      assert moved == "Your cart came with you: 1 item."
+      assert moved == "Your cart came with you: 1 product."
 
       assert left ==
                "These stayed in your cart on the other site: #{ctx.p2.title["en"]} (no longer available)."
@@ -743,8 +894,8 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
               Gettext.dngettext(
                 backend,
                 "default",
-                "Your cart came with you: %{count} item.",
-                "Your cart came with you: %{count} items.",
+                "Your cart came with you: %{count} product.",
+                "Your cart came with you: %{count} products.",
                 count
               )
 
@@ -810,9 +961,12 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
         )
       end)
 
+      carts_before = cart_count()
+
       assert {:ok, report} = Shop.handoff_apply(core_apply_context(), payload(source))
 
       assert report.moved == 0
+      assert cart_count() == carts_before
       row = Repo.get!(Cart, source.uuid)
       assert row.status == "active"
       assert row.user_uuid == user.uuid
@@ -897,10 +1051,62 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
       """)
 
-      assert {:ok, %{moved: 0, skipped: [%{reason: :busy}]}} =
+      carts_before = cart_count()
+
+      assert {:ok, %{moved: 0, skipped: [%{reason: :busy}]} = report} =
                Shop.handoff_apply(core_apply_context(), payload(source))
 
+      refute Map.has_key?(report, :cookies)
       assert stored(source.uuid) == before
+      assert cart_count() == carts_before
+    end
+  end
+
+  describe "a failure inside a hook" do
+    # What is logged: where it happened (the exception's module and the top
+    # frame of the shop's own code: module, function/arity, line), never a
+    # message, an argument or a payload value.
+    @frame ~r/failed: Postgrex\.Error at PhoenixKitEcommerce[\w.]*\.\S+\/\d+ \(line \d+\)/
+
+    test "handoff_apply/2 answers a no-op and names the exception and the shop's top frame",
+         ctx do
+      source = guest_cart!([{ctx.p1, 1}])
+
+      Repo.query!("""
+      CREATE FUNCTION pk_test_raise_on_cart() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'marker-4711 %', NEW.session_id USING ERRCODE = 'XX000'; END
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER pk_test_raise_on_cart BEFORE INSERT ON phoenix_kit_shop_carts
+      FOR EACH ROW EXECUTE FUNCTION pk_test_raise_on_cart()
+      """)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, nothing()} == Shop.handoff_apply(core_apply_context(), payload(source))
+        end)
+
+      assert log =~ "[Shop] handoff_apply failed: Postgrex.Error at "
+      assert log =~ @frame
+      refute log =~ "marker-4711"
+      refute log =~ source.uuid
+    end
+
+    test "handoff_snapshot/1 answers nil and names the exception and the shop's top frame" do
+      session_id = session()
+      Repo.query!("ALTER TABLE phoenix_kit_shop_carts RENAME TO pk_test_carts_gone")
+
+      log =
+        capture_log(fn ->
+          assert Shop.handoff_snapshot(%{user_uuid: nil, shop_session_id: session_id}) == nil
+        end)
+
+      assert log =~ "[Shop] handoff_snapshot failed: Postgrex.Error at "
+      assert log =~ @frame
+      refute log =~ "pk_test_carts_gone"
+      refute log =~ session_id
     end
   end
 
@@ -955,9 +1161,13 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       assert quantities(cart) == %{ctx.p1.uuid => 2}
     end
 
-    test "no payload: the user's cart in another currency is re-denominated", ctx do
+    # Core calls `handoff_apply/2` only for a payload that has an entry for the
+    # module, and `handoff_snapshot/1` is nil for an account, so an account never
+    # arrives here without one: with none, nothing is done, whatever the cart is.
+    test "no payload: the user's own cart is left as it is", ctx do
       user = fixture_user()
       own = "USD" |> cart_in(user_uuid: user.uuid, session_id: session()) |> fill!([{ctx.p1, 3}])
+      before = {stored(own.uuid), cart_count()}
 
       assert {:ok, nothing()} ==
                Shop.handoff_apply(
@@ -965,24 +1175,7 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
                  nil
                )
 
-      cart = reload(own)
-      assert cart.currency == "EUR"
-      assert Decimal.equal?(cart.subtotal, Decimal.new("27.27"))
-      assert [%{currency: "EUR"}] = cart.items
-    end
-
-    test "no payload and the cart already in that currency: nothing is written", ctx do
-      user = fixture_user()
-      own = "EUR" |> cart_in(user_uuid: user.uuid, session_id: session()) |> fill!([{ctx.p1, 1}])
-      before = stored(own.uuid)
-
-      assert {:ok, nothing()} ==
-               Shop.handoff_apply(
-                 %{user_uuid: user.uuid, shop_session_id: session(), currency: "EUR"},
-                 nil
-               )
-
-      assert stored(own.uuid) == before
+      assert {stored(own.uuid), cart_count()} == before
     end
 
     test "no payload and no cart: nothing is created" do

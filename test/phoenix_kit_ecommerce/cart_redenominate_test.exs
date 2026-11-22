@@ -577,6 +577,51 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
     end
   end
 
+  # The caller's struct only names the cart: a page that was opened on one
+  # currency can click "refresh the rate" after the cart has moved to another.
+  describe "refresh_cart_rate/1 on a stale struct" do
+    defp plain_product!, do: product!(%{"price" => dec("20.00"), "compare_at_price" => nil})
+
+    test "a USD struct against a row already in EUR refreshes it in EUR at the EUR rate" do
+      stale = usd_cart_with(plain_product!(), 1)
+      assert {:ok, _eur} = Shop.redenominate_cart(stale, "EUR")
+      assert stale.currency == "USD"
+
+      assert {:ok, refreshed} = Shop.refresh_cart_rate(stale)
+
+      assert refreshed.currency == "EUR"
+      assert Decimal.equal?(refreshed.exchange_rate, dec("0.909091"))
+      assert Decimal.equal?(refreshed.subtotal, dec("18.18"))
+
+      {row, [line]} = stored(stale.uuid)
+      assert Decimal.equal?(row.exchange_rate, dec("0.909091"))
+      assert Decimal.equal?(row.subtotal, dec("18.18"))
+      assert Decimal.equal?(line.unit_price, dec("18.18"))
+    end
+
+    test "a EUR struct against a row already back in USD refreshes it in USD at rate 1" do
+      usd = usd_cart_with(plain_product!(), 1)
+      {:ok, stale} = Shop.redenominate_cart(usd, "EUR")
+      assert {:ok, _usd} = Shop.redenominate_cart(stale, "USD")
+
+      assert {:ok, refreshed} = Shop.refresh_cart_rate(stale)
+
+      assert refreshed.currency == "USD"
+      assert Decimal.equal?(refreshed.exchange_rate, dec("1"))
+      assert Decimal.equal?(refreshed.subtotal, dec("20.00"))
+    end
+
+    test "the row's currency decides whether it is still available", %{eur: eur} do
+      stale = usd_cart_with(plain_product!(), 1)
+      assert {:ok, _eur} = Shop.redenominate_cart(stale, "EUR")
+      {:ok, _} = Billing.update_currency(eur, %{enabled: false})
+      before = stored(stale.uuid)
+
+      assert {:error, :currency_unavailable} = Shop.refresh_cart_rate(stale)
+      assert stored(stale.uuid) == before
+    end
+  end
+
   describe "cart_in_request_currency/1" do
     test "follows a request currency that resolves", %{eur: _eur} do
       cart = usd_cart_with(product!(), 1)

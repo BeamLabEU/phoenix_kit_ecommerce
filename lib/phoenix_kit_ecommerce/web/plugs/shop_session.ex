@@ -53,8 +53,7 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   # cannot be found: an unsigned value is never an identity.
   def signed_cookie_id(cookies) when is_map(cookies) do
     with raw when is_binary(raw) <- Map.get(cookies, @cookie_name),
-         {:ok, endpoint} <- PhoenixKit.Config.get_parent_endpoint(),
-         secret when is_binary(secret) <- endpoint.config(:secret_key_base) do
+         {:ok, secret} <- signing_secret() do
       conn = %Plug.Conn{secret_key_base: secret, req_cookies: %{@cookie_name => raw}}
 
       conn
@@ -69,6 +68,31 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   end
 
   def signed_cookie_id(_cookies), do: nil
+
+  @doc false
+  # Whether the map of raw request cookies holds this cookie but it cannot be
+  # judged at all, because the host endpoint's secret is not to be found
+  # (`signed_cookie_id/1` answers `nil` for it, as it does for a forged one).
+  # A cookie that fails verification with the secret at hand is not this.
+  def unverifiable_cookie?(cookies) when is_map(cookies) do
+    case Map.get(cookies, @cookie_name) do
+      raw when is_binary(raw) and raw != "" -> signing_secret() == :error
+      _no_cookie -> false
+    end
+  end
+
+  def unverifiable_cookie?(_cookies), do: false
+
+  defp signing_secret do
+    with {:ok, endpoint} <- PhoenixKit.Config.get_parent_endpoint(),
+         secret when is_binary(secret) <- endpoint.config(:secret_key_base) do
+      {:ok, secret}
+    else
+      _not_found -> :error
+    end
+  rescue
+    _error -> :error
+  end
 
   def call(conn, _opts) do
     if Shop.enabled?() do

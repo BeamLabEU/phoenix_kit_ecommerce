@@ -15,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
   use PhoenixKitEcommerce.LiveCase, async: false
 
   import Ecto.Query, only: [from: 2]
+  import ExUnit.CaptureLog
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitBilling.Currency
@@ -158,7 +159,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       assert Decimal.equal?(row.exchange_rate, Decimal.new("0.909091"))
     end
 
-    test "when it cannot be done the cart is shown as it is, with a notice, and the page lives",
+    test "when it cannot be done the cart is shown as it is, without a notice, and the page lives",
          %{conn: conn, user: user, product: product} do
       cart = user_cart(user, product, "USD")
       [line] = cart.items
@@ -171,7 +172,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
 
       {:ok, view, _html} = live(conn_for(conn, user, "EUR"), "/cart")
 
-      assert has_element?(view, "#test-flash-error")
+      refute has_element?(view, "#test-flash-error")
       assert total_text(view, "#cart-summary-total") =~ "$"
       assert stored(cart.uuid) == before
     end
@@ -226,7 +227,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       assert money(cart.uuid) == before
     end
 
-    test "when it cannot be done the cart is shown as it is, with a notice, and the page lives",
+    test "when it cannot be done the cart is shown as it is, without a notice, and the page lives",
          %{conn: conn, user: user, product: product} do
       cart = user_cart(user, product, "USD")
       [line] = cart.items
@@ -239,7 +240,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
 
       {:ok, view, _html} = live(conn_for(conn, user, "EUR"), "/checkout")
 
-      assert has_element?(view, "#test-flash-error")
+      refute has_element?(view, "#test-flash-error")
       assert total_text(view, "#checkout-summary-total") =~ "$"
       assert money(cart.uuid) == before
     end
@@ -260,6 +261,59 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
   end
 
   describe "the helper both pages call" do
+    # A socket that can carry a flash, without a LiveView process.
+    defp flash_socket, do: %Phoenix.LiveView.Socket{assigns: %{flash: %{}, __changed__: %{}}}
+
+    test "a currency that is not available says so to the shopper, and leaves the cart",
+         %{user: user, product: product} do
+      cart = user_cart(user, product, "USD")
+      Currency.put_request_currency("EUR")
+
+      # A cart frozen in a currency that has no row: the base-change path cannot
+      # price it.
+      Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid),
+        set: [currency: "XXX", base_currency: "EUR"]
+      )
+
+      cart = Shop.get_cart(cart.uuid)
+      before = stored(cart.uuid)
+
+      log =
+        capture_log(fn ->
+          assert {socket, ^cart} = Helpers.cart_in_request_currency(flash_socket(), cart)
+
+          assert socket.assigns.flash == %{
+                   "error" => PhoenixKitEcommerce.Errors.message(:currency_unavailable)
+                 }
+        end)
+
+      assert log =~ ":currency_unavailable"
+      assert stored(cart.uuid) == before
+    end
+
+    test "any other reason shows the shopper nothing new, leaves the cart, and logs once",
+         %{user: user, product: product} do
+      cart = user_cart(user, product, "USD")
+      [line] = cart.items
+      Currency.put_request_currency("EUR")
+
+      Repo.update_all(from(i in CartItem, where: i.uuid == ^line.uuid),
+        set: [base_unit_price: nil]
+      )
+
+      before = stored(cart.uuid)
+      socket = flash_socket()
+
+      log =
+        capture_log(fn ->
+          assert {^socket, ^cart} = Helpers.cart_in_request_currency(socket, cart)
+        end)
+
+      assert log =~ ":no_base_price"
+      assert length(String.split(log, "could not be brought into the request currency")) == 2
+      assert stored(cart.uuid) == before
+    end
+
     test "a cart that stopped being active under it is returned as it is, silently, and not touched",
          %{user: user, product: product} do
       cart = user_cart(user, product, "USD")

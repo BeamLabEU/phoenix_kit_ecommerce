@@ -305,14 +305,14 @@ Repo-local aliases:
 - **A cart's rate is frozen while it stays in one currency; every change of
   currency re-freezes it at the current rate, and the currency follows the
   request.** Only a page MOUNT runs `redenominate_cart/2`; an open page shows
-  the cart as the row is (each place it stores a cart sets `:currency` from it)
-  and never re-denominates on a broadcast. A request currency the shop cannot
-  price in moves no cart; a cart not active is never touched. In
-  `move_cart_lines/3` the caller establishes ownership (`guest_source: true`
-  checks it under the lock) and `keep_skipped: true` leaves unmovable lines in
-  the source. Core's handoff calls `handoff_snapshot/1` / `handoff_apply/2` by
-  `function_exported?/3`; neither raises; a payload's cart uuid is a bearer
-  secret. Detail: the guide's "Cart currency and handoff" row.
+  the cart as the row is. A currency the shop cannot price in, or a cart not
+  active, moves nothing. `move_cart_lines/3`: the caller establishes ownership
+  (`guest_source: true` re-checks under the lock), `keep_skipped: true` leaves
+  unmovable lines in the source. Core calls `handoff_snapshot/1` /
+  `handoff_apply/2`; neither raises. `handoff_apply/2` sees no request currency
+  (core's task has no process dictionary): a new target cart is in the base
+  currency unless the caller passes `:currency`; the cart page re-denominates
+  it. See the guide's "Cart currency and handoff" row.
 - **`API.CartWriter` and the claim's "add" merge hold a cart row and then
   call `add_to_cart`, which locks Legacy product rows** (the reverse of the
   module's product-then-cart order, see the note above `lock_active_cart!/1`).
