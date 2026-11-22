@@ -3788,6 +3788,161 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Brings an ACTIVE cart into another display currency, because a cart is paid
+  in the currency of the site it is paid on: a signed-in shopper's cart is
+  found by user on every domain, and nothing else moves its prices when the
+  domain (and so the display currency) changes.
+
+  The currency is replaced; the rate is never refreshed silently within one.
+  In one transaction with the cart row locked and reloaded (the caller's
+  struct may be many events old):
+
+    * the cart is first brought onto the current base through `rebase_cart/1`
+      (its errors pass through);
+    * `currency`, `base_currency` and the frozen `exchange_rate` are rewritten
+      for `currency_code` at the CURRENT rate, the way `create_cart/1` would
+      freeze them;
+    * every line's `unit_price` is re-derived from its exact
+      `base_unit_price` through the same `snapshot_unit_price/2` an
+      add-to-cart uses, and its `currency` is rewritten. `compare_at_price`
+      has no base column, so it is inverted to base with the OLD cart first
+      and then re-snapshotted, exactly as `refresh_cart_rate/1` does it, and
+      a stored `discount_amount` is carried through base the same way;
+    * totals and the shipping charge are recalculated.
+
+  Charged amounts survive any number of round trips exactly (they come from
+  `base_unit_price`). `compare_at_price` can move by up to a cent per round
+  trip: it passes through the foreign currency's 2-decimal rounding and back
+  (9.99 -> 6.14 -> 9.98 at a rate of 0.615).
+
+  A cart already in `currency_code` is `{:ok, cart}`, the struct handed in,
+  with no write; a stale struct whose row has meanwhile moved to
+  `currency_code` is answered with the row, also without a write. An empty
+  cart is brought over too.
+
+  Errors leave the cart exactly as it was: `{:error, :currency_unavailable}`
+  (unknown, disabled or non-positive rate; checked before anything is locked),
+  `{:error, :no_base_price}` (a line has nothing to re-derive from),
+  `{:error, :cart_not_active}` (the cart is converting, converted, merged or
+  abandoned, judged on the locked row: a cart being paid is never touched),
+  and the `rebase_cart/1` errors.
+  """
+  @spec redenominate_cart(Cart.t(), String.t() | nil) ::
+          {:ok, Cart.t()}
+          | {:error,
+             :currency_unavailable
+             | :no_base_price
+             | :cart_not_active
+             | :cart_base_unavailable
+             | :cart_not_found}
+  def redenominate_cart(%Cart{currency: code} = cart, code) when is_binary(code), do: {:ok, cart}
+
+  def redenominate_cart(%Cart{status: status}, _currency_code) when status != "active",
+    do: {:error, :cart_not_active}
+
+  def redenominate_cart(%Cart{} = cart, currency_code) do
+    with {:ok, target, base} <- redenomination_target(currency_code),
+         {:ok, {change, updated}} <-
+           repo().transaction(fn -> redenominate_under_lock!(cart.uuid, target, base) end) do
+      if change == :changed, do: Events.broadcast_cart_updated(updated)
+      {:ok, updated}
+    end
+  end
+
+  defp redenominate_under_lock!(cart_uuid, %Currency{} = target, %Currency{} = base) do
+    locked = lock_active_cart!(cart_uuid)
+
+    if locked.currency == target.code do
+      {:unchanged, repo().preload(locked, [:items, :shipping_method])}
+    else
+      {:changed, redenominate_locked!(locked, target, base)}
+    end
+  end
+
+  # The same fail-safe boundary as `refresh_cart_rate/1`: a currency the shop
+  # no longer prices in is refused rather than priced at a rate that is not
+  # there.
+  defp redenomination_target(code) when is_binary(code) do
+    with %Currency{enabled: true, exchange_rate: %Decimal{} = rate} = target <-
+           Billing.get_currency_by_code(code),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      {:ok, target, base}
+    else
+      _ -> {:error, :currency_unavailable}
+    end
+  end
+
+  defp redenomination_target(_code), do: {:error, :currency_unavailable}
+
+  defp redenominate_locked!(%Cart{} = locked, %Currency{} = target, %Currency{} = base) do
+    # Onto the current base first, inside this transaction (the row is locked
+    # already): the lines are re-derived from `base_unit_price`, which is only
+    # meaningful in the shop's current base. The rebased cart is the OLD
+    # frame the `compare_at_price` inversion below reads.
+    old =
+      case rebase_cart(locked) do
+        {:ok, %Cart{} = rebased} -> rebased
+        {:error, reason} -> repo().rollback(reason)
+      end
+
+    items = CartItem |> where([i], i.cart_uuid == ^old.uuid) |> repo().all()
+
+    if Enum.any?(items, &is_nil(&1.base_unit_price)) do
+      repo().rollback(:no_base_price)
+    end
+
+    new_rate = Currency.effective_rate(target, base)
+
+    # A struct copy only, never persisted itself: `snapshot_unit_price/2`
+    # must see the NEW currency and rate while each line is re-derived.
+    renominated = %{
+      old
+      | currency: target.code,
+        base_currency: base.code,
+        exchange_rate: new_rate
+    }
+
+    Enum.each(items, fn item ->
+      attrs = %{
+        currency: target.code,
+        unit_price: snapshot_unit_price(renominated, item.base_unit_price),
+        compare_at_price:
+          item.compare_at_price &&
+            snapshot_unit_price(renominated, to_base(old, item.compare_at_price))
+      }
+
+      item |> CartItem.changeset(attrs) |> repo().update!()
+    end)
+
+    old
+    |> Cart.totals_changeset(%{
+      currency: target.code,
+      base_currency: base.code,
+      exchange_rate: new_rate,
+      discount_amount: redenominate_discount(old, new_rate, target)
+    })
+    |> repo().update!()
+    |> recalculate_cart_totals!(fx_refresh: false)
+  end
+
+  # A stored discount is a cart-currency amount like any other. Nothing in
+  # this module writes one, but a host may: carry it through base so it is
+  # not relabelled in the new currency.
+  defp redenominate_discount(%Cart{discount_amount: %Decimal{} = amount} = old, rate, target) do
+    if Decimal.compare(amount, 0) == :gt do
+      amount
+      |> then(&to_base(old, &1))
+      |> Decimal.mult(rate)
+      |> Decimal.round(target.decimal_places || 2)
+    else
+      amount
+    end
+  end
+
+  defp redenominate_discount(%Cart{discount_amount: amount}, _rate, _target), do: amount
+
+  @doc """
   Brings a cart frozen against a PREVIOUS base currency onto the current
   one. `reprice_for_base_change/3` deliberately leaves carts alone (§4.9
   step 6), but a cart that outlives a base change is then frozen against
@@ -8131,7 +8286,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp recalculate_cart_totals!(%Cart{} = cart) do
+  defp recalculate_cart_totals!(%Cart{} = cart, opts \\ []) do
     # Serialize concurrent recalculations of the SAME cart.
     #
     # Callers lock only the PRODUCT row, which does not serialize two adds
@@ -8212,7 +8367,11 @@ defmodule PhoenixKitEcommerce do
       |> Decimal.add(tax_amount)
       |> Decimal.sub(cart.discount_amount || Decimal.new("0"))
 
-    fx_refresh = fx_refresh_if_emptied(cart, items)
+    # `fx_refresh: false` is for `redenominate_cart/2`, which has just written
+    # the currency it was asked for: an emptied cart must not be moved on to
+    # the request's currency instead.
+    fx_refresh =
+      if Keyword.get(opts, :fx_refresh, true), do: fx_refresh_if_emptied(cart, items), else: %{}
 
     cart
     |> Cart.totals_changeset(
