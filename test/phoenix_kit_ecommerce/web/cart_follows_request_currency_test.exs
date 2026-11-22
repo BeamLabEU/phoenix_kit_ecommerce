@@ -6,6 +6,10 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
   (`PhoenixKitEcommerce.redenominate_cart/2`), because a cart is paid in the
   currency of the site it is paid on. A cart already in the request's currency
   is left alone: its rate stays frozen (§4.4).
+
+  An OPEN page is another matter: it follows the cart, whatever currency the
+  cart is in (another tab or domain may have re-denominated it and broadcast
+  the new cart), and never re-denominates on a broadcast. Only a mount does.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
@@ -22,7 +26,6 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
   setup do
     PhoenixKit.Cache.clear(:billing_currencies)
     Currency.put_request_currency(nil)
-    on_exit(fn -> Currency.put_request_currency(nil) end)
     Repo.delete_all(Currency)
 
     {:ok, _usd} =
@@ -172,7 +175,11 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       assert stored(cart.uuid) == before
     end
 
-    test "a cart that is being paid is never touched",
+    # The page never even finds a cart that is being paid (`find_active_cart`
+    # skips it), so this does not reach the `:cart_not_active` guard of
+    # `redenominate_cart/2`; the helper test below does. What the page does is
+    # pinned here.
+    test "a cart that is being paid is not shown and not touched; the shopper gets a new one",
          %{conn: conn, user: user, product: product} do
       cart = user_cart(user, product, "USD")
 
@@ -236,7 +243,9 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       assert money(cart.uuid) == before
     end
 
-    test "a cart that is being paid is never touched",
+    # As on the cart page: `find_active_cart` never returns this cart, so the
+    # guard in `redenominate_cart/2` is reached by the helper test below.
+    test "a cart that is being paid is not shown and not touched",
          %{conn: conn, user: user, product: product} do
       cart = user_cart(user, product, "USD")
 
@@ -246,6 +255,206 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       # No active cart: the page sends the shopper back to the cart page.
       assert {:error, {:live_redirect, _}} = live(conn_for(conn, user, "EUR"), "/checkout")
       assert money(cart.uuid) == before
+    end
+  end
+
+  describe "the helper both pages call" do
+    test "a cart that stopped being active under it is returned as it is, silently, and not touched",
+         %{user: user, product: product} do
+      cart = user_cart(user, product, "USD")
+      Currency.put_request_currency("EUR")
+
+      # What the page holds says "active"; the row says it is being paid.
+      Repo.update_all(from(c in Cart, where: c.uuid == ^cart.uuid), set: [status: "converting"])
+      before = stored(cart.uuid)
+      socket = %Phoenix.LiveView.Socket{}
+
+      assert {^socket, ^cart} =
+               PhoenixKitEcommerce.Web.Helpers.cart_in_request_currency(socket, cart)
+
+      assert stored(cart.uuid) == before
+    end
+  end
+
+  describe "an open cart page when the cart changes currency under it" do
+    setup %{conn: conn, user: user, product: product} do
+      cart = user_cart(user, product, "USD")
+      {:ok, view, _html} = live(conn_for(conn, user, "USD"), "/cart")
+      assert total_text(view, "#cart-summary-total") =~ "$"
+      %{cart: cart, view: view}
+    end
+
+    test "shows the cart as the cart row is: the new symbol and the new amounts",
+         %{cart: cart, view: view} do
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+
+      total = total_text(view, "#cart-summary-total")
+      assert total =~ "€"
+      assert total =~ "125.45"
+      refute total =~ "$"
+    end
+
+    test "and does not move the cart back to its own request's currency",
+         %{cart: cart, view: view} do
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+      _ = render(view)
+
+      # The page's request currency is still USD; the cart stays what it was
+      # made, on every broadcast it handled.
+      row = Repo.get!(Cart, cart.uuid)
+      assert row.currency == "EUR"
+      assert Decimal.equal?(row.total, Decimal.new("125.45"))
+    end
+
+    test "takes the currency of a cart it is handed through the payment event too",
+         %{cart: cart, view: view} do
+      {:ok, eur} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+      {:ok, _usd} = Shop.redenominate_cart(eur, "USD")
+      assert total_text(view, "#cart-summary-total") =~ "$"
+
+      send(view.pid, {:payment_selected, eur})
+      assert total_text(view, "#cart-summary-total") =~ "€"
+    end
+  end
+
+  describe "an open checkout page when the cart changes currency under it" do
+    setup %{conn: conn, user: user, product: product} do
+      cart = user_cart(user, product, "USD")
+      {:ok, view, _html} = live(conn_for(conn, user, "USD"), "/checkout")
+      assert total_text(view, "#checkout-summary-total") =~ "$"
+      %{cart: cart, view: view}
+    end
+
+    test "shows the new symbol and the new amounts, not new amounts under the old symbol",
+         %{cart: cart, view: view} do
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+
+      total = total_text(view, "#checkout-summary-total")
+      assert total =~ "€"
+      assert total =~ "125.45"
+      refute total =~ "$"
+      assert Repo.get!(Cart, cart.uuid).currency == "EUR"
+    end
+
+    test "takes the currency of a cart it is handed through the payment event too",
+         %{cart: cart, view: view} do
+      {:ok, eur} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+      {:ok, _usd} = Shop.redenominate_cart(eur, "USD")
+      assert total_text(view, "#checkout-summary-total") =~ "$"
+
+      send(view.pid, {:payment_selected, eur})
+
+      assert total_text(view, "#checkout-summary-total") =~ "€"
+    end
+
+    test "confirming places the order in the currency and at the totals the page showed",
+         %{conn: conn, user: user, cart: cart, view: view} do
+      _ = conn
+      billing = complete_billing("EE", "follows-currency")
+      view |> form("#checkout-billing-form", billing: billing) |> render_change()
+      view |> element("button[phx-click='proceed_to_review']") |> render_click()
+      assert total_text(view, "#checkout-summary-total") =~ "138.00"
+
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+
+      shown = total_text(view, "#checkout-summary-total")
+      assert shown =~ "€"
+      assert shown =~ "125.45"
+
+      view |> element("#checkout-confirm-order") |> render_click()
+      {path, _flash} = assert_redirect(view)
+
+      assert [order] = Billing.list_user_orders(user.uuid)
+      assert path =~ "/checkout/complete/#{order.uuid}"
+      assert order.currency == "EUR"
+      assert Decimal.equal?(order.total, Decimal.new("125.45"))
+    end
+  end
+
+  describe "an open checkout page and the rate drift notice" do
+    test "follows the cart it shows",
+         %{conn: conn, user: user, eur: eur, product: product} do
+      Currency.put_request_currency("EUR")
+      {:ok, cart} = Shop.create_cart(user_uuid: user.uuid)
+      Currency.put_request_currency(nil)
+      {:ok, cart} = Shop.add_to_cart(cart, product, 1)
+      assert cart.currency == "EUR"
+      # Past the alert threshold, in EUR: the cart opened on the EUR domain
+      # shows the notice.
+      {:ok, _} = Billing.update_currency(eur, %{exchange_rate: "0.96"})
+      stale_eur = Shop.get_cart(cart.uuid)
+
+      {:ok, view, _html} = live(conn_for(conn, user, "EUR"), "/checkout")
+      assert has_element?(view, "#checkout-fx-drift")
+
+      {:ok, _usd} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "USD")
+      refute has_element?(view, "#checkout-fx-drift")
+
+      send(view.pid, {:payment_selected, stale_eur})
+      assert has_element?(view, "#checkout-fx-drift")
+    end
+  end
+
+  describe "the shipping options of an open page" do
+    setup %{user: user} do
+      {:ok, product} =
+        Shop.create_product(%{
+          "title" => %{"en" => "Currency Parcel"},
+          "price" => Decimal.new("138.00"),
+          "status" => "active",
+          "currency" => "USD",
+          "product_type" => "physical",
+          "requires_shipping" => true,
+          "weight_grams" => 300
+        })
+
+      {:ok, method} =
+        Shop.create_shipping_method(%{
+          "name" => "Flat #{System.unique_integer([:positive])}",
+          "price" => Decimal.new("10.00"),
+          "active" => true
+        })
+
+      %{cart: user_cart(user, product, "USD"), method: method}
+    end
+
+    test "on the cart page the method's price follows the cart's currency",
+         %{conn: conn, user: user, cart: cart, method: method} do
+      PhoenixKit.Settings.update_setting_with_module(
+        "shop_shipping_selection_position",
+        "cart",
+        "shop"
+      )
+
+      {:ok, view, _html} = live(conn_for(conn, user, "USD"), "/cart")
+      price = "#cart-shipping-price-#{method.uuid}"
+      assert total_text(view, price) =~ "$10.00"
+
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+
+      assert total_text(view, price) =~ "€9.09"
+      assert total_text(view, "#cart-summary-shipping") =~ "€9.09"
+    end
+
+    test "on the checkout shipping step the method's price follows the cart's currency",
+         %{conn: conn, user: user, cart: cart, method: method} do
+      PhoenixKit.Settings.update_setting_with_module(
+        "shop_shipping_selection_position",
+        "checkout",
+        "shop"
+      )
+
+      {:ok, view, _html} = live(conn_for(conn, user, "USD"), "/checkout")
+      billing = complete_billing("EE", "follows-shipping")
+      view |> form("#checkout-billing-form", billing: billing) |> render_change()
+      view |> element("button[phx-click='proceed_to_review']") |> render_click()
+
+      price = "#checkout-shipping-price-#{method.uuid}"
+      assert total_text(view, price) =~ "$10.00"
+
+      {:ok, _} = Shop.redenominate_cart(Shop.get_cart(cart.uuid), "EUR")
+
+      assert total_text(view, price) =~ "€9.09"
     end
   end
 end

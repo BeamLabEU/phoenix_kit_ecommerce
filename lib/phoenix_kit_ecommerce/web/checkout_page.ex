@@ -257,9 +257,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   defp do_build_checkout_socket(socket, assigns) do
     socket
     |> assign(:page_title, gettext("Checkout"))
-    |> assign(:cart, assigns.cart)
-    |> assign(:currency, Shop.currency_for_code(assigns.cart.currency))
-    |> assign(:fx_drift, Shop.cart_rate_drift(assigns.cart))
+    |> assign_cart(assigns.cart)
     |> assign(:is_guest, assigns.is_guest)
     |> assign(:authenticated, assigns.authenticated)
     |> assign(:payment_options, assigns.payment_options)
@@ -308,7 +306,20 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   # Only the steps that show or approve the shipping work it out; the payment
   # and billing steps carry an empty snapshot until `advance_after_billing/1`.
   defp put_cart(socket, cart) do
-    socket |> assign(:cart, cart) |> assign_shipping_view()
+    socket |> assign_cart(cart) |> assign_shipping_view()
+  end
+
+  # The cart and everything the page derives from the cart's own currency and
+  # frozen rate. The page shows the cart exactly as the cart row is: another
+  # tab or domain may have brought it into another currency and broadcast it,
+  # so every place that stores a cart goes through here, never just
+  # `assign(:cart, ...)`. A page never re-denominates on a broadcast; only a
+  # mount does (`Helpers.cart_in_request_currency/2`).
+  defp assign_cart(socket, cart) do
+    socket
+    |> assign(:cart, cart)
+    |> assign(:currency, Shop.currency_for_code(cart.currency))
+    |> assign(:fx_drift, Shop.cart_rate_drift(cart))
   end
 
   defp assign_shipping_view(%{assigns: %{step: step}} = socket) when step in [:shipping, :review],
@@ -986,7 +997,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
     methods = Shop.get_available_shipping_methods(cart)
 
     socket
-    |> assign(:cart, cart)
+    |> assign_cart(cart)
     |> assign(:checkout_shipping_methods, methods)
     |> assign(:shipping_fallback, methods == [] and Shop.shipping_skip_mode() == :fallback)
     |> assign(:step, :shipping)
@@ -1146,9 +1157,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
         put_cart(socket, cart)
       end
 
-    socket
-    |> assign(:fx_drift, Shop.cart_rate_drift(socket.assigns.cart))
-    |> requote_stale_review()
+    requote_stale_review(socket)
   end
 
   # On the review a price that went stale is renewed without the shopper
