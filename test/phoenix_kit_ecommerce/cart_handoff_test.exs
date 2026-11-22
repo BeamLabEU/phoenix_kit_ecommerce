@@ -521,18 +521,25 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       assert quantities(existing) == %{ctx.p1.uuid => 2, ctx.p2.uuid => 1}
     end
 
+    # The cookie names somebody else's session. Believed, the guest's lines
+    # would be added to that visitor's cart.
     test "an unsigned or forged cookie is not trusted: the guest gets a new identity", ctx do
       with_parent_endpoint()
 
-      for cookie <- [session(), signed_cookie(session(), String.duplicate("x", 64))] do
+      for forgery <- [:unsigned, :signed_under_another_key] do
         victim_session = session()
         victim = "USD" |> cart_in(session_id: victim_session) |> fill!([{ctx.p2, 1}])
         source = guest_cart!([{ctx.p1, 2}])
-        forged = if cookie == victim_session, do: victim_session, else: cookie
+
+        cookie =
+          case forgery do
+            :unsigned -> victim_session
+            :signed_under_another_key -> signed_cookie(victim_session, String.duplicate("x", 64))
+          end
 
         assert {:ok, %{moved: 1, cookies: [{_, id, _}]}} =
                  Shop.handoff_apply(
-                   core_apply_context(cookies: %{"shop_session_id" => forged}),
+                   core_apply_context(cookies: %{"shop_session_id" => cookie}),
                    payload(source)
                  )
 
