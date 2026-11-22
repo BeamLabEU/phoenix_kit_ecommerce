@@ -5558,6 +5558,65 @@ defmodule PhoenixKitEcommerce do
   end
 
   @doc """
+  Moves every line of `source` into `target`, an active cart of the same
+  shopper (or of the shopper the source is handed to), and ends `source` as
+  `merged` into `target` (`merged_into_cart_uuid`).
+
+  Each line goes through the normal `add_to_cart/4` path, so it is re-read and
+  re-validated (the product is still on sale, its options are still offered,
+  stock, the quantity cap of the cart API) and priced at the TARGET cart's
+  currency and frozen rate and the product's CURRENT price. The line keeps its
+  quantity and options and nothing else: the price it was added at is not
+  carried over, so the lines of a USD cart land in a EUR cart in EUR. A
+  product the target already holds adds up to that line, which keeps its own
+  price, up to the cap.
+
+  A line that cannot be added is skipped and named, and the rest goes on:
+  `%{product_uuid: uuid | nil, name: title, reason: reason}` with `reason` one
+  of `:not_found` (gone, hidden or no longer carted), `:not_on_sale`,
+  `:invalid_options`, `:quantity_cap` (the target holds it at the cap),
+  `:insufficient_stock`, or what `add_to_cart/4` refuses for good
+  (`:currency_mismatch`, `:shop_disabled`, `:cart_base_unavailable`,
+  `:currency_unavailable`). Lines go in in product-uuid order.
+
+  Returns `{:ok, target, %{moved: n, skipped: [...]}}`, `target` as it stands
+  afterwards, `moved` the number of lines that went in (a capped one counts).
+  An empty source moves nothing and is merged. Calling it again for a source
+  that was merged into this same target moves nothing and changes nothing
+  (`{:ok, target, %{moved: 0, skipped: []}}`).
+
+  Refusals leave both carts as they were: `{:error, :same_cart}`,
+  `{:error, :cart_not_active}` (either cart, judged on the locked rows, a
+  source merged into another cart included), `{:error, :cart_not_found}`, and
+  `{:error, :busy}` (a deadlock, or an answer of `add_to_cart/4` that is not
+  this line's own: nothing was moved and the call can be repeated).
+
+  Everything runs in one transaction (it joins the caller's). The identity locks
+  of both carts are taken first, in one order for every caller: the user keys
+  sorted, then the session keys sorted (`lock_cart_identity!/2`), then both
+  cart rows in uuid order. A caller that already holds a cart row and then
+  calls this must itself add in a fixed order and rescue `deadlock_detected`,
+  as `API.Claims` does.
+
+  ## Options
+
+    * `:language` - the language of the shopper's page: products are re-read in
+      it and the lines' titles snapshotted in it (as for `add_to_cart/4`).
+    * `:via` - `:assistant` keeps `add_to_cart/4` from sending its per-line
+      "item added" notification, for a move the shopper did not make line by
+      line. Default `nil`.
+  """
+  @spec move_cart_lines(Cart.t(), Cart.t(), keyword()) ::
+          {:ok, Cart.t(),
+           %{
+             moved: non_neg_integer(),
+             skipped: [%{product_uuid: String.t() | nil, name: String.t(), reason: atom()}]
+           }}
+          | {:error, :same_cart | :cart_not_active | :cart_not_found | :busy}
+  def move_cart_lines(%Cart{} = source, %Cart{} = target, opts \\ []) when is_list(opts),
+    do: PhoenixKitEcommerce.CartMove.move(source, target, opts)
+
+  @doc """
   Lists carts with filters for admin.
   """
   def list_carts_with_count(opts \\ []) do

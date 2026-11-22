@@ -21,10 +21,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
   the cart row because `issue/3` locks the cart row and then updates claim
   rows; the opposite order is a deadlock between a redeem and a new link.
 
-  Lines are validated before `add_to_cart` is called (the product is
-  `:listed` by the one visibility rule of the public API, its options are
-  valid), because a rollback inside `add_to_cart` dooms the surrounding
-  transaction.
+  The "add" merge is `PhoenixKitEcommerce.move_cart_lines/3`: lines are
+  validated before `add_to_cart` is called (the product is `:listed` by the
+  one visibility rule of the public API, its options are valid), because a
+  rollback inside `add_to_cart` dooms the surrounding transaction.
   """
 
   import Ecto.Query, warn: false
@@ -33,12 +33,10 @@ defmodule PhoenixKitEcommerce.API.Claims do
   alias PhoenixKit.Utils.Date, as: UtilsDate
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitEcommerce, as: Shop
-  alias PhoenixKitEcommerce.API.CartOptions
   alias PhoenixKitEcommerce.API.CartSettings
   alias PhoenixKitEcommerce.API.CartToken
   alias PhoenixKitEcommerce.API.CartView
   alias PhoenixKitEcommerce.API.CartWriter
-  alias PhoenixKitEcommerce.API.Loader
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartClaim
   alias PhoenixKitEcommerce.Events
@@ -370,23 +368,18 @@ defmodule PhoenixKitEcommerce.API.Claims do
     finish!(claim, mode, relocate!(api_cart, browser), [])
   end
 
+  # The shared line mover does the work (re-priced in the browser cart's
+  # currency, re-validated, product-uuid order, capped); a claim only names
+  # what it left behind. `:assistant`: the cart API's one coalesced signal
+  # stands in for a notification per line.
   defp merge!(claim, api_cart, browser_cart) do
-    records = load_records(api_cart.items, claim.language)
+    case Shop.move_cart_lines(api_cart, browser_cart, language: claim.language, via: :assistant) do
+      {:ok, merged, %{skipped: skipped}} ->
+        finish!(claim, :merged, merged, Enum.map(skipped, & &1.name))
 
-    # Product-uuid order, like the writer: two merges (or a merge and a write)
-    # that share two products must not lock their rows crosswise.
-    {merged, skipped} =
-      api_cart.items
-      |> Enum.sort_by(&(CartView.line_product_id(&1) || ""))
-      |> Enum.reduce({browser_cart, []}, fn item, {cart, skipped} ->
-        add_line(cart, item, records, claim.language, skipped)
-      end)
-
-    api_cart
-    |> Cart.status_changeset("merged", %{merged_into_cart_uuid: merged.uuid})
-    |> repo().update!()
-
-    finish!(claim, :merged, merged, Enum.reverse(skipped))
+      {:error, reason} ->
+        repo().rollback(reason)
+    end
   end
 
   defp finish!(claim, mode, cart, skipped) do
@@ -407,80 +400,6 @@ defmodule PhoenixKitEcommerce.API.Claims do
     |> Cart.changeset(attrs)
     |> repo().update!()
     |> repo().preload(@preloads, force: true)
-  end
-
-  # --- merging lines ---------------------------------------------------------------------
-
-  # One loader call for every product of the API cart: the records carry the
-  # visibility state of the public API (the same rule the writer applies).
-  defp load_records(items, language),
-    do: Loader.load(Enum.map(items, &CartView.line_product_id/1), language: language)
-
-  # One API line into the browser's cart through the normal add_to_cart path
-  # (re-priced in that cart's currency, re-validated). The line is validated
-  # here first: a refusal made inside add_to_cart's own transaction would doom
-  # this one. A line that no longer validates is skipped and named.
-  defp add_line(cart, item, records, language, skipped) do
-    with product_id when is_binary(product_id) <- CartView.line_product_id(item),
-         {:ok, product} <- listed_product(records, product_id),
-         {:ok, specs} <- specs_for(product, item),
-         quantity when quantity > 0 <- room_for(cart, product, specs, item.quantity) do
-      add_checked(cart, item, product, quantity, specs, language, skipped)
-    else
-      # Also the line the buyer's cart already holds at the cap (`room_for/4` is
-      # 0): named, not dropped quietly with the claim consumed.
-      _not_addable -> {cart, [item.product_title | skipped]}
-    end
-  end
-
-  # Only a refusal that `add_to_cart` makes before it writes anything skips the
-  # line. Any other answer means the product changed since the check above and
-  # the surrounding transaction may be doomed: nothing is claimed, the buyer
-  # tries again.
-  defp add_checked(cart, item, product, quantity, specs, language, skipped) do
-    opts = [selected_specs: specs, language: language, via: :assistant]
-
-    case Shop.add_to_cart(cart, product, quantity, opts) do
-      {:ok, updated} ->
-        {updated, skipped}
-
-      {:error, {:insufficient_stock, _lines}} ->
-        {cart, [item.product_title | skipped]}
-
-      {:error, reason} when is_atom(reason) ->
-        if CartWriter.refused_before_write?(reason),
-          do: {cart, [item.product_title | skipped]},
-          else: repo().rollback(:busy)
-
-      _other ->
-        repo().rollback(:busy)
-    end
-  end
-
-  defp listed_product(records, product_id) do
-    with id when is_binary(id) <- Loader.canonical_uuid(product_id) do
-      CartWriter.addable_product(Map.get(records, id))
-    end
-  end
-
-  defp specs_for(product, item) do
-    case CartOptions.to_specs(product, CartOptions.from_item(item, product)) do
-      {:ok, specs} ->
-        {:ok, specs}
-
-      {:error, _code, _context} ->
-        specs = item.selected_specs || %{}
-        if Shop.validate_selected_specs(product, specs) == :ok, do: {:ok, specs}, else: :error
-    end
-  end
-
-  defp room_for(cart, product, specs, wanted) do
-    existing =
-      Enum.find(cart.items, fn line ->
-        CartView.line_product_id(line) == product.uuid and (line.selected_specs || %{}) == specs
-      end)
-
-    max(0, min(wanted, CartWriter.max_quantity() - ((existing && existing.quantity) || 0)))
   end
 
   # --- shared ---------------------------------------------------------------------------
