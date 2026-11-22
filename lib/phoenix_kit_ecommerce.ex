@@ -852,8 +852,10 @@ defmodule PhoenixKitEcommerce do
   Whether a cart's frozen exchange rate (§4.4, §12.2) has drifted past
   `fx_rate_drift_alert_pct/0` away from the currency table's CURRENT
   rate — and by how much, for the checkout notice. A cart's own prices
-  are NEVER silently recalculated (§4.4); this only reports the drift so
-  checkout can offer `refresh_cart_rate/1` as an explicit choice.
+  are NEVER silently recalculated within its currency (§4.4); this only
+  reports the drift so checkout can offer `refresh_cart_rate/1` as an
+  explicit choice. (A cart opened on a domain with another display
+  currency is moved into that currency first: `redenominate_cart/2`.)
 
   Returns `nil` — nothing to report — for:
   - a cart already in its base currency (nothing was ever converted);
@@ -2989,9 +2991,14 @@ defmodule PhoenixKitEcommerce do
   fail-safe by `get_display_currency/0` (§6.3). With no mapping in play
   this is the base currency, same as before this feature existed
   (§2.12). `base_currency`/`exchange_rate` freeze the base and the rate
-  at THIS moment (§12.2) — no code anywhere may re-read them from the
-  currency table for this cart after creation; only emptying the cart
-  refreshes them (`recalculate_cart_totals!/1`).
+  at THIS moment (§12.2) — no code may re-read them from the currency
+  table for this cart while it holds items and stays in its currency;
+  only emptying the cart refreshes them (`recalculate_cart_totals!/1`)
+  and only the shopper's explicit `refresh_cart_rate/1` re-freezes the
+  rate. The CURRENCY, unlike the rate, follows the request: the cart and
+  checkout pages bring the cart into the domain's currency when they
+  open it (`redenominate_cart/2`), because a cart is paid in the
+  currency of the site it is paid on.
   """
   def create_cart(opts) do
     base = Billing.get_base_currency()
@@ -3665,10 +3672,12 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Re-freezes a cart's exchange rate at the currency table's CURRENT rate
   and re-snapshots every line at that new rate (§4.4) — the ONLY path
-  that changes a non-empty cart's `exchange_rate`. A plain add/update
-  never touches it (§12.2, `snapshot_unit_price/2`); this is the
-  shopper's own EXPLICIT choice, offered by the checkout drift notice
-  (`cart_rate_drift/1`) and never triggered automatically.
+  that refreshes a non-empty cart's rate WITHIN its currency
+  (`redenominate_cart/2` writes a rate too, but only together with a
+  change of currency). A plain add/update never touches it (§12.2,
+  `snapshot_unit_price/2`); this is the shopper's own EXPLICIT choice,
+  offered by the checkout drift notice (`cart_rate_drift/1`) and never
+  triggered automatically.
 
   Each line's `unit_price` is re-derived from its `base_unit_price`
   through the same `snapshot_unit_price/2` an add-to-cart uses
@@ -5615,6 +5624,68 @@ defmodule PhoenixKitEcommerce do
           | {:error, :same_cart | :cart_not_active | :cart_not_found | :busy}
   def move_cart_lines(%Cart{} = source, %Cart{} = target, opts \\ []) when is_list(opts),
     do: PhoenixKitEcommerce.CartMove.move(source, target, opts)
+
+  @doc """
+  What a visitor carries to another domain of the same shop: the shop's half of
+  core's cross-domain handoff (the shopper switches language, lands on the
+  domain that serves it, and keeps their cart). Core calls it through
+  `function_exported?/3` with a plain map, so it works with any core.
+
+  `context` is `%{user_uuid: uuid | nil, shop_session_id: binary | nil}` (string
+  keys work too). The answer is `nil` when there is nothing to carry, else a
+  JSON-safe map core hands back to `handoff_apply/2` on the target domain:
+
+    * a signed-in user: always `nil`. Their cart is found by user on every
+      domain, and the target brings it into its own currency
+      (`handoff_apply/2`);
+    * a guest with no active cart, or an empty one: `nil`;
+    * a guest with a non-empty ACTIVE cart: `%{"cart_uuid" => uuid}`.
+
+  Reads only. Anything that is not a context answers `nil`.
+  """
+  @spec handoff_snapshot(map()) :: %{String.t() => String.t()} | nil
+  def handoff_snapshot(context), do: PhoenixKitEcommerce.CartHandoff.snapshot(context)
+
+  @doc """
+  Applies what `handoff_snapshot/1` returned on the TARGET domain: the shop's
+  half of core's cross-domain handoff, called through `function_exported?/3`
+  with plain maps.
+
+  `context` is `%{user_uuid: uuid | nil, shop_session_id: binary, currency: code}`
+  (string keys work too; `:language` is optional and is the language the moved
+  lines are titled in). `currency` is the display currency of the target domain
+  and defaults to the request's. The answer is `{:ok, %{moved: n, skipped: [...]}}`
+  (the same report as `move_cart_lines/3`, JSON-encodable) or `{:error, reason}`.
+
+  The cart named in `payload` is adopted only if it is still ACTIVE, has NO
+  user, is not an API cart, has lines and is not the target's own cart: a guest
+  cart's uuid is a bearer secret that travelled through a redirect, so a cart
+  that belongs to a user, was converted, merged or abandoned, or is being paid
+  is never touched. The shopper's cart on this domain (by user when
+  `user_uuid` is set, else by `shop_session_id`) is found or created under the
+  identity lock, brought into `currency` (`redenominate_cart/2`), and the
+  lines move into it through `move_cart_lines/3`: re-priced in `currency` at
+  the current price, quantities and options kept, what cannot be added named in
+  `skipped`. The guest's cart ends `merged`; applying the same payload again
+  moves nothing.
+
+  An unknown, invalid or ineligible payload is `{:ok, %{moved: 0, skipped: []}}`
+  and never raises: the caller is a redirect endpoint. With no payload, a
+  signed-in user's existing active cart in another currency is brought into
+  `currency`, and nothing is created. Errors: `{:error, :invalid_context}` (no
+  user and no session), `{:error, :currency_unavailable}` (and the other
+  `redenominate_cart/2` refusals), `{:error, :busy}` (a deadlock: nothing was
+  moved, repeat the call), `{:error, :cart_unavailable}`.
+  """
+  @spec handoff_apply(map(), term()) ::
+          {:ok,
+           %{
+             moved: non_neg_integer(),
+             skipped: [%{product_uuid: String.t() | nil, name: String.t(), reason: atom()}]
+           }}
+          | {:error, atom()}
+  def handoff_apply(context, payload),
+    do: PhoenixKitEcommerce.CartHandoff.apply_payload(context, payload)
 
   @doc """
   Lists carts with filters for admin.
@@ -8476,11 +8547,14 @@ defmodule PhoenixKitEcommerce do
     |> repo().preload([:items, :shipping_method], force: true)
   end
 
-  # §4.4: a cart's currency/base/rate are frozen at creation and NEVER
-  # re-read from the currency table while it holds items — a shopper
-  # must not have their cart's prices moved under them. Emptying it is
-  # the one safe moment: nothing left to reprice, so this is where a
-  # stale mapping/rate catches up before the next item freezes it again.
+  # §4.4: a cart's base and rate are frozen at creation and NEVER re-read
+  # from the currency table while it holds items — a shopper must not
+  # have their cart's prices moved under them within a currency. (Its
+  # CURRENCY follows the request when the shopper opens the cart:
+  # `redenominate_cart/2`, because a cart is paid in the currency of the
+  # site it is paid on.) Emptying it is the one safe moment for the rate:
+  # nothing left to reprice, so this is where a stale mapping/rate
+  # catches up before the next item freezes it again.
   # The request-scoped code wins over the cart's own stale currency when
   # both are available, since a shopper on a still-open tab may have
   # since navigated to a different domain.

@@ -789,7 +789,8 @@ defmodule PhoenixKitEcommerce.Web.CheckoutPage do
   end
 
   # §4.4: the shopper's own EXPLICIT choice to accept the current rate -
-  # the ONE path that ever changes a non-empty cart's `exchange_rate`.
+  # the ONE path that refreshes a non-empty cart's rate within its
+  # currency (a change of currency is `redenominate_cart/2`, on mount).
   @impl true
   def handle_event("refresh_cart_rate", _params, socket) do
     case Shop.refresh_cart_rate(socket.assigns.cart) do

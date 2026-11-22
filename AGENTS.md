@@ -302,6 +302,13 @@ Repo-local aliases:
   `claims_race_test.exs` reproduce them on committed data (callers on real
   connections, or a transaction that holds the cart row while the call under
   test waits for it), and the sequential re-check is pinned beside them.
+- **A cart's rate is never refreshed silently within a currency; its
+  currency follows the request.** The cart and checkout pages run
+  `redenominate_cart/2` on mount (a cart is paid in the currency of the site it
+  is paid on); a cart not active is never touched. `move_cart_lines/3` takes the
+  user keys, then the session keys, sorted. Core's handoff calls
+  `handoff_snapshot/1` / `handoff_apply/2` by `function_exported?/3`; a payload's
+  cart uuid is a bearer secret.
 - **`API.CartWriter` and the claim's "add" merge hold a cart row and then
   call `add_to_cart`, which locks Legacy product rows** (the reverse of the
   module's product-then-cart order, see the note above `lock_active_cart!/1`).
