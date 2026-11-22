@@ -7,12 +7,20 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
   through the same snapshot an add-to-cart uses, so a re-denominated line is
   indistinguishable from one added fresh at that rate.
 
+  Rate: it is frozen while the cart stays in one currency; every CHANGE of
+  currency re-freezes it at the rate of that moment (a EUR cart frozen at an
+  old rate, opened on the USD domain and then on the EUR domain, comes back at
+  today's rate and shows no drift notice). Pinned below.
+
   Rounding: `unit_price`, line totals and the subtotal come from
   `base_unit_price` and are exact however often the cart changes currency.
-  `compare_at_price` has no base column and is inverted through the cart's
-  own 2-decimal conversion, so a round trip can move the crossed-out price by
-  up to a cent (a half cent of rounding on the foreign leg, divided by a rate
-  between 0.5 and 2, rounded to a cent): pinned below at 9.99 -> 9.98.
+  `compare_at_price` has no base column: it is inverted through the cart's own
+  rounded amount in the old currency and rounded again in the new one. With a
+  plain 2-decimal target that moves it by up to a cent per round trip (9.99
+  -> 9.98); with a rounding rule on the target it moves by up to the rule's
+  step (`charm_99`: 180.00 -> 162.99 -> 179.29). A line whose crossed-out
+  price does not end up above its unit price loses it (a struck-through price
+  that is not higher is wrong to show).
   """
 
   use PhoenixKitEcommerce.DataCase, async: false
@@ -22,6 +30,7 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
+  alias PhoenixKitEcommerce.Shipping.{Destination, Locality, PickupPoint, Quote}
 
   defp lang do
     PhoenixKitEcommerce.SlugResolver.normalize_language_public(
@@ -55,7 +64,6 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
   setup do
     PhoenixKit.Cache.clear(:billing_currencies)
     Currency.put_request_currency(nil)
-    on_exit(fn -> Currency.put_request_currency(nil) end)
 
     Repo.delete_all(Currency)
 
@@ -302,6 +310,178 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
     end
   end
 
+  describe "the rate" do
+    # A cart's rate is frozen while it stays in one currency; a CHANGE of
+    # currency takes the rate of that moment. So a EUR cart opened on the USD
+    # domain and then on the EUR domain is repriced at today's rate, silently:
+    # the shopper followed the request to another currency twice.
+    test "a change of currency re-freezes the rate at the current one, with no drift notice",
+         %{eur: eur} do
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      assert Decimal.equal?(cart.exchange_rate, dec("0.909091"))
+      assert Decimal.equal?(hd(cart.items).unit_price, dec("125.45"))
+
+      {:ok, _} = Billing.update_currency(eur, %{exchange_rate: "0.96"})
+      # The rate moved while the cart sat: that IS drift, and it is reported.
+      assert %{pct: _} = Shop.cart_rate_drift(Shop.get_cart(cart.uuid))
+
+      {:ok, usd} = Shop.redenominate_cart(cart, "USD")
+      assert {:ok, back} = Shop.redenominate_cart(usd, "EUR")
+
+      assert Decimal.equal?(back.exchange_rate, dec("0.96"))
+      assert Decimal.equal?(hd(back.items).unit_price, dec("132.48"))
+      assert Decimal.equal?(back.total, dec("132.48"))
+      assert Shop.cart_rate_drift(back) == nil
+    end
+
+    test "within one currency the rate stays frozen: the same currency is no refresh", %{eur: eur} do
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      {:ok, _} = Billing.update_currency(eur, %{exchange_rate: "0.95"})
+      before = stored(cart.uuid)
+
+      assert {:ok, same} = Shop.redenominate_cart(cart, "EUR")
+
+      assert same == cart
+      assert stored(cart.uuid) == before
+      assert Decimal.equal?(Repo.get!(Cart, cart.uuid).exchange_rate, dec("0.909091"))
+    end
+  end
+
+  describe "compare_at_price" do
+    defp set_rounding(code, rule) do
+      {:ok, _} =
+        Billing.update_currency(Billing.get_currency_by_code(code), %{rounding_rule: rule})
+    end
+
+    test "with a rounding rule on the target it moves by more than a cent on a round trip" do
+      set_rounding("EUR", "charm_99")
+      {:ok, usd} = Shop.add_to_cart(cart_in("USD"), product!(), 1)
+      assert Decimal.equal?(hd(usd.items).compare_at_price, dec("180.00"))
+
+      {:ok, eur} = Shop.redenominate_cart(usd, "EUR")
+      [eur_line] = eur.items
+      # 138.00 x 0.909091 = 125.45 -> 124.99; 180.00 x 0.909091 = 163.64 -> 162.99
+      assert Decimal.equal?(eur_line.unit_price, dec("124.99"))
+      assert Decimal.equal?(eur_line.compare_at_price, dec("162.99"))
+
+      {:ok, back} = Shop.redenominate_cart(eur, "USD")
+      [line] = back.items
+
+      # What is charged is exact; the crossed-out price is not.
+      assert Decimal.equal?(line.unit_price, dec("138.00"))
+      assert Decimal.equal?(line.compare_at_price, dec("179.29"))
+    end
+
+    test "a move between two non-base currencies goes through base, unit price exact" do
+      {:ok, _} =
+        Billing.create_currency(%{
+          code: "GBP",
+          name: "Pound",
+          symbol: "£",
+          exchange_rate: "0.8"
+        })
+
+      {:ok, eur} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      assert Decimal.equal?(hd(eur.items).compare_at_price, dec("163.64"))
+
+      assert {:ok, gbp} = Shop.redenominate_cart(eur, "GBP")
+
+      assert %{currency: "GBP", base_currency: "USD"} = gbp
+      assert Decimal.equal?(gbp.exchange_rate, dec("0.8"))
+      [line] = gbp.items
+      assert line.currency == "GBP"
+      # From base_unit_price, not from the EUR amount: 138.00 x 0.8
+      assert Decimal.equal?(line.unit_price, dec("110.40"))
+      assert Decimal.equal?(line.base_unit_price, dec("138.00"))
+      # 163.64 EUR -> 180.00 base (163.64 / 0.909091 = 179.9999...) -> 144.00 GBP
+      assert Decimal.equal?(line.compare_at_price, dec("144.00"))
+      assert Decimal.equal?(gbp.subtotal, dec("110.40"))
+      assert_total_identity(gbp)
+    end
+
+    test "a crossed-out price that is not above the unit price is dropped" do
+      set_rounding("EUR", "charm_99")
+      product = product!(%{"price" => dec("10.00"), "compare_at_price" => dec("10.10")})
+      {:ok, usd} = Shop.add_to_cart(cart_in("USD"), product, 1)
+      assert Decimal.equal?(hd(usd.items).compare_at_price, dec("10.10"))
+
+      assert {:ok, eur} = Shop.redenominate_cart(usd, "EUR")
+
+      [line] = eur.items
+      # 10.00 -> 9.09 -> 8.99 and 10.10 -> 9.18 -> 8.99: not higher, not shown
+      assert Decimal.equal?(line.unit_price, dec("8.99"))
+      assert line.compare_at_price == nil
+      assert Repo.get!(CartItem, line.uuid).compare_at_price == nil
+    end
+
+    test "a crossed-out price that is still higher is kept" do
+      {:ok, usd} = Shop.add_to_cart(cart_in("USD"), product!(), 1)
+
+      {:ok, eur} = Shop.redenominate_cart(usd, "EUR")
+
+      assert Decimal.equal?(hd(eur.items).compare_at_price, dec("163.64"))
+    end
+  end
+
+  describe "a stored carrier quote" do
+    setup do
+      alias PhoenixKitEcommerce.Test.Shipping.StubProvider
+      previous = Application.get_env(:phoenix_kit_ecommerce, :shipping_providers)
+      Application.put_env(:phoenix_kit_ecommerce, :shipping_providers, [StubProvider])
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:phoenix_kit_ecommerce, :shipping_providers, previous),
+          else: Application.delete_env(:phoenix_kit_ecommerce, :shipping_providers)
+      end)
+
+      # A carrier that quotes in the currency the cart is in (EUR), as
+      # third-party ones may: a quote that means nothing in any other.
+      StubProvider.put(%{
+        quote: %Quote{amount: Decimal.new("8.00"), currency: "EUR", source: :api}
+      })
+
+      :ok
+    end
+
+    test "is dropped when the cart changes currency, so it cannot stay :ok while the method price is charged" do
+      {:ok, method} =
+        Shop.create_shipping_method(%{
+          "name" => "Carrier #{System.unique_integer([:positive])}",
+          "price" => "7.00",
+          "active" => true,
+          "shipping_provider" => %{
+            "provider" => "stub",
+            "services" => ["branch"],
+            "settings" => %{"sender_city" => %{"id" => "c1", "name" => "Springfield"}},
+            "pricing" => %{"markup_percent" => "0", "markup_fixed" => "0", "round_to" => "1"}
+          }
+        })
+
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "US")
+
+      {:ok, cart} =
+        Shop.set_cart_shipping_destination(cart, %Destination{
+          locality: %Locality{id: "L1", name: "Kyiv"},
+          pickup_point: %PickupPoint{id: "P1", name: "Branch P1"}
+        })
+
+      {:ok, cart} = Shop.quote_cart_shipping(cart)
+      assert Shop.shipping_quote_status(cart) == :ok
+      assert Decimal.equal?(cart.shipping_amount, dec("8.00"))
+
+      assert {:ok, usd} = Shop.redenominate_cart(cart, "USD")
+
+      refute Map.has_key?(usd.metadata, "shipping_quote")
+      refute Map.has_key?(Repo.get!(Cart, cart.uuid).metadata, "shipping_quote")
+      assert Shop.shipping_quote_status(usd) != :ok
+      assert Decimal.equal?(usd.shipping_amount, dec("7.00"))
+      # The destination the shopper typed is theirs and stays.
+      assert Shop.cart_shipping_destination(usd) != nil
+    end
+  end
+
   describe "no change" do
     test "the cart's own currency is {:ok, cart} and writes nothing" do
       cart = usd_cart_with(product!(), 1)
@@ -394,6 +574,81 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
         assert {:error, :cart_not_active} = Shop.redenominate_cart(cart, "EUR")
         assert stored(cart.uuid) == before
       end
+    end
+  end
+
+  describe "cart_in_request_currency/1" do
+    test "follows a request currency that resolves", %{eur: _eur} do
+      cart = usd_cart_with(product!(), 1)
+      Currency.put_request_currency("EUR")
+
+      assert {:ok, eur} = Shop.cart_in_request_currency(cart)
+
+      assert eur.currency == "EUR"
+      assert Repo.get!(Cart, cart.uuid).currency == "EUR"
+    end
+
+    # The request names a currency the shop cannot price in (disabled, or not
+    # there at all): the fail-safe display falls back to the base, but that is
+    # a fallback for DISPLAY, not a request to move a cart. A cart keeps its
+    # currency and its frozen rate, whichever way the currency comes back.
+    test "a disabled request currency leaves a cart in that currency alone, and re-enabling it too",
+         %{eur: eur} do
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      {:ok, eur} = Billing.update_currency(eur, %{enabled: false})
+      Currency.put_request_currency("EUR")
+      before = stored(cart.uuid)
+
+      assert {:ok, same} = Shop.cart_in_request_currency(cart)
+      assert same == cart
+      assert stored(cart.uuid) == before
+
+      # Back again, at a rate that has moved: the cart is in EUR already, so
+      # it keeps the rate it froze.
+      {:ok, _} = Billing.update_currency(eur, %{enabled: true, exchange_rate: "0.95"})
+
+      assert {:ok, same} = Shop.cart_in_request_currency(cart)
+      assert same == cart
+      assert stored(cart.uuid) == before
+    end
+
+    test "a disabled request currency does not move a cart in another currency, and re-enabling it does",
+         %{eur: eur} do
+      {:ok, _gbp} =
+        Billing.create_currency(%{code: "GBP", name: "Pound", symbol: "£", exchange_rate: "0.8"})
+
+      {:ok, cart} = Shop.add_to_cart(cart_in("GBP"), product!(), 1)
+      {:ok, eur} = Billing.update_currency(eur, %{enabled: false})
+      Currency.put_request_currency("EUR")
+      before = stored(cart.uuid)
+
+      # The fallback would be USD, the base: the GBP cart is not sent there.
+      assert {:ok, same} = Shop.cart_in_request_currency(cart)
+      assert same == cart
+      assert stored(cart.uuid) == before
+
+      {:ok, _} = Billing.update_currency(eur, %{enabled: true})
+
+      assert {:ok, moved} = Shop.cart_in_request_currency(cart)
+      assert moved.currency == "EUR"
+    end
+
+    test "an unknown request currency leaves a cart alone" do
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      Currency.put_request_currency("XXX")
+      before = stored(cart.uuid)
+
+      assert {:ok, ^cart} = Shop.cart_in_request_currency(cart)
+      assert stored(cart.uuid) == before
+    end
+
+    test "with no request currency at all the base is the display currency" do
+      {:ok, cart} = Shop.add_to_cart(cart_in("EUR"), product!(), 1)
+      Currency.put_request_currency(nil)
+
+      assert {:ok, usd} = Shop.cart_in_request_currency(cart)
+
+      assert usd.currency == "USD"
     end
   end
 

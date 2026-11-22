@@ -3802,9 +3802,13 @@ defmodule PhoenixKitEcommerce do
   found by user on every domain, and nothing else moves its prices when the
   domain (and so the display currency) changes.
 
-  The currency is replaced; the rate is never refreshed silently within one.
-  In one transaction with the cart row locked and reloaded (the caller's
-  struct may be many events old):
+  The currency is replaced. The RATE is frozen while the cart stays in one
+  currency, and every CHANGE of currency re-freezes it at the CURRENT rate: a
+  EUR cart frozen at an old rate, opened on the USD domain and then on the EUR
+  domain, comes back at today's rate and shows no drift notice. Following the
+  request to another currency is what takes the rate; only the same currency
+  keeps it. In one transaction with the cart row locked and reloaded (the
+  caller's struct may be many events old):
 
     * the cart is first brought onto the current base through `rebase_cart/1`
       (its errors pass through);
@@ -3817,12 +3821,19 @@ defmodule PhoenixKitEcommerce do
       has no base column, so it is inverted to base with the OLD cart first
       and then re-snapshotted, exactly as `refresh_cart_rate/1` does it, and
       a stored `discount_amount` is carried through base the same way;
+    * a stored carrier quote is dropped (it is an amount in the old currency;
+      the shopper's destination and service choice stay, and the quote is
+      asked for again);
     * totals and the shipping charge are recalculated.
 
   Charged amounts survive any number of round trips exactly (they come from
-  `base_unit_price`). `compare_at_price` can move by up to a cent per round
-  trip: it passes through the foreign currency's 2-decimal rounding and back
-  (9.99 -> 6.14 -> 9.98 at a rate of 0.615).
+  `base_unit_price`). `compare_at_price` does not: it passes through the old
+  currency's rounded amount and is rounded again in the new one. Into a plain
+  2-decimal currency it can move by up to a cent per round trip (9.99 -> 6.14
+  -> 9.98 at a rate of 0.615); into a currency with a rounding rule it moves by
+  up to the rule's step (`charm_99`: 180.00 -> 162.99 -> 179.29 at 0.909091).
+  A line whose `compare_at_price` does not end up above its `unit_price` loses
+  it (`nil`): a struck-through price that is not higher is wrong to show.
 
   A cart already in `currency_code` is `{:ok, cart}`, the struct handed in,
   with no write; a stale struct whose row has meanwhile moved to
@@ -3913,16 +3924,22 @@ defmodule PhoenixKitEcommerce do
     }
 
     Enum.each(items, fn item ->
+      unit_price = snapshot_unit_price(renominated, item.base_unit_price)
+
       attrs = %{
         currency: target.code,
-        unit_price: snapshot_unit_price(renominated, item.base_unit_price),
+        unit_price: unit_price,
         compare_at_price:
-          item.compare_at_price &&
-            snapshot_unit_price(renominated, to_base(old, item.compare_at_price))
+          redenominated_compare_at(item.compare_at_price, old, renominated, unit_price)
       }
 
       item |> CartItem.changeset(attrs) |> repo().update!()
     end)
+
+    # A stored carrier quote is an amount in the OLD currency: left in place it
+    # keeps its request hash, so it would stay `:ok` while the charge falls
+    # back to the method's static price. The destination stays.
+    old = write_cart_metadata!(old, CartQuote.drop_quote(old.metadata || %{}))
 
     old
     |> Cart.totals_changeset(%{
@@ -3933,6 +3950,17 @@ defmodule PhoenixKitEcommerce do
     })
     |> repo().update!()
     |> recalculate_cart_totals!(fx_refresh: false)
+  end
+
+  # `compare_at_price` has no base column: it goes to base through the old
+  # cart's rounded amount and back through the new one's rounding. A result
+  # that is not above the line's own price is not a markdown, so it is not
+  # kept.
+  defp redenominated_compare_at(nil, _old, _renominated, _unit_price), do: nil
+
+  defp redenominated_compare_at(compare_at, old, renominated, unit_price) do
+    converted = snapshot_unit_price(renominated, to_base(old, compare_at))
+    if Decimal.compare(converted, unit_price) == :gt, do: converted
   end
 
   # A stored discount is a cart-currency amount like any other. Nothing in
@@ -3964,18 +3992,37 @@ defmodule PhoenixKitEcommerce do
   asked for while no display currency resolves: all `{:ok, cart}`, the struct
   handed in.
 
+  A request that names a currency the shop cannot price in (disabled, unknown,
+  no usable rate) is shown in the base, but that is the fail-safe of the
+  DISPLAY, not a request to move a cart: the cart is left as it is, in
+  whatever currency it holds, and follows the request again when the currency
+  comes back (a request that names no currency still means the base).
+
   The cart page and the checkout page call this on mount, through
   `Web.Helpers.cart_in_request_currency/2`. It is not called on every read.
   """
   @spec cart_in_request_currency(Cart.t()) :: {:ok, Cart.t()} | {:error, atom()}
   def cart_in_request_currency(%Cart{status: "active", currency: current} = cart) do
     case Billing.get_display_currency() do
-      %Currency{code: code} when code != current -> redenominate_cart(cart, code)
-      _same_or_unresolved -> {:ok, cart}
+      %Currency{code: code} when code != current ->
+        if display_currency_fell_back?(code),
+          do: {:ok, cart},
+          else: redenominate_cart(cart, code)
+
+      _same_or_unresolved ->
+        {:ok, cart}
     end
   end
 
   def cart_in_request_currency(%Cart{} = cart), do: {:ok, cart}
+
+  # The request named a currency and the display resolved to another one.
+  defp display_currency_fell_back?(resolved_code) do
+    case Currency.get_request_currency() do
+      requested when is_binary(requested) -> String.upcase(requested) != resolved_code
+      _no_request_currency -> false
+    end
+  end
 
   @doc """
   Brings a cart frozen against a PREVIOUS base currency onto the current
