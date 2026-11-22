@@ -251,6 +251,11 @@ defmodule PhoenixKitEcommerce.CartMove do
     )
   end
 
+  @doc false
+  # Every line of `cart` as a skipped line with `reason`: what a caller reports
+  # when it could not move the cart at all.
+  def skipped_lines(%Cart{items: items}, reason), do: Enum.map(items, &skipped_line(&1, reason))
+
   defp skipped_line(item, reason),
     do: %{product_uuid: CartView.line_product_id(item), name: item.product_title, reason: reason}
 

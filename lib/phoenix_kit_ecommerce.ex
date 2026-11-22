@@ -4027,6 +4027,29 @@ defmodule PhoenixKitEcommerce do
 
   def cart_in_request_currency(%Cart{} = cart), do: {:ok, cart}
 
+  @doc false
+  # The code of the currency this request asked to be shown in, when the
+  # request names one and the shop prices in it: `nil` when the request names
+  # none, or names one that fell back to the base (see
+  # `cart_in_request_currency/1`). For callers that must not guess a currency.
+  @spec request_display_currency_code() :: String.t() | nil
+  def request_display_currency_code do
+    with requested when is_binary(requested) <- Currency.get_request_currency(),
+         %Currency{code: code} <- Billing.resolve_display_currency(requested),
+         true <- code == String.upcase(requested) do
+      code
+    else
+      _none_or_fell_back -> nil
+    end
+  end
+
+  @doc false
+  # Whether `redenominate_cart/2` could move a cart into `code`: a currency the
+  # shop knows, has enabled and gives a positive rate. Checked before anything
+  # is written.
+  @spec pricing_currency?(term()) :: boolean()
+  def pricing_currency?(code), do: match?({:ok, _target, _base}, redenomination_target(code))
+
   # The request named a currency and the display resolved to another one.
   defp display_currency_fell_back?(resolved_code) do
     case Currency.get_request_currency() do
@@ -5727,64 +5750,109 @@ defmodule PhoenixKitEcommerce do
     do: PhoenixKitEcommerce.CartMove.move(source, target, opts)
 
   @doc """
-  What a visitor carries to another domain of the same shop: the shop's half of
-  core's cross-domain handoff (the shopper switches language, lands on the
-  domain that serves it, and keeps their cart). Core calls it through
-  `function_exported?/3` with a plain map, so it works with any core.
+  Cross-domain handoff, source side: what a visitor carries to another domain
+  of the same shop (the shopper switches language, lands on the domain that
+  serves it, and keeps their cart).
 
-  `context` is `%{user_uuid: uuid | nil, shop_session_id: binary | nil}` (string
-  keys work too). The answer is `nil` when there is nothing to carry, else a
-  JSON-safe map core hands back to `handoff_apply/2` on the target domain:
+  Core's `PhoenixKit.Handoff` calls this, and `handoff_apply/2`, on the module
+  it has registered for `module_key/0` (this one), found with
+  `function_exported?/3`: they are the optional `PhoenixKit.Module` callbacks
+  `handoff_snapshot/1` and `handoff_apply/2` of the core release that ships the
+  handoff (after 3.6.1, which has no caller: with it, or with any core that does
+  not call them, these functions are inert). They carry no `@impl` because the
+  behaviour of the core this package is built against does not declare them;
+  add it when the dependency floor is raised to a core that does.
 
-    * a signed-in user: always `nil`. Their cart is found by user on every
-      domain, and the target brings it into its own currency
-      (`handoff_apply/2`);
+  `context` is what core builds, `%{user_uuid: uuid | nil, session: map,
+  cookies: map}`: `session` the request's Plug session (string keys),
+  `cookies` its raw cookies. The visitor's shop session id is read from, in
+  order, `:shop_session_id` (a plain-map caller may name it outright), the
+  SIGNED `shop_session_id` cookie (verified with the host endpoint's
+  `secret_key_base`, as `Web.Plugs.ShopSession` verifies it) and
+  `session["shop_session_id"]` (the plug mirrors the id there). An unsigned
+  cookie value is never an identity, and an `api:` session is a cart token, not
+  a browser. String keys work as well as atoms.
+
+  The answer is `nil` when there is nothing to carry, else a JSON-safe map core
+  stores and hands back to `handoff_apply/2` on the target domain:
+
+    * a signed-in account: always `nil`. Their cart is found by user on every
+      domain, and the cart and checkout pages bring it into the domain's
+      currency when they open it (`redenominate_cart/2`);
     * a guest with no active cart, or an empty one: `nil`;
     * a guest with a non-empty ACTIVE cart: `%{"cart_uuid" => uuid}`.
 
-  Reads only. Anything that is not a context answers `nil`.
+  Reads only, and never raises: anything that is not a context, a malformed
+  `user_uuid` included, answers `nil`.
   """
-  @spec handoff_snapshot(map()) :: %{String.t() => String.t()} | nil
+  @spec handoff_snapshot(term()) :: %{String.t() => String.t()} | nil
   def handoff_snapshot(context), do: PhoenixKitEcommerce.CartHandoff.snapshot(context)
 
   @doc """
-  Applies what `handoff_snapshot/1` returned on the TARGET domain: the shop's
-  half of core's cross-domain handoff, called through `function_exported?/3`
-  with plain maps.
+  Cross-domain handoff, target side: applies what `handoff_snapshot/1` took, in
+  the request that redeems the handoff (core calls it, with the same
+  provisions as `handoff_snapshot/1`, only for a payload that has an entry for
+  this module).
 
-  `context` is `%{user_uuid: uuid | nil, shop_session_id: binary, currency: code}`
-  (string keys work too; `:language` is optional and is the language the moved
-  lines are titled in). `currency` is the display currency of the target domain
-  and defaults to the request's. The answer is `{:ok, %{moved: n, skipped: [...]}}`
-  (the same report as `move_cart_lines/3`, JSON-encodable) or `{:error, reason}`.
+  `context` is what core builds, `%{user_uuid: uuid | nil, session: map,
+  cookies: map, host: binary, locale: binary | nil}` (the same plain keys
+  work: `:shop_session_id`, `:currency`, `:language`). `payload` is what
+  `handoff_snapshot/1` returned. The answer is always `{:ok, report}`, never an
+  error and never a raise: the caller is a redirect endpoint and does not
+  branch on failures. `report` is `%{moved: n, skipped: [...]}` as
+  `move_cart_lines/3` reports it, and only when there is something to say
+  also:
 
-  The cart named in `payload` is adopted only if it is still ACTIVE, has NO
-  user, is not an API cart, has lines and is not the target's own cart: a guest
-  cart's uuid is a bearer secret that travelled through a redirect, so a cart
-  that belongs to a user, was converted, merged or abandoned, or is being paid
-  is never touched. The shopper's cart on this domain (by user when
-  `user_uuid` is set, else by `shop_session_id`) is found or created under the
-  identity lock, brought into `currency` (`redenominate_cart/2`), and the
-  lines move into it through `move_cart_lines/3`: re-priced in `currency` at
-  the current price, quantities and options kept, what cannot be added named in
-  `skipped`. The guest's cart ends `merged`; applying the same payload again
-  moves nothing.
+    * `notices` - translated, shopper-facing lines for the flash, in the
+      catalogue of `locale` (the process locale is left alone): one for the
+      lines that came along (plural-aware) and one naming the products that
+      did not, each with a short reason;
+    * `cookies` - `[{"shop_session_id", id, opts}]`, for a guest who had no
+      shop session on this domain: `id` is minted exactly as the shop plug
+      mints it and `opts` are the plug's cookie options (signed, 30 days,
+      `same_site: "Lax"`, `http_only`, `secure`), so the browser's next request
+      finds the cart. A guest who has a session (in the session map or in a
+      verified signed cookie) keeps it and gets no cookie, and none is set when
+      nothing was moved into the new identity. Core sets each with
+      `Plug.Conn.put_resp_cookie/4`.
 
-  An unknown, invalid or ineligible payload is `{:ok, %{moved: 0, skipped: []}}`
-  and never raises: the caller is a redirect endpoint. With no payload, a
-  signed-in user's existing active cart in another currency is brought into
-  `currency`, and nothing is created. Errors: `{:error, :invalid_context}` (no
-  user and no session), `{:error, :currency_unavailable}` (and the other
-  `redenominate_cart/2` refusals), `{:error, :busy}` (a deadlock: nothing was
-  moved, repeat the call), `{:error, :cart_unavailable}`.
+  The cart named in `payload` is adopted only if it is ACTIVE, has NO user, is
+  not an API cart, has lines and is not the target's own cart: a guest cart's
+  uuid is a bearer secret that travelled through a redirect, so a cart that
+  belongs to a user, was converted, merged or abandoned, or is being paid is
+  never touched. That is judged again on the locked row
+  (`move_cart_lines/3`, `guest_source: true`). The shopper's cart on this
+  domain (by user when `user_uuid` is set, else by the session id) is found or
+  created under the identity lock and the lines move into it in ITS currency,
+  re-priced at the current price, quantities and options kept.
+
+  The currency: the plain-map `:currency` if given, else the display currency
+  of this request when the request names one the shop prices in
+  (`Billing`'s request currency, set by the host per domain), else none: the
+  target cart keeps the currency it has, and the cart page moves it on its next
+  mount. It is never guessed from `host` or `locale`. A currency the shop does
+  not price in moves nothing.
+
+  A line that cannot be moved STAYS in the guest's cart (`move_cart_lines/3`,
+  `keep_skipped: true`): that cart is `merged` only when nothing is left in it,
+  else it stays active with its totals recalculated, and the next handoff
+  tries the rest again. `skipped` names them. An eligible cart that cannot be
+  carried at all (an unusable currency, a deadlock) is kept whole and reported
+  as `%{moved: 0, skipped: [every line, with the reason]}`. An unknown, invalid
+  or ineligible payload, and any context that names no usable account, is
+  `{:ok, %{moved: 0, skipped: []}}`. Applying the same payload again moves
+  nothing.
   """
-  @spec handoff_apply(map(), term()) ::
+  @spec handoff_apply(term(), term()) ::
           {:ok,
            %{
-             moved: non_neg_integer(),
-             skipped: [%{product_uuid: String.t() | nil, name: String.t(), reason: atom()}]
+             required(:moved) => non_neg_integer(),
+             required(:skipped) => [
+               %{product_uuid: String.t() | nil, name: String.t(), reason: atom()}
+             ],
+             optional(:notices) => [String.t()],
+             optional(:cookies) => [{String.t(), String.t(), keyword()}]
            }}
-          | {:error, atom()}
   def handoff_apply(context, payload),
     do: PhoenixKitEcommerce.CartHandoff.apply_payload(context, payload)
 

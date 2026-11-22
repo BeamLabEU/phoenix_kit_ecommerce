@@ -114,19 +114,25 @@ defmodule PhoenixKitEcommerce.CartRedenominateRaceTest do
       {:ok, cart} = Shop.create_cart(session_id: session_id)
       assert cart.currency == currency.code
 
-      on_exit(fn ->
-        unboxed(fn -> Repo.delete_all(from(c in Cart, where: c.uuid == ^cart.uuid)) end)
-      end)
+      delete_on_exit(Cart, cart.uuid)
 
-      filled =
-        Enum.reduce(1..3, cart, fn quantity, acc ->
-          {:ok, updated} = Shop.add_to_cart(acc, product!(), quantity)
-          updated
-        end)
-
+      filled = Enum.reduce(1..3, cart, &add_line!/2)
       Currency.put_request_currency(nil)
       filled
     end)
+  end
+
+  # The rows are committed, so the test removes them itself (the cart's lines go
+  # with the cart).
+  defp delete_on_exit(schema, uuid) do
+    on_exit(fn ->
+      unboxed(fn -> Repo.delete_all(from(r in schema, where: r.uuid == ^uuid)) end)
+    end)
+  end
+
+  defp add_line!(quantity, cart) do
+    {:ok, updated} = Shop.add_to_cart(cart, product!(), quantity)
+    updated
   end
 
   defp product! do
@@ -142,9 +148,7 @@ defmodule PhoenixKitEcommerce.CartRedenominateRaceTest do
         "weight_grams" => 0
       })
 
-    on_exit(fn ->
-      unboxed(fn -> Repo.delete_all(from(p in Product, where: p.uuid == ^product.uuid)) end)
-    end)
+    delete_on_exit(Product, product.uuid)
 
     product
   end

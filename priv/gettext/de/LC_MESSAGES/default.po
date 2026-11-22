@@ -8337,3 +8337,45 @@ msgstr "Wenn eine bezahlte Bestellung erstattet wird"
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to %{max}."
 msgstr "Geben Sie eine ganze Zahl von 0 bis %{max} ein."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:277
+#, elixir-autogen, elixir-format
+msgid "Your cart came with you: %{count} item."
+msgid_plural "Your cart came with you: %{count} items."
+msgstr[0] "Ihr Warenkorb ist mitgekommen: %{count} Artikel."
+msgstr[1] "Ihr Warenkorb ist mitgekommen: %{count} Artikel."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:290
+#, elixir-autogen, elixir-format
+msgid "These stayed in your cart on the other site: %{products}."
+msgstr "Diese Artikel sind in Ihrem Warenkorb auf der anderen Seite geblieben: %{products}."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:296
+#, elixir-autogen, elixir-format
+msgid "%{name} (%{reason})"
+msgstr "%{name} (%{reason})"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:297
+#, elixir-autogen, elixir-format
+msgid "an item"
+msgstr "ein Artikel"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:303
+#, elixir-autogen, elixir-format
+msgid "no longer available"
+msgstr "nicht mehr verfügbar"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:305
+#, elixir-autogen, elixir-format
+msgid "not enough in stock"
+msgstr "nicht genug auf Lager"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:306
+#, elixir-autogen, elixir-format
+msgid "quantity limit reached"
+msgstr "Mengenlimit erreicht"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:307
+#, elixir-autogen, elixir-format
+msgid "cannot be added here right now"
+msgstr "kann hier gerade nicht hinzugefügt werden"

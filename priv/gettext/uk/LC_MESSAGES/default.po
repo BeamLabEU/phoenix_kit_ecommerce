@@ -8398,3 +8398,46 @@ msgstr "Коли за оплачене замовлення повертають
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to %{max}."
 msgstr "Введіть ціле число від 0 до %{max}."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:277
+#, elixir-autogen, elixir-format
+msgid "Your cart came with you: %{count} item."
+msgid_plural "Your cart came with you: %{count} items."
+msgstr[0] "Ваш кошик перенесено: %{count} товар."
+msgstr[1] "Ваш кошик перенесено: %{count} товари."
+msgstr[2] "Ваш кошик перенесено: %{count} товарів."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:290
+#, elixir-autogen, elixir-format
+msgid "These stayed in your cart on the other site: %{products}."
+msgstr "Ці товари залишилися у вашому кошику на іншому сайті: %{products}."
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:296
+#, elixir-autogen, elixir-format
+msgid "%{name} (%{reason})"
+msgstr "%{name} (%{reason})"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:297
+#, elixir-autogen, elixir-format
+msgid "an item"
+msgstr "товар"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:303
+#, elixir-autogen, elixir-format
+msgid "no longer available"
+msgstr "більше недоступний"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:305
+#, elixir-autogen, elixir-format
+msgid "not enough in stock"
+msgstr "недостатньо на складі"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:306
+#, elixir-autogen, elixir-format
+msgid "quantity limit reached"
+msgstr "досягнуто ліміт кількості"
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:307
+#, elixir-autogen, elixir-format
+msgid "cannot be added here right now"
+msgstr "зараз неможливо додати тут"

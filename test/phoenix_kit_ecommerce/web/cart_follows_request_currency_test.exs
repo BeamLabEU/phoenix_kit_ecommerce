@@ -22,6 +22,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Test.Repo
+  alias PhoenixKitEcommerce.Web.Helpers
 
   setup do
     PhoenixKit.Cache.clear(:billing_currencies)
@@ -270,7 +271,7 @@ defmodule PhoenixKitEcommerce.Web.CartFollowsRequestCurrencyTest do
       socket = %Phoenix.LiveView.Socket{}
 
       assert {^socket, ^cart} =
-               PhoenixKitEcommerce.Web.Helpers.cart_in_request_currency(socket, cart)
+               Helpers.cart_in_request_currency(socket, cart)
 
       assert stored(cart.uuid) == before
     end
