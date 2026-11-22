@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.Events
 
   setup do
     ensure_currencies!()
@@ -310,6 +311,371 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
       assert {:ok, _, %{moved: 1}} = Shop.move_cart_lines(source, first, [])
       assert {:error, :cart_not_active} = Shop.move_cart_lines(source, second, [])
       assert stored_items(second.uuid) == []
+    end
+  end
+
+  defp drain_events(acc \\ []) do
+    receive do
+      {:cart_updated, _cart} = event -> drain_events([event | acc])
+      {:item_added, _cart, _item} = event -> drain_events([event | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  # Everything a refused move must leave exactly as it was.
+  defp world(source, target) do
+    {Repo.get!(Cart, source.uuid), stored_items(source.uuid), Repo.get!(Cart, target.uuid),
+     stored_items(target.uuid)}
+  end
+
+  describe "the ownership contract" do
+    # `move_cart_lines/3` does not know whose carts they are: the caller has
+    # settled that the shopper may hand the source over. `guest_source: true`
+    # makes it check, under the row lock, that the source is a guest cart.
+    test "a source that has a user is refused with guest_source: true", ctx do
+      user = fixture_user()
+      {:ok, source} = Shop.create_cart(user_uuid: user.uuid, session_id: "move-#{unique()}")
+      source = fill!(source, [{ctx.p1, 1}])
+      target = cart_in("USD")
+      before = world(source, target)
+
+      assert {:error, :not_a_guest_cart} =
+               Shop.move_cart_lines(source, target, guest_source: true)
+
+      assert world(source, target) == before
+    end
+
+    test "a source that gained a user between the caller's read and the lock is refused", ctx do
+      user = fixture_user()
+      source = usd_source([{ctx.p1, 1}])
+      target = cart_in("USD")
+
+      # What the caller holds says "guest"; the row, by the time it is locked, does not.
+      assert source.user_uuid == nil
+      Repo.update_all(from(c in Cart, where: c.uuid == ^source.uuid), set: [user_uuid: user.uuid])
+      before = world(source, target)
+
+      assert {:error, :not_a_guest_cart} =
+               Shop.move_cart_lines(source, target, guest_source: true)
+
+      assert world(source, target) == before
+    end
+
+    test "without the option the same source moves: the claim's behaviour is unchanged", ctx do
+      user = fixture_user()
+      source = usd_source([{ctx.p1, 1}])
+      target = cart_in("USD")
+      Repo.update_all(from(c in Cart, where: c.uuid == ^source.uuid), set: [user_uuid: user.uuid])
+
+      assert {:ok, _, %{moved: 1}} = Shop.move_cart_lines(source, target, [])
+      assert Repo.get!(Cart, source.uuid).status == "merged"
+    end
+
+    test "an API cart is refused with guest_source: true", ctx do
+      {:ok, api} = Shop.create_cart(session_id: "api:" <> String.duplicate("a", 20))
+      api = fill!(api, [{ctx.p1, 1}])
+      target = cart_in("USD")
+      before = world(api, target)
+
+      assert {:error, :not_a_guest_cart} = Shop.move_cart_lines(api, target, guest_source: true)
+      assert world(api, target) == before
+    end
+
+    test "an empty source is refused with guest_source: true and is not merged" do
+      source = cart_in("USD")
+      target = cart_in("USD")
+      before = world(source, target)
+
+      assert {:error, :cart_empty} = Shop.move_cart_lines(source, target, guest_source: true)
+      assert world(source, target) == before
+    end
+
+    test "a guest source goes through with guest_source: true", ctx do
+      source = usd_source([{ctx.p1, 2}])
+      target = cart_in("USD")
+
+      assert {:ok, _, %{moved: 1, skipped: []}} =
+               Shop.move_cart_lines(source, target, guest_source: true)
+
+      assert Repo.get!(Cart, source.uuid).status == "merged"
+    end
+
+    test "a source merged into this very target before is still a quiet no-op", ctx do
+      source = usd_source([{ctx.p1, 2}])
+      target = cart_in("USD")
+      opts = [guest_source: true]
+
+      assert {:ok, _, %{moved: 1}} = Shop.move_cart_lines(source, target, opts)
+      assert {:ok, _, %{moved: 0, skipped: []}} = Shop.move_cart_lines(source, target, opts)
+    end
+  end
+
+  describe "keep_skipped: true" do
+    # A line that cannot be moved is not lost: it stays in the source, which is
+    # `merged` only when nothing is left in it.
+    test "a skipped line stays in the source, which stays active with its totals recalculated",
+         ctx do
+      source = usd_source([{ctx.p1, 1}, {ctx.p2, 2}])
+      target = cart_in("EUR")
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+
+      assert {:ok, _, %{moved: 1, skipped: [skipped]}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      assert skipped.product_uuid == ctx.p2.uuid
+      assert skipped.reason == :not_on_sale
+
+      row = Repo.get!(Cart, source.uuid)
+      assert row.status == "active"
+      assert row.merged_into_cart_uuid == nil
+      assert [left] = stored_items(source.uuid)
+      assert left.product_uuid == ctx.p2.uuid and left.quantity == 2
+      assert row.items_count == 2
+      assert Decimal.equal?(row.subtotal, Decimal.new("20.00"))
+      assert Decimal.equal?(row.total, Decimal.new("20.00"))
+      assert row.currency == "USD"
+
+      assert [only] = reload(target).items
+      assert only.product_uuid == ctx.p1.uuid
+    end
+
+    test "when every line moved the source is merged and holds nothing", ctx do
+      source = usd_source([{ctx.p1, 1}, {ctx.p2, 2}])
+      target = cart_in("USD")
+
+      assert {:ok, _, %{moved: 2, skipped: []}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      row = Repo.get!(Cart, source.uuid)
+      assert row.status == "merged"
+      assert row.merged_into_cart_uuid == target.uuid
+      assert stored_items(source.uuid) == []
+      assert row.items_count == 0
+      assert Decimal.equal?(row.total, Decimal.new("0"))
+    end
+
+    test "when nothing could move, nothing is written to either cart", ctx do
+      source = usd_source([{ctx.p1, 1}, {ctx.p2, 1}])
+      target = cart_in("USD")
+      {:ok, _} = Shop.update_product(ctx.p1, %{"status" => "archived"})
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+      before = world(source, target)
+
+      assert {:ok, same, %{moved: 0, skipped: [_, _]}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      assert same.uuid == target.uuid
+      assert world(source, target) == before
+    end
+
+    test "the part of a capped line that did not fit stays in the source", ctx do
+      max = CartWriter.max_quantity()
+      source = usd_source([{ctx.p1, 5}])
+      target = "USD" |> cart_in() |> fill!([{ctx.p1, max - 2}])
+
+      assert {:ok, _, %{moved: 1, skipped: [skipped]}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      assert skipped.product_uuid == ctx.p1.uuid
+      assert skipped.reason == :quantity_cap
+
+      assert [%{quantity: 3}] = stored_items(source.uuid)
+
+      assert [%{quantity: ^max}] = reload(target).items
+      row = Repo.get!(Cart, source.uuid)
+      assert row.status == "active"
+      assert row.items_count == 3
+      assert Decimal.equal?(row.subtotal, Decimal.new("30.00"))
+    end
+
+    test "what stayed can be moved by a later call, which then merges the source", ctx do
+      source = usd_source([{ctx.p1, 1}, {ctx.p2, 2}])
+      target = cart_in("USD")
+      {:ok, p2} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+
+      assert {:ok, _, %{moved: 1, skipped: [_]}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      {:ok, _} = Shop.update_product(p2, %{"status" => "active"})
+
+      assert {:ok, _, %{moved: 1, skipped: []}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true)
+
+      assert Repo.get!(Cart, source.uuid).status == "merged"
+      assert quantities_of(target) == %{ctx.p1.uuid => 1, ctx.p2.uuid => 2}
+    end
+
+    test "without the option a skipped line is dropped with the merged source (the claim)",
+         ctx do
+      source = usd_source([{ctx.p1, 1}, {ctx.p2, 2}])
+      target = cart_in("USD")
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+
+      assert {:ok, _, %{moved: 1, skipped: [_]}} = Shop.move_cart_lines(source, target, [])
+
+      assert Repo.get!(Cart, source.uuid).status == "merged"
+      assert length(stored_items(source.uuid)) == 2
+    end
+  end
+
+  defp quantities_of(cart),
+    do: cart |> reload() |> Map.fetch!(:items) |> Map.new(&{&1.product_uuid, &1.quantity})
+
+  describe "events" do
+    setup do
+      source = cart_in("USD")
+      target = cart_in("EUR")
+      :ok = Events.subscribe_to_session_cart(source.session_id)
+      :ok = Events.subscribe_to_session_cart(target.session_id)
+      %{source: source, target: target}
+    end
+
+    test "one cart_updated per affected cart, after the commit; no line-by-line events", ctx do
+      source = fill!(ctx.source, [{ctx.p1, 1}, {ctx.p2, 2}])
+      _ = drain_events()
+
+      assert {:ok, _, %{moved: 2}} = Shop.move_cart_lines(source, ctx.target, [])
+
+      events = drain_events()
+      assert [] = for({:item_added, _, _} = event <- events, do: event)
+
+      target_uuid = ctx.target.uuid
+      source_uuid = source.uuid
+
+      assert [{:cart_updated, %Cart{uuid: ^target_uuid, items_count: 3}}] =
+               for({:cart_updated, %Cart{uuid: ^target_uuid}} = e <- events, do: e)
+
+      assert [{:cart_updated, %Cart{uuid: ^source_uuid, status: "merged"}}] =
+               for({:cart_updated, %Cart{uuid: ^source_uuid}} = e <- events, do: e)
+    end
+
+    test "the source that stays active is announced as it stands", ctx do
+      source = fill!(ctx.source, [{ctx.p1, 1}, {ctx.p2, 2}])
+      {:ok, _} = Shop.update_product(ctx.p2, %{"status" => "archived"})
+      _ = drain_events()
+
+      assert {:ok, _, %{moved: 1}} =
+               Shop.move_cart_lines(source, ctx.target, keep_skipped: true)
+
+      source_uuid = source.uuid
+
+      assert [{:cart_updated, %Cart{uuid: ^source_uuid, status: "active", items_count: 2}}] =
+               for({:cart_updated, %Cart{uuid: ^source_uuid}} = e <- drain_events(), do: e)
+    end
+
+    test "nothing moved, nothing announced", ctx do
+      source = fill!(ctx.source, [{ctx.p1, 1}])
+      {:ok, _} = Shop.update_product(ctx.p1, %{"status" => "archived"})
+      _ = drain_events()
+
+      assert {:ok, _, %{moved: 0}} = Shop.move_cart_lines(source, ctx.target, keep_skipped: true)
+
+      assert drain_events() == []
+    end
+
+    test "a refused move announces nothing", ctx do
+      source = fill!(ctx.source, [{ctx.p1, 1}])
+
+      Repo.update_all(from(c in Cart, where: c.uuid == ^ctx.target.uuid),
+        set: [status: "abandoned"]
+      )
+
+      _ = drain_events()
+
+      assert {:error, :cart_not_active} = Shop.move_cart_lines(source, ctx.target, [])
+
+      assert drain_events() == []
+    end
+
+    # The limit, kept on purpose: the caller owns the transaction (the claim
+    # does), so the move cannot know when it commits and sends nothing of its
+    # own: the lines are announced one by one, as `add_to_cart/4` does.
+    test "inside the caller's transaction the lines are announced as they are added", ctx do
+      source = fill!(ctx.source, [{ctx.p1, 1}, {ctx.p2, 2}])
+      _ = drain_events()
+
+      assert {:ok, {:ok, _, %{moved: 2}}} =
+               Repo.transaction(fn -> Shop.move_cart_lines(source, ctx.target, []) end)
+
+      events = drain_events()
+      assert [_, _] = for({:item_added, _, _} = event <- events, do: event)
+    end
+  end
+
+  describe ":busy" do
+    setup do
+      [first, second] = Enum.sort_by([product!(), product!()], & &1.uuid)
+      source = usd_source([{first, 1}, {second, 2}])
+      target = cart_in("EUR")
+      :ok = Events.subscribe_to_session_cart(source.session_id)
+      :ok = Events.subscribe_to_session_cart(target.session_id)
+      _ = drain_events()
+      %{first: first, second: second, source: source, target: target}
+    end
+
+    # The second line's product left the shop after the check: `add_to_cart`
+    # refuses it inside its own transaction, which dooms the move. The first
+    # line was already added: it must go, and no tab may have been told of it.
+    test "an answer of add_to_cart that is not the line's own rolls the whole move back", ctx do
+      before = world(ctx.source, ctx.target)
+
+      after_first_query("INSERT", "phoenix_kit_shop_cart_items", fn ->
+        {:ok, _} = Shop.update_product(ctx.second, %{"status" => "archived"})
+      end)
+
+      assert {:error, :busy} = Shop.move_cart_lines(ctx.source, ctx.target, keep_skipped: true)
+
+      assert world(ctx.source, ctx.target) == before
+      assert drain_events() == []
+      # the connection is still usable
+      assert %{rows: [[1]]} = Repo.query!("SELECT 1")
+    end
+
+    test "a deadlock the database resolves against the move is :busy, nothing moved", ctx do
+      before = world(ctx.source, ctx.target)
+
+      Repo.query!("""
+      CREATE FUNCTION pk_test_raise_deadlock() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01'; END
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER pk_test_raise_deadlock BEFORE INSERT ON phoenix_kit_shop_cart_items
+      FOR EACH ROW EXECUTE FUNCTION pk_test_raise_deadlock()
+      """)
+
+      assert {:error, :busy} = Shop.move_cart_lines(ctx.source, ctx.target, [])
+
+      assert world(ctx.source, ctx.target) == before
+      assert drain_events() == []
+    end
+  end
+
+  describe "via" do
+    # `via: :assistant` keeps `add_to_cart/4` from telling the shop's operators
+    # about every moved line; any other value (the default) lets it.
+    setup do
+      PhoenixKit.Settings.update_setting_with_module("shop_notify_cart_item", "true", "shop")
+      # the first user registered in the sandbox is the owner who is told
+      _owner = fixture_user()
+      :ok
+    end
+
+    test "the default lets add_to_cart notify, :assistant does not", ctx do
+      # The lines are put in the sources first: filling a cart notifies too.
+      {first, first_target} = {usd_source([{ctx.p1, 1}]), cart_in("USD")}
+      {second, second_target} = {usd_source([{ctx.p2, 1}]), cart_in("USD")}
+      before = count_notifications("shop.cart_item_added")
+
+      assert {:ok, _, %{moved: 1}} = Shop.move_cart_lines(first, first_target, [])
+      assert count_notifications("shop.cart_item_added") == before + 1
+
+      assert {:ok, _, %{moved: 1}} =
+               Shop.move_cart_lines(second, second_target, via: :assistant)
+
+      assert count_notifications("shop.cart_item_added") == before + 1
     end
   end
 

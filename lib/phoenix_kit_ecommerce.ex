@@ -3193,6 +3193,11 @@ defmodule PhoenixKitEcommerce do
     notification is not sent, the API sends one coalesced signal per call
     (`PhoenixKitEcommerce.API.Signals`). Default `nil`: the storefront
     behaviour, unchanged.
+  - `:broadcast` - `false` keeps the `{:item_added, cart, item}` PubSub event
+    from being sent (default `true`). For a caller that adds several lines in a
+    transaction of its own and announces the result once it has committed
+    (`move_cart_lines/3`): an event sent before the commit tells other tabs of
+    lines a rollback then removes.
 
   ## Examples
 
@@ -3207,7 +3212,7 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, opts) when is_list(opts) do
     selected_specs = Keyword.get(opts, :selected_specs, %{})
     skip_validation = Keyword.get(opts, :skip_spec_validation, false)
-    via = Keyword.get(opts, :via)
+    effects = [via: Keyword.get(opts, :via), broadcast: Keyword.get(opts, :broadcast, true)]
     language = Keyword.get(opts, :language)
 
     # The disabled check lives in the CONTEXT, not only the LiveView mounts:
@@ -3230,10 +3235,10 @@ defmodule PhoenixKitEcommerce do
           selected_specs,
           language,
           skip_validation,
-          via
+          effects
         )
       else
-        add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via)
+        add_simple_product_to_cart(cart, product, quantity, language, skip_validation, effects)
       end
     end
   end
@@ -3245,7 +3250,7 @@ defmodule PhoenixKitEcommerce do
          :ok <- validate_cart_currency(cart, product),
          :ok <- validate_stock_for_add(cart, product, quantity),
          {:ok, cart} <- rebase_cart(cart) do
-      add_simple_product_to_cart(cart, product, quantity, nil, false, nil)
+      add_simple_product_to_cart(cart, product, quantity, nil, false, via: nil, broadcast: true)
     end
   end
 
@@ -3440,7 +3445,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via) do
+  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation, effects) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
@@ -3495,8 +3500,7 @@ defmodule PhoenixKitEcommerce do
 
     case result do
       {:ok, {updated_cart, item}} ->
-        Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
+        announce_item_added(updated_cart, item, product, effects)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
@@ -3505,6 +3509,14 @@ defmodule PhoenixKitEcommerce do
       error ->
         error
     end
+  end
+
+  defp announce_item_added(cart, item, product, effects) do
+    if Keyword.fetch!(effects, :broadcast), do: Events.broadcast_item_added(cart, item)
+
+    PhoenixKitEcommerce.Notifications.cart_item_added(cart, item, product,
+      via: Keyword.fetch!(effects, :via)
+    )
   end
 
   # What the packer needs to know about one unit of the line, frozen with the
@@ -3599,7 +3611,7 @@ defmodule PhoenixKitEcommerce do
          selected_specs,
          language,
          skip_validation,
-         via
+         effects
        ) do
     result =
       repo().transaction(fn ->
@@ -3657,8 +3669,7 @@ defmodule PhoenixKitEcommerce do
 
     case result do
       {:ok, {updated_cart, item}} ->
-        Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
+        announce_item_added(updated_cart, item, product, effects)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
@@ -5618,6 +5629,18 @@ defmodule PhoenixKitEcommerce do
   shopper (or of the shopper the source is handed to), and ends `source` as
   `merged` into `target` (`merged_into_cart_uuid`).
 
+  ## Ownership
+
+  This function does not know whose carts they are. The CALLER must have
+  settled that the shopper may hand `source` over and that `target` is theirs:
+  the checkout claim holds a redeemed token for an API cart, the cross-domain
+  handoff holds the bearer uuid of a guest cart. Nothing here checks identity
+  by default, so a caller that passes a cart it has not established is
+  moving somebody else's lines. For the one check that can be made here, pass
+  `guest_source: true`: judged on the LOCKED row (the caller's read may be many
+  events old), the source must be active, have no user, not be an API cart and
+  hold lines (`{:error, :not_a_guest_cart}`, `{:error, :cart_empty}`).
+
   Each line goes through the normal `add_to_cart/4` path, so it is re-read and
   re-validated (the product is still on sale, its options are still offered,
   stock, the quantity cap of the cart API) and priced at the TARGET cart's
@@ -5643,9 +5666,24 @@ defmodule PhoenixKitEcommerce do
 
   Refusals leave both carts as they were: `{:error, :same_cart}`,
   `{:error, :cart_not_active}` (either cart, judged on the locked rows, a
-  source merged into another cart included), `{:error, :cart_not_found}`, and
-  `{:error, :busy}` (a deadlock, or an answer of `add_to_cart/4` that is not
-  this line's own: nothing was moved and the call can be repeated).
+  source merged into another cart included), `{:error, :cart_not_found}`,
+  `{:error, :not_a_guest_cart}` and `{:error, :cart_empty}` (`guest_source:
+  true`), and `{:error, :busy}` (a deadlock, or an answer of `add_to_cart/4`
+  that is not this line's own: nothing was moved and the call can be repeated).
+
+  ## Events
+
+  With a transaction of its own (called outside one) the move sends no
+  per-line `{:item_added, ...}` event: once it has committed it sends ONE
+  `{:cart_updated, cart}` for the target and one for the source, as each
+  stands, and nothing at all when nothing changed or the move was refused or
+  rolled back, so no tab is told of a line that was never saved. Called
+  inside a caller's transaction (the checkout claim does) the move cannot know
+  when it commits: it sends nothing of its own and `add_to_cart/4` announces
+  each line as it goes in, as it always has, so a later rollback of the
+  caller can leave other tabs showing lines that were not saved. That is the
+  limit, kept for the claim; the caller that cares announces after its own
+  commit.
 
   Everything runs in one transaction (it joins the caller's). The identity locks
   of both carts are taken first, in one order for every caller: the user keys
@@ -5661,6 +5699,16 @@ defmodule PhoenixKitEcommerce do
     * `:via` - `:assistant` keeps `add_to_cart/4` from sending its per-line
       "item added" notification, for a move the shopper did not make line by
       line. Default `nil`.
+    * `:guest_source` - `true` makes the source a guest cart or a refusal, see
+      "Ownership". Default `false`.
+    * `:keep_skipped` - `true` is for a move that must not lose lines (the
+      handoff): what moved leaves the source, what could not move STAYS in it,
+      and the source is `merged` only when nothing is left; otherwise it stays
+      active with the remaining lines and its totals recalculated, so a later
+      call can try them again. The part of a capped line that did not fit stays
+      too and is reported as skipped (`:quantity_cap`) next to the moved line.
+      Default `false` (the claim): every line is moved or dropped and the source
+      is merged with its lines kept as a record.
   """
   @spec move_cart_lines(Cart.t(), Cart.t(), keyword()) ::
           {:ok, Cart.t(),
@@ -5668,7 +5716,13 @@ defmodule PhoenixKitEcommerce do
              moved: non_neg_integer(),
              skipped: [%{product_uuid: String.t() | nil, name: String.t(), reason: atom()}]
            }}
-          | {:error, :same_cart | :cart_not_active | :cart_not_found | :busy}
+          | {:error,
+             :same_cart
+             | :cart_not_active
+             | :cart_not_found
+             | :not_a_guest_cart
+             | :cart_empty
+             | :busy}
   def move_cart_lines(%Cart{} = source, %Cart{} = target, opts \\ []) when is_list(opts),
     do: PhoenixKitEcommerce.CartMove.move(source, target, opts)
 
@@ -8488,6 +8542,13 @@ defmodule PhoenixKitEcommerce do
       nil -> repo().rollback(:cart_not_found)
     end
   end
+
+  # Totals over the lines a cart holds now, for `CartMove`, with the cart's
+  # currency and rate left alone even when it ends up empty (an emptied cart is
+  # otherwise moved on to the request's currency). The caller holds the lock.
+  @doc false
+  def recalculate_totals_keeping_currency!(%Cart{} = cart),
+    do: recalculate_cart_totals!(cart, fx_refresh: false)
 
   defp recalculate_cart_totals!(%Cart{} = cart, opts \\ []) do
     # Serialize concurrent recalculations of the SAME cart.
