@@ -216,7 +216,7 @@ defmodule PhoenixKitEcommerce.CartHandoff do
 
   defp target_session(_identity) do
     session_id = ShopSession.generate_session_id()
-    cookie = {ShopSession.cookie_name(), session_id, ShopSession.cookie_options(true)}
+    cookie = {ShopSession.cookie_name(), session_id, ShopSession.cookie_options()}
     {:ok, session_id, [cookie]}
   end
 

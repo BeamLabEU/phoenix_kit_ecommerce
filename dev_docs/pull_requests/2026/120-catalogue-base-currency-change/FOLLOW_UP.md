@@ -6,3 +6,7 @@
 - Removed an unreachable refusal for a hypothetical third product source. Dialyzer confirmed that both possible return values of `ProductSource.current/0` were already handled.
 
 The full suite reported 5,254 tests, zero failures and four exclusions. The final focused run passed all 114 tests. The final `mix precommit` passed, and a separate host without Catalogue compiled and returned `:ok` from the legacy capability check.
+
+## Release-range review
+
+**BUG - MEDIUM** — A malformed `price_modifiers` array raised during the initial scan, and a boolean `ecommerce` value could be overwritten as if it were missing. The locked write now refuses both with the item UUID and `:malformed_ecommerce_data`. Regression tests verify that the earlier item and shipping price roll back and no rebuild job survives.

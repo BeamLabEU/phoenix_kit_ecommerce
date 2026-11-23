@@ -250,9 +250,17 @@ defmodule PhoenixKitEcommerce.CartRedenominateTest do
                )
 
       # The cart is still USD against base USD; the shop is now based in EUR.
+      :ok = PhoenixKitEcommerce.Events.subscribe_to_session_cart(cart.session_id)
       assert {:ok, eur} = Shop.redenominate_cart(cart, "EUR")
 
       assert %{currency: "EUR", base_currency: "EUR"} = eur
+      assert_receive {:cart_updated, %{currency: "EUR"}}
+      refute_received {:cart_updated, _intermediate}
+
+      # A stale caller can reach the rebase after this transaction commits.
+      assert {:ok, retried} = Shop.rebase_cart(cart)
+      assert retried.items == eur.items
+      refute_received {:cart_updated, _unchanged}
       [line] = eur.items
       # 138.00 USD / 1.1 = 125.45 EUR: the new base amount, then the cart
       # IS in the base currency, so the line carries it unconverted.

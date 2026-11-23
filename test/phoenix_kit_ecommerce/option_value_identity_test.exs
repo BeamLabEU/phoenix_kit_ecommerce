@@ -308,6 +308,38 @@ defmodule PhoenixKitEcommerce.OptionValueIdentityTest do
   end
 
   describe "a cart line stored before keys were the identity" do
+    test "a move keeps an unresolvable old label in the source even when it matches a current key",
+         %{item: item, session_id: session_id} do
+      source = cart_for(session_id)
+      old = insert_label_line!(source, item, "crimson", "24.00")
+      target = cart_for(session_id <> "-target")
+
+      assert {:ok, %{items: []}, %{moved: 0, skipped: [%{reason: :invalid_options}]}} =
+               Shop.move_cart_lines(source, target, keep_skipped: true, language: "en-US")
+
+      assert Repo.get!(CartItem, old.uuid).quantity == 1
+    end
+
+    test "a full old label line in the target leaves room for a distinct keyed selection",
+         %{item: item, session_id: session_id} do
+      source = cart_for(session_id)
+      target = cart_for(session_id <> "-target")
+      line = insert_label_line!(target, item, "crimson", "24.00")
+      {:ok, _} = Shop.update_cart_item(line, 99)
+
+      {:ok, source} =
+        Shop.add_to_cart(source, product(item, "en-US"), 1,
+          selected_specs: %{"color" => "crimson"},
+          language: "en-US"
+        )
+
+      assert {:ok, updated, %{moved: 1, skipped: []}} =
+               Shop.move_cart_lines(source, target, language: "en-US")
+
+      assert Enum.find(updated.items, &SelectedSpecs.keyed?/1).quantity == 1
+      assert Repo.get!(CartItem, line.uuid).quantity == 99
+    end
+
     test "a label that happens to be a key does not identify the new selection", %{
       conn: conn,
       item: item,

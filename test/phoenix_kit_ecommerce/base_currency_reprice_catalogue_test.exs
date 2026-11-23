@@ -1774,42 +1774,49 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
   end
 
   describe "malformed stored data" do
-    test "an item whose data[\"ecommerce\"] is not a JSON object refuses with a tagged error, and the earlier write is rolled back" do
-      n = System.unique_integer([:positive])
-      {:ok, _} = Options.update_global_options([material_schema()])
-      {:ok, shop} = APIFixtures.create_shop_catalogue()
+    for {shape, ecommerce} <- [
+          {"non-object ecommerce", "corrupt"},
+          {"boolean ecommerce", false},
+          {"non-object price modifiers", %{"price_modifiers" => ["corrupt"]}}
+        ] do
+      @malformed_ecommerce ecommerce
+      test "#{shape} refuses the reprice and rolls back the earlier write" do
+        n = System.unique_integer([:positive])
+        {:ok, _} = Options.update_global_options([material_schema()])
+        {:ok, shop} = APIFixtures.create_shop_catalogue()
 
-      {:ok, method} =
-        Shop.create_shipping_method(%{"name" => "Flat#{n}", "price" => Decimal.new("10.00")})
+        {:ok, method} =
+          Shop.create_shipping_method(%{"name" => "Flat#{n}", "price" => Decimal.new("10.00")})
 
-      {good, bad} = earlier_and_later_item!(shop, %{"currency" => "USD"})
-      assert good.uuid < bad.uuid
+        {good, bad} = earlier_and_later_item!(shop, %{"currency" => "USD"})
+        assert good.uuid < bad.uuid
 
-      # Storable only by raw SQL: the changeset casts `data` as a map but
-      # never looks inside it. Must come back as {:error, _}, not raise.
-      Repo.update_all(
-        from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^bad.uuid),
-        set: [data: %{"ecommerce" => "corrupt"}]
-      )
+        # Storable only by raw SQL: the changeset casts `data` as a map but
+        # never looks inside it. Must come back as {:error, _}, not raise.
+        Repo.update_all(
+          from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^bad.uuid),
+          set: [data: %{"ecommerce" => @malformed_ecommerce}]
+        )
 
-      good_before = Catalogue.get_item!(good.uuid)
-      bad_before = Catalogue.get_item!(bad.uuid)
+        good_before = Catalogue.get_item!(good.uuid)
+        bad_before = Catalogue.get_item!(bad.uuid)
 
-      {result, updated} =
-        item_updates(fn ->
-          Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
-        end)
+        {result, updated} =
+          item_updates(fn ->
+            Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+          end)
 
-      assert {:error, {:catalogue_item_reprice_failed, failed_uuid, :malformed_ecommerce_data}} =
-               result
+        assert {:error, {:catalogue_item_reprice_failed, failed_uuid, :malformed_ecommerce_data}} =
+                 result
 
-      assert failed_uuid == bad.uuid
-      assert good.uuid in updated
-      refute bad.uuid in updated
-      assert Catalogue.get_item!(good.uuid) == good_before
-      assert Catalogue.get_item!(bad.uuid) == bad_before
-      assert rebuild_jobs() == []
-      assert Decimal.equal?(Shop.get_shipping_method!(method.uuid).price, Decimal.new("10.00"))
+        assert failed_uuid == bad.uuid
+        assert good.uuid in updated
+        refute bad.uuid in updated
+        assert Catalogue.get_item!(good.uuid) == good_before
+        assert Catalogue.get_item!(bad.uuid) == bad_before
+        assert rebuild_jobs() == []
+        assert Decimal.equal?(Shop.get_shipping_method!(method.uuid).price, Decimal.new("10.00"))
+      end
     end
   end
 

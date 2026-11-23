@@ -21,6 +21,7 @@ defmodule PhoenixKitEcommerce.CartMove do
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Events
+  alias PhoenixKitEcommerce.SelectedSpecs
 
   @preloads [:items, :shipping_method]
 
@@ -304,20 +305,26 @@ defmodule PhoenixKitEcommerce.CartMove do
   end
 
   defp specs_for(product, item) do
-    case CartOptions.to_specs(product, CartOptions.from_item(item, product)) do
-      {:ok, specs} ->
-        {:ok, specs}
-
-      {:error, _code, _context} ->
-        specs = item.selected_specs || %{}
+    case CartOptions.stored(item) do
+      [] ->
+        specs = SelectedSpecs.keys(item, product)
         if Shop.validate_selected_specs(product, specs) == :ok, do: {:ok, specs}, else: :error
+
+      options ->
+        case CartOptions.to_specs(product, options) do
+          {:ok, specs} -> {:ok, specs}
+          {:error, _code, _context} -> :error
+        end
     end
   end
 
   defp room_for(cart, product, specs, wanted) do
+    keyed? = product.origin == :catalogue and map_size(specs) > 0
+
     existing =
       Enum.find(cart.items, fn line ->
-        CartView.line_product_id(line) == product.uuid and (line.selected_specs || %{}) == specs
+        CartView.line_product_id(line) == product.uuid and
+          SelectedSpecs.keyed?(line) == keyed? and SelectedSpecs.keys(line, product) == specs
       end)
 
     max(0, min(wanted, CartWriter.max_quantity() - ((existing && existing.quantity) || 0)))

@@ -32,17 +32,18 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   end
 
   @doc false
-  # The options this plug sets the cookie with; `secure?` is whether the
-  # request arrived over HTTPS (the handoff is always HTTPS).
-  def cookie_options(secure?) do
+  # Handoff lets core apply the target scheme. The plug uses its own connection.
+  def cookie_options do
     [
       max_age: @cookie_max_age,
       http_only: true,
       same_site: "Lax",
-      secure: secure?,
       sign: true
     ]
   end
+
+  @doc false
+  def cookie_options(secure?), do: Keyword.put(cookie_options(), :secure, secure?)
 
   @doc false
   # The id inside the SIGNED cookie of a map of raw request cookies

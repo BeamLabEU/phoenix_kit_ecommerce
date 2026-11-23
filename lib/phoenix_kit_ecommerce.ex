@@ -3930,12 +3930,12 @@ defmodule PhoenixKitEcommerce do
     # meaningful in the shop's current base. The rebased cart is the OLD
     # frame the `compare_at_price` inversion below reads.
     old =
-      case rebase_cart(locked) do
-        {:ok, %Cart{} = rebased} -> rebased
+      case rebase_locked_cart(locked, base) do
+        {:ok, _change, rebased} -> rebased
         {:error, reason} -> repo().rollback(reason)
       end
 
-    items = CartItem |> where([i], i.cart_uuid == ^old.uuid) |> repo().all()
+    items = old.items
 
     if Enum.any?(items, &is_nil(&1.base_unit_price)) do
       repo().rollback(:no_base_price)
@@ -4137,9 +4137,33 @@ defmodule PhoenixKitEcommerce do
   defp cart_base_stale?(_cart, _base), do: false
 
   defp do_rebase_cart(%Cart{} = cart, %Currency{} = new_base) do
-    with {:ok, multiplier} <- rebase_multiplier(cart.base_currency),
-         {:ok, new_rate} <- rebase_target_rate(cart.currency, new_base) do
-      run_cart_rebase(cart, new_base, multiplier, new_rate)
+    result =
+      repo().transaction(fn -> rebase_locked_cart(lock_active_cart!(cart.uuid), new_base) end)
+
+    case result do
+      {:ok, {:ok, :changed, rebased}} ->
+        Events.broadcast_cart_updated(rebased)
+        {:ok, rebased}
+
+      {:ok, {:ok, :unchanged, current}} ->
+        {:ok, current}
+
+      {:ok, {:error, reason}} ->
+        {:error, reason}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp rebase_locked_cart(locked, new_base) do
+    if cart_base_stale?(locked, new_base) do
+      with {:ok, multiplier} <- rebase_multiplier(locked.base_currency),
+           {:ok, new_rate} <- rebase_target_rate(locked.currency, new_base) do
+        {:ok, :changed, rebase_lines!(locked, new_base, multiplier, new_rate)}
+      end
+    else
+      {:ok, :unchanged, repo().preload(locked, [:items, :shipping_method])}
     end
   end
 
@@ -4175,60 +4199,43 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp run_cart_rebase(%Cart{} = cart, %Currency{} = new_base, multiplier, new_rate) do
+  defp rebase_lines!(locked, new_base, multiplier, new_rate) do
     places = new_base.decimal_places || 2
+    items = CartItem |> where([i], i.cart_uuid == ^locked.uuid) |> repo().all()
 
-    result =
-      repo().transaction(fn ->
-        # Locked and reloaded, same as `recalculate_cart_totals!/1`: the
-        # OLD frozen rate `to_base/2` inverts `compare_at_price` with has
-        # to be the row's, not a possibly stale caller struct's.
-        locked = lock_active_cart!(cart.uuid)
-        items = CartItem |> where([i], i.cart_uuid == ^locked.uuid) |> repo().all()
-
-        if Enum.any?(items, &is_nil(&1.base_unit_price)) do
-          repo().rollback(:no_base_price)
-        end
-
-        # A struct copy only, never persisted itself: `snapshot_unit_price/2`
-        # must see the NEW base and rate while each line is re-derived —
-        # its same-currency clause matches on `base_currency`, so a cart in
-        # the new base has to read as such before the first line is
-        # snapshotted.
-        rebased = %{locked | base_currency: new_base.code, exchange_rate: new_rate}
-
-        Enum.each(items, fn item ->
-          new_base_unit = reprice_amount(item.base_unit_price, multiplier, places)
-
-          # Same inversion `do_refresh_cart_rate/1` does, for the same
-          # reason: there is no base compare-at column to re-derive from.
-          new_base_compare =
-            item.compare_at_price &&
-              reprice_amount(to_base(locked, item.compare_at_price), multiplier, places)
-
-          attrs = %{
-            base_unit_price: new_base_unit,
-            unit_price: snapshot_unit_price(rebased, new_base_unit),
-            compare_at_price: new_base_compare && snapshot_unit_price(rebased, new_base_compare)
-          }
-
-          item |> CartItem.changeset(attrs) |> repo().update!()
-        end)
-
-        locked
-        |> Cart.totals_changeset(%{base_currency: new_base.code, exchange_rate: new_rate})
-        |> repo().update!()
-        |> recalculate_cart_totals!()
-      end)
-
-    case result do
-      {:ok, rebased_cart} ->
-        Events.broadcast_cart_updated(rebased_cart)
-        {:ok, rebased_cart}
-
-      {:error, reason} ->
-        {:error, reason}
+    if Enum.any?(items, &is_nil(&1.base_unit_price)) do
+      repo().rollback(:no_base_price)
     end
+
+    # A struct copy only, never persisted itself: `snapshot_unit_price/2`
+    # must see the NEW base and rate while each line is re-derived —
+    # its same-currency clause matches on `base_currency`, so a cart in
+    # the new base has to read as such before the first line is
+    # snapshotted.
+    rebased = %{locked | base_currency: new_base.code, exchange_rate: new_rate}
+
+    Enum.each(items, fn item ->
+      new_base_unit = reprice_amount(item.base_unit_price, multiplier, places)
+
+      # Same inversion `do_refresh_cart_rate/1` does, for the same
+      # reason: there is no base compare-at column to re-derive from.
+      new_base_compare =
+        item.compare_at_price &&
+          reprice_amount(to_base(locked, item.compare_at_price), multiplier, places)
+
+      attrs = %{
+        base_unit_price: new_base_unit,
+        unit_price: snapshot_unit_price(rebased, new_base_unit),
+        compare_at_price: new_base_compare && snapshot_unit_price(rebased, new_base_compare)
+      }
+
+      item |> CartItem.changeset(attrs) |> repo().update!()
+    end)
+
+    locked
+    |> Cart.totals_changeset(%{base_currency: new_base.code, exchange_rate: new_rate})
+    |> repo().update!()
+    |> recalculate_cart_totals!()
   end
 
   # ============================================
@@ -5760,10 +5767,7 @@ defmodule PhoenixKitEcommerce do
   it has registered for `module_key/0` (this one), found with
   `function_exported?/3`: they are the optional `PhoenixKit.Module` callbacks
   `handoff_snapshot/1` and `handoff_apply/2` of the core release that ships the
-  handoff (after 3.6.1, which has no caller: with it, or with any core that does
-  not call them, these functions are inert). They carry no `@impl` because the
-  behaviour of the core this package is built against does not declare them;
-  add it when the dependency floor is raised to a core that does.
+  handoff. Older supported cores do not invoke these hooks.
 
   `context` is what core builds, `%{user_uuid: uuid | nil, session: map,
   cookies: map}`: `session` the request's Plug session (string keys),
@@ -5788,7 +5792,10 @@ defmodule PhoenixKitEcommerce do
   `user_uuid` included, answers `nil`.
   """
   @spec handoff_snapshot(term()) :: %{String.t() => String.t()} | nil
-  @impl PhoenixKit.Module
+  if {:handoff_snapshot, 1} in PhoenixKit.Module.behaviour_info(:callbacks) do
+    @impl PhoenixKit.Module
+  end
+
   def handoff_snapshot(context), do: PhoenixKitEcommerce.CartHandoff.snapshot(context)
 
   @doc """
@@ -5869,7 +5876,10 @@ defmodule PhoenixKitEcommerce do
              optional(:notices) => [String.t()],
              optional(:cookies) => [{String.t(), String.t(), keyword()}]
            }}
-  @impl PhoenixKit.Module
+  if {:handoff_apply, 2} in PhoenixKit.Module.behaviour_info(:callbacks) do
+    @impl PhoenixKit.Module
+  end
+
   def handoff_apply(context, payload),
     do: PhoenixKitEcommerce.CartHandoff.apply_payload(context, payload)
 
@@ -8297,7 +8307,8 @@ defmodule PhoenixKitEcommerce do
     # SQL — refuses with a tagged error instead of raising: the contract is
     # `{:error, term}`, and only a cut-short lock wait raises.
     with %{} = data <- fresh.data || %{},
-         %{} = ecommerce <- Map.get(data, "ecommerce") || %{} do
+         %{} = ecommerce <- Map.get(data, "ecommerce", %{}),
+         modifiers when is_map(modifiers) or is_nil(modifiers) <- ecommerce["price_modifiers"] do
       do_write_repriced_item(fresh, data, ecommerce, ctx)
     else
       _ -> {:error, :malformed_ecommerce_data}
@@ -8451,7 +8462,7 @@ defmodule PhoenixKitEcommerce do
   defp catalogue_item_modifier_mismatches(item, global_options) do
     price_modifiers = safe_get_in(item.data, ["ecommerce", "price_modifiers"]) || %{}
 
-    if price_modifiers == %{} do
+    if not is_map(price_modifiers) or map_size(price_modifiers) == 0 do
       []
     else
       types = catalogue_modifier_types(global_options, item.category)

@@ -428,13 +428,12 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
 
       assert name == "shop_session_id"
       assert is_binary(id) and byte_size(id) == 43
-      assert opts == ShopSession.cookie_options(true)
+      assert opts == ShopSession.cookie_options()
 
       assert Keyword.take(opts, [:max_age, :http_only, :same_site, :secure, :sign]) == [
                max_age: 60 * 60 * 24 * 30,
                http_only: true,
                same_site: "Lax",
-               secure: true,
                sign: true
              ]
 
@@ -458,11 +457,16 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
           cookies,
           Plug.Test.conn("GET", "/") |> Map.put(:secret_key_base, secret()),
           fn {name, value, opts}, conn ->
-            Plug.Conn.put_resp_cookie(conn, name, value, Keyword.take(opts, whitelist))
+            Plug.Conn.put_resp_cookie(
+              conn,
+              name,
+              value,
+              Keyword.merge([secure: conn.scheme == :https], Keyword.take(opts, whitelist))
+            )
           end
         )
 
-      %{value: sent, http_only: true, same_site: "Lax", secure: true} =
+      %{value: sent, http_only: true, same_site: "Lax", secure: false} =
         response.resp_cookies["shop_session_id"]
 
       # The target browser's next request.
