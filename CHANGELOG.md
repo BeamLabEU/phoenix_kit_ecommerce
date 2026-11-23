@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.14.0 - 2026-11-23
+
+**Upgrading from Hex 0.12.0.** This release also includes the catalogue
+base-currency repricing changes documented under 0.13.0 below. Hosts can
+upgrade with their existing dependency requirements and database schema.
+
+### Added
+
+- Opening the cart or checkout in another supported currency converts the
+  active cart at the current rate. Line prices are calculated from their
+  stored base amounts, and a carrier quote in the previous currency is
+  cleared. The rate stays frozen while the cart stays in the same currency.
+- On hosts with PhoenixKit handoff support, shoppers can carry a guest cart
+  between storefront domains. The destination reprices each line at its
+  current price and preserves option selections. Lines that cannot move
+  stay in the source cart, and the shopper receives a notice. Storefront
+  quantities above the public cart API limit of 99 can move in full.
+
+### Fixed
+
+- Sold-out product pages hide the quantity selector and line total. Both
+  return when stock becomes available while the shopper has the page open (#121).
+- Retrying a cart conversion after another request has already changed its
+  base currency preserves the converted prices.
+- A catalogue base-currency change that encounters malformed pricing data
+  returns an error and rolls back earlier writes in the same operation.
+
 ## 0.13.0 - 2026-11-23
 
 A base-currency change now reprices a catalogue-backed shop (#120): the shop's
