@@ -5,10 +5,12 @@
 Reviewed at the PR head plus a gate run against local core (which carries #1058's
 `PhoenixKit.Module.handoff_snapshot/1` / `handoff_apply/2`).
 
-**Verdict:** merged. One finding, fixed on main: the two handoff callbacks lacked
-`@impl PhoenixKit.Module`, which fails `compile --warnings-as-errors` against a core
-that declares the callbacks (the published Hex core does not have them yet, so the
-author's gate was green). Fixed in the follow-up commit on main.
+**Verdict:** merged. Two findings, both fixed on main: the two handoff callbacks lacked
+`@impl PhoenixKit.Module` (fails `compile --warnings-as-errors` against a core that
+declares the callbacks — the published Hex core does not have them yet, so the author's
+gate was green), and `ShopSession.signed_cookie_id/1` fabricated a `%Plug.Conn{}` whose
+defaults violate `Plug.Conn.t()`, which dialyzer flags as a contract break on the
+`fetch_cookies/2` call. Fixed in follow-up commits on main (`a7d45c9`, `3d9cab3`).
 
 ## Checked, fine
 
@@ -51,6 +53,13 @@ author's gate was green). Fixed in the follow-up commit on main.
    module now expects the core release that carries #1058 — which the ecosystem release
    order (core first) provides; the module's `pk_dep(:phoenix_kit, ...)` floor should be
    raised to that version at release time.
+2. **BUG - MEDIUM (dialyzer) — fabricated `%Plug.Conn{}` in `ShopSession.signed_cookie_id/1`.**
+   Building a bare conn to run `fetch_cookies(conn, signed: [...])` on a raw cookie map
+   leaves `remote_ip: nil` / `status: nil`, which do not match `Plug.Conn.t()`, so dialyzer
+   reports the call as breaking the `fetch_cookies/2` contract. Fixed on main by calling
+   `Plug.Crypto.verify(secret, name <> "_cookie", raw, keys: Plug.Keys)` directly — exactly
+   what `fetch_cookies(signed:)` runs internally; behaviour identical, and the handoff
+   tests (signed cookie accepted, forged/unsigned refused) still pass.
 
 ## Verification
 

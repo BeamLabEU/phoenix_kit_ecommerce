@@ -52,14 +52,13 @@ defmodule PhoenixKitEcommerce.Web.Plugs.ShopSession do
   # verify (forged, or signed under another key), or when the endpoint's secret
   # cannot be found: an unsigned value is never an identity.
   def signed_cookie_id(cookies) when is_map(cookies) do
+    # The same verification `fetch_cookies(conn, signed: [@cookie_name])` runs in
+    # the pipeline, without fabricating a conn for it.
     with raw when is_binary(raw) <- Map.get(cookies, @cookie_name),
-         {:ok, secret} <- signing_secret() do
-      conn = %Plug.Conn{secret_key_base: secret, req_cookies: %{@cookie_name => raw}}
-
-      conn
-      |> fetch_cookies(signed: [@cookie_name])
-      |> Map.fetch!(:cookies)
-      |> Map.get(@cookie_name)
+         {:ok, secret} <- signing_secret(),
+         {:ok, id} when is_binary(id) <-
+           Plug.Crypto.verify(secret, @cookie_name <> "_cookie", raw, keys: Plug.Keys) do
+      id
     else
       _unverifiable -> nil
     end
