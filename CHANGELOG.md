@@ -4,6 +4,81 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.13.0 - 2026-11-23
+
+A base-currency change now reprices a catalogue-backed shop (#120): the shop's
+own catalogue is repriced next to the legacy tables, the search index is told
+through a rebuild queued inside the change's transaction, and a multiplier of
+1 is a pure relabel that writes nothing it does not have to. Dependency lock
+upgrades only otherwise — no requirement changed and there is no migration.
+
+**Upgrading.** No requirement moved (`phoenix_kit` stays `>= 3.5.0 and < 4.0.0`,
+billing `~> 0.25`), so hosts can take this release on their current floors.
+The locked dependencies moved: core 3.7.0, billing 0.29.0, AI 0.31.0,
+entities 0.8.0. There is no migration.
+
+### Added
+
+- **A base-currency change reprices the catalogue product source**
+  (`reprice_for_base_change/3`). Previously it refused whenever the source was
+  the catalogue, so a catalogue-backed shop could not change its base
+  currency at all. It now reprices the catalogue named by `shop_catalogue`
+  (a trashed one included; other catalogues are never touched) next to the
+  legacy store: each item's `base_price` and its `data["ecommerce"]` money
+  (`compare_at_price`, `cost_per_item`, the `currency` label, the fixed
+  `price_modifiers` leaves — a key no price-affecting option schema names is
+  repriced as fixed, the way the storefront prices a discovered option — and
+  the money fields of `["shopify"]["price_fit"]`), and each catalogue
+  category's fixed `option_schema` modifiers. Amounts are read the way the
+  storefront reads them (decimal string or JSON number) and written back as
+  decimal strings.
+- **The search index is rebuilt after a reprice.** The catalogue leg writes
+  silently (no broadcast, inside billing's still-uncommitted transaction),
+  so after the last write the operation queues one rebuild of the whole
+  index (`Search.Jobs.enqueue_rebuild(nil)`) inside the transaction — the
+  job exists only if the change commits, and a refused enqueue rolls the
+  whole change back (`{:error, {:search_rebuild_failed, reason}}`,
+  translated in every supported locale). A relabel queues nothing.
+- **A multiplier of 1 is a pure relabel**: every stored amount keeps its
+  value and JSON type, only the currency labels change, unchanged option
+  lists and legacy product metadata are not written back, the modifier
+  counts are 0. It repairs a shop whose base was switched without this
+  operation, where `shop_enforce_product_currency` refused every item still
+  labelled with the old base.
+- **Race hardening in the catalogue leg.** Categories are locked before
+  items, each kind in uuid order, under the catalogue advisory lock; every
+  row is re-read under its lock and written with `data_owned_paths`, mode
+  `auto`, `via: "base_currency_change"` attribution and no broadcast.
+  `create_item`/`create_category` take no advisory lock, so one late pass at
+  the end picks up rows created during the run (categories first, then
+  items, in the same lock order). The shop catalogue's name is resolved
+  inside the operation's transaction and the row re-checked under the lock,
+  so a permanent delete interleaved with the lookup refuses with
+  `:no_shop_catalogue` instead of repricing a phantom. A row whose
+  `data["ecommerce"]` is not a JSON object refuses with
+  `{:error, {:catalogue_item_reprice_failed, uuid, :malformed_ecommerce_data}}`
+  instead of raising. The ambiguous-override pre-flight scan (an explicit
+  `%{"type", "value"}` override whose type disagrees with its option's
+  schema default) runs for both stores and is re-run under each item's lock.
+- `base_currency_change_supported/0` now answers `:ok` on the catalogue
+  source when the shop's catalogue resolves, and `{:error, :no_shop_catalogue}`
+  when it does not.
+
+### Changed
+
+- Dependency lock upgrades: `phoenix_kit` 3.7.0, `phoenix_kit_billing` 0.29.0,
+  `phoenix_kit_ai` 0.31.0, `phoenix_kit_entities` 0.8.0, `phoenix_kit_comments`
+  0.7.0, Phoenix 1.8.17, LiveView 1.2.15, Postgrex 0.23.0, and the rest of the
+  tree. No requirement in `mix.exs` changed. The unused `ex_aws_ec2` lock
+  entry is gone.
+
+### Fixed
+
+- `reprice_for_base_change/3` returned `{:error, {:unsupported_product_source, _}}`
+  on the catalogue source; the message now covers any unsupported source, and
+  two new refusal reasons (`:no_shop_catalogue`, `{:search_rebuild_failed, _}`)
+  have their own translated messages.
+
 ## 0.12.0 - 2026-11-15
 
 The rest of stock tracking (#82): what a refund does to stock, a low-stock
