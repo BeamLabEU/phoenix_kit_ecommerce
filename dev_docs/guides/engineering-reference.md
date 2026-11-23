@@ -952,8 +952,9 @@ settings-layer error.
   Every posting broadcasts `{:inventory_updated, item_uuid, :issued | :returned}`
   so an open product page re-reads its stock.
 - **The product page.** `Availability.offer/1` answers `:available`,
-  `{:few_left, n}` or `:sold_out`. Sold out disables Add to Cart and labels it
-  "Out of stock"; `{:few_left, n}` shows "Only n left" while `n` is at most
+  `{:few_left, n}` or `:sold_out`. A sold-out product hides the quantity selector
+  and line total and shows a disabled "Out of stock" button.
+  `{:few_left, n}` shows "Only n left" while `n` is at most
   `shop_stock_low_threshold` (`StockTracking.low_stock_threshold/0`, a whole
   number from 0 to 1000, default `0` = never; a malformed value reads as 0). An
   application's `:availability` hook answers instead and never says how many.

@@ -71,6 +71,7 @@ defmodule PhoenixKitEcommerce.Web.StockLimitsPagesTest do
 
     assert view |> element("#product-add-to-cart[disabled]", "Out of stock") |> has_element?()
     refute has_element?(view, "#product-stock-left")
+    refute has_element?(view, "fieldset legend", "Quantity")
   end
 
   test "the product page says how few are left", %{conn: conn} do
@@ -100,6 +101,13 @@ defmodule PhoenixKitEcommerce.Web.StockLimitsPagesTest do
     PhoenixKitEcommerce.Events.broadcast_inventory_updated(item.uuid, :issued)
 
     assert view |> element("#product-add-to-cart[disabled]", "Out of stock") |> has_element?()
+    refute has_element?(view, "input[name=quantity]")
+
+    put_stock!(item.uuid, 1)
+    PhoenixKitEcommerce.Events.broadcast_inventory_updated(item.uuid, :returned)
+
+    assert has_element?(view, "input[name=quantity]")
+    refute has_element?(view, "#product-add-to-cart[disabled]")
   end
 
   test "the cart refuses a quantity above the stock", %{conn: conn, product: product} do

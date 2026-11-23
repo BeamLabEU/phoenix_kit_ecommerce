@@ -1023,7 +1023,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                 <% end %>
 
                 <%!-- Quantity Selector --%>
-                <fieldset class="fieldset">
+                <fieldset :if={@offer != :sold_out} class="fieldset">
                   <legend class="fieldset-legend">{gettext("Quantity")}</legend>
                   <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                     <div class="flex items-center gap-1">
