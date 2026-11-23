@@ -5788,6 +5788,7 @@ defmodule PhoenixKitEcommerce do
   `user_uuid` included, answers `nil`.
   """
   @spec handoff_snapshot(term()) :: %{String.t() => String.t()} | nil
+  @impl PhoenixKit.Module
   def handoff_snapshot(context), do: PhoenixKitEcommerce.CartHandoff.snapshot(context)
 
   @doc """
@@ -5868,6 +5869,7 @@ defmodule PhoenixKitEcommerce do
              optional(:notices) => [String.t()],
              optional(:cookies) => [{String.t(), String.t(), keyword()}]
            }}
+  @impl PhoenixKit.Module
   def handoff_apply(context, payload),
     do: PhoenixKitEcommerce.CartHandoff.apply_payload(context, payload)
 
