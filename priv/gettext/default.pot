@@ -8337,3 +8337,45 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Enter a whole number from 0 to %{max}."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:363
+#, elixir-autogen, elixir-format
+msgid "Your cart came with you: %{count} product."
+msgid_plural "Your cart came with you: %{count} products."
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:376
+#, elixir-autogen, elixir-format
+msgid "These stayed in your cart on the other site: %{products}."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:382
+#, elixir-autogen, elixir-format
+msgid "%{name} (%{reason})"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:383
+#, elixir-autogen, elixir-format
+msgid "an item"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:389
+#, elixir-autogen, elixir-format
+msgid "no longer available"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:391
+#, elixir-autogen, elixir-format
+msgid "not enough in stock"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:392
+#, elixir-autogen, elixir-format
+msgid "quantity limit reached"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/cart_handoff.ex:393
+#, elixir-autogen, elixir-format
+msgid "cannot be added here right now"
+msgstr ""

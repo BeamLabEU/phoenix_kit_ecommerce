@@ -852,8 +852,10 @@ defmodule PhoenixKitEcommerce do
   Whether a cart's frozen exchange rate (§4.4, §12.2) has drifted past
   `fx_rate_drift_alert_pct/0` away from the currency table's CURRENT
   rate — and by how much, for the checkout notice. A cart's own prices
-  are NEVER silently recalculated (§4.4); this only reports the drift so
-  checkout can offer `refresh_cart_rate/1` as an explicit choice.
+  are NEVER silently recalculated within its currency (§4.4); this only
+  reports the drift so checkout can offer `refresh_cart_rate/1` as an
+  explicit choice. (A cart opened on a domain with another display
+  currency is moved into that currency first: `redenominate_cart/2`.)
 
   Returns `nil` — nothing to report — for:
   - a cart already in its base currency (nothing was ever converted);
@@ -2989,9 +2991,14 @@ defmodule PhoenixKitEcommerce do
   fail-safe by `get_display_currency/0` (§6.3). With no mapping in play
   this is the base currency, same as before this feature existed
   (§2.12). `base_currency`/`exchange_rate` freeze the base and the rate
-  at THIS moment (§12.2) — no code anywhere may re-read them from the
-  currency table for this cart after creation; only emptying the cart
-  refreshes them (`recalculate_cart_totals!/1`).
+  at THIS moment (§12.2) — no code may re-read them from the currency
+  table for this cart while it holds items and stays in its currency;
+  only emptying the cart refreshes them (`recalculate_cart_totals!/1`)
+  and only the shopper's explicit `refresh_cart_rate/1` re-freezes the
+  rate. The CURRENCY, unlike the rate, follows the request: the cart and
+  checkout pages bring the cart into the domain's currency when they
+  open it (`redenominate_cart/2`), because a cart is paid in the
+  currency of the site it is paid on.
   """
   def create_cart(opts) do
     base = Billing.get_base_currency()
@@ -3186,6 +3193,11 @@ defmodule PhoenixKitEcommerce do
     notification is not sent, the API sends one coalesced signal per call
     (`PhoenixKitEcommerce.API.Signals`). Default `nil`: the storefront
     behaviour, unchanged.
+  - `:broadcast` - `false` keeps the `{:item_added, cart, item}` PubSub event
+    from being sent (default `true`). For a caller that adds several lines in a
+    transaction of its own and announces the result once it has committed
+    (`move_cart_lines/3`): an event sent before the commit tells other tabs of
+    lines a rollback then removes.
 
   ## Examples
 
@@ -3200,7 +3212,7 @@ defmodule PhoenixKitEcommerce do
   def add_to_cart(%Cart{} = cart, %Product{} = product, quantity, opts) when is_list(opts) do
     selected_specs = Keyword.get(opts, :selected_specs, %{})
     skip_validation = Keyword.get(opts, :skip_spec_validation, false)
-    via = Keyword.get(opts, :via)
+    effects = [via: Keyword.get(opts, :via), broadcast: Keyword.get(opts, :broadcast, true)]
     language = Keyword.get(opts, :language)
 
     # The disabled check lives in the CONTEXT, not only the LiveView mounts:
@@ -3223,10 +3235,10 @@ defmodule PhoenixKitEcommerce do
           selected_specs,
           language,
           skip_validation,
-          via
+          effects
         )
       else
-        add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via)
+        add_simple_product_to_cart(cart, product, quantity, language, skip_validation, effects)
       end
     end
   end
@@ -3238,7 +3250,7 @@ defmodule PhoenixKitEcommerce do
          :ok <- validate_cart_currency(cart, product),
          :ok <- validate_stock_for_add(cart, product, quantity),
          {:ok, cart} <- rebase_cart(cart) do
-      add_simple_product_to_cart(cart, product, quantity, nil, false, nil)
+      add_simple_product_to_cart(cart, product, quantity, nil, false, via: nil, broadcast: true)
     end
   end
 
@@ -3433,7 +3445,7 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation, via) do
+  defp add_simple_product_to_cart(cart, product, quantity, language, skip_validation, effects) do
     result =
       repo().transaction(fn ->
         # Lock product row to prevent price changes during cart update
@@ -3488,8 +3500,7 @@ defmodule PhoenixKitEcommerce do
 
     case result do
       {:ok, {updated_cart, item}} ->
-        Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
+        announce_item_added(updated_cart, item, product, effects)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
@@ -3498,6 +3509,14 @@ defmodule PhoenixKitEcommerce do
       error ->
         error
     end
+  end
+
+  defp announce_item_added(cart, item, product, effects) do
+    if Keyword.fetch!(effects, :broadcast), do: Events.broadcast_item_added(cart, item)
+
+    PhoenixKitEcommerce.Notifications.cart_item_added(cart, item, product,
+      via: Keyword.fetch!(effects, :via)
+    )
   end
 
   # What the packer needs to know about one unit of the line, frozen with the
@@ -3592,7 +3611,7 @@ defmodule PhoenixKitEcommerce do
          selected_specs,
          language,
          skip_validation,
-         via
+         effects
        ) do
     result =
       repo().transaction(fn ->
@@ -3650,8 +3669,7 @@ defmodule PhoenixKitEcommerce do
 
     case result do
       {:ok, {updated_cart, item}} ->
-        Events.broadcast_item_added(updated_cart, item)
-        PhoenixKitEcommerce.Notifications.cart_item_added(updated_cart, item, product, via: via)
+        announce_item_added(updated_cart, item, product, effects)
         {:ok, updated_cart}
 
       {:error, {:invalid_specs, error}} ->
@@ -3665,10 +3683,12 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Re-freezes a cart's exchange rate at the currency table's CURRENT rate
   and re-snapshots every line at that new rate (§4.4) — the ONLY path
-  that changes a non-empty cart's `exchange_rate`. A plain add/update
-  never touches it (§12.2, `snapshot_unit_price/2`); this is the
-  shopper's own EXPLICIT choice, offered by the checkout drift notice
-  (`cart_rate_drift/1`) and never triggered automatically.
+  that refreshes a non-empty cart's rate WITHIN its currency
+  (`redenominate_cart/2` writes a rate too, but only together with a
+  change of currency). A plain add/update never touches it (§12.2,
+  `snapshot_unit_price/2`); this is the shopper's own EXPLICIT choice,
+  offered by the checkout drift notice (`cart_rate_drift/1`) and never
+  triggered automatically.
 
   Each line's `unit_price` is re-derived from its `base_unit_price`
   through the same `snapshot_unit_price/2` an add-to-cart uses
@@ -3692,9 +3712,10 @@ defmodule PhoenixKitEcommerce do
   partial reprice) if any line predates `base_unit_price` and has
   nothing to re-derive from; `{:error, :cart_not_active}` if the cart
   has since been converted or abandoned. `{:error, :currency_unavailable}`
-  — checked up front, same fail-safe boundary as `cart_rate_drift/1` —
-  if the cart's currency is no longer usable (unknown, disabled, or a
-  non-positive rate). A cart still frozen against a previous base is
+  — same fail-safe boundary as `cart_rate_drift/1` — if the cart's
+  currency is no longer usable (unknown, disabled, or a non-positive
+  rate). The currency, and so the rate frozen, are those of the locked
+  row: the caller's struct only names the cart. A cart still frozen against a previous base is
   first brought onto the current one through `rebase_cart/1`, whose
   errors pass through.
   """
@@ -3707,26 +3728,29 @@ defmodule PhoenixKitEcommerce do
              | :cart_not_active
              | :cart_not_found}
   def refresh_cart_rate(%Cart{} = cart) do
-    with {:ok, cart} <- rebase_cart(cart),
-         %Currency{enabled: true, exchange_rate: rate} = target <-
-           Billing.get_currency_by_code(cart.currency),
-         true <- Decimal.compare(rate, 0) == :gt,
-         %Currency{} = base <- Billing.get_base_currency() do
-      do_refresh_cart_rate(cart, Currency.effective_rate(target, base))
-    else
-      {:error, _reason} = error -> error
-      _ -> {:error, :currency_unavailable}
+    with {:ok, cart} <- rebase_cart(cart) do
+      do_refresh_cart_rate(cart.uuid)
     end
   end
 
-  defp do_refresh_cart_rate(%Cart{} = cart, new_rate) do
+  # The cart's currency and the rate to freeze are taken from the LOCKED row:
+  # the caller's struct only names the cart (a page opened on one currency can
+  # ask for a refresh after the cart has been brought into another).
+  defp do_refresh_cart_rate(cart_uuid) do
     result =
       repo().transaction(fn ->
         # Lock and reload: `to_base/2` below inverts every
         # `compare_at_price` with the rate on THIS struct, so it has to be
         # the row's current one, and the lock keeps a concurrent add from
         # snapshotting a line at the old rate while this reprices.
-        cart = lock_active_cart!(cart.uuid)
+        cart = lock_active_cart!(cart_uuid)
+
+        new_rate =
+          case refreshed_rate(cart.currency) do
+            {:ok, rate} -> rate
+            {:error, reason} -> repo().rollback(reason)
+          end
+
         items = CartItem |> where([i], i.cart_uuid == ^cart.uuid) |> repo().all()
 
         if Enum.any?(items, &is_nil(&1.base_unit_price)) do
@@ -3784,6 +3808,255 @@ defmodule PhoenixKitEcommerce do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # The fail-safe boundary of a refresh, same as `cart_rate_drift/1`: a currency
+  # the shop no longer prices in is refused rather than priced at a rate that is
+  # not there.
+  defp refreshed_rate(code) do
+    with %Currency{enabled: true, exchange_rate: %Decimal{} = rate} = target <-
+           Billing.get_currency_by_code(code),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      {:ok, Currency.effective_rate(target, base)}
+    else
+      _ -> {:error, :currency_unavailable}
+    end
+  end
+
+  @doc """
+  Brings an ACTIVE cart into another display currency, because a cart is paid
+  in the currency of the site it is paid on: a signed-in shopper's cart is
+  found by user on every domain, and nothing else moves its prices when the
+  domain (and so the display currency) changes.
+
+  The currency is replaced. The RATE is frozen while the cart stays in one
+  currency, and every CHANGE of currency re-freezes it at the CURRENT rate: a
+  EUR cart frozen at an old rate, opened on the USD domain and then on the EUR
+  domain, comes back at today's rate and shows no drift notice. Following the
+  request to another currency is what takes the rate; only the same currency
+  keeps it. In one transaction with the cart row locked and reloaded (the
+  caller's struct may be many events old):
+
+    * the cart is first brought onto the current base through `rebase_cart/1`
+      (its errors pass through);
+    * `currency`, `base_currency` and the frozen `exchange_rate` are rewritten
+      for `currency_code` at the CURRENT rate, the way `create_cart/1` would
+      freeze them;
+    * every line's `unit_price` is re-derived from its exact
+      `base_unit_price` through the same `snapshot_unit_price/2` an
+      add-to-cart uses, and its `currency` is rewritten. `compare_at_price`
+      has no base column, so it is inverted to base with the OLD cart first
+      and then re-snapshotted, exactly as `refresh_cart_rate/1` does it, and
+      a stored `discount_amount` is carried through base the same way;
+    * a stored carrier quote is dropped (it is an amount in the old currency;
+      the shopper's destination and service choice stay, and the quote is
+      asked for again);
+    * totals and the shipping charge are recalculated.
+
+  Charged amounts survive any number of round trips exactly (they come from
+  `base_unit_price`). `compare_at_price` does not: it passes through the old
+  currency's rounded amount and is rounded again in the new one. Into a plain
+  2-decimal currency it can move by up to a cent per round trip (9.99 -> 6.14
+  -> 9.98 at a rate of 0.615); into a currency with a rounding rule it moves by
+  up to the rule's step (`charm_99`: 180.00 -> 162.99 -> 179.29 at 0.909091).
+  A line whose `compare_at_price` does not end up above its `unit_price` loses
+  it (`nil`): a struck-through price that is not higher is wrong to show.
+
+  A cart already in `currency_code` is `{:ok, cart}`, the struct handed in,
+  with no write; a stale struct whose row has meanwhile moved to
+  `currency_code` is answered with the row, also without a write. An empty
+  cart is brought over too.
+
+  Errors leave the cart exactly as it was: `{:error, :currency_unavailable}`
+  (unknown, disabled or non-positive rate; checked before anything is locked),
+  `{:error, :no_base_price}` (a line has nothing to re-derive from),
+  `{:error, :cart_not_active}` (the cart is converting, converted, merged or
+  abandoned, judged on the locked row: a cart being paid is never touched),
+  and the `rebase_cart/1` errors.
+  """
+  @spec redenominate_cart(Cart.t(), String.t() | nil) ::
+          {:ok, Cart.t()}
+          | {:error,
+             :currency_unavailable
+             | :no_base_price
+             | :cart_not_active
+             | :cart_base_unavailable
+             | :cart_not_found}
+  def redenominate_cart(%Cart{currency: code} = cart, code) when is_binary(code), do: {:ok, cart}
+
+  def redenominate_cart(%Cart{status: status}, _currency_code) when status != "active",
+    do: {:error, :cart_not_active}
+
+  def redenominate_cart(%Cart{} = cart, currency_code) do
+    with {:ok, target, base} <- redenomination_target(currency_code),
+         {:ok, {change, updated}} <-
+           repo().transaction(fn -> redenominate_under_lock!(cart.uuid, target, base) end) do
+      if change == :changed, do: Events.broadcast_cart_updated(updated)
+      {:ok, updated}
+    end
+  end
+
+  defp redenominate_under_lock!(cart_uuid, %Currency{} = target, %Currency{} = base) do
+    locked = lock_active_cart!(cart_uuid)
+
+    if locked.currency == target.code do
+      {:unchanged, repo().preload(locked, [:items, :shipping_method])}
+    else
+      {:changed, redenominate_locked!(locked, target, base)}
+    end
+  end
+
+  # The same fail-safe boundary as `refresh_cart_rate/1`: a currency the shop
+  # no longer prices in is refused rather than priced at a rate that is not
+  # there.
+  defp redenomination_target(code) when is_binary(code) do
+    with %Currency{enabled: true, exchange_rate: %Decimal{} = rate} = target <-
+           Billing.get_currency_by_code(code),
+         true <- Decimal.compare(rate, 0) == :gt,
+         %Currency{} = base <- Billing.get_base_currency() do
+      {:ok, target, base}
+    else
+      _ -> {:error, :currency_unavailable}
+    end
+  end
+
+  defp redenomination_target(_code), do: {:error, :currency_unavailable}
+
+  defp redenominate_locked!(%Cart{} = locked, %Currency{} = target, %Currency{} = base) do
+    # Onto the current base first, inside this transaction (the row is locked
+    # already): the lines are re-derived from `base_unit_price`, which is only
+    # meaningful in the shop's current base. The rebased cart is the OLD
+    # frame the `compare_at_price` inversion below reads.
+    old =
+      case rebase_cart(locked) do
+        {:ok, %Cart{} = rebased} -> rebased
+        {:error, reason} -> repo().rollback(reason)
+      end
+
+    items = CartItem |> where([i], i.cart_uuid == ^old.uuid) |> repo().all()
+
+    if Enum.any?(items, &is_nil(&1.base_unit_price)) do
+      repo().rollback(:no_base_price)
+    end
+
+    new_rate = Currency.effective_rate(target, base)
+
+    # A struct copy only, never persisted itself: `snapshot_unit_price/2`
+    # must see the NEW currency and rate while each line is re-derived.
+    renominated = %{
+      old
+      | currency: target.code,
+        base_currency: base.code,
+        exchange_rate: new_rate
+    }
+
+    Enum.each(items, fn item ->
+      unit_price = snapshot_unit_price(renominated, item.base_unit_price)
+
+      attrs = %{
+        currency: target.code,
+        unit_price: unit_price,
+        compare_at_price:
+          redenominated_compare_at(item.compare_at_price, old, renominated, unit_price)
+      }
+
+      item |> CartItem.changeset(attrs) |> repo().update!()
+    end)
+
+    # A stored carrier quote is an amount in the OLD currency: left in place it
+    # keeps its request hash, so it would stay `:ok` while the charge falls
+    # back to the method's static price. The destination stays.
+    old = write_cart_metadata!(old, CartQuote.drop_quote(old.metadata || %{}))
+
+    old
+    |> Cart.totals_changeset(%{
+      currency: target.code,
+      base_currency: base.code,
+      exchange_rate: new_rate,
+      discount_amount: redenominate_discount(old, new_rate, target)
+    })
+    |> repo().update!()
+    |> recalculate_cart_totals!(fx_refresh: false)
+  end
+
+  # `compare_at_price` has no base column: it goes to base through the old
+  # cart's rounded amount and back through the new one's rounding. A result
+  # that is not above the line's own price is not a markdown, so it is not
+  # kept.
+  defp redenominated_compare_at(nil, _old, _renominated, _unit_price), do: nil
+
+  defp redenominated_compare_at(compare_at, old, renominated, unit_price) do
+    converted = snapshot_unit_price(renominated, to_base(old, compare_at))
+    if Decimal.compare(converted, unit_price) == :gt, do: converted
+  end
+
+  # A stored discount is a cart-currency amount like any other. Nothing in
+  # this module writes one, but a host may: carry it through base so it is
+  # not relabelled in the new currency.
+  defp redenominate_discount(%Cart{discount_amount: %Decimal{} = amount} = old, rate, target) do
+    if Decimal.compare(amount, 0) == :gt do
+      amount
+      |> then(&to_base(old, &1))
+      |> Decimal.mult(rate)
+      |> Decimal.round(target.decimal_places || 2)
+    else
+      amount
+    end
+  end
+
+  defp redenominate_discount(%Cart{discount_amount: amount}, _rate, _target), do: amount
+
+  @doc """
+  The cart a page is about to show, in the REQUEST's display currency
+  (`Billing.get_display_currency/0`, which the host sets per domain): a
+  signed-in shopper's cart is found by user on every domain, and a cart is
+  paid in the currency of the site it is paid on.
+
+  A cart in another currency, empty or not, goes through `redenominate_cart/2`
+  and its answer is returned as it is. A cart already in the request's
+  currency keeps its frozen rate and is not written (§4.4), and neither is a
+  cart that is not active (converting, converted, merged, abandoned), nor one
+  asked for while no display currency resolves: all `{:ok, cart}`, the struct
+  handed in.
+
+  A request that names a currency the shop cannot price in (disabled, unknown,
+  no usable rate) is shown in the base, but that is the fail-safe of the
+  DISPLAY, not a request to move a cart: the cart is left as it is, in
+  whatever currency it holds, and follows the request again when the currency
+  comes back (a request that names no currency still means the base).
+
+  The cart page and the checkout page call this on mount, through
+  `Web.Helpers.cart_in_request_currency/2`. It is not called on every read.
+  """
+  @spec cart_in_request_currency(Cart.t()) :: {:ok, Cart.t()} | {:error, atom()}
+  def cart_in_request_currency(%Cart{status: "active", currency: current} = cart) do
+    case Billing.get_display_currency() do
+      %Currency{code: code} when code != current ->
+        if display_currency_fell_back?(code),
+          do: {:ok, cart},
+          else: redenominate_cart(cart, code)
+
+      _same_or_unresolved ->
+        {:ok, cart}
+    end
+  end
+
+  def cart_in_request_currency(%Cart{} = cart), do: {:ok, cart}
+
+  @doc false
+  # Whether `redenominate_cart/2` could move a cart into `code`: a currency the
+  # shop knows, has enabled and gives a positive rate. Checked before anything
+  # is written.
+  @spec pricing_currency?(term()) :: boolean()
+  def pricing_currency?(code), do: match?({:ok, _target, _base}, redenomination_target(code))
+
+  # The request named a currency and the display resolved to another one.
+  defp display_currency_fell_back?(resolved_code) do
+    case Currency.get_request_currency() do
+      requested when is_binary(requested) -> String.upcase(requested) != resolved_code
+      _no_request_currency -> false
     end
   end
 
@@ -5375,6 +5648,228 @@ defmodule PhoenixKitEcommerce do
   defp restamp_compare_at(guest_cart, user_cart, compare) do
     snapshot_unit_price(user_cart, to_base(guest_cart, compare))
   end
+
+  @doc """
+  Moves every line of `source` into `target`, an active cart of the same
+  shopper (or of the shopper the source is handed to), and ends `source` as
+  `merged` into `target` (`merged_into_cart_uuid`).
+
+  ## Ownership
+
+  This function does not know whose carts they are. The CALLER must have
+  settled that the shopper may hand `source` over and that `target` is theirs:
+  the checkout claim holds a redeemed token for an API cart, the cross-domain
+  handoff holds the uuid of a guest cart. Nothing here checks identity
+  by default, so a caller that passes a cart it has not established is
+  moving somebody else's lines. For the one check that can be made here, pass
+  `guest_source: true`: judged on the LOCKED row (the caller's read may be many
+  events old), the source must be active, have no user, not be an API cart and
+  hold lines (`{:error, :not_a_guest_cart}`, `{:error, :cart_empty}`).
+
+  Each line goes through the normal `add_to_cart/4` path, so it is re-read and
+  re-validated (the product is still on sale, its options are still offered,
+  stock, the quantity cap of the cart API) and priced at the TARGET cart's
+  currency and frozen rate and the product's CURRENT price. The line keeps its
+  quantity and options and nothing else: the price it was added at is not
+  carried over, so the lines of a USD cart land in a EUR cart in EUR. A
+  product the target already holds adds up to that line, which keeps its own
+  price, up to the cap.
+
+  A line that cannot be added is skipped and named, and the rest goes on:
+  `%{product_uuid: uuid | nil, name: title, reason: reason}` with `reason` one
+  of `:not_found` (gone, hidden or no longer carted), `:not_on_sale`,
+  `:invalid_options`, `:quantity_cap` (the target holds it at the cap),
+  `:insufficient_stock`, or what `add_to_cart/4` refuses for good
+  (`:currency_mismatch`, `:shop_disabled`, `:cart_base_unavailable`,
+  `:currency_unavailable`). Lines go in in product-uuid order.
+
+  Returns `{:ok, target, %{moved: n, skipped: [...]}}`, `target` as it stands
+  afterwards, `moved` the number of lines that went in (a capped one counts).
+  An empty source moves nothing and is merged. Calling it again for a source
+  that was merged into this same target moves nothing and changes nothing
+  (`{:ok, target, %{moved: 0, skipped: []}}`).
+
+  Refusals leave both carts as they were: `{:error, :same_cart}`,
+  `{:error, :cart_not_active}` (either cart, judged on the locked rows, a
+  source merged into another cart included), `{:error, :cart_not_found}`,
+  `{:error, :not_a_guest_cart}` and `{:error, :cart_empty}` (`guest_source:
+  true`), and `{:error, :busy}` (a deadlock, or an answer of `add_to_cart/4`
+  that is not this line's own: nothing was moved and the call can be repeated).
+
+  ## Events
+
+  With a transaction of its own (called outside one) the move sends no
+  per-line `{:item_added, ...}` event: once it has committed it sends ONE
+  `{:cart_updated, cart}` for the target and one for the source, as each
+  stands, and nothing at all when nothing changed or the move was refused or
+  rolled back, so no tab is told of a line that was never saved. Called
+  inside a caller's transaction (the checkout claim does) the move cannot know
+  when it commits: it sends nothing of its own and `add_to_cart/4` announces
+  each line as it goes in, as it always has, so a later rollback of the
+  caller can leave other tabs showing lines that were not saved. That is the
+  limit, kept for the claim; the caller that cares announces after its own
+  commit.
+
+  Everything runs in one transaction (it joins the caller's). The identity locks
+  of both carts are taken first, in one order for every caller: the user keys
+  sorted, then the session keys sorted (`lock_cart_identity!/2`), then both
+  cart rows in uuid order. A caller that already holds a cart row and then
+  calls this must itself add in a fixed order and rescue `deadlock_detected`,
+  as `API.Claims` does.
+
+  ## Options
+
+    * `:language` - the language of the shopper's page: products are re-read in
+      it and the lines' titles snapshotted in it (as for `add_to_cart/4`).
+    * `:via` - `:assistant` keeps `add_to_cart/4` from sending its per-line
+      "item added" notification, for a move the shopper did not make line by
+      line. Default `nil`.
+    * `:guest_source` - `true` makes the source a guest cart or a refusal, see
+      "Ownership". Default `false`.
+    * `:keep_skipped` - `true` is for a move that must not lose lines (the
+      handoff): what moved leaves the source, what could not move STAYS in it,
+      and the source is `merged` only when nothing is left; otherwise it stays
+      active with the remaining lines and its totals recalculated, so a later
+      call can try them again. The part of a capped line that did not fit stays
+      too and is reported as skipped (`:quantity_cap`) next to the moved line.
+      Default `false` (the claim): every line is moved or dropped and the source
+      is merged with its lines kept as a record.
+  """
+  @spec move_cart_lines(Cart.t(), Cart.t(), keyword()) ::
+          {:ok, Cart.t(),
+           %{
+             moved: non_neg_integer(),
+             skipped: [%{product_uuid: String.t() | nil, name: String.t(), reason: atom()}]
+           }}
+          | {:error,
+             :same_cart
+             | :cart_not_active
+             | :cart_not_found
+             | :not_a_guest_cart
+             | :cart_empty
+             | :busy}
+  def move_cart_lines(%Cart{} = source, %Cart{} = target, opts \\ []) when is_list(opts),
+    do: PhoenixKitEcommerce.CartMove.move(source, target, opts)
+
+  @doc """
+  Cross-domain handoff, source side: what a visitor carries to another domain
+  of the same shop (the shopper switches language, lands on the domain that
+  serves it, and keeps their cart).
+
+  Core's `PhoenixKit.Handoff` calls this, and `handoff_apply/2`, on the module
+  it has registered for `module_key/0` (this one), found with
+  `function_exported?/3`: they are the optional `PhoenixKit.Module` callbacks
+  `handoff_snapshot/1` and `handoff_apply/2` of the core release that ships the
+  handoff (after 3.6.1, which has no caller: with it, or with any core that does
+  not call them, these functions are inert). They carry no `@impl` because the
+  behaviour of the core this package is built against does not declare them;
+  add it when the dependency floor is raised to a core that does.
+
+  `context` is what core builds, `%{user_uuid: uuid | nil, session: map,
+  cookies: map}`: `session` the request's Plug session (string keys),
+  `cookies` its raw cookies. The visitor's shop session id is read from, in
+  order, `:shop_session_id` (a plain-map caller may name it outright), the
+  SIGNED `shop_session_id` cookie (verified with the host endpoint's
+  `secret_key_base`, as `Web.Plugs.ShopSession` verifies it) and
+  `session["shop_session_id"]` (the plug mirrors the id there). An unsigned
+  cookie value is never an identity, and an `api:` session is a cart token, not
+  a browser. String keys work as well as atoms.
+
+  The answer is `nil` when there is nothing to carry, else a JSON-safe map core
+  stores and hands back to `handoff_apply/2` on the target domain:
+
+    * a signed-in account: always `nil`. Their cart is found by user on every
+      domain, and the cart and checkout pages bring it into the domain's
+      currency when they open it (`redenominate_cart/2`);
+    * a guest with no active cart, or an empty one: `nil`;
+    * a guest with a non-empty ACTIVE cart: `%{"cart_uuid" => uuid}`.
+
+  Reads only, and never raises: anything that is not a context, a malformed
+  `user_uuid` included, answers `nil`.
+  """
+  @spec handoff_snapshot(term()) :: %{String.t() => String.t()} | nil
+  def handoff_snapshot(context), do: PhoenixKitEcommerce.CartHandoff.snapshot(context)
+
+  @doc """
+  Cross-domain handoff, target side: applies what `handoff_snapshot/1` took, in
+  the request that redeems the handoff (core calls it, with the same
+  provisions as `handoff_snapshot/1`, only for a payload that has an entry for
+  this module).
+
+  `context` is what core builds, `%{user_uuid: uuid | nil, session: map,
+  cookies: map, host: binary, locale: binary | nil}` (the same plain keys
+  work: `:shop_session_id`, `:currency`, `:language`). `payload` is what
+  `handoff_snapshot/1` returned. The answer is always `{:ok, report}`, never an
+  error and never a raise: the caller is a redirect endpoint and does not
+  branch on failures. `report` is `%{moved: n, skipped: [...]}` as
+  `move_cart_lines/3` reports it, and only when there is something to say
+  also:
+
+    * `notices` - translated, shopper-facing lines for the flash, in the
+      catalogue of `locale` (the process locale is left alone): one for the
+      lines that came along, counted as `moved` counts them (one per product
+      and option choice, whatever its quantity; plural-aware), and one naming
+      the products that did not, each with a short reason;
+    * `cookies` - `[{"shop_session_id", id, opts}]`, for a guest who had no
+      shop session on this domain: `id` is minted exactly as the shop plug
+      mints it and `opts` are the plug's cookie options (signed, 30 days,
+      `same_site: "Lax"`, `http_only`, `secure`), so the browser's next request
+      finds the cart. A guest who has a session (in the session map or in a
+      verified signed cookie) keeps it and gets no cookie. Nothing is minted,
+      and no cart is left under a minted id, when nothing was moved into it.
+      Core sets each with `Plug.Conn.put_resp_cookie/4`.
+
+  A browser that sent the `shop_session_id` cookie while the host endpoint or
+  its `secret_key_base` cannot be found is not given a new identity: the cookie
+  cannot be judged and may be the browser's own cart, so nothing is moved or
+  minted (`{:ok, %{moved: 0, skipped: []}}`, the source stays) and one warning
+  names the cause. A cookie that fails verification with the secret at hand
+  (unsigned, forged, expired) is no session, as before.
+
+  The payload names a guest cart by uuid. It is adopted only if it is ACTIVE,
+  has NO user, is not an API cart, has lines and is not the target's own cart:
+  a payload is data, so a cart that belongs to a user, was converted, merged
+  or abandoned, or is being paid is never touched. That is judged again on the
+  locked row (`move_cart_lines/3`, `guest_source: true`), because the first
+  read may be many events old. The shopper's cart on this domain (by user when
+  `user_uuid` is set, else by the session id) is found or created under the
+  identity lock and the lines move into it in ITS currency, re-priced at the
+  current price, quantities and options kept.
+
+  The currency: the plain-map `:currency` if given, else none. Core's context
+  names no currency (only `host` and `locale`), Billing has no way to ask for
+  the currency of a host (the request's display currency lives in the request
+  process, which is not the process core runs this in), and it is never guessed
+  from `host` or `locale`. So under core an existing target cart keeps the
+  currency it has, and a new one is made in the base currency; the cart page
+  and the checkout page bring it into the domain's currency when the shopper
+  opens them (`redenominate_cart/2`). A caller that does know the currency
+  passes `:currency`; one that runs in a request process with a display
+  currency set gets that currency for a new cart, as `create_cart/1` gives it.
+  A currency the shop does not price in moves nothing.
+
+  A line that cannot be moved STAYS in the guest's cart (`move_cart_lines/3`,
+  `keep_skipped: true`): that cart is `merged` only when nothing is left in it,
+  else it stays active with its totals recalculated, and the next handoff
+  tries the rest again. `skipped` names them. An eligible cart that cannot be
+  carried at all (an unusable currency, a deadlock) is kept whole and reported
+  as `%{moved: 0, skipped: [every line, with the reason]}`. An unknown, invalid
+  or ineligible payload, and any context that names no usable account, is
+  `{:ok, %{moved: 0, skipped: []}}`. Applying the same payload again moves
+  nothing.
+  """
+  @spec handoff_apply(term(), term()) ::
+          {:ok,
+           %{
+             required(:moved) => non_neg_integer(),
+             required(:skipped) => [
+               %{product_uuid: String.t() | nil, name: String.t(), reason: atom()}
+             ],
+             optional(:notices) => [String.t()],
+             optional(:cookies) => [{String.t(), String.t(), keyword()}]
+           }}
+  def handoff_apply(context, payload),
+    do: PhoenixKitEcommerce.CartHandoff.apply_payload(context, payload)
 
   @doc """
   Lists carts with filters for admin.
@@ -8223,7 +8718,14 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp recalculate_cart_totals!(%Cart{} = cart) do
+  # Totals over the lines a cart holds now, for `CartMove`, with the cart's
+  # currency and rate left alone even when it ends up empty (an emptied cart is
+  # otherwise moved on to the request's currency). The caller holds the lock.
+  @doc false
+  def recalculate_totals_keeping_currency!(%Cart{} = cart),
+    do: recalculate_cart_totals!(cart, fx_refresh: false)
+
+  defp recalculate_cart_totals!(%Cart{} = cart, opts \\ []) do
     # Serialize concurrent recalculations of the SAME cart.
     #
     # Callers lock only the PRODUCT row, which does not serialize two adds
@@ -8304,7 +8806,11 @@ defmodule PhoenixKitEcommerce do
       |> Decimal.add(tax_amount)
       |> Decimal.sub(cart.discount_amount || Decimal.new("0"))
 
-    fx_refresh = fx_refresh_if_emptied(cart, items)
+    # `fx_refresh: false` is for `redenominate_cart/2`, which has just written
+    # the currency it was asked for: an emptied cart must not be moved on to
+    # the request's currency instead.
+    fx_refresh =
+      if Keyword.get(opts, :fx_refresh, true), do: fx_refresh_if_emptied(cart, items), else: %{}
 
     cart
     |> Cart.totals_changeset(
@@ -8324,11 +8830,14 @@ defmodule PhoenixKitEcommerce do
     |> repo().preload([:items, :shipping_method], force: true)
   end
 
-  # §4.4: a cart's currency/base/rate are frozen at creation and NEVER
-  # re-read from the currency table while it holds items — a shopper
-  # must not have their cart's prices moved under them. Emptying it is
-  # the one safe moment: nothing left to reprice, so this is where a
-  # stale mapping/rate catches up before the next item freezes it again.
+  # §4.4: a cart's base and rate are frozen at creation and NEVER re-read
+  # from the currency table while it holds items — a shopper must not
+  # have their cart's prices moved under them within a currency. (Its
+  # CURRENCY follows the request when the shopper opens the cart:
+  # `redenominate_cart/2`, because a cart is paid in the currency of the
+  # site it is paid on.) Emptying it is the one safe moment for the rate:
+  # nothing left to reprice, so this is where a stale mapping/rate
+  # catches up before the next item freezes it again.
   # The request-scoped code wins over the cart's own stale currency when
   # both are available, since a shopper on a still-open tab may have
   # since navigated to a different domain.

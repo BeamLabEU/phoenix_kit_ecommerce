@@ -302,6 +302,17 @@ Repo-local aliases:
   `claims_race_test.exs` reproduce them on committed data (callers on real
   connections, or a transaction that holds the cart row while the call under
   test waits for it), and the sequential re-check is pinned beside them.
+- **A cart's rate is frozen while it stays in one currency; every change of
+  currency re-freezes it at the current rate, and the currency follows the
+  request.** Only a page MOUNT runs `redenominate_cart/2`; an open page shows
+  the cart as the row is. A currency the shop cannot price in, or a cart not
+  active, moves nothing. `move_cart_lines/3`: the caller establishes ownership
+  (`guest_source: true` re-checks under the lock), `keep_skipped: true` leaves
+  unmovable lines in the source. Core calls `handoff_snapshot/1` /
+  `handoff_apply/2`; neither raises. `handoff_apply/2` sees no request currency
+  (core's task has no process dictionary): a new target cart is in the base
+  currency unless the caller passes `:currency`; the cart page re-denominates
+  it. See the guide's "Cart currency and handoff" row.
 - **`API.CartWriter` and the claim's "add" merge hold a cart row and then
   call `add_to_cart`, which locks Legacy product rows** (the reverse of the
   module's product-then-cart order, see the note above `lock_active_cart!/1`).

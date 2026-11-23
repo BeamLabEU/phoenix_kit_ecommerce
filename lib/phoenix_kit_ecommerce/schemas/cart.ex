@@ -64,9 +64,13 @@ defmodule PhoenixKitEcommerce.Cart do
     # Frozen at cart creation (§4.4, §12.2 of the per-domain-currency
     # spec): the shop's base currency and the base -> currency rate at
     # that moment. Never re-read from the currency table by any code
-    # after creation — a later rate change must not reprice a cart the
-    # shopper is still looking at. Refreshed only when the cart is
-    # emptied (`recalculate_cart_totals!/1`), the one safe moment.
+    # while the cart holds items and stays in its currency — a later rate
+    # change must not reprice a cart the shopper is still looking at.
+    # Refreshed when the cart is emptied (`recalculate_cart_totals!/1`),
+    # on the shopper's explicit `refresh_cart_rate/1`, and together with
+    # the `currency` when the cart is opened on a domain with another
+    # display currency (`redenominate_cart/2`): a cart is paid in the
+    # currency of the site it is paid on.
     field :base_currency, :string
     field :exchange_rate, :decimal
 
@@ -133,9 +137,10 @@ defmodule PhoenixKitEcommerce.Cart do
 
   `:currency`/`:base_currency`/`:exchange_rate` are only ever present in
   `attrs` when the cart was just emptied (§4.4) — see
-  `recalculate_cart_totals!/1`'s `fx_refresh` map — or on the shopper's
-  explicit `refresh_cart_rate/1` (§4.4) — never as a side effect of a
-  normal totals recompute over existing items.
+  `recalculate_cart_totals!/1`'s `fx_refresh` map — on the shopper's
+  explicit `refresh_cart_rate/1` (§4.4), or when the cart changes
+  currency to follow the request (`redenominate_cart/2`) — never as a
+  side effect of a normal totals recompute over existing items.
   """
   def totals_changeset(cart, attrs) do
     cart

@@ -90,6 +90,7 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp mount_with_cart(socket, cart, session_id, current_language) do
+    {socket, cart} = Helpers.cart_in_request_currency(socket, cart)
     cart = cart |> rebase_cart() |> refresh_pay_on_delivery_shipping()
 
     # Shipping selection only happens on this page when it hasn't been
@@ -109,9 +110,6 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
         cart
       end
 
-    # Get default currency from Billing
-    currency = Shop.currency_for_code(cart.currency)
-
     # Check if user is authenticated
     authenticated = not is_nil(socket.assigns[:phoenix_kit_current_user])
 
@@ -119,7 +117,6 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       socket
       |> assign(:page_title, gettext("Shopping Cart"))
       |> assign(:session_id, session_id)
-      |> assign(:currency, currency)
       |> assign(:authenticated, authenticated)
       |> assign(:current_language, current_language)
       |> assign(:locale, Gettext.get_locale(PhoenixKitEcommerce.Gettext))
@@ -308,9 +305,8 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
       )
 
     socket
-    |> assign(:cart, cart)
+    |> assign_cart(cart)
     |> assign_cross_sells(cart)
-    |> assign(:currency, Shop.currency_for_code(cart.currency))
     |> assign(:shipping_methods, shipping_methods)
     |> assign(:requires_shipping, requires_shipping)
     |> assign(:skip_mode, skip_mode)
@@ -320,7 +316,17 @@ defmodule PhoenixKitEcommerce.Web.CartPage do
   end
 
   defp put_cart(socket, cart) do
-    socket |> assign(:cart, cart) |> assign_shipping_view()
+    socket |> assign_cart(cart) |> assign_shipping_view()
+  end
+
+  # The cart and the currency it is in: the page shows the cart exactly as the
+  # cart row is, so a cart another tab or domain brought into another currency
+  # is shown with that currency's symbol. A page never re-denominates on a
+  # broadcast; only a mount does (`Helpers.cart_in_request_currency/2`).
+  defp assign_cart(socket, cart) do
+    socket
+    |> assign(:cart, cart)
+    |> assign(:currency, Shop.currency_for_code(cart.currency))
   end
 
   # The shipping of the cart is worked out HERE, when the cart changes, and

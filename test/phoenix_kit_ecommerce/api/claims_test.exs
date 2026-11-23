@@ -1050,6 +1050,24 @@ defmodule PhoenixKitEcommerce.API.ClaimsTest do
     end
   end
 
+  describe "redeem/3 merging lines and the operators' notifications" do
+    # The claim moves the lines with `via: :assistant`: the cart API sends one
+    # coalesced signal of its own, so `add_to_cart/4` must not notify per line.
+    test "an add merge sends no per-line notification", ctx do
+      PhoenixKit.Settings.update_setting_with_module("shop_notify_cart_item", "true", "shop")
+      _owner = fixture_user()
+      api = api_cart!([{ctx.p1, 1}, {ctx.p2, 1}])
+      {raw, _} = issue!(api)
+      browser = browser()
+      mine = browser_cart!(browser, [{product!(), 1}])
+      before = count_notifications("shop.cart_item_added")
+
+      assert {:ok, %{mode: :merged}} = redeem(raw, browser, mine.uuid, "add")
+
+      assert count_notifications("shop.cart_item_added") == before
+    end
+  end
+
   describe "helpers" do
     test "path/1 is outside the locale prefix and carries the token", ctx do
       {raw, _} = issue!(api_cart!([{ctx.p1, 1}]))
