@@ -6942,9 +6942,12 @@ defmodule PhoenixKitEcommerce do
   The catalogue pass is scoped to the shop's own catalogue — the one the
   `shop_catalogue` config names, found by name directly so a trashed
   catalogue is still found. Another catalogue's rows are never touched.
-  When the catalogue source is active and that catalogue cannot be
-  resolved, the operation refuses with `{:error, :no_shop_catalogue}`
-  before any write (`base_currency_change_supported/0` says the same);
+  The name is resolved inside the operation's own transaction and the row
+  is re-checked under the advisory lock, so a permanent delete interleaved
+  with the lookup refuses the same way. When the catalogue source is active
+  and that catalogue cannot be resolved, the operation refuses with
+  `{:error, :no_shop_catalogue}` before any write
+  (`base_currency_change_supported/0` says the same);
   under the legacy source the catalogue pass is skipped instead.
 
   Inside that catalogue there is no status filter: trashed items and
@@ -6997,8 +7000,10 @@ defmodule PhoenixKitEcommerce do
   catalogue category FOR UPDATE (by uuid), then each item (by uuid) with its
   category FOR SHARE and itself FOR UPDATE, all held until the transaction
   ends. That is the order an item save takes them in, so the two cannot
-  deadlock. An item created after the worklist was read is picked up by one
-  more pass at the end; one created after that pass is not.
+  deadlock. Neither `create_item` nor `create_category` takes the advisory
+  lock, so a category or item created after its worklist was read is picked
+  up by one more pass at the end — categories first, then items, in the same
+  lock order; one created after that pass is not.
 
   Returns `{:ok, %{products: n, shipping_methods: n, global_modifiers: n,
   category_modifiers: n, product_modifiers: n, catalogue_items: n,
@@ -7014,13 +7019,16 @@ defmodule PhoenixKitEcommerce do
   label is always set, like `products`). Returns `{:error, term}` on the
   first failure encountered — including `{:error, {:ambiguous_modifier_overrides, _}}`
   from an override scan. The scans of the legacy products and of the catalogue
-  worklist refuse before any write; the one of the late pass (items created
+  worklist refuse before any write; the one of the late pass (rows created
   during the run) runs after the earlier writes, so it can refuse after them,
   and everything written so far is rolled back with the transaction. A
   failed catalogue write comes back as
   `{:error, {:catalogue_item_reprice_failed, item_uuid, reason}}` or
   `{:error, {:catalogue_category_reprice_failed, category_uuid, reason}}`,
-  `reason` being the changeset of the write that was refused.
+  `reason` being the changeset of the write that was refused, or
+  `:malformed_ecommerce_data` when the row's `data` or `data["ecommerce"]`
+  is not a JSON object (storable only by raw SQL) — such a row refuses with
+  that tagged error instead of raising.
   """
   @spec reprice_for_base_change(String.t(), String.t(), Decimal.t()) ::
           {:ok,
@@ -7038,11 +7046,17 @@ defmodule PhoenixKitEcommerce do
           | {:error, term()}
   def reprice_for_base_change(old_base_code, new_base_code, %Decimal{} = multiplier)
       when is_binary(old_base_code) and is_binary(new_base_code) do
-    with :ok <- validate_multiplier(multiplier),
-         {:ok, catalogue_uuid} <- resolve_catalogue_scope() do
-      atomically(fn ->
-        do_reprice_for_base_change(old_base_code, new_base_code, multiplier, catalogue_uuid)
-      end)
+    with :ok <- validate_multiplier(multiplier) do
+      atomically(fn -> reprice_in_transaction(old_base_code, new_base_code, multiplier) end)
+    end
+  end
+
+  # The catalogue scope is resolved INSIDE the transaction, so the name
+  # lookup and the advisory lock below cannot straddle a permanent delete of
+  # the shop catalogue.
+  defp reprice_in_transaction(old_base_code, new_base_code, multiplier) do
+    with {:ok, catalogue_uuid} <- resolve_catalogue_scope() do
+      do_reprice_for_base_change(old_base_code, new_base_code, multiplier, catalogue_uuid)
     end
   end
 
@@ -7078,7 +7092,8 @@ defmodule PhoenixKitEcommerce do
     # Both pre-flight scans of the worklists run BEFORE either store's writes
     # start — see the doc's "GUARDED HAZARD" paragraph. The late pass scans its
     # own items after the earlier writes; a refusal there rolls them back.
-    with :ok <- reject_ambiguous_modifier_overrides(products),
+    with :ok <- verify_shop_catalogue_exists(catalogue_uuid),
+         :ok <- reject_ambiguous_modifier_overrides(products),
          :ok <- reject_ambiguous_catalogue_modifier_overrides(catalogue_items, global_options),
          {:ok, decimal_places} <- fetch_currency_decimal_places(new_base_code),
          {:ok, product_count, product_modifiers} <-
@@ -7093,16 +7108,17 @@ defmodule PhoenixKitEcommerce do
              multiplier,
              decimal_places
            ),
-         {:ok, catalogue_category_modifiers} <-
+         {:ok, catalogue_category_modifiers, category_uuids} <-
            reprice_catalogue_categories_for_base_change(
              catalogue_uuid,
              multiplier,
              decimal_places
            ),
-         {:ok, catalogue_totals} <-
+         {:ok, catalogue_totals, late_category_modifiers} <-
            reprice_catalogue_items_for_base_change(
              catalogue_uuid,
              catalogue_items,
+             category_uuids,
              %{
                old_base_code: old_base_code,
                new_base_code: new_base_code,
@@ -7122,7 +7138,7 @@ defmodule PhoenixKitEcommerce do
          category_modifiers: category_modifiers,
          product_modifiers: product_modifiers,
          catalogue_items: catalogue_totals.items,
-         catalogue_category_modifiers: catalogue_category_modifiers,
+         catalogue_category_modifiers: catalogue_category_modifiers + late_category_modifiers,
          catalogue_item_modifiers: catalogue_totals.modifiers,
          catalogue_items_relabelled_from_other: catalogue_totals.relabelled_from_other
        }}
@@ -7625,6 +7641,16 @@ defmodule PhoenixKitEcommerce do
   defp lock_shop_catalogue(nil), do: :ok
   defp lock_shop_catalogue(catalogue_uuid), do: Catalogue.lock_catalogue!(catalogue_uuid)
 
+  # The advisory lock is keyed on the uuid, not on the row, so it does not
+  # prove the catalogue still exists: a permanent delete interleaved with
+  # the name lookup (both inside this transaction) must refuse, not reprice
+  # a phantom catalogue.
+  defp verify_shop_catalogue_exists(nil), do: :ok
+
+  defp verify_shop_catalogue_exists(catalogue_uuid) do
+    if repo().get(CatCatalogue, catalogue_uuid), do: :ok, else: {:error, :no_shop_catalogue}
+  end
+
   # No status filter: see the doc. Used for the pre-flight scan and as the
   # worklist; every row is re-read under its lock before it is written.
   defp fetch_catalogue_items(nil), do: []
@@ -7639,17 +7665,44 @@ defmodule PhoenixKitEcommerce do
     )
   end
 
-  # The worklist was read before the row locks were taken, so an item
-  # created since is not in it. One more pass picks up what is not yet in
-  # the new base; it does not loop, an item created after it is a window
-  # this operation leaves open.
-  defp reprice_catalogue_items_for_base_change(catalogue_uuid, items, ctx) do
+  # The worklists were read before the row locks were taken, so a row
+  # created since is not in them. One more pass at the end picks up what is
+  # not yet in the new base — categories first, then items, in the same
+  # lock order the main passes take; it does not loop, a row created after
+  # it is a window this operation leaves open.
+  defp reprice_catalogue_items_for_base_change(catalogue_uuid, items, category_uuids, ctx) do
     with {:ok, totals} <- reprice_catalogue_item_list(items, ctx),
-         late = fetch_late_catalogue_items(catalogue_uuid, items, ctx.new_base_code),
-         :ok <- reject_ambiguous_catalogue_modifier_overrides(late, ctx.global_options),
-         {:ok, late_totals} <- reprice_catalogue_item_list(late, ctx) do
-      {:ok, Map.merge(totals, late_totals, fn _key, a, b -> a + b end)}
+         {:ok, late_category_modifiers} <-
+           reprice_late_catalogue_categories(catalogue_uuid, category_uuids, ctx),
+         {:ok, late_totals} <- reprice_late_catalogue_items(catalogue_uuid, items, ctx) do
+      {:ok, Map.merge(totals, late_totals, fn _key, a, b -> a + b end), late_category_modifiers}
     end
+  end
+
+  defp reprice_late_catalogue_items(catalogue_uuid, items, ctx) do
+    late = fetch_late_catalogue_items(catalogue_uuid, items, ctx.new_base_code)
+
+    with :ok <- reject_ambiguous_catalogue_modifier_overrides(late, ctx.global_options) do
+      reprice_catalogue_item_list(late, ctx)
+    end
+  end
+
+  # `Catalogue.create_category/2` takes no catalogue advisory lock, so —
+  # like an item — a category created after the categories worklist was
+  # read is picked up here, before the late item pass.
+  defp reprice_late_catalogue_categories(nil, _seen_category_uuids, _ctx), do: {:ok, 0}
+
+  defp reprice_late_catalogue_categories(catalogue_uuid, seen_category_uuids, ctx) do
+    late =
+      repo().all(
+        from(c in CatCategory,
+          where: c.catalogue_uuid == ^catalogue_uuid and c.uuid not in ^seen_category_uuids,
+          order_by: c.uuid,
+          select: c.uuid
+        )
+      )
+
+    reprice_catalogue_category_uuids(late, ctx.multiplier, ctx.decimal_places)
   end
 
   defp fetch_late_catalogue_items(nil, _items, _new_base_code), do: []
@@ -7708,7 +7761,7 @@ defmodule PhoenixKitEcommerce do
       CatalogueWrites.with_locked_items([item], fn locked ->
         case Map.fetch(locked, item.uuid) do
           {:ok, fresh} when fresh.catalogue_uuid == item.catalogue_uuid ->
-            reprice_locked_item(fresh, ctx)
+            reprice_fetched_item(fresh, ctx)
 
           _ ->
             {:ok, :gone}
@@ -7721,6 +7774,19 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  # Any error the locked pass returns is handed past `with_locked_items/2`'s
+  # generic row error through the process dictionary.
+  defp reprice_fetched_item(fresh, ctx) do
+    case reprice_locked_item(fresh, ctx) do
+      {:error, reason} = error ->
+        Process.put(@item_write_failure_key, reason)
+        error
+
+      other ->
+        other
+    end
+  end
+
   defp reprice_locked_item(item, ctx) do
     fresh = repo().preload(item, :category)
 
@@ -7730,8 +7796,18 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp write_repriced_item(fresh, ctx) do
-    data = fresh.data || %{}
-    ecommerce = Map.get(data, "ecommerce") || %{}
+    # A corrupt row — a non-map `data` or `ecommerce`, storable only by raw
+    # SQL — refuses with a tagged error instead of raising: the contract is
+    # `{:error, term}`, and only a cut-short lock wait raises.
+    with %{} = data <- fresh.data || %{},
+         %{} = ecommerce <- Map.get(data, "ecommerce") || %{} do
+      do_write_repriced_item(fresh, data, ecommerce, ctx)
+    else
+      _ -> {:error, :malformed_ecommerce_data}
+    end
+  end
+
+  defp do_write_repriced_item(fresh, data, ecommerce, ctx) do
     types = catalogue_modifier_types(ctx.global_options, fresh.category)
 
     {new_ecommerce, modifiers} = reprice_catalogue_ecommerce(ecommerce, types, ctx)
@@ -7761,9 +7837,8 @@ defmodule PhoenixKitEcommerce do
         {:ok, _updated} ->
           {:ok, %{outcome | written?: true}}
 
-        {:error, reason} = error ->
-          Process.put(@item_write_failure_key, reason)
-          error
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
@@ -7849,7 +7924,7 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp catalogue_category_option_schema(%{data: data}) when is_map(data) do
-    case get_in(data, ["ecommerce", "option_schema"]) do
+    case safe_get_in(data, ["ecommerce", "option_schema"]) do
       options when is_list(options) -> options
       _ -> []
     end
@@ -7857,6 +7932,13 @@ defmodule PhoenixKitEcommerce do
 
   # Also an uncategorised item (`nil`).
   defp catalogue_category_option_schema(_category), do: []
+
+  # `get_in/2` raises on a non-map intermediate (a corrupt JSON shape
+  # storable only by raw SQL); the scans must not raise — the write refuses
+  # the row with a tagged error when it reaches it.
+  defp safe_get_in(term, []), do: term
+  defp safe_get_in(term, _path) when not is_map(term), do: nil
+  defp safe_get_in(map, [key | rest]), do: safe_get_in(Map.get(map, key), rest)
 
   # Pre-flight: same contract as `reject_ambiguous_modifier_overrides/1`,
   # with `item_uuid:` in the mismatches so the two sources are never
@@ -7870,7 +7952,7 @@ defmodule PhoenixKitEcommerce do
   end
 
   defp catalogue_item_modifier_mismatches(item, global_options) do
-    price_modifiers = get_in(item.data || %{}, ["ecommerce", "price_modifiers"]) || %{}
+    price_modifiers = safe_get_in(item.data, ["ecommerce", "price_modifiers"]) || %{}
 
     if price_modifiers == %{} do
       []
@@ -7913,16 +7995,26 @@ defmodule PhoenixKitEcommerce do
   # ---- Catalogue categories ----
 
   defp reprice_catalogue_categories_for_base_change(nil, _multiplier, _decimal_places),
-    do: {:ok, 0}
+    do: {:ok, 0, []}
 
   defp reprice_catalogue_categories_for_base_change(catalogue_uuid, multiplier, decimal_places) do
-    from(c in CatCategory,
-      where: c.catalogue_uuid == ^catalogue_uuid,
-      order_by: c.uuid,
-      select: c.uuid
-    )
-    |> repo().all()
-    |> Enum.reduce_while({:ok, 0}, fn category_uuid, {:ok, count} ->
+    category_uuids =
+      repo().all(
+        from(c in CatCategory,
+          where: c.catalogue_uuid == ^catalogue_uuid,
+          order_by: c.uuid,
+          select: c.uuid
+        )
+      )
+
+    with {:ok, count} <-
+           reprice_catalogue_category_uuids(category_uuids, multiplier, decimal_places) do
+      {:ok, count, category_uuids}
+    end
+  end
+
+  defp reprice_catalogue_category_uuids(category_uuids, multiplier, decimal_places) do
+    Enum.reduce_while(category_uuids, {:ok, 0}, fn category_uuid, {:ok, count} ->
       reprice_one_catalogue_category(category_uuid, count, multiplier, decimal_places)
     end)
   end

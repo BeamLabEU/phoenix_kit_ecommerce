@@ -864,13 +864,20 @@ settings-layer error.
   broadcast, so nothing tells the search index (it stores base-currency
   prices): after the last write the operation queues one rebuild
   (`Search.Jobs.enqueue_rebuild(nil)`) inside its transaction, so the job
-  exists only if the change commits. A refused enqueue rolls back the reprice. A multiplier of 1 relabels only and
-  leaves every amount as stored (legacy product metadata and unchanged option
-  lists are not written back, the modifier counts are 0, no rebuild is queued
-  as the index holds no currency label); that is the repair for a base that
-  was switched without the operation. A direct call is one transaction. The
-  repricer checks modifier types again under each item lock. An intervening
-  edit or a newly created item with a conflicting override rolls back the change. With the catalogue
+  exists only if the change commits. A refused enqueue rolls back the
+  reprice. A multiplier of 1 relabels only and leaves every amount as stored
+  (legacy product metadata and unchanged option lists are not written back,
+  the modifier counts are 0, no rebuild is queued as the index holds no
+  currency label); that is the repair for a base that was switched without
+  the operation. A direct call is one transaction. The catalogue name is
+  resolved inside that transaction and the row is re-checked under the
+  advisory lock, so a permanent delete interleaved with the lookup refuses
+  the same way. The repricer checks modifier types again under each item
+  lock. An intervening edit or a newly created item or category (neither
+  create takes the advisory lock) is picked up by one late pass — categories
+  first, then items, in the same lock order — and a conflicting override in
+  it rolls back the change. A row whose `data["ecommerce"]` is not a JSON
+  object refuses with a tagged error instead of raising. With the catalogue
   source active and no resolvable shop catalogue it refuses with
   `:no_shop_catalogue`. A screen offering the change asks
   `base_currency_change_supported/0` before its confirmation step and shows

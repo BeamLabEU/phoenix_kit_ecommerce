@@ -952,6 +952,39 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       assert Decimal.equal?(Shop.get_shipping_method!(method.uuid).price, Decimal.new("10.00"))
     end
 
+    test "a shop catalogue permanently deleted after the name lookup refuses with :no_shop_catalogue instead of repricing a phantom" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+      item = create_item!(shop, %{base_price: Decimal.new("100.00")}, %{"currency" => "USD"})
+      test = self()
+
+      # Fires on the name lookup itself (the first catalogues-table SELECT
+      # the reprice runs): the row is gone by the time the advisory lock is
+      # taken, and the lock is keyed on the uuid, so only the re-check
+      # under the lock can catch it.
+      after_first_query("SELECT", "phoenix_kit_cat_catalogues", fn ->
+        Repo.delete_all(
+          from(i in PhoenixKitCatalogue.Schemas.Item, where: i.catalogue_uuid == ^shop.uuid)
+        )
+
+        Repo.delete_all(
+          from(c in PhoenixKitCatalogue.Schemas.Catalogue, where: c.uuid == ^shop.uuid)
+        )
+
+        send(test, :deleted)
+      end)
+
+      assert Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091")) ==
+               {:error, :no_shop_catalogue}
+
+      assert_received :deleted
+      # No rebuild was queued...
+      assert rebuild_jobs() == []
+
+      # ...and the delete itself lived in the reprice's transaction, so the
+      # refusal rolled it back: the catalogue is found again afterwards.
+      assert Shop.base_currency_change_supported() == :ok
+    end
+
     test "the legacy source with no resolvable shop catalogue skips the catalogue pass" do
       n = System.unique_integer([:positive])
       set_product_source("legacy")
@@ -1692,6 +1725,91 @@ defmodule PhoenixKitEcommerce.BaseCurrencyRepriceCatalogueTest do
       assert Billing.get_base_currency().code == "USD"
       assert Catalogue.get_item!(first.uuid) == first_before
       assert rebuild_jobs() == []
+    end
+  end
+
+  describe "the late category pass" do
+    test "a category created after the categories worklist was read is repriced too" do
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+
+      {:ok, early} =
+        Catalogue.create_category(%{
+          name: "Early",
+          catalogue_uuid: shop.uuid,
+          data: %{"ecommerce" => %{"option_schema" => [material_schema()]}}
+        })
+
+      test = self()
+
+      # No items exist, so the first categories-table SELECT the reprice
+      # runs is the worklist itself; the handler fires once it has
+      # returned, so the category it creates is visible only to the late
+      # pass (create_category takes no catalogue advisory lock).
+      after_first_query("SELECT", "phoenix_kit_cat_categories", fn ->
+        {:ok, late} =
+          Catalogue.create_category(%{
+            name: "Late",
+            catalogue_uuid: shop.uuid,
+            data: %{"ecommerce" => %{"option_schema" => [material_schema()]}}
+          })
+
+        send(test, {:late_category, late})
+      end)
+
+      # Both categories' fixed "material" entries (PLA/PETG) are counted.
+      assert {:ok, %{catalogue_items: 0, catalogue_category_modifiers: 4}} =
+               Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+
+      assert_received {:late_category, late}
+
+      for category <- [early, late] do
+        [material] = Catalogue.get_category!(category.uuid).data["ecommerce"]["option_schema"]
+
+        assert Decimal.equal?(
+                 Decimal.new(material["price_modifiers"]["PETG"]),
+                 Decimal.new("9.09")
+               )
+      end
+    end
+  end
+
+  describe "malformed stored data" do
+    test "an item whose data[\"ecommerce\"] is not a JSON object refuses with a tagged error, and the earlier write is rolled back" do
+      n = System.unique_integer([:positive])
+      {:ok, _} = Options.update_global_options([material_schema()])
+      {:ok, shop} = APIFixtures.create_shop_catalogue()
+
+      {:ok, method} =
+        Shop.create_shipping_method(%{"name" => "Flat#{n}", "price" => Decimal.new("10.00")})
+
+      {good, bad} = earlier_and_later_item!(shop, %{"currency" => "USD"})
+      assert good.uuid < bad.uuid
+
+      # Storable only by raw SQL: the changeset casts `data` as a map but
+      # never looks inside it. Must come back as {:error, _}, not raise.
+      Repo.update_all(
+        from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^bad.uuid),
+        set: [data: %{"ecommerce" => "corrupt"}]
+      )
+
+      good_before = Catalogue.get_item!(good.uuid)
+      bad_before = Catalogue.get_item!(bad.uuid)
+
+      {result, updated} =
+        item_updates(fn ->
+          Shop.reprice_for_base_change("USD", "EUR", Decimal.new("0.909091"))
+        end)
+
+      assert {:error, {:catalogue_item_reprice_failed, failed_uuid, :malformed_ecommerce_data}} =
+               result
+
+      assert failed_uuid == bad.uuid
+      assert good.uuid in updated
+      refute bad.uuid in updated
+      assert Catalogue.get_item!(good.uuid) == good_before
+      assert Catalogue.get_item!(bad.uuid) == bad_before
+      assert rebuild_jobs() == []
+      assert Decimal.equal?(Shop.get_shipping_method!(method.uuid).price, Decimal.new("10.00"))
     end
   end
 
