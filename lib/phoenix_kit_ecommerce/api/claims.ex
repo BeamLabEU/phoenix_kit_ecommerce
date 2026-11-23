@@ -369,11 +369,17 @@ defmodule PhoenixKitEcommerce.API.Claims do
   end
 
   # The shared line mover does the work (re-priced in the browser cart's
-  # currency, re-validated, product-uuid order, capped); a claim only names
-  # what it left behind. `:assistant`: the cart API's one coalesced signal
-  # stands in for a notification per line.
+  # currency, re-validated, product-uuid order). A claim caps at the cart
+  # API's quantity: the storefront's own ceiling is higher, and an agent cart
+  # must not land more than the API allows. A claim only names what it left
+  # behind. `:assistant`: the cart API's one coalesced signal stands in for a
+  # notification per line.
   defp merge!(claim, api_cart, browser_cart) do
-    case Shop.move_cart_lines(api_cart, browser_cart, language: claim.language, via: :assistant) do
+    case Shop.move_cart_lines(api_cart, browser_cart,
+           language: claim.language,
+           via: :assistant,
+           max_quantity: CartWriter.max_quantity()
+         ) do
       {:ok, merged, %{skipped: skipped}} ->
         finish!(claim, :merged, merged, Enum.map(skipped, & &1.name))
 

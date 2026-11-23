@@ -5675,17 +5675,17 @@ defmodule PhoenixKitEcommerce do
 
   Each line goes through the normal `add_to_cart/4` path, so it is re-read and
   re-validated (the product is still on sale, its options are still offered,
-  stock, the quantity cap of the cart API) and priced at the TARGET cart's
-  currency and frozen rate and the product's CURRENT price. The line keeps its
-  quantity and options and nothing else: the price it was added at is not
-  carried over, so the lines of a USD cart land in a EUR cart in EUR. A
-  product the target already holds adds up to that line, which keeps its own
-  price, up to the cap.
+  stock, the quantity ceiling) and priced at the TARGET cart's currency and
+  frozen rate and the product's CURRENT price. The line keeps its quantity and
+  options and nothing else: the price it was added at is not carried over, so
+  the lines of a USD cart land in a EUR cart in EUR. A product the target
+  already holds adds up to that line, which keeps its own price, up to the
+  ceiling.
 
   A line that cannot be added is skipped and named, and the rest goes on:
   `%{product_uuid: uuid | nil, name: title, reason: reason}` with `reason` one
   of `:not_found` (gone, hidden or no longer carted), `:not_on_sale`,
-  `:invalid_options`, `:quantity_cap` (the target holds it at the cap),
+  `:invalid_options`, `:quantity_cap` (the target holds it at the ceiling),
   `:insufficient_stock`, or what `add_to_cart/4` refuses for good
   (`:currency_mismatch`, `:shop_disabled`, `:cart_base_unavailable`,
   `:currency_unavailable`). Lines go in in product-uuid order.
@@ -5741,6 +5741,14 @@ defmodule PhoenixKitEcommerce do
       too and is reported as skipped (`:quantity_cap`) next to the moved line.
       Default `false` (the claim): every line is moved or dropped and the source
       is merged with its lines kept as a record.
+    * `:max_quantity` - the most units of one product and option choice the
+      target may hold after the move. Default is the cart line's own ceiling
+      (`CartItem.max_quantity/0`, what the storefront accepts). The checkout
+      claim passes the cart API's lower cap (`API.CartWriter.max_quantity/0`),
+      so an agent cart cannot land more than the API allows; the handoff does
+      not, so a storefront quantity above that cap moves in full. A value above
+      the cart ceiling, or one that is not a positive integer, is the cart
+      ceiling.
   """
   @spec move_cart_lines(Cart.t(), Cart.t(), keyword()) ::
           {:ok, Cart.t(),
@@ -5842,7 +5850,9 @@ defmodule PhoenixKitEcommerce do
   read may be many events old. The shopper's cart on this domain (by user when
   `user_uuid` is set, else by the session id) is found or created under the
   identity lock and the lines move into it in ITS currency, re-priced at the
-  current price, quantities and options kept.
+  current price, quantities and options kept. The quantity ceiling is the cart
+  line's own, not the cart API's lower cap, so a storefront quantity above
+  that cap moves in full.
 
   The currency: the plain-map `:currency` if given, else none. Core's context
   names no currency (only `host` and `locale`), Billing has no way to ask for

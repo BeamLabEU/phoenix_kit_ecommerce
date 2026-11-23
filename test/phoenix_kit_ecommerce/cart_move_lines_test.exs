@@ -2,7 +2,7 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
   @moduledoc """
   `PhoenixKitEcommerce.move_cart_lines/3`: every line of a source cart goes
   into a target cart through the normal add-to-cart path, so it is re-read,
-  re-validated (availability, options, stock, the quantity cap) and priced at
+  re-validated (availability, options, stock, the quantity ceiling) and priced at
   the TARGET cart's currency and the CURRENT price of the product. What the
   source line keeps is the quantity and the options, not the price. The source
   cart ends `merged` into the target.
@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.Cart
+  alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Events
 
   setup do
@@ -134,23 +135,25 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
       assert Decimal.equal?(line.unit_price, Decimal.new("10.00"))
     end
 
-    test "the quantity is capped as the cart API caps it", ctx do
+    test "the quantity is capped when the caller names the cart API cap", ctx do
       max = CartWriter.max_quantity()
       source = usd_source([{ctx.p1, 5}])
       target = "USD" |> cart_in() |> fill!([{ctx.p1, max - 2}])
 
-      assert {:ok, _, %{moved: 1, skipped: []}} = Shop.move_cart_lines(source, target, [])
+      assert {:ok, _, %{moved: 1, skipped: []}} =
+               Shop.move_cart_lines(source, target, max_quantity: max)
 
       assert [line] = reload(target).items
       assert line.quantity == max
     end
 
-    test "a line the target already holds at the cap is skipped and named", ctx do
+    test "a line the target already holds at the named cap is skipped and named", ctx do
       max = CartWriter.max_quantity()
       source = usd_source([{ctx.p1, 1}, {ctx.p2, 1}])
       target = "USD" |> cart_in() |> fill!([{ctx.p1, max}])
 
-      assert {:ok, _, %{moved: 1, skipped: [skipped]}} = Shop.move_cart_lines(source, target, [])
+      assert {:ok, _, %{moved: 1, skipped: [skipped]}} =
+               Shop.move_cart_lines(source, target, max_quantity: max)
 
       assert skipped.product_uuid == ctx.p1.uuid
       assert skipped.name == ctx.p1.title["en"]
@@ -469,13 +472,45 @@ defmodule PhoenixKitEcommerce.CartMoveLinesTest do
       assert world(source, target) == before
     end
 
+    test "a quantity above the cart API cap moves in full by default", ctx do
+      quantity = CartWriter.max_quantity() + 40
+      source = usd_source([{ctx.p1, quantity}])
+      target = "USD" |> cart_in() |> fill!([{ctx.p1, 20}])
+
+      assert {:ok, _, %{moved: 1, skipped: []}} = Shop.move_cart_lines(source, target, [])
+
+      landed = quantity + 20
+      assert [%{quantity: ^landed}] = reload(target).items
+      assert Repo.get!(Cart, source.uuid).status == "merged"
+    end
+
+    test "a ceiling above the cart's own is the cart ceiling", ctx do
+      ceiling = CartItem.max_quantity()
+      source = usd_source([{ctx.p1, 5}])
+      target = "USD" |> cart_in() |> fill!([{ctx.p1, ceiling - 2}])
+
+      assert {:ok, _, %{moved: 1, skipped: []}} =
+               Shop.move_cart_lines(source, target, max_quantity: ceiling + 100)
+
+      assert [%{quantity: ^ceiling}] = reload(target).items
+    end
+
+    test "a max_quantity that is not a positive integer is the cart ceiling", ctx do
+      ceiling = CartItem.max_quantity()
+      source = usd_source([{ctx.p1, 1}])
+      target = "USD" |> cart_in() |> fill!([{ctx.p1, ceiling}])
+
+      assert {:ok, _, %{moved: 0, skipped: [%{reason: :quantity_cap}]}} =
+               Shop.move_cart_lines(source, target, max_quantity: "99")
+    end
+
     test "the part of a capped line that did not fit stays in the source", ctx do
       max = CartWriter.max_quantity()
       source = usd_source([{ctx.p1, 5}])
       target = "USD" |> cart_in() |> fill!([{ctx.p1, max - 2}])
 
       assert {:ok, _, %{moved: 1, skipped: [skipped]}} =
-               Shop.move_cart_lines(source, target, keep_skipped: true)
+               Shop.move_cart_lines(source, target, keep_skipped: true, max_quantity: max)
 
       assert skipped.product_uuid == ctx.p1.uuid
       assert skipped.reason == :quantity_cap

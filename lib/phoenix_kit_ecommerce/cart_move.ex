@@ -138,6 +138,7 @@ defmodule PhoenixKitEcommerce.CartMove do
     language = Keyword.get(opts, :language)
     via = Keyword.get(opts, :via)
     add_opts = [language: language, via: via, broadcast: not announce_after_commit?]
+    ceiling = quantity_ceiling(opts)
     records = load_records(source.items, language)
 
     # Product-uuid order, like the writer: two moves (or a move and a write)
@@ -146,7 +147,7 @@ defmodule PhoenixKitEcommerce.CartMove do
       source.items
       |> Enum.sort_by(&(CartView.line_product_id(&1) || ""))
       |> Enum.reduce({target, []}, fn item, {cart, outcomes} ->
-        case add_line(cart, item, records, add_opts) do
+        case add_line(cart, item, records, add_opts, ceiling) do
           {:ok, updated, quantity} -> {updated, [{item, {:moved, quantity}} | outcomes]}
           {:skipped, reason} -> {cart, [{item, {:skipped, reason}} | outcomes]}
         end
@@ -260,18 +261,18 @@ defmodule PhoenixKitEcommerce.CartMove do
   defp skipped_line(item, reason),
     do: %{product_uuid: CartView.line_product_id(item), name: item.product_title, reason: reason}
 
-  defp add_line(cart, item, records, add_opts) do
+  defp add_line(cart, item, records, add_opts, ceiling) do
     with product_id when is_binary(product_id) <- CartView.line_product_id(item),
          {:ok, product} <- listed_product(records, product_id),
          {:ok, specs} <- specs_for(product, item),
-         quantity when quantity > 0 <- room_for(cart, product, specs, item.quantity) do
+         quantity when quantity > 0 <- room_for(cart, product, specs, item.quantity, ceiling) do
       add_checked(cart, product, quantity, specs, add_opts)
     else
       nil -> {:skipped, :not_found}
       {:error, reason} when reason in [:not_found, :not_on_sale] -> {:skipped, reason}
       :error -> {:skipped, :invalid_options}
-      # The line the target already holds at the cap (`room_for/4` is 0): named,
-      # not dropped quietly.
+      # The line the target already holds at the ceiling (`room_for/5` is 0):
+      # named, not dropped quietly.
       0 -> {:skipped, :quantity_cap}
     end
   end
@@ -318,7 +319,18 @@ defmodule PhoenixKitEcommerce.CartMove do
     end
   end
 
-  defp room_for(cart, product, specs, wanted) do
+  # The cart line's own ceiling, unless the caller names a lower one (the
+  # claim names the cart API's). Anything else — above the cart ceiling, not a
+  # positive integer — is the cart ceiling, which is also what `add_to_cart/4`
+  # will accept.
+  defp quantity_ceiling(opts) do
+    case Keyword.get(opts, :max_quantity, CartItem.max_quantity()) do
+      n when is_integer(n) and n > 0 -> min(n, CartItem.max_quantity())
+      _other -> CartItem.max_quantity()
+    end
+  end
+
+  defp room_for(cart, product, specs, wanted, ceiling) do
     keyed? = product.origin == :catalogue and map_size(specs) > 0
 
     existing =
@@ -327,7 +339,7 @@ defmodule PhoenixKitEcommerce.CartMove do
           SelectedSpecs.keyed?(line) == keyed? and SelectedSpecs.keys(line, product) == specs
       end)
 
-    max(0, min(wanted, CartWriter.max_quantity() - ((existing && existing.quantity) || 0)))
+    max(0, min(wanted, ceiling - ((existing && existing.quantity) || 0)))
   end
 
   defp repo, do: RepoHelper.repo()

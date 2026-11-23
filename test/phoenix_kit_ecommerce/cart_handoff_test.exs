@@ -21,6 +21,7 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
 
   alias PhoenixKitBilling.Currency
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.API.CartWriter
   alias PhoenixKitEcommerce.Cart
   alias PhoenixKitEcommerce.CartItem
   alias PhoenixKitEcommerce.Test.Endpoint
@@ -306,6 +307,23 @@ defmodule PhoenixKitEcommerce.CartHandoffTest do
       merged = Repo.get!(Cart, source.uuid)
       assert merged.status == "merged"
       assert merged.merged_into_cart_uuid == target.uuid
+    end
+
+    test "a storefront quantity above the cart API cap moves in full", ctx do
+      quantity = CartWriter.max_quantity() + 40
+      source = guest_cart!([{ctx.p1, quantity}])
+      target_session = session()
+      existing = "USD" |> cart_in(session_id: target_session) |> fill!([{ctx.p1, 20}])
+
+      assert {:ok, %{moved: 1, skipped: []}} =
+               Shop.handoff_apply(
+                 %{user_uuid: nil, shop_session_id: target_session, currency: "USD"},
+                 payload(source)
+               )
+
+      landed = quantity + 20
+      assert quantities(existing) == %{ctx.p1.uuid => landed}
+      assert Repo.get!(Cart, source.uuid).status == "merged"
     end
 
     test "the target already holds lines: they stay, the same product adds up", ctx do
