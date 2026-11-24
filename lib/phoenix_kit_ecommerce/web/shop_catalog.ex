@@ -305,26 +305,18 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
            Matches catalog_category.ex. --%>
       <%!-- `pt-0`: the host layout already pads the top of every page. --%>
       <div class="px-6 pt-0 pb-6 max-w-7xl mx-auto">
-        <%!-- One row under the site header. This page is the first crumb
-              itself, so the left side carries the shop's own name rather than
-              a link back to where the visitor already is. --%>
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div class="breadcrumbs text-sm">
-            <ul>
-              <li class="font-medium inline-flex items-center gap-1">
-                <.icon name="hero-home" class="w-4 h-4" />
-                {gettext("Shop")}
-              </li>
-            </ul>
-          </div>
-
-          <ShopCards.storefront_bar
-            language={@current_language}
-            cart_count={@cart_count}
-            admin_edit_url={assigns[:admin_edit_url]}
-            admin_edit_label={assigns[:admin_edit_label]}
-          />
-        </div>
+        <%!-- No breadcrumbs: this page is the shop's front page, so the trail
+              would be one crumb, itself, linking nowhere, in a row of its own
+              above a heading that already names the page. The cart/Edit bar
+              is all that can sit up here; it renders nothing when both are
+              off, so no empty row or spacing is left. --%>
+        <ShopCards.storefront_bar
+          class="justify-end mb-4"
+          language={@current_language}
+          cart_count={@cart_count}
+          admin_edit_url={assigns[:admin_edit_url]}
+          admin_edit_label={assigns[:admin_edit_label]}
+        />
 
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">
