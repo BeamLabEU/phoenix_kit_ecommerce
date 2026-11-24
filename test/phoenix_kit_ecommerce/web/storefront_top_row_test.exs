@@ -68,6 +68,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
       assert has_element?(view, "#{@index_page} > div:first-child > .breadcrumbs .hero-home")
       assert has_element?(view, "#{@index_page} > div:first-child > [data-storefront-bar]")
       assert has_element?(view, "[data-storefront-bar] a.btn", "Cart")
+      refute has_element?(view, "#{@index_page} > [data-storefront-bar]")
     end
 
     test "bar off: the first row holds the crumb and nothing else", %{conn: conn} do
