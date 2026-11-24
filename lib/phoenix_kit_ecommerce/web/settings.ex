@@ -83,6 +83,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:related_fallback, RelatedProducts.fallback() == :category)
       |> assign(:related_limit, RelatedProducts.limit())
       |> assign(:show_cart_bar, get_show_cart_bar())
+      |> assign(:show_admin_edit_button, get_show_admin_edit_button())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
       |> assign(
@@ -215,6 +216,10 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp get_show_cart_bar do
     Settings.get_setting_cached("shop_show_cart_bar", "true") == "true"
+  end
+
+  defp get_show_admin_edit_button do
+    Settings.get_setting_cached("shop_show_admin_edit_button", "false") == "true"
   end
 
   defp get_sidebar_show_categories do
@@ -432,6 +437,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_cart_bar", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_cart_bar", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_admin_edit_button", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_admin_edit_button", params, socket)
     end)
   end
 
@@ -1613,6 +1625,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               event="toggle_cart_bar"
             />
 
+            <%!-- The Edit target also reaches the account menu; this is the
+                  in-page button, off unless a store wants both. --%>
+            <.setting_toggle
+              id="toggle-shop-show-admin-edit-button"
+              title={gettext("Show the admin Edit button on storefront pages")}
+              description={
+                gettext(
+                "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+                )
+              }
+              checked={@show_admin_edit_button}
+              event="toggle_admin_edit_button"
+            />
+
             <div class="divider"></div>
 
             <%!-- Category Name Display --%>
@@ -2621,6 +2647,28 @@ defmodule PhoenixKitEcommerce.Web.Settings do
            if(new_value,
              do: gettext("Storefront cart bar enabled"),
              else: gettext("Storefront cart bar disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("toggle_admin_edit_button", _params, socket) do
+    new_value = !socket.assigns.show_admin_edit_button
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_show_admin_edit_button", value_str) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:show_admin_edit_button, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Storefront admin Edit button enabled"),
+             else: gettext("Storefront admin Edit button disabled")
            )
          )}
 

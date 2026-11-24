@@ -3257,6 +3257,26 @@ msgstr "Barre de panier de la boutique désactivée"
 msgid "Storefront cart bar enabled"
 msgstr "Barre de panier de la boutique activée"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr "Afficher le bouton Modifier pour les administrateurs sur les pages de la boutique"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+msgstr "Un bouton Modifier à côté de la barre de panier pour les administrateurs, sur les pages de la boutique, des catégories et des produits. Le menu du compte renvoie déjà vers la même page ; il est donc désactivé par défaut."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr "Bouton Modifier de la boutique désactivé pour les administrateurs"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr "Bouton Modifier de la boutique activé pour les administrateurs"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

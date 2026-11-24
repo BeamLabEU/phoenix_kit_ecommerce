@@ -16,6 +16,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopLayouts do
   host site) and were removed; the in-page category/filter sidebar that the
   dashboard layout used to carry now renders in the page templates for
   everyone.
+
+  A page that has an admin Edit target (shop index, category, product) assigns
+  `:admin_edit_url`/`:admin_edit_label`, already permission-gated by
+  `PhoenixKitEcommerce.Web.Helpers.maybe_assign_admin_edit/4`; `shop_layout/1`
+  passes them on to `app_layout`, so the host's account menu can show the link.
   """
 
   use Phoenix.Component
@@ -38,6 +43,12 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopLayouts do
   attr :current_locale, :string, default: nil
   attr :page_title, :string, default: nil
 
+  # The page's admin Edit target, set by `Helpers.maybe_assign_admin_edit/4`
+  # (the permission gate) on the pages that have one. Handed on to
+  # `app_layout`, which gives it to the account menu and to a host layout.
+  attr :admin_edit_url, :string, default: nil
+  attr :admin_edit_label, :string, default: nil
+
   def shop_layout(assigns) do
     ~H"""
     <PhoenixKitWeb.Components.LayoutWrapper.app_layout
@@ -46,6 +57,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopLayouts do
       current_path={@url_path || "/"}
       current_locale={@current_locale || PhoenixKitEcommerce.Translations.default_language()}
       page_title={@page_title || "Shop"}
+      admin_edit_url={@admin_edit_url}
+      admin_edit_label={@admin_edit_label}
     >
       {render_slot(@inner_block)}
     </PhoenixKitWeb.Components.LayoutWrapper.app_layout>

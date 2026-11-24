@@ -3263,6 +3263,26 @@ msgstr "Панель корзины отключена"
 msgid "Storefront cart bar enabled"
 msgstr "Панель корзины включена"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr "Показывать кнопку «Изменить» для администратора в витрине"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+msgstr "Кнопка «Изменить» рядом с панелью корзины для администраторов на страницах магазина, категорий и товаров. Меню аккаунта уже ведёт на ту же страницу, поэтому по умолчанию кнопка отключена."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr "Кнопка «Изменить» для администратора отключена"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr "Кнопка «Изменить» для администратора включена"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

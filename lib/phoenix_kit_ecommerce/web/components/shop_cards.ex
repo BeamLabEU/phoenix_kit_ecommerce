@@ -177,6 +177,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   and switchable off via `shop_show_cart_bar` by hosts that carry their
   own.
 
+  The admin Edit button is a separate switch, `shop_show_admin_edit_button`
+  (default off): the Edit target now reaches the layout through
+  `ShopLayouts.shop_layout/1`, where the account menu shows it, so the
+  button here only renders for a store that wants it in the page as well.
+
   It carries no "Shop" link: every page that renders it also renders
   breadcrumbs, whose first crumb is that same link, and two of them side
   by side only cost a row of vertical space.
@@ -187,26 +192,33 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
   attr :admin_edit_url, :string,
     default: nil,
-    doc: "when set, an edit link is rendered just before the cart link"
+    doc:
+      "the page's admin Edit target; rendered just before the cart link when `shop_show_admin_edit_button` is on"
 
   attr :admin_edit_label, :string, default: nil
 
   def storefront_bar(assigns) do
     # One settings read per render, not one per `:if` that consults it.
-    assigns = assign(assigns, :show_cart_bar, show_cart_bar?())
+    assigns =
+      assigns
+      |> assign(:show_cart_bar, show_cart_bar?())
+      |> assign(
+        :show_edit_button,
+        show_admin_edit_button?() and not is_nil(assigns.admin_edit_url)
+      )
 
     ~H"""
     <div
-      :if={@show_cart_bar or not is_nil(@admin_edit_url)}
+      :if={@show_cart_bar or @show_edit_button}
       class={["flex items-center gap-2", @class]}
     >
       <%!-- Admin edit sits with the page's other navigation rather than
             beside the page heading, where it changed how the heading itself
             was laid out for an admin. It stays independent of
             `shop_show_cart_bar`: a host that hides the Shop/Cart links
-            because its own header already carries them still needs the
-            product/category Edit link. --%>
-      <.link :if={@admin_edit_url} navigate={@admin_edit_url} class="btn btn-outline btn-sm gap-2">
+            because its own header already carries them can still turn
+            the product/category Edit button on. --%>
+      <.link :if={@show_edit_button} navigate={@admin_edit_url} class="btn btn-outline btn-sm gap-2">
         <.icon name="hero-pencil-square" class="w-4 h-4" />
         {@admin_edit_label || gettext("Edit")}
       </.link>
@@ -224,6 +236,13 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
       </.link>
     </div>
     """
+  end
+
+  defp show_admin_edit_button? do
+    PhoenixKit.Settings.get_setting_cached("shop_show_admin_edit_button", "false") == "true"
+  rescue
+    # Fail toward the default: the account menu carries the Edit target.
+    _ -> false
   end
 
   defp show_cart_bar? do

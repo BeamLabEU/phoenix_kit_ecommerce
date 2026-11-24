@@ -3257,6 +3257,26 @@ msgstr "Warenkorb-Leiste deaktiviert"
 msgid "Storefront cart bar enabled"
 msgstr "Warenkorb-Leiste aktiviert"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr "Admin-Schaltfläche „Bearbeiten“ auf Shop-Seiten anzeigen"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+msgstr "Eine Schaltfläche „Bearbeiten“ neben der Warenkorb-Leiste für Administratoren auf Shop-, Kategorie- und Produktseiten. Das Kontomenü verlinkt bereits auf dieselbe Seite, daher ist sie standardmäßig deaktiviert."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr "Admin-Schaltfläche „Bearbeiten“ im Shop deaktiviert"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr "Admin-Schaltfläche „Bearbeiten“ im Shop aktiviert"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

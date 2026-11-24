@@ -3255,6 +3255,26 @@ msgstr "Ostukorvi riba välja lülitatud"
 msgid "Storefront cart bar enabled"
 msgstr "Ostukorvi riba sisse lülitatud"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr "Näita poe lehtedel administraatori nuppu „Muuda“"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+msgstr "Nupp „Muuda“ ostukorvi riba kõrval administraatoritele poe-, kategooria- ja tootelehtedel. Konto menüü viib juba samale lehele, seepärast on see vaikimisi välja lülitatud."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr "Administraatori nupp „Muuda“ välja lülitatud"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr "Administraatori nupp „Muuda“ sisse lülitatud"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

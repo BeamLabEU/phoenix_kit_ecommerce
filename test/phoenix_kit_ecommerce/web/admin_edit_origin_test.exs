@@ -244,6 +244,8 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
     @describetag :catalogue
 
     setup do
+      # Asserting the in-page button; the menu path has its own test.
+      put_admin_edit_button!("true")
       set_product_source("catalogue")
       enable_catalogue_module()
 
@@ -295,6 +297,8 @@ defmodule PhoenixKitEcommerce.Web.AdminEditOriginTest do
     @describetag :catalogue
 
     setup do
+      # Asserting the in-page button; the menu path has its own test.
+      put_admin_edit_button!("true")
       set_product_source("catalogue")
       enable_catalogue_module()
 

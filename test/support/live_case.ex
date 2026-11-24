@@ -172,6 +172,23 @@ defmodule PhoenixKitEcommerce.LiveCase do
   end
 
   @doc """
+  Sets `shop_show_admin_edit_button` (the storefront's in-page admin Edit
+  button, default off) to `"true"`/`"false"` for the calling test and
+  restores the default afterwards.
+  """
+  def put_admin_edit_button!(value) when value in ["true", "false"] do
+    PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", value)
+    PhoenixKit.Cache.invalidate(:settings, "shop_show_admin_edit_button")
+
+    ExUnit.Callbacks.on_exit(fn ->
+      PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", "false")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_admin_edit_button")
+    end)
+
+    :ok
+  end
+
+  @doc """
   Plugs a locale (e.g. `"ru"`) into the test conn's session so the
   `:assign_locale` `on_mount` hook can set `:current_locale` at mount time,
   as core's live_session does for a real visitor.

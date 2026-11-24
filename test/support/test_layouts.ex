@@ -72,6 +72,27 @@ defmodule PhoenixKitEcommerce.Test.Layouts do
     """
   end
 
+  @doc """
+  A stand-in for a host's own layout, selected through
+  `config :phoenix_kit, layout: {PhoenixKitEcommerce.Test.Layouts, :host}`.
+
+  It renders the `admin_edit_url` / `admin_edit_label` that core's
+  `LayoutWrapper.app_layout` hands a host layout, the way the host's account
+  menu does, so a test can see what the storefront passed to the layout.
+  """
+  def host(assigns) do
+    ~H"""
+    <div
+      :if={assigns[:admin_edit_url]}
+      id="host-admin-edit"
+      data-url={@admin_edit_url}
+      data-label={assigns[:admin_edit_label]}
+    >
+    </div>
+    {@inner_content}
+    """
+  end
+
   # Phoenix's error pipeline will try to render "<status>.html" from the
   # layouts module if a LiveView raises during mount. Forward everything
   # to a single generic template so tests get a readable error instead
