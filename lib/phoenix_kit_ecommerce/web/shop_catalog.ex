@@ -127,6 +127,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
       )
       |> assign(:show_categories_grid, Helpers.sidebar_categories_enabled?())
       |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
+      |> assign(:show_index_breadcrumbs, Helpers.index_breadcrumbs_enabled?())
       # The row of buttons stands in for the cards and the phone category list;
       # it follows "Show Categories in Shop" like the cards do.
       |> assign(
@@ -300,10 +301,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     # page: `NamePrefix.prefixes/0` is a GenServer round-trip on core's
     # settings cache, and a grid of cards plus category tiles would
     # otherwise repeat it per name.
-    assigns =
-      assigns
-      |> assign(:name_prefixes, NamePrefix.prefixes())
-      |> assign(:show_index_breadcrumbs, Helpers.index_breadcrumbs_enabled?())
+    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
 
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
@@ -313,15 +311,12 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
            Matches catalog_category.ex. --%>
       <%!-- `pt-0`: the host layout already pads the top of every page. --%>
       <div class="px-6 pt-0 pb-6 max-w-7xl mx-auto">
-        <%!-- `shop_show_index_breadcrumbs` (default on). This page is the
-              shop's front page, so its trail is one crumb: itself, linking
-              nowhere. On, that crumb and the bar share one row; off, the bar
-              is all that can sit up here, alone and right-aligned, and it
-              renders nothing when both of its buttons are off, so no empty
-              row or spacing is left. --%>
-        <%!-- One row under the site header. This page is the first crumb
-              itself, so the left side carries the shop's own name rather than
-              a link back to where the visitor already is. --%>
+        <%!-- One row under the site header (`shop_show_index_breadcrumbs`,
+              default on). This page is the shop's front page, so its trail is
+              one crumb carrying the shop's own name rather than a link back to
+              where the visitor already is. On, that crumb and the bar share one
+              row; off, the bar sits alone, right-aligned, and renders nothing
+              when both of its buttons are off, leaving no empty row or spacing. --%>
         <div
           :if={@show_index_breadcrumbs}
           class="flex flex-wrap items-center justify-between gap-3 mb-4"

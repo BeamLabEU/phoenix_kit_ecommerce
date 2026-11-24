@@ -2705,6 +2705,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
     case Settings.update_setting("shop_show_index_breadcrumbs", value_str) do
       {:ok, _} ->
+        Activity.log("shop.index_breadcrumbs_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"show_index_breadcrumbs" => new_value}
+        )
+
         {:noreply,
          socket
          |> assign(:show_index_breadcrumbs, new_value)

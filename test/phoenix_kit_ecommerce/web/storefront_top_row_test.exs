@@ -96,6 +96,7 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
 
       assert has_element?(view, "#{@index_page} > div:first-child > .breadcrumbs")
       assert has_element?(view, "#{@index_page} > div:first-child > [data-storefront-bar]")
+      refute has_element?(view, "#{@index_page} > [data-storefront-bar]")
     end
   end
 
@@ -170,6 +171,19 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
 
       assert has_element?(view, "[data-storefront-bar] a.btn", "Manage Shop")
       refute has_element?(view, "[data-storefront-bar] a", "Cart")
+    end
+
+    test "cart bar off, Edit button on for a guest: no empty bar, heading is first", %{
+      conn: conn
+    } do
+      put_cart_bar!("false")
+      put_admin_edit_button!("true")
+
+      {:ok, view, _html} = live(conn, "/shop")
+
+      refute has_element?(view, ".breadcrumbs")
+      refute has_element?(view, "[data-storefront-bar]")
+      assert has_element?(view, "#{@index_page} > header:first-child h1")
     end
   end
 

@@ -3285,12 +3285,12 @@ msgstr "Näita poe avalehel leivapurude rida"
 msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
 msgstr "Poe avaleht on ise esimene kirje, seega sisaldab selle leivapurude rida ainult ühte silti ilma lingita. Lülita see välja, et see rida eemaldada ja jätta ostukorvi riba ning muutmisnupp ainsana paremale; kategooria- ja tootelehed säilitavad oma leivapurud."
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2715
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2722
 #, elixir-autogen, elixir-format
 msgid "Shop index breadcrumbs disabled"
 msgstr "Poe avalehe leivapurud välja lülitatud"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2714
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2721
 #, elixir-autogen, elixir-format
 msgid "Shop index breadcrumbs enabled"
 msgstr "Poe avalehe leivapurud sisse lülitatud"

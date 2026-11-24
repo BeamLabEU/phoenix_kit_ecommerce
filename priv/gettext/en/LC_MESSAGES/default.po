@@ -3286,12 +3286,12 @@ msgstr ""
 msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2715
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2722
 #, elixir-autogen, elixir-format
 msgid "Shop index breadcrumbs disabled"
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:2714
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2721
 #, elixir-autogen, elixir-format
 msgid "Shop index breadcrumbs enabled"
 msgstr ""

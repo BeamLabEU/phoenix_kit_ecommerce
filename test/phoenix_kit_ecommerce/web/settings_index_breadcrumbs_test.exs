@@ -29,18 +29,32 @@ defmodule PhoenixKitEcommerce.Web.SettingsIndexBreadcrumbsTest do
     assert has_element?(view, "#{@toggle}[checked]")
   end
 
-  test "clicking it turns the setting off and on", %{conn: conn} do
+  test "renders unchecked when the setting is already false", %{conn: conn} do
+    put_index_breadcrumbs!("false")
+
     {:ok, view, _html} = live(conn, @path)
 
-    view |> element(@toggle) |> render_click()
+    assert has_element?(view, @toggle)
+    refute has_element?(view, "#{@toggle}[checked]")
+  end
+
+  test "clicking it turns the setting off and on and writes the audit row", %{conn: conn} do
+    {:ok, view, _html} = live(conn, @path)
+
+    html = view |> element(@toggle) |> render_click()
 
     assert Settings.get_setting(@key) == "false"
     refute has_element?(view, "#{@toggle}[checked]")
+    assert html =~ "Shop index breadcrumbs disabled"
 
-    view |> element(@toggle) |> render_click()
+    row = assert_activity_logged("shop.index_breadcrumbs_changed")
+    assert row.metadata["show_index_breadcrumbs"] == false
+
+    html = view |> element(@toggle) |> render_click()
 
     assert Settings.get_setting(@key) == "true"
     assert has_element?(view, "#{@toggle}[checked]")
+    assert html =~ "Shop index breadcrumbs enabled"
   end
 
   test "is refused without the settings capability", %{conn: conn} do
@@ -51,5 +65,6 @@ defmodule PhoenixKitEcommerce.Web.SettingsIndexBreadcrumbsTest do
 
     assert html =~ "permission"
     refute Settings.get_setting(@key) == "false"
+    refute_activity_logged("shop.index_breadcrumbs_changed")
   end
 end
