@@ -120,16 +120,19 @@ Repo-local aliases:
   category/filter sidebar renders in the page templates for everyone. Admin
   LiveViews do not wrap themselves in a layout; core's admin shell supplies
   it.
-- **The admin Edit target goes to the layout, not (by default) into the
-  page.** A page that has one (shop index, category, product) assigns
+- **The admin Edit target goes to the layout; the in-page button is opt-in.**
+  A page that has one (shop index, category, product) assigns
   `:admin_edit_url`/`:admin_edit_label` through
   `Web.Helpers.maybe_assign_admin_edit/4`, which is the permission gate, and
-  `ShopLayouts.shop_layout/1` hands them to `app_layout`: core's account menu
-  (`UserDashboardNav.user_dropdown/1`) and a host layout read them from
-  there. The in-page Edit button of `ShopCards.storefront_bar/1` is a
-  separate switch, `shop_show_admin_edit_button` (Settings, next to the cart
-  bar; default off). A new storefront page with an edit target must assign it
-  the same way and reach `shop_layout/1` with its assigns.
+  `ShopLayouts.shop_layout/1` hands them to `app_layout`. Core renders no
+  account menu on a storefront page: the link shows only if the HOST layout
+  reads `assigns[:admin_edit_url]` (e.g. by rendering core's
+  `UserDashboardNav.user_dropdown/1`). The in-page Edit button of
+  `ShopCards.storefront_bar/1` is a separate switch,
+  `shop_show_admin_edit_button` (Settings, next to the cart bar; default
+  off), for a host whose layout does not show the entry. A new storefront
+  page with an edit target must assign it the same way and reach
+  `shop_layout/1` with its assigns.
 - **The storefront's `<head>` tags are the host's to render.** The catalog,
   category and product pages assign `og`, `canonical_url` and
   `hreflang_links`; core's root layout reads `og` only (its canonical link

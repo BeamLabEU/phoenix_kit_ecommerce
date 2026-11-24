@@ -1625,14 +1625,14 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               event="toggle_cart_bar"
             />
 
-            <%!-- The Edit target also reaches the account menu; this is the
-                  in-page button, off unless a store wants both. --%>
+            <%!-- The Edit target always goes to the host layout; this is the
+                  in-page button, for a layout that does not show it. --%>
             <.setting_toggle
               id="toggle-shop-show-admin-edit-button"
               title={gettext("Show the admin Edit button on storefront pages")}
               description={
                 gettext(
-                "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+                "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
                 )
               }
               checked={@show_admin_edit_button}

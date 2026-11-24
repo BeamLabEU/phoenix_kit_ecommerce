@@ -20,7 +20,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopLayouts do
   A page that has an admin Edit target (shop index, category, product) assigns
   `:admin_edit_url`/`:admin_edit_label`, already permission-gated by
   `PhoenixKitEcommerce.Web.Helpers.maybe_assign_admin_edit/4`; `shop_layout/1`
-  passes them on to `app_layout`, so the host's account menu can show the link.
+  passes them on to `app_layout`. Core renders no account menu on a storefront
+  page itself: the link appears only if the host layout reads
+  `assigns[:admin_edit_url]` (for example by rendering core's
+  `user_dropdown/1`). The in-page button `shop_show_admin_edit_button` is the
+  alternative for a host that does not.
   """
 
   use Phoenix.Component

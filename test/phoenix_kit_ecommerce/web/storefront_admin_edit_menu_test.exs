@@ -30,6 +30,16 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditMenuTest do
     :ok
   end
 
+  defp put_cart_bar!(value) do
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_cart_bar", value)
+    PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+
+    on_exit(fn ->
+      PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+    end)
+  end
+
   defp lang do
     PhoenixKitEcommerce.SlugResolver.normalize_language_public(
       PhoenixKitEcommerce.Translations.default_language()
@@ -195,7 +205,38 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditMenuTest do
     test "the setting does not touch the cart link", %{conn: conn, path: path} do
       {:ok, view, _html} = live(put_test_scope(conn, fake_scope()), path)
 
-      assert has_element?(view, "a.btn", "Cart")
+      assert has_element?(view, "[data-storefront-bar] a.btn", "Cart")
+    end
+
+    test "cart bar off and button off: an admin gets no empty bar row", %{conn: conn, path: path} do
+      put_cart_bar!("false")
+
+      {:ok, view, _html} = live(put_test_scope(conn, fake_scope()), path)
+
+      refute has_element?(view, "[data-storefront-bar]")
+      assert has_element?(view, "#host-admin-edit")
+    end
+
+    test "cart bar off and button on: the bar holds the Edit button alone", %{
+      conn: conn,
+      path: path
+    } do
+      put_cart_bar!("false")
+      put_admin_edit_button!("true")
+
+      {:ok, view, _html} = live(put_test_scope(conn, fake_scope()), path)
+
+      assert has_element?(view, "[data-storefront-bar] a.btn", "Edit Product")
+      refute has_element?(view, "[data-storefront-bar] a", "Cart")
+    end
+
+    test "cart bar off: a guest gets no bar even with the button on", %{conn: conn, path: path} do
+      put_cart_bar!("false")
+      put_admin_edit_button!("true")
+
+      {:ok, view, _html} = live(conn, path)
+
+      refute has_element?(view, "[data-storefront-bar]")
     end
   end
 end

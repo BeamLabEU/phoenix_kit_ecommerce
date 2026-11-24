@@ -3264,7 +3264,7 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1634
 #, elixir-autogen, elixir-format
-msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2671

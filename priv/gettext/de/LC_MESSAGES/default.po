@@ -3260,22 +3260,22 @@ msgstr "Warenkorb-Leiste aktiviert"
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1632
 #, elixir-autogen, elixir-format
 msgid "Show the admin Edit button on storefront pages"
-msgstr "Admin-Schaltfläche „Bearbeiten“ auf Shop-Seiten anzeigen"
+msgstr "Bearbeiten-Schaltfläche für Admins auf Shop-Seiten anzeigen"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1634
 #, elixir-autogen, elixir-format
-msgid "An Edit button next to the cart bar for admins on shop, category and product pages. The account menu already links to the same page, so it is off by default."
-msgstr "Eine Schaltfläche „Bearbeiten“ neben der Warenkorb-Leiste für Administratoren auf Shop-, Kategorie- und Produktseiten. Das Kontomenü verlinkt bereits auf dieselbe Seite, daher ist sie standardmäßig deaktiviert."
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
+msgstr "Eine Bearbeiten-Schaltfläche neben der Warenkorb-Leiste für Administratoren auf Shop-, Kategorie- und Produktseiten. Aktivieren Sie sie, wenn der Kopfbereich Ihrer Website keinen eigenen Bearbeiten-Eintrag zeigt; ein Layout, das den Bearbeiten-Link der Seite an das Kontomenü des Kerns weitergibt, zeigt ihn bereits."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2671
 #, elixir-autogen, elixir-format
 msgid "Storefront admin Edit button disabled"
-msgstr "Admin-Schaltfläche „Bearbeiten“ im Shop deaktiviert"
+msgstr "Bearbeiten-Schaltfläche für Admins im Shop deaktiviert"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2670
 #, elixir-autogen, elixir-format
 msgid "Storefront admin Edit button enabled"
-msgstr "Admin-Schaltfläche „Bearbeiten“ im Shop aktiviert"
+msgstr "Bearbeiten-Schaltfläche für Admins im Shop aktiviert"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format

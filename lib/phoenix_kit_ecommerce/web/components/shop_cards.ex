@@ -178,9 +178,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   own.
 
   The admin Edit button is a separate switch, `shop_show_admin_edit_button`
-  (default off): the Edit target now reaches the layout through
-  `ShopLayouts.shop_layout/1`, where the account menu shows it, so the
-  button here only renders for a store that wants it in the page as well.
+  (default off). The page's Edit target also goes to the layout through
+  `ShopLayouts.shop_layout/1`, but only a host layout that reads
+  `assigns[:admin_edit_url]` (for example by rendering core's
+  `user_dropdown/1`) shows it; a store whose header does not turns this
+  button on instead.
 
   It carries no "Shop" link: every page that renders it also renders
   breadcrumbs, whose first crumb is that same link, and two of them side
@@ -204,12 +206,13 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
       |> assign(:show_cart_bar, show_cart_bar?())
       |> assign(
         :show_edit_button,
-        show_admin_edit_button?() and not is_nil(assigns.admin_edit_url)
+        not is_nil(assigns.admin_edit_url) and show_admin_edit_button?()
       )
 
     ~H"""
     <div
       :if={@show_cart_bar or @show_edit_button}
+      data-storefront-bar
       class={["flex items-center gap-2", @class]}
     >
       <%!-- Admin edit sits with the page's other navigation rather than
@@ -241,7 +244,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   defp show_admin_edit_button? do
     PhoenixKit.Settings.get_setting_cached("shop_show_admin_edit_button", "false") == "true"
   rescue
-    # Fail toward the default: the account menu carries the Edit target.
+    # Fail toward the default: off.
     _ -> false
   end
 

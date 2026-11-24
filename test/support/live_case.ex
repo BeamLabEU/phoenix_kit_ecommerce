@@ -177,11 +177,11 @@ defmodule PhoenixKitEcommerce.LiveCase do
   restores the default afterwards.
   """
   def put_admin_edit_button!(value) when value in ["true", "false"] do
-    PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", value)
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", value)
     PhoenixKit.Cache.invalidate(:settings, "shop_show_admin_edit_button")
 
     ExUnit.Callbacks.on_exit(fn ->
-      PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", "false")
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_admin_edit_button", "false")
       PhoenixKit.Cache.invalidate(:settings, "shop_show_admin_edit_button")
     end)
 

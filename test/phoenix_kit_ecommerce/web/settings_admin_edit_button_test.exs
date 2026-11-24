@@ -14,7 +14,7 @@ defmodule PhoenixKitEcommerce.Web.SettingsAdminEditButtonTest do
 
   setup %{conn: conn} do
     on_exit(fn ->
-      Settings.update_setting(@key, "false")
+      {:ok, _} = Settings.update_setting(@key, "false")
       PhoenixKit.Cache.invalidate(:settings, @key)
     end)
 
