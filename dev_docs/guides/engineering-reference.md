@@ -659,6 +659,14 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   host whose header already links to the cart turns this off; a host whose
   header does not must leave it on, or shoppers have no way back to their
   cart.
+- `shop_show_admin_edit_button` — show an Edit button (shop index "Manage
+  Shop", category, product) in the storefront bar for admins (default:
+  `false`). The same target is always handed to the host layout as
+  `assigns[:admin_edit_url]` / `:admin_edit_label`, but core renders no
+  account menu on a storefront page: the entry exists only if the host layout
+  reads those assigns (e.g. with core's `user_dropdown/1`). A host that does
+  not show it turns this on. The permission gate is
+  `Web.Helpers.maybe_assign_admin_edit/4` either way.
 - `shop_catalog_vocabulary` — `"products"` (default), `"services"` or
   `"mixed"`. What the storefront calls what it sells. Read through
   `PhoenixKitEcommerce.Vocabulary`, never directly. Each variant is a

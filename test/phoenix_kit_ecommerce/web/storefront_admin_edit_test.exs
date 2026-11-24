@@ -26,6 +26,13 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditTest do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.Web.Helpers
 
+  # These tests are about the in-page Edit button: its gate and its target.
+  # The button is off by default (`shop_show_admin_edit_button`); the menu
+  # path is covered by `storefront_admin_edit_menu_test.exs`.
+  setup do
+    put_admin_edit_button!("true")
+  end
+
   defp admin_edit_href(view) do
     view
     |> render()

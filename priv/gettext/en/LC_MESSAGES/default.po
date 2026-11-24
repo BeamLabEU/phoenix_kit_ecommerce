@@ -3256,6 +3256,26 @@ msgstr ""
 msgid "Storefront cart bar enabled"
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr ""
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

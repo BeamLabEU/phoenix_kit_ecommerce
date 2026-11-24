@@ -3265,6 +3265,26 @@ msgstr "Панель кошика вітрини вимкнено"
 msgid "Storefront cart bar enabled"
 msgstr "Панель кошика вітрини увімкнено"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1632
+#, elixir-autogen, elixir-format
+msgid "Show the admin Edit button on storefront pages"
+msgstr "Показувати кнопку редагування для адміністратора у вітрині"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1634
+#, elixir-autogen, elixir-format
+msgid "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
+msgstr "Кнопка редагування поруч із панеллю кошика для адміністраторів на сторінках магазину, категорій і товарів. Увімкніть її, якщо в шапці вашого сайту немає власного пункту редагування; макет, що передає посилання редагування сторінки в меню облікового запису ядра, його вже показує."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2671
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button disabled"
+msgstr "Кнопку редагування для адміністратора у вітрині вимкнено"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2670
+#, elixir-autogen, elixir-format
+msgid "Storefront admin Edit button enabled"
+msgstr "Кнопку редагування для адміністратора у вітрині увімкнено"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"
