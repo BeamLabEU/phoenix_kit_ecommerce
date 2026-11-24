@@ -3277,6 +3277,26 @@ msgstr "Bouton de modification de la boutique désactivé pour les administrateu
 msgid "Storefront admin Edit button enabled"
 msgstr "Bouton de modification de la boutique activé pour les administrateurs"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1654
+#, elixir-autogen, elixir-format
+msgid "Show the breadcrumb row on the shop index"
+msgstr "Afficher la ligne de fil d'Ariane sur la page d'accueil de la boutique"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1656
+#, elixir-autogen, elixir-format
+msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+msgstr "La page d'accueil de la boutique est elle-même le premier élément, donc sa ligne de fil d'Ariane ne contient qu'un libellé sans lien. Désactivez-la pour supprimer cette ligne et laisser la barre de panier et le bouton de modification seuls à droite ; les pages de catégories et de produits conservent leur fil d'Ariane."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2715
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs disabled"
+msgstr "Fil d'Ariane de la page d'accueil de la boutique désactivé"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2714
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs enabled"
+msgstr "Fil d'Ariane de la page d'accueil de la boutique activé"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

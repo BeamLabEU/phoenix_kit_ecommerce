@@ -3285,6 +3285,26 @@ msgstr "Кнопку редагування для адміністратора 
 msgid "Storefront admin Edit button enabled"
 msgstr "Кнопку редагування для адміністратора у вітрині увімкнено"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1654
+#, elixir-autogen, elixir-format
+msgid "Show the breadcrumb row on the shop index"
+msgstr "Показувати рядок «хлібних крихт» на головній сторінці магазину"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1656
+#, elixir-autogen, elixir-format
+msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+msgstr "Головна сторінка магазину сама є першим елементом шляху, тому її рядок «хлібних крихт» містить один підпис без посилання. Вимкніть його, щоб прибрати цей рядок і залишити панель кошика та кнопку редагування самі праворуч; сторінки категорій і товарів зберігають свої «хлібні крихти»."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2715
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs disabled"
+msgstr "«Хлібні крихти» головної сторінки магазину вимкнено"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2714
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs enabled"
+msgstr "«Хлібні крихти» головної сторінки магазину увімкнено"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"
