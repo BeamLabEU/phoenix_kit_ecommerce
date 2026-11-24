@@ -3278,12 +3278,12 @@ msgstr "Кнопка редагування поруч із панеллю ко�
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2671
 #, elixir-autogen, elixir-format
 msgid "Storefront admin Edit button disabled"
-msgstr "Кнопку редагування для адміністратора вимкнено"
+msgstr "Кнопку редагування для адміністратора у вітрині вимкнено"
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2670
 #, elixir-autogen, elixir-format
 msgid "Storefront admin Edit button enabled"
-msgstr "Кнопку редагування для адміністратора увімкнено"
+msgstr "Кнопку редагування для адміністратора у вітрині увімкнено"
 
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format

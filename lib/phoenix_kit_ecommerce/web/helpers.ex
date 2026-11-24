@@ -780,7 +780,7 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   Returns `socket` unchanged when the visitor isn't an admin.
 
   The assigns are read by `ShopLayouts.shop_layout/1`, which passes them to
-  the layout (the account menu), and by `ShopCards.storefront_bar/1` for the
+  the host layout, and by `ShopCards.storefront_bar/1` for the
   in-page button, which `shop_show_admin_edit_button` switches on.
   """
   def maybe_assign_admin_edit(socket, path, label, opts \\ []) do

@@ -49,7 +49,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopLayouts do
 
   # The page's admin Edit target, set by `Helpers.maybe_assign_admin_edit/4`
   # (the permission gate) on the pages that have one. Handed on to
-  # `app_layout`, which gives it to the account menu and to a host layout.
+  # `app_layout`, which gives it to a host layout (core renders no account
+  # menu on a storefront page itself).
   attr :admin_edit_url, :string, default: nil
   attr :admin_edit_label, :string, default: nil
 

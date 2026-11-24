@@ -189,6 +189,22 @@ defmodule PhoenixKitEcommerce.LiveCase do
   end
 
   @doc """
+  Sets `shop_show_cart_bar` (default `"true"`) for the calling test and
+  restores the default afterwards.
+  """
+  def put_cart_bar!(value) when value in ["true", "false"] do
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_cart_bar", value)
+    PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+
+    ExUnit.Callbacks.on_exit(fn ->
+      {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
+      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
+    end)
+
+    :ok
+  end
+
+  @doc """
   Plugs a locale (e.g. `"ru"`) into the test conn's session so the
   `:assign_locale` `on_mount` hook can set `:current_locale` at mount time,
   as core's live_session does for a real visitor.

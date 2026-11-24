@@ -30,16 +30,6 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditMenuTest do
     :ok
   end
 
-  defp put_cart_bar!(value) do
-    {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_cart_bar", value)
-    PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
-
-    on_exit(fn ->
-      PhoenixKit.Settings.update_setting("shop_show_cart_bar", "true")
-      PhoenixKit.Cache.invalidate(:settings, "shop_show_cart_bar")
-    end)
-  end
-
   defp lang do
     PhoenixKitEcommerce.SlugResolver.normalize_language_public(
       PhoenixKitEcommerce.Translations.default_language()
@@ -199,7 +189,9 @@ defmodule PhoenixKitEcommerce.Web.StorefrontAdminEditMenuTest do
 
       {:ok, view, _html} = live(conn, path)
 
-      refute page_button?(view, "Edit Product")
+      # Any text: a guest has no label, so a leaked button reads plain "Edit".
+      assert has_element?(view, "[data-storefront-bar] a", "Cart")
+      refute has_element?(view, "[data-storefront-bar] a", "Edit")
     end
 
     test "the setting does not touch the cart link", %{conn: conn, path: path} do

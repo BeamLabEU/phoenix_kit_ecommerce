@@ -181,8 +181,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
   (default off). The page's Edit target also goes to the layout through
   `ShopLayouts.shop_layout/1`, but only a host layout that reads
   `assigns[:admin_edit_url]` (for example by rendering core's
-  `user_dropdown/1`) shows it; a store whose header does not turns this
-  button on instead.
+  `user_dropdown/1`) shows it; a store whose header does not show it turns
+  this button on instead.
 
   It carries no "Shop" link: every page that renders it also renders
   breadcrumbs, whose first crumb is that same link, and two of them side
@@ -215,6 +215,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
       data-storefront-bar
       class={["flex items-center gap-2", @class]}
     >
+      <%!-- `data-storefront-bar` is a hook for tests, not for styling: it marks
+            the wrapper, which must not render as an empty row when neither
+            link is shown. --%>
       <%!-- Admin edit sits with the page's other navigation rather than
             beside the page heading, where it changed how the heading itself
             was laid out for an admin. It stays independent of

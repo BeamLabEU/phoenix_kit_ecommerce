@@ -665,7 +665,7 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   `assigns[:admin_edit_url]` / `:admin_edit_label`, but core renders no
   account menu on a storefront page: the entry exists only if the host layout
   reads those assigns (e.g. with core's `user_dropdown/1`). A host that does
-  not turns this on. The permission gate is
+  not show it turns this on. The permission gate is
   `Web.Helpers.maybe_assign_admin_edit/4` either way.
 - `shop_catalog_vocabulary` — `"products"` (default), `"services"` or
   `"mixed"`. What the storefront calls what it sells. Read through

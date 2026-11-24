@@ -3265,7 +3265,7 @@ msgstr "Afficher le bouton de modification pour les administrateurs sur les page
 #: lib/phoenix_kit_ecommerce/web/settings.ex:1634
 #, elixir-autogen, elixir-format
 msgid "An Edit button next to the cart bar for admins on shop, category and product pages. Turn it on if your site's header does not show an Edit entry of its own; a layout that hands the page's Edit link to core's account menu already does."
-msgstr "Un bouton de modification à côté de la barre de panier, pour les administrateurs, sur les pages de la boutique, des catégories et des produits. Activez-le si l'en-tête de votre site n'affiche pas d'entrée de modification propre ; un gabarit qui transmet le lien de modification de la page au menu du compte du noyau en affiche déjà une."
+msgstr "Un bouton de modification à côté de la barre de panier, pour les administrateurs, sur les pages de la boutique, des catégories et des produits. Activez-le si l'en-tête de votre site n'affiche pas sa propre entrée de modification ; une mise en page qui transmet le lien de modification de la page au menu du compte du noyau en affiche déjà une."
 
 #: lib/phoenix_kit_ecommerce/web/settings.ex:2671
 #, elixir-autogen, elixir-format
