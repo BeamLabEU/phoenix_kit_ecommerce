@@ -3290,7 +3290,7 @@ msgstr "Кнопку редагування для адміністратора 
 msgid "Show the breadcrumb row on the shop index"
 msgstr "Показувати рядок «хлібних крихт» на головній сторінці магазину"
 
-#: lib/phoenix_kit_ecommerce/web/settings.ex:1657
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1656
 #, elixir-autogen, elixir-format
 msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
 msgstr "Головна сторінка магазину сама є першим елементом шляху, тому її рядок «хлібних крихт» містить один підпис без посилання. Вимкніть його, щоб прибрати цей рядок і залишити панель кошика та кнопку редагування самі праворуч; сторінки категорій і товарів зберігають свої «хлібні крихти»."

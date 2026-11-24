@@ -208,7 +208,7 @@ defmodule PhoenixKitEcommerce.LiveCase do
   Sets `shop_show_index_breadcrumbs` (default `"true"`) for the calling test
   and restores the default afterwards.
   """
-  def put_index_breadcrumbs!(value) when value in ["true", "false"] do
+  def put_index_breadcrumbs!(value) when is_binary(value) do
     {:ok, _} = PhoenixKit.Settings.update_setting("shop_show_index_breadcrumbs", value)
     PhoenixKit.Cache.invalidate(:settings, "shop_show_index_breadcrumbs")
 
