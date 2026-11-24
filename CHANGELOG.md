@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.15.0 - 2026-11-24
+
+PR #123. Needs phoenix_kit 3.7.0 or later for the layout hand-off (`LayoutWrapper.app_layout`'s
+`admin_edit_url` / `admin_edit_label` attrs).
+
+### Added
+
+- **The storefront hands the page's admin Edit target to the host layout.** `ShopLayouts.shop_layout/1`
+  passes `admin_edit_url` / `admin_edit_label` to `LayoutWrapper.app_layout`, so a host layout that
+  renders them (for example with core's `UserDashboardNav.user_dropdown/1` account menu) shows the
+  Edit entry on the shop index, category and product pages. The permission gate
+  (`Web.Helpers.maybe_assign_admin_edit/4`) is unchanged: guests and admins without the shop
+  permission get nothing.
+
+### Changed
+
+- **The in-page Edit button of the storefront bar is now opt-in** via `shop_show_admin_edit_button`
+  (default off; toggle on Settings → Shop next to the cart bar). With it on, the button renders as
+  before. Upgrade note: a host whose header does not render `admin_edit_url` shows no Edit link on
+  storefront pages until the toggle is switched on.
+
 ## 0.14.0 - 2026-11-23
 
 **Upgrading from Hex 0.12.0.** This release also includes the catalogue
