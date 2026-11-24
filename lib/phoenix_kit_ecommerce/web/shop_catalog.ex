@@ -2,6 +2,10 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   @moduledoc """
   Public shop catalog main page.
   Shows categories and featured/active products.
+
+  The page opens with its breadcrumb row (the shop's own name, sharing the row
+  with the cart/Edit bar) unless `shop_show_index_breadcrumbs` is off; then the
+  bar sits alone, right-aligned, and nothing is rendered when it is off too.
   """
 
   use PhoenixKitEcommerce.Web, :live_view
@@ -295,7 +299,10 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
     # page: `NamePrefix.prefixes/0` is a GenServer round-trip on core's
     # settings cache, and a grid of cards plus category tiles would
     # otherwise repeat it per name.
-    assigns = assign(assigns, :name_prefixes, NamePrefix.prefixes())
+    assigns =
+      assigns
+      |> assign(:name_prefixes, NamePrefix.prefixes())
+      |> assign(:show_index_breadcrumbs, Helpers.index_breadcrumbs_enabled?())
 
     ~H"""
     <ShopLayouts.shop_layout {assigns}>
@@ -305,18 +312,42 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
            Matches catalog_category.ex. --%>
       <%!-- `pt-0`: the host layout already pads the top of every page. --%>
       <div class="px-6 pt-0 pb-6 max-w-7xl mx-auto">
-        <%!-- No breadcrumbs: this page is the shop's front page, so the trail
-              would be one crumb, itself, linking nowhere, in a row of its own
-              above a heading that already names the page. The cart/Edit bar
-              is all that can sit up here; it renders nothing when both are
-              off, so no empty row or spacing is left. --%>
-        <ShopCards.storefront_bar
-          class="justify-end mb-4"
-          language={@current_language}
-          cart_count={@cart_count}
-          admin_edit_url={assigns[:admin_edit_url]}
-          admin_edit_label={assigns[:admin_edit_label]}
-        />
+        <%!-- `shop_show_index_breadcrumbs` (default on). This page is the
+              shop's front page, so its trail is one crumb: itself, linking
+              nowhere. --%>
+        <%= if @show_index_breadcrumbs do %>
+          <%!-- One row under the site header. This page is the first crumb
+                itself, so the left side carries the shop's own name rather
+                than a link back to where the visitor already is. --%>
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="breadcrumbs text-sm">
+              <ul>
+                <li class="font-medium inline-flex items-center gap-1">
+                  <.icon name="hero-home" class="w-4 h-4" />
+                  {gettext("Shop")}
+                </li>
+              </ul>
+            </div>
+
+            <ShopCards.storefront_bar
+              language={@current_language}
+              cart_count={@cart_count}
+              admin_edit_url={assigns[:admin_edit_url]}
+              admin_edit_label={assigns[:admin_edit_label]}
+            />
+          </div>
+        <% else %>
+          <%!-- Off: the cart/Edit bar is all that can sit up here, alone and
+                right-aligned. It renders nothing when both are off, so no
+                empty row or spacing is left. --%>
+          <ShopCards.storefront_bar
+            class="justify-end mb-4"
+            language={@current_language}
+            cart_count={@cart_count}
+            admin_edit_url={assigns[:admin_edit_url]}
+            admin_edit_label={assigns[:admin_edit_label]}
+          />
+        <% end %>
 
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">

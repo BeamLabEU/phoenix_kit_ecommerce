@@ -3,13 +3,16 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
   What the top of each storefront page holds, and that nothing is left behind
   when the cart bar and the Edit button are both off.
 
-  The shop index is the shop's front page: its only crumb would be itself, a
-  label that links nowhere above a heading that already says where the visitor
-  is. It renders no breadcrumbs, so with the bar off its first element is the
-  heading block and with the bar on it is the bar alone.
+  The shop index is the shop's front page: its only crumb is itself, a label
+  that links nowhere above a heading that already says where the visitor is.
+  `shop_show_index_breadcrumbs` (default on) decides whether that one-crumb row
+  is rendered. On, the crumb and the bar share one row. Off, the index has no
+  breadcrumbs: the bar sits alone, right-aligned, and with the bar off too the
+  heading block is the first thing on the page.
 
-  The category and product pages keep their breadcrumb row; with the bar off
-  that row holds the breadcrumbs and nothing else.
+  The category and product pages keep their breadcrumb row either way; with
+  the bar off that row holds the breadcrumbs and nothing else. The setting
+  does not touch them.
   """
 
   use PhoenixKitEcommerce.LiveCase, async: false
@@ -53,8 +56,48 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
   @category_page "div.max-w-7xl.mx-auto"
   @product_page "div.container.mx-auto"
 
-  describe "shop index" do
-    test "has no breadcrumb row: the heading block is the first thing on the page", %{conn: conn} do
+  describe "shop index, breadcrumbs on (the default)" do
+    test "bar on: the crumb and the bar share the first row", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/shop")
+
+      assert has_element?(
+               view,
+               "#{@index_page} > div.flex.flex-wrap.items-center.justify-between.gap-3.mb-4:first-child > .breadcrumbs.text-sm li.font-medium"
+             )
+
+      assert has_element?(view, "#{@index_page} > div:first-child > .breadcrumbs .hero-home")
+      assert has_element?(view, "#{@index_page} > div:first-child > [data-storefront-bar]")
+      assert has_element?(view, "[data-storefront-bar] a.btn", "Cart")
+    end
+
+    test "bar off: the first row holds the crumb and nothing else", %{conn: conn} do
+      put_cart_bar!("false")
+
+      {:ok, view, _html} = live(conn, "/shop")
+
+      refute has_element?(view, "[data-storefront-bar]")
+      assert has_element?(view, "#{@index_page} > div:first-child > .breadcrumbs")
+      refute has_element?(view, "#{@index_page} > div:first-child > :not(.breadcrumbs)")
+    end
+
+    test "explicitly on behaves as the default", %{conn: conn} do
+      put_index_breadcrumbs!("true")
+
+      {:ok, view, _html} = live(conn, "/shop")
+
+      assert has_element?(view, "#{@index_page} > div:first-child > .breadcrumbs")
+      assert has_element?(view, "#{@index_page} > div:first-child > [data-storefront-bar]")
+    end
+  end
+
+  describe "shop index, breadcrumbs off" do
+    setup do
+      put_index_breadcrumbs!("false")
+    end
+
+    test "bar and Edit button off: the heading block is the first thing on the page", %{
+      conn: conn
+    } do
       put_cart_bar!("false")
 
       {:ok, view, _html} = live(conn, "/shop")
@@ -71,43 +114,70 @@ defmodule PhoenixKitEcommerce.Web.StorefrontTopRowTest do
       assert has_element?(view, "#{@index_page} > [data-storefront-bar].justify-end:first-child")
       assert has_element?(view, "[data-storefront-bar] a.btn", "Cart")
     end
-  end
 
-  describe "category page" do
-    test "bar off: the first row holds the breadcrumbs and nothing else", %{conn: conn} do
+    test "cart bar off, Edit button on for an admin: the Edit button alone, right-aligned", %{
+      conn: conn
+    } do
       put_cart_bar!("false")
+      put_admin_edit_button!("true")
+      conn = put_test_scope(conn, fake_scope())
 
-      {:ok, view, _html} = live(conn, category_path())
+      {:ok, view, _html} = live(conn, "/shop")
 
-      refute has_element?(view, "[data-storefront-bar]")
-      assert has_element?(view, "#{@category_page} > div:first-child > .breadcrumbs")
-      refute has_element?(view, "#{@category_page} > div:first-child > :not(.breadcrumbs)")
-    end
-
-    test "bar on: breadcrumbs and bar share the first row", %{conn: conn} do
-      {:ok, view, _html} = live(conn, category_path())
-
-      assert has_element?(view, "#{@category_page} > div:first-child > .breadcrumbs")
-      assert has_element?(view, "#{@category_page} > div:first-child > [data-storefront-bar]")
+      refute has_element?(view, ".breadcrumbs")
+      assert has_element?(view, "#{@index_page} > [data-storefront-bar].justify-end:first-child")
+      assert has_element?(view, "[data-storefront-bar] a.btn", "Manage Shop")
+      refute has_element?(view, "[data-storefront-bar] a", "Cart")
     end
   end
 
-  describe "product page" do
-    test "bar off: the first row holds the breadcrumbs and nothing else", %{conn: conn} do
-      put_cart_bar!("false")
+  for index_breadcrumbs <- ["true", "false"] do
+    describe "category page, index breadcrumbs #{index_breadcrumbs}" do
+      setup do
+        put_index_breadcrumbs!(unquote(index_breadcrumbs))
+      end
 
-      {:ok, view, _html} = live(conn, product_path())
+      test "bar off: the first row holds the breadcrumbs and nothing else", %{conn: conn} do
+        put_cart_bar!("false")
 
-      refute has_element?(view, "[data-storefront-bar]")
-      assert has_element?(view, "#{@product_page} > div:first-child > .breadcrumbs")
-      refute has_element?(view, "#{@product_page} > div:first-child > :not(.breadcrumbs)")
+        {:ok, view, _html} = live(conn, category_path())
+
+        refute has_element?(view, "[data-storefront-bar]")
+        assert has_element?(view, "#{@category_page} > div:first-child > .breadcrumbs")
+        refute has_element?(view, "#{@category_page} > div:first-child > :not(.breadcrumbs)")
+      end
+
+      test "bar on: breadcrumbs and bar share the first row", %{conn: conn} do
+        {:ok, view, _html} = live(conn, category_path())
+
+        assert has_element?(view, "#{@category_page} > div:first-child > .breadcrumbs")
+        assert has_element?(view, "#{@category_page} > div:first-child > [data-storefront-bar]")
+      end
     end
+  end
 
-    test "bar on: breadcrumbs and bar share the first row", %{conn: conn} do
-      {:ok, view, _html} = live(conn, product_path())
+  for index_breadcrumbs <- ["true", "false"] do
+    describe "product page, index breadcrumbs #{index_breadcrumbs}" do
+      setup do
+        put_index_breadcrumbs!(unquote(index_breadcrumbs))
+      end
 
-      assert has_element?(view, "#{@product_page} > div:first-child > .breadcrumbs")
-      assert has_element?(view, "#{@product_page} > div:first-child > [data-storefront-bar]")
+      test "bar off: the first row holds the breadcrumbs and nothing else", %{conn: conn} do
+        put_cart_bar!("false")
+
+        {:ok, view, _html} = live(conn, product_path())
+
+        refute has_element?(view, "[data-storefront-bar]")
+        assert has_element?(view, "#{@product_page} > div:first-child > .breadcrumbs")
+        refute has_element?(view, "#{@product_page} > div:first-child > :not(.breadcrumbs)")
+      end
+
+      test "bar on: breadcrumbs and bar share the first row", %{conn: conn} do
+        {:ok, view, _html} = live(conn, product_path())
+
+        assert has_element?(view, "#{@product_page} > div:first-child > .breadcrumbs")
+        assert has_element?(view, "#{@product_page} > div:first-child > [data-storefront-bar]")
+      end
     end
   end
 end

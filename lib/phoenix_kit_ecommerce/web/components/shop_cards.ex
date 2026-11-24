@@ -166,8 +166,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
   @doc """
   Compact cart-side actions for storefront pages, rendered on the same row
-  as the page's breadcrumbs (the shop index has none and right-aligns the bar
-  on its own).
+  as the page's breadcrumbs (the shop index has them only while
+  `shop_show_index_breadcrumbs` is on; without them it right-aligns the bar on
+  its own).
 
   The storefront used to ship its own top-level layout carrying a cart
   link, a language switcher and a home link. Rendering inside the HOST's
@@ -187,7 +188,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShopCards do
 
   It carries no "Shop" link: the category and product pages that render it
   have breadcrumbs whose first crumb is that same link, and the shop index is
-  that page, so a second one only costs vertical space.
+  that page (its own crumb, when shown, is that page's name), so a second one
+  only costs vertical space.
   """
   attr :language, :string, required: true
   attr :cart_count, :integer, default: 0

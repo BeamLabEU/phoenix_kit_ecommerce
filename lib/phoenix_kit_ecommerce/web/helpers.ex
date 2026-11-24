@@ -306,6 +306,18 @@ defmodule PhoenixKitEcommerce.Web.Helpers do
   end
 
   @doc """
+  Whether the shop index renders its breadcrumb row
+  (`shop_show_index_breadcrumbs`, default `true`). The index is the shop's own
+  front page, so its trail is one crumb that names it; off drops that row and
+  leaves the cart/Edit bar alone, right-aligned. The category and product
+  pages keep their trails either way.
+  """
+  @spec index_breadcrumbs_enabled?() :: boolean()
+  def index_breadcrumbs_enabled? do
+    PhoenixKit.Settings.get_setting_cached("shop_show_index_breadcrumbs", "true") == "true"
+  end
+
+  @doc """
   How the storefront shows its categories above the products
   (`shop_category_display`): `"cards"` (default) or `"buttons"`. A stored value
   neither reader understands counts as `"cards"`.

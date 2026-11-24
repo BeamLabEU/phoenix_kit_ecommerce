@@ -3277,6 +3277,26 @@ msgstr "Bearbeiten-Schaltfläche für Admins im Shop deaktiviert"
 msgid "Storefront admin Edit button enabled"
 msgstr "Bearbeiten-Schaltfläche für Admins im Shop aktiviert"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1654
+#, elixir-autogen, elixir-format
+msgid "Show the breadcrumb row on the shop index"
+msgstr "Breadcrumb-Zeile auf der Shop-Startseite anzeigen"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1657
+#, elixir-autogen, elixir-format
+msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+msgstr "Die Startseite des Shops ist selbst der erste Eintrag, daher enthält ihre Breadcrumb-Zeile nur eine Bezeichnung ohne Link. Deaktivieren Sie sie, um diese Zeile zu entfernen und Warenkorb-Leiste und Bearbeiten-Schaltfläche allein rechts anzuzeigen; Kategorie- und Produktseiten behalten ihre Breadcrumbs."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2715
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs disabled"
+msgstr "Breadcrumbs der Shop-Startseite deaktiviert"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2714
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs enabled"
+msgstr "Breadcrumbs der Shop-Startseite aktiviert"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

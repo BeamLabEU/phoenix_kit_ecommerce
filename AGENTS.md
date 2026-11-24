@@ -130,7 +130,10 @@ Repo-local aliases:
   `UserDashboardNav.user_dropdown/1`). The in-page Edit button of
   `ShopCards.storefront_bar/1` is a separate switch,
   `shop_show_admin_edit_button` (Settings, next to the cart bar; default
-  off), for a host whose layout does not show the entry. A new storefront
+  off), for a host whose layout does not show the entry. The shop index's
+  one-crumb breadcrumb row is a third switch beside them,
+  `shop_show_index_breadcrumbs` (default on; off leaves the bar alone,
+  right-aligned; category and product pages are unaffected). A new storefront
   page with an edit target must assign it the same way and reach
   `shop_layout/1` with its assigns.
 - **The storefront's `<head>` tags are the host's to render.** The catalog,
