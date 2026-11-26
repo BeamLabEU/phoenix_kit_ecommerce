@@ -33,6 +33,7 @@ defmodule PhoenixKitEcommerce.Web.SubKeyPagesTest do
     {"/en/admin/shop/imports", "run_imports"},
     {"/en/admin/shop/imports/#{@missing}", "run_imports"},
     {"/en/admin/shop/shopify-sync", "run_imports"},
+    {"/en/admin/shop/shipments", "manage_shipments"},
     {"/en/admin/shop/test", "manage_catalog"}
   ]
 

@@ -69,16 +69,23 @@ defmodule PhoenixKitEcommerce.Web.Routes do
   end
 
   @doc """
-  Non-LiveView public routes, emitted by core for every module with a
+  Non-LiveView routes, emitted by core for every module with a
   `route_module/0` (`PhoenixKitWeb.Integration`, before any `/:locale` surface,
-  so a locale can never swallow them).
+  so a locale can never swallow them). **Not locale-prefixed**: links to them
+  are built with `Routes.path(path, locale: :none)`.
 
   The checkout claim page of the public cart API:
   `GET /checkout/claim/:token` shows the interstitial and consumes nothing,
-  `POST` (with the CSRF token) consumes the claim. **Not locale-prefixed**, so
-  one analytics exclusion pattern covers it. The pipelines are the host's
-  `:browser` (session, CSRF, flash), core's `:phoenix_kit_auto_setup` (the
-  logged-in user) and `:phoenix_kit_shop_session` (the browser's cart id).
+  `POST` (with the CSRF token) consumes the claim; one analytics exclusion
+  pattern covers it. The pipelines are the host's `:browser` (session, CSRF,
+  flash), core's `:phoenix_kit_auto_setup` (the logged-in user) and
+  `:phoenix_kit_shop_session` (the browser's cart id).
+
+  The shipment labels, `GET /shop-shipments/labels?ids=...`
+  (`Web.ShipmentLabelsController`), through `:browser` and core's
+  `:phoenix_kit_admin_only`. It is not under `/admin`: core does not rewrite
+  the routes a module declares here for a host that renamed its admin path,
+  so the controller checks `shop.manage_shipments` itself.
   """
   @spec generate(String.t()) :: Macro.t()
   def generate(url_prefix) do
@@ -88,6 +95,12 @@ defmodule PhoenixKitEcommerce.Web.Routes do
 
         get("/checkout/claim/:token", PhoenixKitEcommerce.Web.ClaimController, :show)
         post("/checkout/claim/:token", PhoenixKitEcommerce.Web.ClaimController, :create)
+      end
+
+      scope unquote(url_prefix) do
+        pipe_through([:browser, :phoenix_kit_admin_only])
+
+        get("/shop-shipments/labels", PhoenixKitEcommerce.Web.ShipmentLabelsController, :index)
       end
     end
   end

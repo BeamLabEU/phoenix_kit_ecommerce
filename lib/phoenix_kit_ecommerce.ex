@@ -369,6 +369,20 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  @doc """
+  The paper size shipment labels are printed in (setting
+  `shop_shipping_label_format`): `:a4` (the default), `:a5` or `:a6`. An
+  unknown stored value is `:a4`.
+  """
+  @spec shipping_label_format() :: Shipping.LabelOptions.format()
+  def shipping_label_format do
+    case Settings.get_setting_cached("shop_shipping_label_format", "a4") do
+      "a5" -> :a5
+      "a6" -> :a6
+      _ -> :a4
+    end
+  end
+
   @parcel_defaults_key "shop_shipping_parcel_defaults"
   @parcel_default_fields [:length_mm, :width_mm, :height_mm, :weight_g]
   @max_parcel_value 10_000_000
@@ -1006,6 +1020,12 @@ defmodule PhoenixKitEcommerce do
           key: "run_imports",
           label: "Run imports",
           description: "Start CSV imports and manage import configurations"
+        },
+        %{
+          key: "manage_shipments",
+          label: "Manage shipments",
+          description:
+            "Register paid orders with the carrier, resolve and cancel shipments and print their labels (includes the recipients' contact details)"
         }
       ]
     }
@@ -1208,6 +1228,18 @@ defmodule PhoenixKitEcommerce do
         # live on every sidebar render (per `Tab.visible?/2`'s own doc),
         # so `get_setting_cached/2` is required here — this is a hot path.
         visible: fn _scope -> TranslationSweepSettings.translations_enabled?() end,
+        gettext_backend: PhoenixKitEcommerce.Gettext
+      ),
+      Tab.new!(
+        id: :admin_shop_shipments,
+        label: "Shipments",
+        icon: "hero-archive-box",
+        path: "shop/shipments",
+        priority: 539,
+        level: :admin,
+        permission: "shop.manage_shipments",
+        live_view: {PhoenixKitEcommerce.Web.Shipments, :index},
+        parent: :admin_shop,
         gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]
