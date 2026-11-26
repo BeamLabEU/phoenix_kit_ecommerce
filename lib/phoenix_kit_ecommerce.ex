@@ -372,7 +372,7 @@ defmodule PhoenixKitEcommerce do
   @doc """
   The paper size shipment labels are printed in (setting
   `shop_shipping_label_format`): `:a4` (the default), `:a5` or `:a6`. An
-  unknown stored value is `:a4`.
+  unknown stored value or settings-layer error falls back to `:a4`.
   """
   @spec shipping_label_format() :: Shipping.LabelOptions.format()
   def shipping_label_format do
@@ -381,6 +381,10 @@ defmodule PhoenixKitEcommerce do
       "a6" -> :a6
       _ -> :a4
     end
+  rescue
+    _ -> :a4
+  catch
+    :exit, _ -> :a4
   end
 
   @doc """

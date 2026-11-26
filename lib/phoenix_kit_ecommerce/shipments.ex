@@ -1168,6 +1168,13 @@ defmodule PhoenixKitEcommerce.Shipments do
     event = event(action, shipment.status, nil, shipment |> masked(message) |> cut())
     compare_and_set(shipment.uuid, [shipment.status], [], event: event)
     :ok
+  rescue
+    error ->
+      Logger.error(
+        "Shipment #{shipment.uuid}: noting #{action} raised #{inspect(error.__struct__)}"
+      )
+
+      :ok
   end
 
   # The open failure: the `tracking_failed` event after which no answer came

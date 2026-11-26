@@ -16,6 +16,7 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
+  alias Mix.Tasks.Compile.PhoenixKitJsSources
   alias PhoenixKitEcommerce.Web.Components.CatalogSidebar
 
   @bundle "priv/static/assets/phoenix_kit_ecommerce.js"
@@ -27,7 +28,7 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
     "lib/phoenix_kit_ecommerce/html_to_markdown.ex"
   ]
 
-  @tag_opening ~r/<(script|style)\b[^>]*>/s
+  @tag_opening ~r/<(script|style)\b[^>]*>/si
 
   # `onclick="…"`, `onclick='…'`, `onclick={…}`, and the same with spaces around `=` for the
   # events a browser knows (a bare `on\w+ =` would also match Elixir like `only = "x"`).
@@ -37,7 +38,10 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
             ~w(mousedown mouseup mouseover mouseout mousemove mouseenter mouseleave) ++
             ~w(touchstart touchend touchmove pointerdown pointerup pointermove) ++
             ~w(dragstart dragend dragover dragenter dragleave animationend transitionend)
-  @handler Regex.compile!("\\son[a-z]+=[\"'{]|\\son(?:#{Enum.join(@events, "|")})\\s*=\\s*[\"'{]")
+  @handler Regex.compile!(
+             "\\son[a-z]+=[\"'{]|\\son(?:#{Enum.join(@events, "|")})\\s*=\\s*[\"'{]",
+             "i"
+           )
   @js_url ~r/\b(?:href|src|action|formaction)\s*=\s*["'{]\s*["']?\s*javascript:/i
 
   test "no inline <script> or <style> in lib/ is written without a nonce" do
@@ -45,12 +49,27 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
       for path <- Path.wildcard("lib/**/*.{ex,heex}"),
           path not in @tags_as_data,
           {opening, number} <- tag_openings(path),
-          not String.contains?(opening, "src="),
+          not (opening =~ ~r/\bsrc\s*=/i),
           not (opening =~ "CSP.nonce(" or opening =~ "CSP.attr("),
           do: "#{path}:#{number}"
 
     assert offenders == [],
            "inline tags without the host's nonce:\n" <> Enum.join(offenders, "\n")
+  end
+
+  # `nonce={…}` is HEEx. In a plain string it renders literally, which the browser cannot match.
+  test "a `nonce={…}` attribute in an .ex file sits inside a ~H template" do
+    offenders =
+      for path <- Path.wildcard("lib/**/*.ex"),
+          lines = path |> File.read!() |> code_lines(),
+          {line, number} <- lines,
+          line =~ "nonce={PhoenixKitWeb.CSP",
+          not in_heex?(lines, number),
+          do: "#{path}:#{number}"
+
+    assert offenders == [],
+           "write `<style\#{PhoenixKitWeb.CSP.attr(:style)}>` in a plain string:\n" <>
+             Enum.join(offenders, "\n")
   end
 
   test "no markup in lib/ carries an inline event handler" do
@@ -70,8 +89,9 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
     offenders =
       for {line, number} <- @bundle |> File.read!() |> String.split("\n") |> Enum.with_index(1),
           not (line =~ ~r{^\s*(//|\*)}),
-          line =~ ~r/\son[a-z]+=\\?["']/ or line =~ ~r/createElement\(["'](?:style|script)["']\)/ or
-            line =~ ~r/["'`]<(?:style|script)\b/,
+          line =~ ~r/\son[a-z]+=\\?["']/i or
+            line =~ ~r/createElement\(["'](?:style|script)["']\)/i or
+            line =~ ~r/["'`]<(?:style|script)\b/i or line =~ ~r/\bjavascript:/i,
           do: "#{@bundle}:#{number}"
 
     assert offenders == [], Enum.join(offenders, "\n")
@@ -79,20 +99,30 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
 
   test "the scans see what they are for" do
     assert ~s(<img onerror={"this.src='x'"} />) =~ @handler
-    assert ~s|<button onclick="go()">| =~ @handler
+    assert ~s|<button onClick="go()">| =~ @handler
     assert ~s|<a href="javascript:void(0)">| =~ @js_url
     refute ~s(<button phx-click="go" data-pkec-no-toggle>) =~ @handler
     assert Regex.match?(@tag_opening, "<style>\n.a{}")
+    assert Regex.match?(@tag_opening, "<SCRIPT>alert(1)</SCRIPT>")
   end
 
   describe "the JS that replaces the handlers" do
     test "is declared by js_sources/0 and shipped in the package" do
-      assert [%{app: :phoenix_kit_ecommerce, file: file, global: "PhoenixKitEcommerceHooks"}] =
+      assert [
+               %{app: :phoenix_kit_ecommerce, file: file, global: "PhoenixKitEcommerceHooks"} =
+                 entry
+             ] =
                PhoenixKitEcommerce.js_sources()
 
       assert Path.join("priv", file) == @bundle
       assert File.regular?(@bundle)
       assert "priv/static" in Mix.Project.config()[:package][:files]
+
+      if Code.ensure_loaded?(PhoenixKitJsSources) and
+           function_exported?(PhoenixKitJsSources, :normalize_entry, 1) do
+        assert %{app: :phoenix_kit_ecommerce, file: ^file, global: "PhoenixKitEcommerceHooks"} =
+                 PhoenixKitJsSources.normalize_entry(entry)
+      end
     end
 
     test "handles every data-pkec-* attribute the markup uses" do
@@ -145,6 +175,18 @@ defmodule PhoenixKitEcommerce.Web.CSPInlineTagsTest do
     assert html =~ ~s(phx-click="clear_filter")
     assert html =~ "data-pkec-no-toggle"
     refute html =~ "onclick"
+  end
+
+  # The nearest heredoc opener above the line is a `~H`.
+  defp in_heex?(lines, number) do
+    lines
+    |> Enum.take(number - 1)
+    |> Enum.reverse()
+    |> Enum.find(fn {line, _} -> line =~ ~s(""") end)
+    |> case do
+      {opener, _} -> opener =~ ~s(~H""")
+      nil -> false
+    end
   end
 
   # Every opening `<script …>` / `<style …>` of the file with the line it starts on.

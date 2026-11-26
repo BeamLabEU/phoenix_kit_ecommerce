@@ -16,6 +16,8 @@
 (function () {
   "use strict";
 
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
   // No hooks; the global exists because js_sources/0 names one.
   window.PhoenixKitEcommerceHooks = window.PhoenixKitEcommerceHooks || {};
 
@@ -28,13 +30,18 @@
   }
 
   function closest(target, selector) {
-    return target && typeof target.closest === "function" ? target.closest(selector) : null;
+    if (!target) return null;
+    var el = typeof target.closest === "function" ? target : target.parentElement;
+    return el && typeof el.closest === "function" ? el.closest(selector) : null;
   }
 
   // Swaps in the fallback once: a fallback that fails too is left alone.
   function imageFallback(img) {
     var url = img.getAttribute("data-pkec-img-fallback");
-    if (url && img.getAttribute("src") !== url) img.src = url;
+    if (!url || img.getAttribute("src") === url) return;
+    // Clear srcset too, or the browser keeps trying the broken srcset candidate.
+    if (has(img, "srcset")) img.removeAttribute("srcset");
+    img.src = url;
   }
 
   // An image that failed before this file ran (a deferred bundle) never

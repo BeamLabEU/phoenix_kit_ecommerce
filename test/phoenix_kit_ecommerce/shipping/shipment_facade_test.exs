@@ -187,6 +187,20 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentFacadeTest do
       capture_log(fn ->
         assert {:error, {:bad_return, _}} =
                  Shipping.print_labels(ctx(%{labels: {:ok, "pdf"}}), [ref()], %LabelOptions{})
+
+        assert {:error, {:bad_return, _}} =
+                 Shipping.print_labels(
+                   ctx(%{labels: {:ok, %{content_type: "", body: "%PDF"}}}),
+                   [ref()],
+                   %LabelOptions{}
+                 )
+
+        assert {:error, {:bad_return, _}} =
+                 Shipping.print_labels(
+                   ctx(%{labels: {:ok, %{content_type: "application/pdf", body: ""}}}),
+                   [ref()],
+                   %LabelOptions{}
+                 )
       end)
     end
   end

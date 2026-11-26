@@ -750,12 +750,18 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
     test "the status filter narrows a section", %{conn: conn} do
       method = method!()
+      open = shipment!(method, "created")
       failed = shipment!(method, "failed")
       unknown = ExUnit.CaptureLog.with_log(fn -> shipment!(method, "unknown") end) |> elem(0)
 
       {:ok, view, _html} = live(conn, @page <> "?section=needs_attention&status=failed")
       assert has_element?(view, "#shipment-#{failed.uuid}")
       refute has_element?(view, "#shipment-#{unknown.uuid}")
+      assert has_element?(view, "#shipments-sections", "1")
+      # Filtering one tab keeps the other tabs' badges and clears status on tab links.
+      assert has_element?(view, "#shipments-sections a[href*='section=open']", "1")
+      refute has_element?(view, "#shipments-sections a[href*='section=open'][href*='status=']")
+      assert open.status == "created"
     end
   end
 
@@ -793,13 +799,19 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       view |> element("#shipment-enter-tracking-#{shipment.uuid}") |> render_click()
 
       view
-      |> form("#shipment-tracking-form", %{"tracking" => %{"tracking_number" => ""}})
+      |> form("#shipment-tracking-form", %{
+        "tracking" => %{"tracking_number" => "CE555EE", "tracking_url" => "not-a-url"}
+      })
       |> render_submit()
 
       assert has_element?(view, "#shipment-tracking-error")
+      assert has_element?(view, "#shipment-tracking-number[value='CE555EE']")
+      assert has_element?(view, "#shipment-tracking-url[value='not-a-url']")
 
       view
-      |> form("#shipment-tracking-form", %{"tracking" => %{"tracking_number" => "CE555EE"}})
+      |> form("#shipment-tracking-form", %{
+        "tracking" => %{"tracking_number" => "CE555EE", "tracking_url" => ""}
+      })
       |> render_submit()
 
       assert %Shipment{status: "created", tracking_number: "CE555EE"} =
@@ -1042,5 +1054,41 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
     settle(view)
 
     assert [%Shipment{destination: %{"pickup_point" => %{"id" => "99999"}}}] = rows(order)
+  end
+
+  test "the destination editor ignores malformed form values and missing searched cities", %{
+    conn: conn
+  } do
+    address_service = %PhoenixKitEcommerce.Shipping.Service{
+      key: "branch",
+      label: "Courier",
+      destination: :address,
+      lookup: :search
+    }
+
+    stub(%{services: [address_service]})
+    order = order!(method!())
+
+    {:ok, view, _html} = live(conn, @page)
+    view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+    settle(view)
+    view |> element("#shipment-editor-destination-change") |> render_click()
+
+    # Non-string values on a validation failure never crash rendering.
+    render_submit(
+      element(view, "#shipment-editor-destination-address-form"),
+      %{"address" => %{"street" => %{"nested" => "bad"}, "house" => ""}}
+    )
+
+    assert has_element?(view, "#shipment-editor-destination-address-form")
+
+    # Dropping the searched city blocks applying an address without one.
+    view |> element("#shipment-editor-destination-locality-change") |> render_click()
+
+    render_click(view, "apply_address", %{
+      "address" => %{"street" => "Pikk", "house" => "1"}
+    })
+
+    assert has_element?(view, "#shipment-editor-destination-editor")
   end
 end

@@ -17,6 +17,7 @@ function image(attrs, extra) {
       attrs: Object.assign({}, attrs),
       hasAttribute(name) { return name in this.attrs; },
       getAttribute(name) { return name in this.attrs ? this.attrs[name] : null; },
+      removeAttribute(name) { delete this.attrs[name]; },
       set src(value) { this.attrs.src = value; this.swaps = (this.swaps || 0) + 1; },
       get src() { return this.attrs.src; },
       closest() { return null; },
@@ -116,4 +117,34 @@ test("loading the file twice installs the listeners once", () => {
   run();
   assert.strictEqual(listeners.length, count);
   assert.deepStrictEqual(Object.keys(window.PhoenixKitEcommerceHooks), []);
+});
+
+test("a failed image with srcset drops srcset so the fallback src wins", () => {
+  const { fire } = page();
+  const img = image({
+    src: "/missing.jpg",
+    srcset: "/missing-2x.jpg 2x",
+    "data-pkec-img-fallback": "/ph.png",
+  });
+
+  fire("error", { target: img });
+  assert.strictEqual(img.src, "/ph.png");
+  assert.strictEqual(img.hasAttribute("srcset"), false);
+});
+
+test("a click landing on a text node inside a no-toggle button still cancels the fold", () => {
+  const { fire } = page();
+  let prevented = 0;
+  const textNode = {
+    parentElement: {
+      closest: (selector) => (selector === "[data-pkec-no-toggle]" ? {} : null),
+    },
+  };
+
+  fire("click", { target: textNode, preventDefault() { prevented++; } });
+  assert.strictEqual(prevented, 1);
+});
+
+test("loading without window or document is a no-op", () => {
+  assert.doesNotThrow(() => vm.runInNewContext(SOURCE, {}));
 });

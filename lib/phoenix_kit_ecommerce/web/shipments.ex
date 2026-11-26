@@ -63,6 +63,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
        status: nil,
        providers: Shipments.shipment_providers(),
        counts: %{to_ship: 0, open: 0, needs_attention: 0},
+       section_count: 0,
        selected_orders: [],
        selected_shipments: [],
        labels_check: nil,
@@ -113,11 +114,22 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp read_lists(socket) do
     %{section: section, provider: provider, status: status} = socket.assigns
     opts = [provider: provider, status: status]
+    # Tab badges reflect the carrier filter only: a status filter belongs to
+    # the active section and must not zero out another tab's badge.
+    counts = Shipments.count_sections(provider: provider)
+
+    section_count =
+      if status && section in ["open", "needs_attention"] do
+        Shipments.count_sections(opts) |> section_count(section)
+      else
+        section_count(counts, section)
+      end
 
     # The rows are streamed anew, unticked.
     socket =
       assign(socket,
-        counts: Shipments.count_sections(opts),
+        counts: counts,
+        section_count: section_count,
         selected_orders: [],
         selected_shipments: [],
         labels_check: nil
@@ -294,7 +306,10 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp gated_event("open_tracking", %{"uuid" => uuid}, socket) do
     case Shipments.get_shipment(uuid) do
       %Shipment{} = shipment ->
-        {:noreply, assign(socket, tracking: %{shipment: shipment, error: nil})}
+        {:noreply,
+         assign(socket,
+           tracking: %{shipment: shipment, tracking_number: "", tracking_url: "", error: nil}
+         )}
 
       nil ->
         {:noreply, put_flash(socket, :error, Errors.message(:not_found))}
@@ -325,7 +340,15 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
          |> load()}
 
       {:error, reason} ->
-        {:noreply, assign(socket, tracking: %{tracking | error: Errors.message(reason)})}
+        {:noreply,
+         assign(socket,
+           tracking: %{
+             tracking
+             | tracking_number: text(form["tracking_number"]) || "",
+               tracking_url: tracking_url_text(form["tracking_url"]),
+               error: Errors.message(reason)
+           }
+         )}
     end
   end
 
@@ -780,12 +803,22 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         active_tab={@section}
         class="mb-4"
         tabs={[
-          %{id: "to_ship", label: gettext("To ship"), patch: url(assigns, section: "to_ship"), badge: badge(@counts.to_ship)},
-          %{id: "open", label: gettext("Open"), patch: url(assigns, section: "open"), badge: badge(@counts.open)},
+          %{
+            id: "to_ship",
+            label: gettext("To ship"),
+            patch: url(assigns, section: "to_ship", status: nil),
+            badge: badge(@counts.to_ship)
+          },
+          %{
+            id: "open",
+            label: gettext("Open"),
+            patch: url(assigns, section: "open", status: nil),
+            badge: badge(@counts.open)
+          },
           %{
             id: "needs_attention",
             label: gettext("Needs attention"),
-            patch: url(assigns, section: "needs_attention"),
+            patch: url(assigns, section: "needs_attention", status: nil),
             badge: badge(@counts.needs_attention),
             badge_class: "badge-warning"
           }
@@ -849,7 +882,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
           <.shipments_table
             streams={@streams}
             section={@section}
-            count={section_count(@counts, @section)}
+            count={@section_count}
             selected={@selected_shipments}
             labels_check={@labels_check}
           />
@@ -1287,8 +1320,8 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         {gettext("Enter the number the carrier's portal shows for this shipment. The shipment is then registered.")}
       </p>
       <.form for={%{}} as={:tracking} id="shipment-tracking-form" phx-submit="submit_tracking" class="space-y-2">
-        <.input id="shipment-tracking-number" name="tracking[tracking_number]" value="" label={gettext("Tracking number")} />
-        <.input id="shipment-tracking-url" name="tracking[tracking_url]" value="" label={gettext("Tracking link (optional)")} />
+        <.input id="shipment-tracking-number" name="tracking[tracking_number]" value={@tracking.tracking_number} label={gettext("Tracking number")} />
+        <.input id="shipment-tracking-url" name="tracking[tracking_url]" value={@tracking.tracking_url} label={gettext("Tracking link (optional)")} />
         <p :if={@tracking.error} id="shipment-tracking-error" class="text-error text-sm">{@tracking.error}</p>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" class="btn btn-ghost" phx-click="close_tracking">{gettext("Cancel")}</button>
@@ -1305,8 +1338,12 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp section_statuses("needs_attention"), do: Shipments.section_statuses(:needs_attention)
   defp section_statuses(_to_ship), do: []
 
+  defp section_count(counts, "to_ship"), do: counts.to_ship
   defp section_count(counts, "open"), do: counts.open
   defp section_count(counts, "needs_attention"), do: counts.needs_attention
+
+  defp tracking_url_text(value) when is_binary(value), do: String.trim(value)
+  defp tracking_url_text(_value), do: ""
 
   defp badge(0), do: nil
   defp badge(count), do: count
@@ -1350,7 +1387,8 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp shipment_badge_class(%Shipment{status: "delivered"}), do: "badge-success"
 
   defp shipment_badge_class(%Shipment{status: status})
-       when status in ["created", "in_transit", "ready_for_pickup"], do: "badge-info"
+       when status in ["created", "in_transit", "ready_for_pickup"],
+       do: "badge-info"
 
   defp shipment_badge_class(_shipment), do: "badge-ghost"
 

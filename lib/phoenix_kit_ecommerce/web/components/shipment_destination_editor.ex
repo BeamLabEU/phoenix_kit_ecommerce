@@ -244,7 +244,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
          pickup_point: PickupPoint.manual(code)
        })}
     else
-      {:noreply, assign(socket, form: Map.merge(socket.assigns.form, params), errors: errors)}
+      form = Map.merge(socket.assigns.form, %{"locality" => locality, "point" => code})
+      {:noreply, assign(socket, form: form, errors: errors)}
     end
   end
 
@@ -252,6 +253,14 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     searched? = searched_locality?(socket.assigns.service)
     service = socket.assigns.service
 
+    if searched? and is_nil(socket.assigns.locality) do
+      {:noreply, socket}
+    else
+      do_apply_address(socket, params, service, searched?)
+    end
+  end
+
+  defp do_apply_address(socket, params, service, searched?) do
     errors =
       %{}
       |> require_text(:street, text(params, "street"), gettext("Please enter the street"))
@@ -286,7 +295,13 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
          }
        })}
     else
-      {:noreply, assign(socket, form: Map.merge(socket.assigns.form, params), errors: errors)}
+      fields =
+        if searched?,
+          do: ~w(postcode street house apartment),
+          else: ~w(locality postcode street house apartment)
+
+      form = Map.merge(socket.assigns.form, Map.new(fields, &{&1, text(params, &1)}))
+      {:noreply, assign(socket, form: form, errors: errors)}
     end
   end
 

@@ -217,4 +217,19 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
     assert labels(conn, [shipment.uuid]) |> refused_to_shipments() ==
              "The carrier did not return the labels. Try again later."
   end
+
+  test "a parameterized content type keeps its file extension", %{conn: conn} do
+    shipment = shipment!()
+
+    StubProvider.put(%{
+      labels: {:ok, %{content_type: "image/png; charset=binary", body: <<137, 80, 78, 71>>}},
+      notify: self()
+    })
+
+    conn = labels(conn, [shipment.uuid])
+
+    assert conn.status == 200
+    assert [disposition] = get_resp_header(conn, "content-disposition")
+    assert disposition =~ ".png"
+  end
 end

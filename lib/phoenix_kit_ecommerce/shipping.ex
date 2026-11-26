@@ -694,8 +694,9 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp normalize(:cancel, :ok), do: {:ok, :cancelled}
 
   defp normalize(:labels, {:ok, %{content_type: type, body: body}} = ok)
-       when is_binary(type) and is_binary(body),
-       do: ok
+       when is_binary(type) and is_binary(body) do
+    if filled?(String.trim(type)) and byte_size(body) > 0, do: ok, else: bad_return(ok)
+  end
 
   defp normalize(_kind, {:error, _reason} = error), do: error
   defp normalize(_kind, other), do: bad_return(other)

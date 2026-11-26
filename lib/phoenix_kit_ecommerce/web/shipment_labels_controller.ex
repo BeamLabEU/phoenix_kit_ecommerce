@@ -70,7 +70,14 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsController do
   defp label_ids(_params), do: []
 
   defp extension(content_type) do
-    case MIME.extensions(content_type) do
+    mime =
+      content_type
+      |> String.split(";", parts: 2)
+      |> hd()
+      |> String.trim()
+      |> String.downcase()
+
+    case MIME.extensions(mime) do
       [extension | _] -> extension
       [] -> "pdf"
     end
