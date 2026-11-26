@@ -45,42 +45,16 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   An answer that arrives after the shipment has left `creating` changes
   nothing (`{:error, :shipment_changed}`; it is logged with the tracking
-  number). `register/2` is the two steps in one.
+  number). `register/2` is the two steps in one. A shipment that waits in
+  `creating` for 10 minutes is moved to `unknown` by `sweep_stuck/0`.
 
-  A `failed` shipment is retried on the same row (`retry_shipment/2`): the
-  same checks, then a compare-and-set `failed -> creating`, and
-  `submit_shipment/2` again. A conflict with another live shipment is
-  `{:error, :live_shipment_exists}`, never a raise.
+  ## Tracking
 
-  ## The data sent
+  `track_shipments/1` asks the carriers for the state of the `created`,
+  `in_transit` and `ready_for_pickup` shipments that are less than 60 days
+  old (see its doc). A status never moves backwards, and every write is
+  conditional on the status the update was weighed against.
 
-  The parcels, the recipient (`name`, `company`, `email`, `phone` from the order's
-  `billing_snapshot`, the phone in E.164 beside the `raw_phone` as typed) and
-  the destination are copied from
-  the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
-  corrections as `:parcels`, `:recipient` and `:destination`. A recipient
-  correction changes only the fields it names (a blank one clears it); one
-  that is not a map is `{:error, :invalid_recipient}`.
-
-  ## Masking
-
-  The error and the events of a shipment are stored masked: the recipient's
-  name, e-mail, phone and street address, and anything shaped like an e-mail
-  address or an international phone number. The error is cut to 300
-  characters; the last 50 events are kept.
-
-  ## Callers
-
-  `submit_shipment/2` and `register/2` must not be called inside a
-  transaction (they raise `ArgumentError`): the attempt runs in its own
-  process, which would wait for the rows the caller's transaction holds, and
-  the carrier call must not sit inside a transaction.
-
-  Every function that changes a shipment takes `:actor_uuid` (who did it; it
-  is recorded on the events, and as `created_by_uuid` on a new shipment).
-  These functions write no Activity: the admin LiveView logs on success, as
-  everywhere else in the module. Errors are atoms or tagged tuples with a
-  clause in `PhoenixKitEcommerce.Errors.message/1`.
   """
 
   import Ecto.Query, only: [from: 2, exclude: 2]
@@ -94,6 +68,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   alias PhoenixKitEcommerce.Shipping.{CartQuote, Codec, Context, Destination, LabelOptions}
   alias PhoenixKitEcommerce.Shipping.{MethodConfig, Parcel}
   alias PhoenixKitEcommerce.Shipping.{Service, ShipmentRef, ShipmentRequest, ShipmentResult}
+  alias PhoenixKitEcommerce.Shipping.TrackingUpdate
 
   @task_supervisor PhoenixKitEcommerce.Shipments.TaskSupervisor
   @max_events 50
@@ -110,6 +85,19 @@ defmodule PhoenixKitEcommerce.Shipments do
   @list_limit 200
   @max_labels 50
   @max_url_length 2048
+  @tracking_days 60
+  @track_limit 1000
+  # An update never moves a shipment to a lower rank unless the carrier's
+  # times say it is newer. The return leg ranks above the outbound one, and
+  # the carrier's cancellation with it: both are terminal.
+  @rank %{
+    "created" => 0,
+    "in_transit" => 1,
+    "ready_for_pickup" => 2,
+    "delivered" => 3,
+    "returned" => 4,
+    "cancelled" => 4
+  }
 
   @type error ::
           :not_found
@@ -591,7 +579,7 @@ defmodule PhoenixKitEcommerce.Shipments do
       not Enum.all?(shipments, &printable?/1) ->
         {:error, :label_unavailable}
 
-      shipments |> Enum.uniq_by(&label_group/1) |> length() > 1 ->
+      shipments |> Enum.uniq_by(&carrier_group/1) |> length() > 1 ->
         {:error, :mixed_label_providers}
 
       true ->
@@ -599,9 +587,10 @@ defmodule PhoenixKitEcommerce.Shipments do
     end
   end
 
-  # One document is printed through one context, the first shipment's: the
-  # others must share its provider, connection and environment.
-  defp label_group(%Shipment{} = shipment) do
+  # One document is printed (and one tracking call made) through one
+  # context, a shipment's of the group: the others must share its provider,
+  # connection and environment.
+  defp carrier_group(%Shipment{} = shipment) do
     environment = (shipment.context_snapshot || %{}) |> Codec.get(:environment) |> Codec.string()
     {shipment.provider, shipment.integration_uuid, environment}
   end
@@ -965,6 +954,231 @@ defmodule PhoenixKitEcommerce.Shipments do
   # status leaves open whether it cancelled.
   defp cancel_error(reason),
     do: if(Shipping.definite_failure?(reason), do: :cancel_refused, else: :cancel_unconfirmed)
+
+  # -- tracking ----------------------------------------------------------
+
+  @doc """
+  Moves the shipments that have waited in `creating` for 10 minutes
+  (`stuck?/1`) to `unknown`, with an event, each on condition that it is
+  still `creating` and still that old. The admin resolves them like any
+  `unknown` shipment; an attempt that answers later changes nothing
+  (`submit_shipment/2`). Returns how many moved.
+  """
+  @spec sweep_stuck() :: non_neg_integer()
+  def sweep_stuck do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    cutoff = DateTime.add(now, -@stuck_after_seconds, :second)
+
+    {count, _} =
+      from(s in Shipment, where: s.status == "creating" and s.updated_at < ^cutoff)
+      |> append_event(event("swept", "unknown", nil, nil))
+      |> repo().update_all(set: [status: "unknown", updated_at: now])
+
+    count
+  end
+
+  @doc """
+  One tracking pass: asks the carriers for the state of the shipments in
+  `created`, `in_transit` or `ready_for_pickup` that were created less than
+  #{@tracking_days} days ago and whose provider exports `track/2` (at most
+  #{@track_limit}, those asked longest ago first), and stores what changed.
+
+    * The shipments are grouped by provider, connection and environment.
+      Each group is one `Shipping.track/2` call with all its references,
+      through the context of a shipment of the group; the adapter decides
+      how many carrier calls that makes (a carrier may take one per run).
+      An error of one group (the carrier's, or no context to rebuild) is
+      logged and leaves the other groups alone. Every shipment asked gets
+      `last_tracked_at`.
+    * An update belongs to the shipment of its group with its tracking
+      number or carrier reference. Of a shipment's updates the newest by
+      `occurred_at` counts, or the highest status when none has a time.
+    * A status never moves backwards. An update with a time must be newer
+      than the last one stored; without a time, or with none stored to
+      compare with, it must rank above the current status (`created <
+      in_transit < ready_for_pickup < delivered < returned`, the carrier's
+      `cancelled` with `returned`).
+    * The write is conditional on the status the update was weighed
+      against, and appends the event: the carrier's text masked, and its
+      time.
+
+  Options: `:context_opts`. Returns how many groups were asked, how many of
+  them failed and how many shipments changed.
+  """
+  @spec track_shipments(keyword()) :: %{
+          groups: non_neg_integer(),
+          failed: non_neg_integer(),
+          updated: non_neg_integer()
+        }
+  def track_shipments(opts \\ []) do
+    results =
+      tracked_shipments()
+      |> Enum.group_by(&carrier_group/1)
+      |> Enum.map(fn {_group, shipments} -> track_group(shipments, opts) end)
+
+    %{
+      groups: length(results),
+      failed: Enum.count(results, &(&1 == :error)),
+      updated: results |> Enum.filter(&is_integer/1) |> Enum.sum()
+    }
+  end
+
+  defp tracked_shipments do
+    case tracking_providers() do
+      [] ->
+        []
+
+      keys ->
+        cutoff =
+          DateTime.utc_now()
+          |> DateTime.add(-@tracking_days * 86_400, :second)
+          |> DateTime.truncate(:second)
+
+        from(s in Shipment,
+          where: s.status in ^@cancellable_statuses,
+          where: s.provider in ^keys,
+          where: s.inserted_at >= ^cutoff,
+          order_by: [asc_nulls_first: s.last_tracked_at, asc: s.inserted_at, asc: s.uuid],
+          limit: @track_limit
+        )
+        |> repo().all()
+    end
+  end
+
+  defp tracking_providers do
+    for provider <- Shipping.providers(),
+        Shipping.supports?(provider, :track),
+        do: provider.key()
+  end
+
+  defp track_group([first | _] = shipments, opts) do
+    answer =
+      with {:ok, ctx} <- group_context(shipments, opts),
+           do: Shipping.track(ctx, Enum.map(shipments, &shipment_ref/1))
+
+    stamp_tracked(shipments)
+
+    case answer do
+      {:ok, updates} ->
+        Enum.count(shipments, &(track_one(&1, updates) == :updated))
+
+      {:error, reason} ->
+        Logger.warning(
+          "Shipment tracking: #{first.provider} (#{length(shipments)} shipments) " <>
+            "failed: #{track_error_text(reason)}"
+        )
+
+        :error
+    end
+  rescue
+    error ->
+      Logger.error(
+        "Shipment tracking: #{first.provider} (#{length(shipments)} shipments) " <>
+          "raised #{inspect(error.__struct__)}"
+      )
+
+      :error
+  end
+
+  # The shipments of a group share the provider, the connection and its
+  # environment, so any one of them that still has its context serves.
+  defp group_context(shipments, opts) do
+    Enum.reduce_while(shipments, {:error, :no_context}, fn shipment, _last ->
+      case shipment_context(shipment, opts) do
+        {:ok, ctx} -> {:halt, {:ok, ctx}}
+        error -> {:cont, error}
+      end
+    end)
+  end
+
+  defp stamp_tracked(shipments) do
+    uuids = Enum.map(shipments, & &1.uuid)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    repo().update_all(from(s in Shipment, where: s.uuid in ^uuids),
+      set: [last_tracked_at: now]
+    )
+  end
+
+  # The log keeps the shape of a carrier's error, never its text: that may
+  # quote a recipient.
+  defp track_error_text({:http_status, status}), do: "HTTP #{status}"
+  defp track_error_text({:http_status, status, _detail}), do: "HTTP #{status}"
+  defp track_error_text(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp track_error_text({tag, _detail}) when is_atom(tag), do: Atom.to_string(tag)
+  defp track_error_text(_reason), do: "error"
+
+  defp track_one(shipment, updates) do
+    with %TrackingUpdate{} = update <- latest_update(shipment, updates),
+         status = Atom.to_string(update.status),
+         true <- forward?(shipment, status, update.occurred_at) do
+      store_tracking(shipment, status, update)
+    else
+      _no_change -> :unchanged
+    end
+  end
+
+  defp latest_update(shipment, updates) do
+    candidates =
+      Enum.filter(updates, &(about?(&1, shipment) and &1.status in TrackingUpdate.statuses()))
+
+    case Enum.filter(candidates, &match?(%DateTime{}, &1.occurred_at)) do
+      [] -> Enum.max_by(candidates, &rank(&1.status), fn -> nil end)
+      timed -> Enum.max_by(timed, & &1.occurred_at, DateTime)
+    end
+  end
+
+  defp about?(%TrackingUpdate{} = update, shipment) do
+    same?(update.tracking_number, shipment.tracking_number) or
+      same?(update.carrier_ref, shipment.carrier_ref)
+  end
+
+  defp about?(_other, _shipment), do: false
+
+  defp same?(value, stored), do: filled?(value) and value == stored
+
+  defp forward?(%Shipment{status: status}, status, _occurred_at), do: false
+
+  defp forward?(shipment, status, occurred_at) do
+    case {occurred_at, last_occurred_at(shipment)} do
+      {%DateTime{} = at, %DateTime{} = last} -> DateTime.compare(at, last) == :gt
+      _no_times -> rank(status) > rank(shipment.status)
+    end
+  end
+
+  defp rank(status) when is_atom(status), do: rank(Atom.to_string(status))
+  defp rank(status), do: Map.get(@rank, status, -1)
+
+  # The carrier's time of the last update stored, kept on its event.
+  defp last_occurred_at(%Shipment{events: events}) do
+    events
+    |> List.wrap()
+    |> Enum.flat_map(fn
+      %{"action" => "tracked", "occurred_at" => at} when is_binary(at) ->
+        case DateTime.from_iso8601(at) do
+          {:ok, datetime, _offset} -> [datetime]
+          {:error, _reason} -> []
+        end
+
+      _other ->
+        []
+    end)
+    |> Enum.max(DateTime, fn -> nil end)
+  end
+
+  defp store_tracking(shipment, status, update) do
+    message = shipment |> masked(Codec.string(update.description)) |> cut()
+
+    tracked =
+      "tracked"
+      |> event(status, nil, message)
+      |> Map.put("occurred_at", update.occurred_at && DateTime.to_iso8601(update.occurred_at))
+
+    case compare_and_set(shipment.uuid, [shipment.status], [status: status], event: tracked) do
+      {:ok, _stored} -> :updated
+      {:error, :shipment_changed} -> :unchanged
+    end
+  end
 
   # -- the order ---------------------------------------------------------
 

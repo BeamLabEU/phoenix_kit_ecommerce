@@ -1337,7 +1337,10 @@ defmodule PhoenixKitEcommerce do
       # `default` queue and do nothing while the shop is off.
       {"17 * * * *", PhoenixKitEcommerce.Workers.ApiCartSweepWorker},
       {"40 4 * * *", PhoenixKitEcommerce.Workers.ApiCartPruneWorker},
-      {"50 4 * * *", PhoenixKitEcommerce.Workers.ApiClaimPruneWorker}
+      {"50 4 * * *", PhoenixKitEcommerce.Workers.ApiClaimPruneWorker},
+      # The shipments' run every 30 minutes, off the hour: the stuck sweep and
+      # the carriers' tracking. On `default`, a no-op while the shop is off.
+      {"7,37 * * * *", PhoenixKitEcommerce.Workers.ShipmentTrackingWorker}
     ]
   end
 

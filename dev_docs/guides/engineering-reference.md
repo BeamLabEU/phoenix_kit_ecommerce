@@ -188,7 +188,8 @@ lib/phoenix_kit_ecommerce/
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
 │                     # ShopifyMediaSyncWorker, TranslationSweepWorker,
 │                     # SearchReindexWorker, SearchRebuildWorker (queue shop_search),
-│                     # ApiCartSweepWorker, ApiCartPruneWorker, ApiClaimPruneWorker
+│                     # ApiCartSweepWorker, ApiCartPruneWorker, ApiClaimPruneWorker,
+│                     # ShipmentTrackingWorker (the stuck sweep + tracking cron)
 ├── search/           # public search index: Entry, Dictionary, Trigram, OptionKeys,
 │                     # Document, Indexer, Query, Jobs, Subscriber
 ├── api/              # public shop API tools: Visibility, Facts, Record, Loader, Context,
