@@ -584,11 +584,14 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       assert_receive {:create_waiting, carrier, _order_uuid}, 5_000
 
       swap_scope(view, without_shipments())
+      # Paid meanwhile: the page must not read the list again without the key.
+      third = order!(method)
       send(carrier, :answer)
       settle(view)
 
       refute_receive {:create_waiting, _carrier, _order_uuid}, 200
       assert rows(second) == []
+      refute has_element?(view, "#to-ship-#{third.uuid}")
       refute has_element?(view, "#shipments-running")
       assert render(view) =~ "permission"
     end

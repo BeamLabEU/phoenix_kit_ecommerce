@@ -104,7 +104,13 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
     end
   end
 
+  # Every read of the lists goes through here: none without the key (a
+  # scope can lose it while the page is open, a carrier call ending later).
   defp load(socket) do
+    if Authz.can?(socket, :manage_shipments), do: read_lists(socket), else: socket
+  end
+
+  defp read_lists(socket) do
     %{section: section, provider: provider, status: status} = socket.assigns
     opts = [provider: provider, status: status]
 
@@ -537,7 +543,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
       |> assign(batch: %{batch | queue: rest, done: batch.done + 1})
       |> run(:register, next, nil, actor_uuid: Activity.actor_uuid(socket))
     else
-      socket |> assign(batch: nil) |> Authz.deny() |> load()
+      socket |> assign(batch: nil) |> Authz.deny()
     end
   end
 
