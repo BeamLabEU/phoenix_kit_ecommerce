@@ -491,6 +491,39 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       refute has_element?(view, "#shipment-cancelled-at-carrier-#{shipment.uuid}")
     end
 
+    test "a shipment whose tracking fails says since when, and its history names the events",
+         %{conn: conn} do
+      shipment =
+        shipment!(method!(), "created",
+          set: [
+            events: [
+              %{"at" => "2026-11-20T08:00:00Z", "action" => "tracked", "status" => "in_transit"},
+              %{"at" => "2026-11-20T09:00:00Z", "action" => "swept", "status" => "unknown"},
+              %{
+                "at" => "2026-11-21T10:30:00Z",
+                "action" => "tracking_failed",
+                "status" => "created",
+                "message" => "HTTP 503"
+              }
+            ]
+          ]
+        )
+
+      {:ok, view, _html} = open_page(conn, "open")
+
+      assert has_element?(
+               view,
+               "#shipment-tracking-failing-#{shipment.uuid}",
+               "Tracking failing since 2026-11-21 10:30"
+             )
+
+      for label <- ["Carrier's tracking", "No answer for 10 minutes", "Tracking failed"] do
+        assert has_element?(view, "#shipment-events-#{shipment.uuid}", label)
+      end
+
+      refute has_element?(view, "#shipment-events-#{shipment.uuid}", "tracking_failed")
+    end
+
     test "an unknown outcome offers the tracking number and mark failed", %{conn: conn} do
       order = order!(method!())
       stub(%{create: {:error, :timeout}})

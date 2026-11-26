@@ -1045,6 +1045,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
               <div :if={Shipments.stuck?(shipment)} class="text-xs text-warning mt-1">
                 {gettext("No answer for 10 minutes")}
               </div>
+              <.tracking_failing shipment={shipment} />
               <p :if={shipment.error} id={"shipment-error-#{shipment.uuid}"} class="text-xs text-error mt-1 max-w-xs break-words">
                 {shipment.error}
               </p>
@@ -1147,6 +1148,23 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         </.table_default_body>
       </.table_default>
     </form>
+    """
+  end
+
+  attr :shipment, :map, required: true
+
+  # The carrier's tracking has been failing for the shipment.
+  defp tracking_failing(assigns) do
+    assigns = assign(assigns, :since, Shipments.tracking_failing_since(assigns.shipment))
+
+    ~H"""
+    <div
+      :if={@since}
+      id={"shipment-tracking-failing-#{@shipment.uuid}"}
+      class="text-xs text-warning mt-1"
+    >
+      {gettext("Tracking failing since %{time}", time: format_datetime(@since))}
+    </div>
     """
   end
 
@@ -1404,6 +1422,10 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp event_action("cancelled"), do: gettext("Cancelled at the carrier by the shop")
   defp event_action("cancelled_at_carrier"), do: gettext("Recorded as cancelled at the carrier")
   defp event_action("closed"), do: gettext("Closed, the order was cancelled or refunded")
+  defp event_action("swept"), do: gettext("No answer for 10 minutes")
+  defp event_action("tracked"), do: gettext("Carrier's tracking")
+  defp event_action("tracking_failed"), do: gettext("Tracking failed")
+  defp event_action("tracking_resumed"), do: gettext("Tracking answers again")
   defp event_action(action), do: to_string(action)
 
   defp format_datetime(nil), do: "-"

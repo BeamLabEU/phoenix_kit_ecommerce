@@ -9117,3 +9117,23 @@ msgstr "Надсилати покупцю листа, коли відправл�
 #, elixir-autogen, elixir-format
 msgid "With the carrier, the tracking number and the tracking link."
 msgstr "З перевізником, номером відстеження і посиланням для відстеження."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1426
+#, elixir-autogen, elixir-format
+msgid "Carrier's tracking"
+msgstr "Відстеження перевізника"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1427
+#, elixir-autogen, elixir-format
+msgid "Tracking failed"
+msgstr "Відстеження не вдалося"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1428
+#, elixir-autogen, elixir-format
+msgid "Tracking answers again"
+msgstr "Відстеження знову відповідає"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1166
+#, elixir-autogen, elixir-format
+msgid "Tracking failing since %{time}"
+msgstr "Відстеження не працює з %{time}"

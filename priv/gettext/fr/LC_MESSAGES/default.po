@@ -9053,3 +9053,23 @@ msgstr "Envoyer un e-mail à l'acheteur lorsqu'un envoi est en route"
 #, elixir-autogen, elixir-format
 msgid "With the carrier, the tracking number and the tracking link."
 msgstr "Avec le transporteur, le numéro de suivi et le lien de suivi."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1426
+#, elixir-autogen, elixir-format
+msgid "Carrier's tracking"
+msgstr "Suivi du transporteur"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1427
+#, elixir-autogen, elixir-format
+msgid "Tracking failed"
+msgstr "Échec du suivi"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1428
+#, elixir-autogen, elixir-format
+msgid "Tracking answers again"
+msgstr "Le suivi répond de nouveau"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1166
+#, elixir-autogen, elixir-format
+msgid "Tracking failing since %{time}"
+msgstr "Le suivi échoue depuis %{time}"

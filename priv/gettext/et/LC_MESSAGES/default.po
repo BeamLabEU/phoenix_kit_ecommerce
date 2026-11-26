@@ -9051,3 +9051,23 @@ msgstr "Saada ostjale e-kiri, kui saadetis on teel"
 #, elixir-autogen, elixir-format
 msgid "With the carrier, the tracking number and the tracking link."
 msgstr "Koos vedaja, jälgimisnumbri ja jälgimislingiga."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1426
+#, elixir-autogen, elixir-format
+msgid "Carrier's tracking"
+msgstr "Vedaja jälgimine"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1427
+#, elixir-autogen, elixir-format
+msgid "Tracking failed"
+msgstr "Jälgimine ebaõnnestus"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1428
+#, elixir-autogen, elixir-format
+msgid "Tracking answers again"
+msgstr "Jälgimine vastab taas"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1166
+#, elixir-autogen, elixir-format
+msgid "Tracking failing since %{time}"
+msgstr "Jälgimine ebaõnnestub alates %{time}"

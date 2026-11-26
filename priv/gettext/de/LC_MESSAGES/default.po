@@ -9053,3 +9053,23 @@ msgstr "Käufer per E-Mail benachrichtigen, wenn eine Sendung unterwegs ist"
 #, elixir-autogen, elixir-format
 msgid "With the carrier, the tracking number and the tracking link."
 msgstr "Mit Versanddienst, Sendungsnummer und Link zur Sendungsverfolgung."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1426
+#, elixir-autogen, elixir-format
+msgid "Carrier's tracking"
+msgstr "Sendungsverfolgung des Versanddienstes"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1427
+#, elixir-autogen, elixir-format
+msgid "Tracking failed"
+msgstr "Sendungsverfolgung fehlgeschlagen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1428
+#, elixir-autogen, elixir-format
+msgid "Tracking answers again"
+msgstr "Sendungsverfolgung antwortet wieder"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1166
+#, elixir-autogen, elixir-format
+msgid "Tracking failing since %{time}"
+msgstr "Sendungsverfolgung schlägt seit %{time} fehl"

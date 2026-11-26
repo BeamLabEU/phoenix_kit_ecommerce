@@ -1034,9 +1034,12 @@ defmodule PhoenixKitEcommerce.Shipments do
       the answer says nothing about keeps its `last_tracked_at`, so it is
       among the first asked next time and a short answer cannot hold the
       others back. An error of one group (the carrier's, or no context to
-      rebuild) is logged and leaves the other groups alone; the group's
-      shipments are stamped, so a dead carrier does not hold the head of
-      the queue either.
+      rebuild from the group's first shipment) is logged and leaves the
+      other groups alone. The group's shipments are stamped, so a dead
+      carrier does not hold the head of the queue either, and get a
+      `tracking_failed` event when a run of failures starts
+      (`tracking_failing_since/1`), a `tracking_resumed` one when the
+      carrier answers again.
     * An update belongs to the shipment of its group with its tracking
       number or carrier reference.
     * A status never moves backwards: an update must rank above the
@@ -1109,10 +1112,12 @@ defmodule PhoenixKitEcommerce.Shipments do
           Enum.filter(shipments, fn shipment -> Enum.any?(updates, &about?(&1, shipment)) end)
 
         stamp_tracked(covered)
+        Enum.each(covered, &note_tracking(&1, :resumed, nil))
         Enum.count(covered, &(track_one(&1, updates) == :updated))
 
       {:error, reason} ->
         stamp_tracked(shipments)
+        Enum.each(shipments, &note_tracking(&1, :failed, track_error_text(reason)))
 
         Logger.warning(
           "Shipment tracking: #{first.provider} (#{length(shipments)} shipments) " <>
@@ -1132,14 +1137,56 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   # The shipments of a group share the provider, the connection and its
-  # environment, so any one of them that still has its context serves.
-  defp group_context(shipments, opts) do
-    Enum.reduce_while(shipments, {:error, :no_context}, fn shipment, _last ->
-      case shipment_context(shipment, opts) do
-        {:ok, ctx} -> {:halt, {:ok, ctx}}
-        error -> {:cont, error}
-      end
-    end)
+  # environment, so the first one's context serves them all; when it cannot
+  # be rebuilt (the connection changed or is gone) the group fails, rather
+  # than rebuilding one context per shipment of a dead connection.
+  defp group_context([first | _], opts), do: shipment_context(first, opts)
+
+  # One `tracking_failed` event when a run of failures starts (its tag only,
+  # never the carrier's text), one `tracking_resumed` when an answer comes
+  # again: a carrier that keeps failing does not push the shipment's history
+  # out of its last 50 events.
+  defp note_tracking(shipment, kind, tag) do
+    case {kind, tracking_failure(shipment)} do
+      {:failed, nil} -> append_tracking_event(shipment, "tracking_failed", tag)
+      {:resumed, %{}} -> append_tracking_event(shipment, "tracking_resumed", nil)
+      _no_change -> :ok
+    end
+  end
+
+  defp append_tracking_event(shipment, action, message) do
+    event = event(action, shipment.status, nil, shipment |> masked(message) |> cut())
+    compare_and_set(shipment.uuid, [shipment.status], [], event: event)
+    :ok
+  end
+
+  # The open failure: the `tracking_failed` event after which no answer came
+  # (a `tracking_resumed` or a `tracked` event), or `nil`.
+  defp tracking_failure(%Shipment{events: events}) do
+    events
+    |> List.wrap()
+    |> Enum.reverse()
+    |> Enum.find(&(is_map(&1) and &1["action"] in ~w(tracking_failed tracking_resumed tracked)))
+    |> case do
+      %{"action" => "tracking_failed"} = failed -> failed
+      _answered -> nil
+    end
+  end
+
+  @doc """
+  Since when the carrier's tracking of the shipment has been failing (its
+  error, or a connection that cannot be rebuilt), or `nil` while it answers.
+  Read from the shipment's events: the run of failures starts with a
+  `tracking_failed` event and ends with the next answer.
+  """
+  @spec tracking_failing_since(Shipment.t()) :: DateTime.t() | nil
+  def tracking_failing_since(%Shipment{} = shipment) do
+    with %{"at" => at} when is_binary(at) <- tracking_failure(shipment),
+         {:ok, datetime, _offset} <- DateTime.from_iso8601(at) do
+      datetime
+    else
+      _none -> nil
+    end
   end
 
   defp stamp_tracked(shipments) do

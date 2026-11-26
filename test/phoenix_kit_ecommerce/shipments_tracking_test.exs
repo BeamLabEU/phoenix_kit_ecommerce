@@ -258,6 +258,68 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert %Shipment{status: "created", last_tracked_at: %DateTime{}} = reload(failing)
     end
 
+    test "a failing carrier is noted once on each shipment, and so is its recovery" do
+      first = shipment!(%{recipient: %{"name" => "Mari Maasikas"}})
+      second = shipment!(%{})
+
+      track(fn _refs, _ctx -> {:error, {:http_status, 503, "Mari Maasikas not found"}} end)
+
+      capture_log(fn ->
+        Shipments.track_shipments()
+        Shipments.track_shipments()
+      end)
+
+      for shipment <- [first, second] do
+        stored = reload(shipment)
+
+        assert [%{"action" => "tracking_failed", "status" => "created", "message" => "HTTP 503"}] =
+                 stored.events
+
+        assert %DateTime{} = Shipments.tracking_failing_since(stored)
+      end
+
+      track(fn _refs, _ctx -> {:ok, [report(first, :in_transit), report(second, :created)]} end)
+      Shipments.track_shipments()
+
+      assert [_failed, %{"action" => "tracking_resumed"}, %{"action" => "tracked"}] =
+               reload(first).events
+
+      assert [_failed, %{"action" => "tracking_resumed"}] = reload(second).events
+      assert Shipments.tracking_failing_since(reload(first)) == nil
+      assert Shipments.tracking_failing_since(reload(second)) == nil
+    end
+
+    test "a group whose first shipment's context cannot be rebuilt fails without trying the rest" do
+      connection = connection!("test")
+      gone = Ecto.UUID.generate()
+
+      dead =
+        shipment!(%{
+          integration_uuid: connection,
+          inserted_at: ago(7200),
+          context_snapshot: %{"settings" => %{"integration" => gone}, "environment" => "test"}
+        })
+
+      alive =
+        shipment!(%{
+          integration_uuid: connection,
+          inserted_at: ago(3600),
+          context_snapshot: %{
+            "settings" => %{"integration" => connection},
+            "environment" => "test"
+          }
+        })
+
+      capture_log(fn -> assert %{groups: 1, failed: 1} = Shipments.track_shipments() end)
+
+      refute_received {:stub_called, :track, _}
+
+      for shipment <- [dead, alive] do
+        assert [%{"action" => "tracking_failed", "message" => "connection_changed"}] =
+                 reload(shipment).events
+      end
+    end
+
     test "a provider that crashes does not stop another" do
       crashing = shipment!(%{provider: "other"})
       working = shipment!(%{})
