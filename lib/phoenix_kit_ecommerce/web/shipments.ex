@@ -938,8 +938,8 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
             </.table_default_cell>
             <.table_default_cell>
               <%= cond do %>
-                <% shipment.tracking_url && shipment.tracking_number -> %>
-                  <a href={shipment.tracking_url} target="_blank" rel="noopener noreferrer" class="link font-mono text-sm">
+                <% Shipments.web_url(shipment.tracking_url) && shipment.tracking_number -> %>
+                  <a href={Shipments.web_url(shipment.tracking_url)} target="_blank" rel="noopener noreferrer" class="link font-mono text-sm">
                     {shipment.tracking_number}
                   </a>
                 <% shipment.tracking_number -> %>

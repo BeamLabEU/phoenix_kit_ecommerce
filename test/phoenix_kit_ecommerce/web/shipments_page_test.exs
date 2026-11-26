@@ -440,6 +440,20 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       assert has_element?(view, "#shipment-order-closed-#{refunded.uuid}")
     end
 
+    test "a stored tracking link that is not a web address is not rendered as a link", %{
+      conn: conn
+    } do
+      shipment = shipment!(method!(), "created", set: [tracking_url: "javascript:alert(1)"])
+      safe = shipment!(method!(), "created", set: [tracking_url: "https://track.example/1"])
+
+      {:ok, view, _html} = open_page(conn, "open")
+
+      assert has_element?(view, "#shipment-#{shipment.uuid}", shipment.tracking_number)
+      refute has_element?(view, "#shipment-#{shipment.uuid} a[href^='javascript']")
+      refute render(view) =~ "javascript:alert"
+      assert has_element?(view, "#shipment-#{safe.uuid} a[href='https://track.example/1']")
+    end
+
     test "the status filter narrows a section", %{conn: conn} do
       method = method!()
       failed = shipment!(method, "failed")

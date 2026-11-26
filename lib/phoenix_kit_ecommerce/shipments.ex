@@ -130,6 +130,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :connection_environment_changed
           | :tracking_number_required
           | :invalid_recipient
+          | :invalid_tracking_url
           | :invalid_shipment_ids
           | :too_many_labels
           | :mixed_label_providers
@@ -268,6 +269,27 @@ defmodule PhoenixKitEcommerce.Shipments do
   """
   @spec printable?(Shipment.t()) :: boolean()
   def printable?(%Shipment{status: status}), do: status in @cancellable_statuses
+
+  @doc """
+  `value` trimmed when it is an `http` or `https` address with a host,
+  otherwise `nil`. A tracking link is stored and rendered only through it, so
+  a `javascript:` or `data:` link never reaches a page.
+  """
+  @spec web_url(term()) :: String.t() | nil
+  def web_url(value) when is_binary(value) do
+    url = String.trim(value)
+
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host}
+      when is_binary(scheme) and is_binary(host) and host != "" ->
+        if String.downcase(scheme) in ["http", "https"], do: url
+
+      _other ->
+        nil
+    end
+  end
+
+  def web_url(_value), do: nil
 
   # -- the admin's lists -------------------------------------------------
 
@@ -779,20 +801,26 @@ defmodule PhoenixKitEcommerce.Shipments do
   Records the tracking number the admin found in the carrier's portal for an
   `unknown` shipment (or one stuck in `creating` for 10 minutes): `created`.
 
-  Options: `:actor_uuid`, `:tracking_url`, `:carrier_ref`.
+  Options: `:actor_uuid`, `:tracking_url` (a web address, `web_url/1`, or
+  blank; anything else is `{:error, :invalid_tracking_url}`), `:carrier_ref`.
   """
   @spec enter_tracking_number(Shipment.t(), String.t(), keyword()) ::
           {:ok, Shipment.t()} | {:error, error()}
   def enter_tracking_number(%Shipment{} = shipment, tracking_number, opts \\ []) do
-    case tracking_number |> Codec.string() |> blank_to_nil() do
-      nil ->
+    url = opts |> Keyword.get(:tracking_url) |> Codec.string() |> blank_to_nil()
+
+    case {tracking_number |> Codec.string() |> blank_to_nil(), url && web_url(url)} do
+      {nil, _url} ->
         {:error, :tracking_number_required}
 
-      number ->
+      {_number, nil} when not is_nil(url) ->
+        {:error, :invalid_tracking_url}
+
+      {number, web_url} ->
         changes = [
           error: nil,
           tracking_number: number,
-          tracking_url: opts |> Keyword.get(:tracking_url) |> Codec.string() |> blank_to_nil(),
+          tracking_url: web_url,
           carrier_ref: opts |> Keyword.get(:carrier_ref) |> Codec.string() |> blank_to_nil()
         ]
 
@@ -1204,7 +1232,7 @@ defmodule PhoenixKitEcommerce.Shipments do
     changes = [
       status: "created",
       tracking_number: result.tracking_number,
-      tracking_url: result.tracking_url,
+      tracking_url: carrier_tracking_url(shipment, result.tracking_url),
       carrier_ref: result.carrier_ref,
       carrier_label: result.carrier_label,
       extra: Codec.string_map(Codec.dump(result.extra)),
@@ -1225,6 +1253,24 @@ defmodule PhoenixKitEcommerce.Shipments do
         )
 
         changed
+    end
+  end
+
+  # The link is rendered to the admin and, later, to the buyer: a carrier's
+  # answer that is not a web address is not stored, and not quoted in the log.
+  defp carrier_tracking_url(_shipment, nil), do: nil
+
+  defp carrier_tracking_url(shipment, url) do
+    case web_url(url) do
+      nil ->
+        Logger.warning(
+          "Shipment #{shipment.uuid}: the carrier's tracking link is not a web address; not stored"
+        )
+
+        nil
+
+      web_url ->
+        web_url
     end
   end
 

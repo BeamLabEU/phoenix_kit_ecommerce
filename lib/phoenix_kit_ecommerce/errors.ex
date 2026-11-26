@@ -62,6 +62,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | {:labels_failed, term()}
           | :invalid_scheme
           | :invalid_shipment_ids
+          | :invalid_tracking_url
           | :live_shipment_exists
           | :missing_base_currency
           | :mixed_label_providers
@@ -267,6 +268,10 @@ defmodule PhoenixKitEcommerce.Errors do
     do: gettext("The carrier no longer offers the delivery service of this order.")
 
   def message(:invalid_shipment_ids), do: gettext("The list of shipments is not valid.")
+
+  def message(:invalid_tracking_url),
+    do: gettext("The tracking link must be a web address starting with http:// or https://.")
+
   def message(:too_many_labels), do: gettext("At most 50 labels can be printed at once.")
 
   def message(:mixed_label_providers),
