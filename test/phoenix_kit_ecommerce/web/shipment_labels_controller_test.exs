@@ -145,6 +145,8 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
 
     conn = labels(conn, [shipment.uuid])
 
+    assert redirected_to(conn) =~ "/admin"
+    refute redirected_to(conn) =~ "/shop"
     assert Phoenix.Flash.get(conn.assigns.flash, :error) == "The shop is switched off."
     refute_received {:stub_called, :print_labels, _args}
   end
