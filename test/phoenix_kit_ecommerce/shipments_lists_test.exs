@@ -123,6 +123,22 @@ defmodule PhoenixKitEcommerce.ShipmentsListsTest do
            }
   end
 
+  test "an order whose shipments are all cancelled is to ship again" do
+    method = method!()
+    order = order!(method)
+    first = register!(order, %ShipmentResult{tracking_number: "T1"})
+    {:ok, _cancelled} = Shipments.mark_cancelled_at_carrier(first)
+
+    assert [{%Order{uuid: uuid}, _method}] = Shipments.list_to_ship()
+    assert uuid == order.uuid
+    assert Shipments.count_sections().to_ship == 1
+
+    # Registered again, it leaves To ship while the new shipment is live.
+    _second = register!(order, %ShipmentResult{tracking_number: "T2"})
+    assert Shipments.list_to_ship() == []
+    assert Shipments.count_sections().to_ship == 0
+  end
+
   test "the carrier filter applies to every section" do
     ours = order!(method!("stub"))
     theirs = method!("nocancel") |> order!() |> register!(%ShipmentResult{tracking_number: "T"})

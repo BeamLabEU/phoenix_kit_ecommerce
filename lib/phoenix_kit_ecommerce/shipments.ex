@@ -296,7 +296,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   @doc """
   The paid orders waiting for a shipment, the oldest first (at most
   #{@list_limit}): their shipping method's provider can register shipments
-  (`create_shipment/2`) and the order has no shipment at all. An order whose
+  (`create_shipment/2`) and the order has no shipment, or only cancelled
+  ones (the admin cancels one to register the order again). An order whose
   shipment failed is in `list_needs_attention/1` instead.
 
   `{order, method}` pairs. Options: `:provider`, a provider key.
@@ -393,7 +394,12 @@ defmodule PhoenixKitEcommerce.Shipments do
           {:array, :string}
         ),
       where:
-        not exists(from(s in Shipment, where: s.order_uuid == parent_as(:order).uuid, select: 1))
+        not exists(
+          from(s in Shipment,
+            where: s.order_uuid == parent_as(:order).uuid and s.status != "cancelled",
+            select: 1
+          )
+        )
     )
   end
 

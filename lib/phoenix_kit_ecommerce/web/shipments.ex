@@ -6,7 +6,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   Three sections (`PhoenixKitEcommerce.Shipments`):
 
     * **To ship** - paid orders whose method's carrier can register
-      shipments and that have none (`list_to_ship/1`). One order is
+      shipments and that have none but cancelled ones (`list_to_ship/1`). One order is
       registered at a time: alone, after the admin has looked at (and may
       have corrected) the parcels, the recipient and the destination, or as a
       batch of the orders ticked, each with the order's own data.
