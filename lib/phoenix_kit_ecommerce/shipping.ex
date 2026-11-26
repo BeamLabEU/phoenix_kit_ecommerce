@@ -598,12 +598,17 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   @doc """
   Whether an error of `create_shipment/2` means the carrier certainly does
-  not have the shipment: `{:rejected, message}`, an HTTP status 400, 401,
+  not have the shipment (or of `cancel_shipment/2`, that it did not cancel it): `{:rejected, message}`, an HTTP status 400, 401,
   403, 404, 422 or 429 (`{:http_status, status}` or
   `{:http_status, status, detail}`), or a connection refused before anything
   was sent (`:econnrefused`, or a transport error with that `reason`).
   Anything else - a timeout, a crash, another status, a transport error
   after sending, an answer that cannot be read - leaves it unknown.
+
+  The same rule reads an error of `cancel_shipment/2`: a definite failure is
+  the carrier's refusal (the shipment is not cancelled), anything else
+  leaves open whether it was (`PhoenixKitEcommerce.Shipments.cancel_shipment/2`
+  answers `:cancel_refused` and `:cancel_unconfirmed`).
   """
   @spec definite_failure?(term()) :: boolean()
   def definite_failure?({:rejected, message}) when is_binary(message), do: true
