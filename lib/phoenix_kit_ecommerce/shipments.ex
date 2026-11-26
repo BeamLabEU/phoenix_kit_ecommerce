@@ -294,6 +294,10 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   # -- the admin's lists -------------------------------------------------
 
+  @doc "How many rows each of the admin's lists returns at most."
+  @spec list_limit() :: pos_integer()
+  def list_limit, do: @list_limit
+
   @doc """
   The paid orders waiting for a shipment, the oldest first (at most
   #{@list_limit}): their shipping method's provider can register shipments

@@ -775,9 +775,12 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp to_ship_table(assigns) do
     ~H"""
     <div class="flex items-center justify-between mb-2">
-      <p class="text-sm text-base-content/60">
-        {ngettext("1 order to ship", "%{count} orders to ship", @count)}
-      </p>
+      <div>
+        <p class="text-sm text-base-content/60">
+          {ngettext("1 order to ship", "%{count} orders to ship", @count)}
+        </p>
+        <.truncated count={@count} />
+      </div>
       <.button
         id="shipments-register-selected"
         size="sm"
@@ -858,9 +861,12 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp shipments_table(assigns) do
     ~H"""
     <div class="flex items-center justify-between mb-2">
-      <p class="text-sm text-base-content/60">
-        {ngettext("1 shipment", "%{count} shipments", @count)}
-      </p>
+      <div>
+        <p class="text-sm text-base-content/60">
+          {ngettext("1 shipment", "%{count} shipments", @count)}
+        </p>
+        <.truncated count={@count} />
+      </div>
       <.button
         :if={@selected != []}
         id="shipments-print-selected"
@@ -1037,6 +1043,22 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         </.table_default_body>
       </.table_default>
     </form>
+    """
+  end
+
+  attr :count, :integer, required: true
+
+  # The lists stop at `Shipments.list_limit/0` rows; the count is of them all.
+  defp truncated(assigns) do
+    assigns = assign(assigns, :limit, Shipments.list_limit())
+
+    ~H"""
+    <p :if={@count > @limit} id="shipments-truncated" class="text-xs text-warning">
+      {gettext("Showing the first %{limit} of %{count}. Narrow the list with the filters.",
+        limit: @limit,
+        count: @count
+      )}
+    </p>
     """
   end
 

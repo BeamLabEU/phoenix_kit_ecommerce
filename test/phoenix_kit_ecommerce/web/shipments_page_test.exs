@@ -187,6 +187,31 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       refute has_element?(view, "#to-ship-#{fixed_order.uuid}")
     end
 
+    test "a list longer than the page shows says how many it holds", %{conn: conn} do
+      order = order!(method!())
+      fields = PhoenixKitBilling.Order.__schema__(:fields)
+      row = Map.take(order, fields)
+
+      copies =
+        for n <- 1..Shipments.list_limit() do
+          %{row | uuid: UUIDv7.generate(), order_number: "#{order.order_number}-#{n}"}
+        end
+
+      Repo.insert_all(PhoenixKitBilling.Order, copies)
+      total = Shipments.list_limit() + 1
+
+      {:ok, view, _html} = live(conn, @page)
+
+      assert has_element?(
+               view,
+               "#shipments-truncated",
+               "first #{Shipments.list_limit()} of #{total}"
+             )
+
+      {:ok, view, _html} = open_page(conn, "open")
+      refute has_element?(view, "#shipments-truncated")
+    end
+
     test "the carrier filter narrows the list", %{conn: conn} do
       stub_order = order!(method!("stub"))
       other_order = order!(method!("nocancel"))
