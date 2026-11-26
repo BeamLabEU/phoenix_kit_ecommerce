@@ -504,6 +504,18 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("+49 (0) 151 2345678", "EE") == "+491512345678"
     end
 
+    test "a trunk 0 typed after the country code is dropped where the trunk is 0" do
+      assert ShipmentRequest.e164_phone("+49 0151 1234567", nil) == "+491511234567"
+      assert ShipmentRequest.e164_phone("+358 040 123 4567", "EE") == "+358401234567"
+      assert ShipmentRequest.e164_phone("00372 05123 4567", nil) == "+37251234567"
+      # Italy and San Marino: the 0 is the number's own.
+      assert ShipmentRequest.e164_phone("+39 06 1234 5678", nil) == "+390612345678"
+      assert ShipmentRequest.e164_phone("+378 0549 123456", nil) == "+3780549123456"
+      # Not a 0 trunk: Hungary's is 06, Russia's 8, the US's 1.
+      assert ShipmentRequest.e164_phone("+36 30 123 4567", nil) == "+36301234567"
+      assert ShipmentRequest.e164_phone("+7 495 123 45 67", nil) == "+74951234567"
+    end
+
     test "an (0) in Italy, San Marino or the Vatican is part of the number" do
       assert ShipmentRequest.e164_phone("+39 (0)6 1234 5678", nil) == "+390612345678"
       assert ShipmentRequest.e164_phone("+378 (0)549 123456", nil) == "+3780549123456"

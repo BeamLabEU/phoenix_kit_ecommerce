@@ -183,7 +183,8 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   An `(0)` written next to a country code is the trunk prefix and is dropped,
   except in Italy, San Marino and the Vatican, where it is the number's own
-  `0`. A national number that still begins with 0 (outside those three) is
+  `0`; so is a plain `0` typed right after the code of a country whose trunk
+  is `0` (`"+49 0151 ..."`). A national number that still begins with 0 (outside those three) is
   `nil`: Hungary's `030 ...` is not its `06` trunk. `nil` also when there is
   no number, the number has other characters, or it has no country code and
   `country` gives none.
@@ -213,7 +214,35 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   defp international(digits) do
     if String.starts_with?(digits, @zero_keeping_codes),
       do: String.replace(digits, "~", "0"),
-      else: String.replace(digits, "~", "")
+      else: digits |> String.replace("~", "") |> without_typed_trunk()
+  end
+
+  # A 0 typed right after the country code ("+49 0151 ...") is the trunk
+  # prefix of a country whose trunk is 0; for any other code it is left (and
+  # Italy's and San Marino's 0 never reach here).
+  defp without_typed_trunk(digits) do
+    codes =
+      for %{country_code: code, alpha2: country} <- CountryData.list_countries(),
+          is_binary(code) and code != "" and String.starts_with?(digits, code <> "0"),
+          do: {code, country}
+
+    case codes do
+      [] ->
+        digits
+
+      found ->
+        code = found |> Enum.map(&elem(&1, 0)) |> Enum.max_by(&String.length/1)
+        countries = for {^code, country} <- found, do: country
+
+        if Enum.all?(countries, &zero_trunk?/1),
+          do: code <> String.replace_prefix(digits, code <> "0", ""),
+          else: digits
+    end
+  end
+
+  defp zero_trunk?(country) do
+    {prefixes, _lengths} = Map.get(@trunk_prefixes, country, @default_trunk)
+    "0" in prefixes
   end
 
   defp national(local, country) do
