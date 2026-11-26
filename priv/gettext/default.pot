@@ -8419,3 +8419,103 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr ""

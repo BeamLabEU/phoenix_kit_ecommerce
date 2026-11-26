@@ -8419,3 +8419,103 @@ msgstr "Mengenlimit erreicht"
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "kann hier gerade nicht hinzugefügt werden"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr "Wird registriert"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr "Ergebnis unbekannt"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr "Registriert"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr "Unterwegs"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr "Abholbereit"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr "Zurückgesendet"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr "Die Bestellung ist nicht bezahlt."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr "Für diese Bestellung gibt es bereits eine laufende Sendung."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr "Dieser Versanddienst kann keine Sendungen aus dem Shop registrieren."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr "Dieser Versanddienst kann keine Sendungen aus dem Shop stornieren."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr "Die gewählte Abholstelle ist nicht mehr verfügbar. Wählen Sie eine andere."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr "Der Versanddienst akzeptiert dieses Ziel nicht: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr "Das Ziel konnte beim Versanddienst nicht geprüft werden. Bitte versuchen Sie es erneut."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr "Die Sendung wurde inzwischen geändert. Laden Sie sie neu und versuchen Sie es erneut."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr "Die Verbindung zum Versanddienst, über die diese Sendung erstellt wurde, ist nicht mehr verfügbar."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr "Die Verbindung zum Versanddienst zeigt jetzt auf eine andere Umgebung (Test oder Live) als die, in der diese Sendung erstellt wurde."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr "Die Versandart verwendet jetzt einen anderen Versanddienst als den, mit dem die Bestellung aufgegeben wurde."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr "Geben Sie die Sendungsnummer ein."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr "Dieser Versanddienst ist nicht mehr eingerichtet."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr "Der Versanddienst bietet die Zustellart dieser Bestellung nicht mehr an."

@@ -162,7 +162,8 @@ defmodule PhoenixKitEcommerce.Web.StatusLabelsTest do
         {&StatusLabels.cart/1, Shop.Cart.statuses()},
         {&StatusLabels.import/1, ~w(pending processing completed failed)},
         {&StatusLabels.order/1, ~w(draft pending confirmed paid cancelled refunded)},
-        {&StatusLabels.translation_entry/1, PhoenixKitAI.Request.valid_statuses()}
+        {&StatusLabels.translation_entry/1, PhoenixKitAI.Request.valid_statuses()},
+        {&StatusLabels.shipment/1, Shop.Shipment.statuses()}
       ]
 
       Gettext.put_locale(PhoenixKitEcommerce.Gettext, "ru")

@@ -8417,3 +8417,103 @@ msgstr "koguse piirang on täis"
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "praegu ei saa siia lisada"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr "Registreerimisel"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr "Tulemus teadmata"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr "Registreeritud"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr "Teel"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr "Valmis kättesaamiseks"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr "Tagastatud"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr "Tellimus ei ole makstud."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr "Sellel tellimusel on juba pooleli saadetis."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr "See vedaja ei saa poest saadetisi registreerida."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr "See vedaja ei saa poest saadetisi tühistada."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr "Valitud väljastuspunkt ei ole enam saadaval. Valige mõni teine."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr "Vedaja ei aktsepteeri seda sihtkohta: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr "Sihtkohta ei õnnestunud vedaja juures kontrollida. Palun proovige uuesti."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr "Saadetist on vahepeal muudetud. Laadige see uuesti ja proovige uuesti."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr "Vedaja ühendus, mille kaudu see saadetis loodi, ei ole enam saadaval."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr "Vedaja ühendus osutab nüüd teisele keskkonnale (test või päris) kui see, milles saadetis loodi."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr "Tarneviis kasutab nüüd teist vedajat kui see, millega tellimus esitati."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr "Sisestage jälgimisnumber."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr "See vedaja ei ole enam seadistatud."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr "Vedaja ei paku enam selle tellimuse tarneteenust."

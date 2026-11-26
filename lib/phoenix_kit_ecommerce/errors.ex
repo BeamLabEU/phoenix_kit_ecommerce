@@ -33,12 +33,17 @@ defmodule PhoenixKitEcommerce.Errors do
           :all_downloads_failed
           | :all_urls_invalid
           | :already_migrated
+          | :cancel_not_supported
           | :cart_already_converting
           | :cart_base_unavailable
           | :cart_empty
           | :cart_not_active
+          | :connection_changed
+          | :connection_environment_changed
           | :currency_mismatch
           | :currency_unavailable
+          | {:destination_rejected, String.t()}
+          | {:destination_unverified, term()}
           | :email_already_registered
           | :email_exists_confirmed
           | :empty_file
@@ -50,6 +55,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :invalid_host
           | :invalid_quantity
           | :invalid_scheme
+          | :live_shipment_exists
           | :missing_base_currency
           | :missing_content_type
           | :missing_slug
@@ -76,6 +82,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :option_key_and_value_required
           | :payment_start_failed
           | :payment_unavailable
+          | :order_not_paid
           | {:option_missing_keys, [String.t()]}
           | {:option_type_invalid, term()}
           | {:option_values_not_a_list, String.t()}
@@ -86,14 +93,21 @@ defmodule PhoenixKitEcommerce.Errors do
           | {:option_key_exists_in_category, String.t()}
           | {:option_value_exists, String.t()}
           | :payment_option_not_found
+          | :pickup_point_unavailable
           | :product_not_found
+          | :provider_changed
           | :rate_limited
           | :redirect_loop
           | :server_error
+          | :shipment_changed
+          | :shipments_not_supported
           | :shipping_quote_required
           | :temp_file_missing
           | :timeout
+          | :tracking_number_required
           | :unknown_format
+          | :unknown_provider
+          | :unknown_service
           | {:unsupported_product_source, module()}
           | {:search_rebuild_failed, term()}
           | :no_shop_catalogue
@@ -178,6 +192,52 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:temp_file_missing), do: gettext("The temporary file is missing.")
   def message(:timeout), do: gettext("The operation timed out.")
   def message(:unknown_format), do: gettext("The file format is not recognized.")
+
+  # Shipments (`PhoenixKitEcommerce.Shipments`).
+  def message(:order_not_paid), do: gettext("The order is not paid.")
+
+  def message(:live_shipment_exists),
+    do: gettext("This order already has a shipment in progress.")
+
+  def message(:shipments_not_supported),
+    do: gettext("This carrier cannot register shipments from the shop.")
+
+  def message(:cancel_not_supported),
+    do: gettext("This carrier cannot cancel shipments from the shop.")
+
+  def message(:pickup_point_unavailable),
+    do: gettext("The chosen pickup point is no longer available. Choose another one.")
+
+  def message({:destination_rejected, reason}),
+    do: gettext("The carrier does not accept this destination: %{reason}", reason: label(reason))
+
+  def message({:destination_unverified, _reason}),
+    do: gettext("The destination could not be checked with the carrier. Please try again.")
+
+  def message(:shipment_changed),
+    do: gettext("The shipment was changed in the meantime. Reload it and try again.")
+
+  def message(:connection_changed),
+    do:
+      gettext("The carrier connection this shipment was created through is no longer available.")
+
+  def message(:connection_environment_changed),
+    do:
+      gettext(
+        "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+      )
+
+  def message(:provider_changed),
+    do:
+      gettext(
+        "The shipping method now uses another carrier than the one the order was placed with."
+      )
+
+  def message(:tracking_number_required), do: gettext("Enter the tracking number.")
+  def message(:unknown_provider), do: gettext("This carrier is not configured any more.")
+
+  def message(:unknown_service),
+    do: gettext("The carrier no longer offers the delivery service of this order.")
 
   # Option definitions (`OptionTypes.validate_option/1`, `Options`).
   def message(:option_not_a_map), do: gettext("An option must be a map.")

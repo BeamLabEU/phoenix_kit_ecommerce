@@ -8419,3 +8419,103 @@ msgstr "limite de quantité atteinte"
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "ne peut pas être ajouté ici pour le moment"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr "Enregistrement en cours"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr "Résultat inconnu"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr "Enregistré"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr "En transit"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr "Prêt à être retiré"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr "Retourné"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr "La commande n'est pas payée."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr "Cette commande a déjà un envoi en cours."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr "Ce transporteur ne peut pas enregistrer d'envois depuis la boutique."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr "Ce transporteur ne peut pas annuler d'envois depuis la boutique."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr "Le point de retrait choisi n'est plus disponible. Choisissez-en un autre."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr "Le transporteur n'accepte pas cette destination : %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr "La destination n'a pas pu être vérifiée auprès du transporteur. Veuillez réessayer."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr "L'envoi a été modifié entre-temps. Rechargez-le et réessayez."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr "La connexion au transporteur par laquelle cet envoi a été créé n'est plus disponible."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr "La connexion au transporteur pointe maintenant vers un autre environnement (test ou production) que celui dans lequel cet envoi a été créé."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr "Le mode de livraison utilise maintenant un autre transporteur que celui de la commande."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr "Saisissez le numéro de suivi."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr "Ce transporteur n'est plus configuré."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr "Le transporteur ne propose plus le service de livraison de cette commande."

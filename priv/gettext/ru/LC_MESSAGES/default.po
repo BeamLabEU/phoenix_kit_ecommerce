@@ -8479,3 +8479,103 @@ msgstr "достигнут лимит количества"
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "сейчас нельзя добавить здесь"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr "Регистрируется"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr "Результат неизвестен"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr "Зарегистрировано"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr "В пути"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr "Готово к выдаче"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr "Возвращено"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr "Заказ не оплачен."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr "У этого заказа уже есть отправление в работе."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr "Этот перевозчик не может регистрировать отправления из магазина."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr "Этот перевозчик не может отменять отправления из магазина."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr "Выбранный пункт выдачи больше недоступен. Выберите другой."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr "Перевозчик не принимает этот адрес доставки: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr "Не удалось проверить адрес доставки у перевозчика. Попробуйте ещё раз."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr "Отправление тем временем изменилось. Обновите его и попробуйте ещё раз."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr "Подключение к перевозчику, через которое создано это отправление, больше недоступно."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr "Подключение к перевозчику теперь указывает на другую среду (тестовую или рабочую), чем та, в которой создано это отправление."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr "Способ доставки теперь использует другого перевозчика, чем тот, с которым был оформлен заказ."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr "Введите трек-номер."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr "Этот перевозчик больше не настроен."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr "Перевозчик больше не предлагает способ доставки этого заказа."
