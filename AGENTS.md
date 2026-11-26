@@ -97,7 +97,7 @@ Repo-local aliases:
   unified `:phoenix_kit_public` live_session), `admin_routes/0` and
   `admin_locale_routes/0` for the admin pages that have no tab (forms,
   detail pages, settings sub-pages, the dashboard); `generate/1` emits the
-  one controller route pair, the checkout claim page. Every page with a tab
+  controller routes (checkout claim, shipment labels). Every page with a tab
   gets its route from the tab's `live_view:` instead, and must not be
   declared in `admin_routes/0` as well (two routes at one path;
   `sub_key_pages_test.exs` pins it). Never hand-register these routes in a

@@ -61,15 +61,21 @@ pages.
   `lib/phoenix_kit_ecommerce/compat/`; only a host written against them does.
 - **Admin surface:** tab `E-Commerce` at `/admin/shop`, subtabs Dashboard,
   Products, Categories, Shipping, Carts, CSV Import, Shopify Sync (hidden
-  while `shop_shopify_enabled` is off) and Translations
-  (`/admin/shop/translations`, hidden until `shop_translations_enabled`); a
+  while `shop_shopify_enabled` is off), Translations
+  (`/admin/shop/translations`, hidden until `shop_translations_enabled`) and
+  Shipments (`/admin/shop/shipments`); a
   settings subtab at `/admin/shop/settings`; user-dashboard tabs Shop
   (`/shop`) and My Cart (`/cart`, also in the avatar dropdown via the
   `Tab` option `user_menu: true`). Public storefront routes: `/shop`,
   `/shop/category/:slug`, `/shop/product/:slug`, `/cart`, `/checkout`,
   `/checkout/complete/:uuid`, and the assistant checkout hand-off
   `/checkout/claim/:token` (GET and POST, no locale prefix; a controller route
-  emitted by `Web.Routes.generate/1`, not a LiveView).
+  emitted by `Web.Routes.generate/1`, not a LiveView). The shipment labels,
+  `GET /shop-shipments/labels?ids=...` (`Web.ShipmentLabelsController`), are
+  the other controller route there: no locale prefix and not under `/admin`
+  (core does not rewrite these routes for a renamed admin path), behind
+  `:phoenix_kit_admin_only`; the controller checks `shop.manage_shipments`
+  itself, and links to it are built with `Routes.path(path, locale: :none)`.
 - **The claim token is in the request path** (`GET /checkout/claim/<token>`).
   Three log lines carry the path before any controller runs: the endpoint's
   request logger (`Plug.Telemetry`, `GET /checkout/claim/...` at info) and core's
@@ -196,6 +202,7 @@ lib/phoenix_kit_ecommerce/
 │                     # list_unstamped_prices (read-only audit)
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz,
 │                     # ClaimController + ClaimHTML (the checkout claim page);
+│                     # ShipmentLabelsController (the labels' download);
 │                     # components/related_products.ex (product page block),
 │                     # components/cross_sells.ex (cart "Add to your order")
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
@@ -299,9 +306,11 @@ different server) and turns events into Oban jobs; it never indexes inline.
 - **Admin LiveViews:** Dashboard, Products, ProductForm, ProductDetail,
   Categories, CategoryForm, ShippingMethods, ShippingMethodForm, Carts,
   Settings, OptionsSettings, Imports, ImportShow, ImportConfigs, ShopifySync,
-  Translations, TestShop.
+  Translations, TestShop, Shipments.
 - **Components:** ShopLayouts, ShopCards, CatalogSidebar, FilterHelpers,
-  TranslationTabs.
+  TranslationTabs, ShipmentDestinationEditor (the Shipments page's own
+  destination editor over the provider's lookups; the checkout picker is
+  bound to a cart and is not reused).
 - **Plug:** `Plugs.ShopSession` mints and reads the signed `shop_session_id`
   cookie (30 days) plus the Phoenix session entry, so a guest keeps one cart
   across pages. A disabled shop does not MINT a new identity but still
@@ -482,7 +491,7 @@ once per build and read the excluded count each time.
 
 ### Permissions
 
-The `"shop"` key opens the admin area's dashboard and nothing else. Five
+The `"shop"` key opens the admin area's dashboard and nothing else. Six
 sub-permissions carry the pages and capabilities (core enforces
 sub-implies-base); each page is refused at mount without its key:
 
@@ -493,6 +502,7 @@ sub-implies-base); each page is refused at mount without its key:
 | `shop.manage_carts` | the carts admin — **read included**, the rows carry customer contact details |
 | `shop.manage_settings` | the settings page (security policy and the rest), product options, shipping methods (list and form); every translations-page action (translate, stamp, reset, stop, run sweep, sweep settings) |
 | `shop.run_imports` | CSV imports and their detail pages, import configurations, Shopify sync |
+| `shop.manage_shipments` | the Shipments page — **read included**, the rows carry the recipients' contact details — every action on it, and the label download route |
 
 ⚠️ Core auto-grants a newly discovered sub-permission to the Admin system
 role only. A CUSTOM role holding base `"shop"` keeps the dashboard but loses
@@ -750,6 +760,9 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   page renders **no** shipping section at all, so nothing may redirect a
   shopper there to "pick another method"; `CheckoutPage` re-enters its own
   `:shipping` step instead.
+- `shop_shipping_label_format` — `"a4"` (default), `"a5"` or `"a6"`: the
+  paper size shipment labels are asked in (`LabelOptions.format`). Read via
+  `shipping_label_format/0`; an unknown value is `:a4`.
 - `shop_shipping_parcel_defaults` — JSON `%{"length_mm", "width_mm",
   "height_mm", "weight_g"}`: the standard box and the weight assumed for a
   line without one. Read via `shipping_parcel_defaults/0`, written via
