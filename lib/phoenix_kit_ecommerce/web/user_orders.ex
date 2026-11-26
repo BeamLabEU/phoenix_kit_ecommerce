@@ -124,7 +124,9 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
     # The status filter matches the label the buyer reads, which follows the
     # orders' shipments: it is applied here, not by billing's own filter.
     orders = Billing.list_user_orders(user_uuid, %{})
-    shipments = orders |> Enum.map(& &1.uuid) |> Shipments.buyer_shipments()
+
+    shipments =
+      orders |> Enum.map(& &1.uuid) |> Shipments.buyer_shipments(fields: [:status, :provider])
 
     display_statuses =
       Map.new(orders, fn order ->

@@ -195,10 +195,12 @@ defmodule PhoenixKitEcommerce.Web.BuyerShipmentsTest do
         :telemetry.detach(id)
       end
 
-      # The disconnected render and the connected mount read the page once each.
-      assert_received {:shipments_query, _}
+      # The disconnected render and the connected mount read the list once each,
+      # only the columns the labels need (not the events).
+      assert_received {:shipments_query, first}
       assert_received {:shipments_query, _}
       refute_received {:shipments_query, _}
+      refute first.query =~ "events"
     end
   end
 end

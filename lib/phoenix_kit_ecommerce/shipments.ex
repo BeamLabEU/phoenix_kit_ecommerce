@@ -1339,9 +1339,13 @@ defmodule PhoenixKitEcommerce.Shipments do
   first: `created` and later (`in_transit`, `ready_for_pickup`,
   `delivered`, `returned`). One query for all the orders; an order without
   one has no key.
+
+  Options: `:fields`, the fields to read (with `:uuid`, `:order_uuid` and
+  `:inserted_at` always), for a caller that needs no full rows: the order
+  list reads only what `buyer_order_status/2` uses.
   """
-  @spec buyer_shipments([String.t()]) :: %{String.t() => [Shipment.t()]}
-  def buyer_shipments(order_uuids) when is_list(order_uuids) do
+  @spec buyer_shipments([String.t()], keyword()) :: %{String.t() => [Shipment.t()]}
+  def buyer_shipments(order_uuids, opts \\ []) when is_list(order_uuids) do
     case order_uuids |> Enum.map(&uuid_or_nil/1) |> Enum.reject(&is_nil/1) |> Enum.uniq() do
       [] ->
         %{}
@@ -1351,10 +1355,17 @@ defmodule PhoenixKitEcommerce.Shipments do
           where: s.order_uuid in ^uuids and s.status in ^@buyer_statuses,
           order_by: [desc: s.inserted_at, desc: s.uuid]
         )
+        |> select_fields(opts[:fields])
         |> repo().all()
         |> Enum.group_by(& &1.order_uuid)
     end
   end
+
+  defp select_fields(query, nil), do: query
+
+  defp select_fields(query, fields),
+    do:
+      from(s in query, select: struct(s, ^Enum.uniq([:uuid, :order_uuid, :inserted_at | fields])))
 
   @doc """
   The order status the buyer reads (for `Web.StatusLabels.order/1`), given
