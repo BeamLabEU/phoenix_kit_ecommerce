@@ -552,6 +552,31 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       assert has_element?(view, "#shipment-#{safe.uuid} a[href='https://track.example/1']")
     end
 
+    test "the status filter offers only the statuses of the section", %{conn: conn} do
+      {:ok, view, _html} = open_page(conn, "open")
+
+      for status <- ~w(creating created in_transit ready_for_pickup),
+          do: assert(has_element?(view, "#shipments-filter-status option[value='#{status}']"))
+
+      for status <- ~w(unknown failed delivered returned cancelled),
+          do: refute(has_element?(view, "#shipments-filter-status option[value='#{status}']"))
+
+      {:ok, view, _html} = open_page(conn, "needs_attention")
+
+      for status <- ~w(unknown failed creating created),
+          do: assert(has_element?(view, "#shipments-filter-status option[value='#{status}']"))
+
+      for status <- ~w(delivered returned cancelled),
+          do: refute(has_element?(view, "#shipments-filter-status option[value='#{status}']"))
+    end
+
+    test "a status the section cannot hold is not applied", %{conn: conn} do
+      shipment = shipment!(method!(), "created")
+
+      {:ok, view, _html} = live(conn, @page <> "?section=open&status=failed")
+      assert has_element?(view, "#shipment-#{shipment.uuid}")
+    end
+
     test "the status filter narrows a section", %{conn: conn} do
       method = method!()
       failed = shipment!(method, "failed")
@@ -724,6 +749,29 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
         resource_uuid: shipment.uuid,
         actor_uuid: actor_uuid
       )
+    end
+
+    test "ticked shipments the label route would refuse get the reason, not a link", %{
+      conn: conn
+    } do
+      ours = shipment!(method!("stub"), "created")
+      theirs = shipment!(method!("nocancel"), "created")
+
+      {:ok, view, _html} = open_page(conn, "open")
+
+      view
+      |> form("#shipments-selection", %{"shipment_uuids" => [ours.uuid, theirs.uuid]})
+      |> render_change()
+
+      refute has_element?(view, "#shipments-print-selected")
+      assert has_element?(view, "#shipments-print-refused", "one carrier connection")
+
+      render_change(view, "select_shipments", %{
+        "shipment_uuids" => [ours.uuid | for(_ <- 1..50, do: Ecto.UUID.generate())]
+      })
+
+      refute has_element?(view, "#shipments-print-selected")
+      assert has_element?(view, "#shipments-print-refused", "At most 50 labels")
     end
 
     test "the ticked shipments get one labels link", %{conn: conn} do

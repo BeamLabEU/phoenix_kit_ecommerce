@@ -105,6 +105,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   @cancellable_statuses ["created", "in_transit", "ready_for_pickup"]
   @locally_cancellable_statuses ["unknown" | @cancellable_statuses]
   @closed_order_statuses ["cancelled", "refunded"]
+  @open_statuses ["creating" | @cancellable_statuses]
+  @attention_statuses ["unknown", "failed" | @open_statuses]
   @list_limit 200
   @max_labels 50
 
@@ -294,6 +296,14 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   # -- the admin's lists -------------------------------------------------
 
+  @doc """
+  The statuses a shipment of `list_open/1` (`:open`) or
+  `list_needs_attention/1` (`:needs_attention`) can have.
+  """
+  @spec section_statuses(:open | :needs_attention) :: [String.t()]
+  def section_statuses(:open), do: @open_statuses
+  def section_statuses(:needs_attention), do: @attention_statuses
+
   @doc "How many rows each of the admin's lists returns at most."
   @spec list_limit() :: pos_integer()
   def list_limit, do: @list_limit
@@ -415,7 +425,7 @@ defmodule PhoenixKitEcommerce.Shipments do
     cutoff = stuck_cutoff()
 
     from([s, o] in shipments_query(opts),
-      where: s.status in ^List.delete(Shipment.live_statuses(), "unknown"),
+      where: s.status in ^@open_statuses,
       where: s.status != "creating" or s.updated_at >= ^cutoff,
       where: o.status not in ^@closed_order_statuses
     )
@@ -507,6 +517,18 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   # -- labels ------------------------------------------------------------
+
+  @doc """
+  Whether `print_labels/2` would take the shipments `ids`: `:ok`, or the
+  refusal it would answer about the ids and the shipments. Neither the
+  carrier nor the connection is asked.
+  """
+  @spec check_labels([String.t()]) :: :ok | {:error, error()}
+  def check_labels(ids) do
+    with {:ok, uuids} <- label_uuids(ids),
+         {:ok, _shipments} <- label_shipments(uuids),
+         do: :ok
+  end
 
   @doc """
   The labels of the shipments `ids` as one document from their carrier

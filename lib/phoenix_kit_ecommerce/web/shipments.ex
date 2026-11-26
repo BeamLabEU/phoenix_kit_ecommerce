@@ -63,6 +63,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
        counts: %{to_ship: 0, open: 0, needs_attention: 0},
        selected_orders: [],
        selected_shipments: [],
+       labels_check: nil,
        editor: nil,
        tracking: nil,
        confirm: nil,
@@ -85,12 +86,14 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
     if Authz.can?(socket, :manage_shipments) do
       provider_keys = Enum.map(socket.assigns.providers, &elem(&1, 0))
 
+      section = if(params["section"] in @sections, do: params["section"], else: "to_ship")
+
       {:noreply,
        socket
        |> assign(
-         section: if(params["section"] in @sections, do: params["section"], else: "to_ship"),
+         section: section,
          provider: if(params["provider"] in provider_keys, do: params["provider"]),
-         status: if(params["status"] in Shipment.statuses(), do: params["status"])
+         status: if(params["status"] in section_statuses(section), do: params["status"])
        )
        |> load()}
     else
@@ -107,7 +110,8 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
       assign(socket,
         counts: Shipments.count_sections(opts),
         selected_orders: [],
-        selected_shipments: []
+        selected_shipments: [],
+        labels_check: nil
       )
 
     case section do
@@ -159,8 +163,13 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp gated_event("select_orders", params, socket),
     do: {:noreply, assign(socket, selected_orders: uuids_param(params["order_uuids"]))}
 
-  defp gated_event("select_shipments", params, socket),
-    do: {:noreply, assign(socket, selected_shipments: uuids_param(params["shipment_uuids"]))}
+  # The label route's own checks, so a selection it would refuse gets the
+  # reason instead of a link.
+  defp gated_event("select_shipments", params, socket) do
+    selected = uuids_param(params["shipment_uuids"])
+    check = if selected != [], do: Shipments.check_labels(selected)
+    {:noreply, assign(socket, selected_shipments: selected, labels_check: check)}
+  end
 
   defp gated_event("open_register", %{"uuid" => uuid}, socket) do
     with :ok <- idle(socket),
@@ -723,7 +732,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
             value={@status}
             label={gettext("Status")}
             prompt={gettext("All statuses")}
-            options={Enum.map(Shipment.statuses(), &{StatusLabels.shipment(&1), &1})}
+            options={Enum.map(section_statuses(@section), &{StatusLabels.shipment(&1), &1})}
           />
         </div>
       </form>
@@ -764,6 +773,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
             section={@section}
             count={section_count(@counts, @section)}
             selected={@selected_shipments}
+            labels_check={@labels_check}
           />
         <% end %>
       </fieldset>
@@ -872,6 +882,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   attr :section, :string, required: true
   attr :count, :integer, required: true
   attr :selected, :list, required: true
+  attr :labels_check, :any, required: true
 
   defp shipments_table(assigns) do
     ~H"""
@@ -882,8 +893,11 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         </p>
         <.truncated count={@count} />
       </div>
+      <p :if={match?({:error, _}, @labels_check)} id="shipments-print-refused" class="text-sm text-error">
+        {Errors.message(elem(@labels_check, 1))}
+      </p>
       <.button
-        :if={@selected != []}
+        :if={@selected != [] and @labels_check == :ok}
         id="shipments-print-selected"
         size="sm"
         href={labels_path(@selected)}
@@ -1173,6 +1187,10 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   end
 
   # -- helpers --------------------------------------------------------------------
+
+  defp section_statuses("open"), do: Shipments.section_statuses(:open)
+  defp section_statuses("needs_attention"), do: Shipments.section_statuses(:needs_attention)
+  defp section_statuses(_to_ship), do: []
 
   defp section_count(counts, "open"), do: counts.open
   defp section_count(counts, "needs_attention"), do: counts.needs_attention
