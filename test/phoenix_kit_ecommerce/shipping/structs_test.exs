@@ -524,6 +524,19 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("07 1234 5678", "CI") == "+2250712345678"
     end
 
+    test "a trunk typed after a code whose trunk is not 0 follows the national rule" do
+      assert ShipmentRequest.e164_phone("+370 8 612 34567", nil) == "+37061234567"
+      assert ShipmentRequest.e164_phone("+7 8 495 123 45 67", nil) == "+74951234567"
+      assert ShipmentRequest.e164_phone("+7 812 123 45 67", nil) == "+78121234567"
+      assert ShipmentRequest.e164_phone("+36 06 30 123 4567", nil) == "+36301234567"
+      assert ShipmentRequest.e164_phone("+375 80 29 123 45 67", nil) == "+375291234567"
+      # A 0 left after such a code is no number there.
+      assert ShipmentRequest.e164_phone("+7 0 495 123 45 67", nil) == nil
+      assert ShipmentRequest.e164_phone("+36 030 123 4567", nil) == nil
+      assert ShipmentRequest.e164_phone("+1 0212 555 0123", nil) == nil
+      assert ShipmentRequest.e164_phone("+375 029 123 45 67", nil) == nil
+    end
+
     test "an (0) in Italy, San Marino or the Vatican is part of the number" do
       assert ShipmentRequest.e164_phone("+39 (0)6 1234 5678", nil) == "+390612345678"
       assert ShipmentRequest.e164_phone("+378 (0)549 123456", nil) == "+3780549123456"

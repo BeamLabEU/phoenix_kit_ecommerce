@@ -184,10 +184,12 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     * `06` in Hungary.
 
   An `(0)` written next to a country code is the trunk prefix and is dropped,
-  except in those seven countries, where it is the number's own `0`; so is a
-  plain `0` typed right after the code of a country whose trunk is `0`
-  (`"+49 0151 ..."`). A national number that still begins with 0 (outside
-  those seven) is `nil`: Hungary's `030 ...` is not its `06` trunk. `nil` also when there is
+  except in those seven countries, where it is the number's own `0`. A trunk
+  typed right after the country code follows the same national rule:
+  `"+49 0151 ..."` drops its `0`, `"+370 8 612 34567"` its `8`. A number that
+  still begins with 0 afterwards (outside those seven) is `nil`, nationally
+  or after the code: Hungary's `030 ...` is not its `06` trunk, and neither
+  is `"+7 0 495 ..."` Russia's `8`. `nil` also when there is
   no number, the number has other characters, or it has no country code and
   `country` gives none.
   """
@@ -215,39 +217,53 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     if is_binary(digits) and Regex.match?(~r/\A[1-9]\d{7,14}\z/, digits), do: "+" <> digits
   end
 
-  # `~` marks an `(0)`.
+  # `~` marks an `(0)`. After the country code, a trunk typed out of habit
+  # follows the national rule of the code's countries (one rule when they
+  # share it, e.g. Russia and Kazakhstan on +7): "+49 0151 ..." drops its 0,
+  # "+370 8 612 34567" its 8. A 0 the rule leaves is no number there (outside
+  # `@zero_keeping_codes`): `nil`. A code this data does not know is left as
+  # typed.
   defp international(digits) do
-    if String.starts_with?(digits, @zero_keeping_codes),
-      do: String.replace(digits, "~", "0"),
-      else: digits |> String.replace("~", "") |> without_typed_trunk()
-  end
+    case code_of(digits) do
+      nil ->
+        String.replace(digits, "~", "")
 
-  # A 0 typed right after the country code ("+49 0151 ...") is the trunk
-  # prefix of a country whose trunk is 0; for any other code it is left (and
-  # the 0 of the countries in `@zero_keeping_codes` never reaches here).
-  defp without_typed_trunk(digits) do
-    codes =
-      for %{country_code: code, alpha2: country} <- CountryData.list_countries(),
-          is_binary(code) and code != "" and String.starts_with?(digits, code <> "0"),
-          do: {code, country}
+      {code, countries} ->
+        rest = String.replace_prefix(digits, code, "")
 
-    case codes do
-      [] ->
-        digits
-
-      found ->
-        code = found |> Enum.map(&elem(&1, 0)) |> Enum.max_by(&String.length/1)
-        countries = for {^code, country} <- found, do: country
-
-        if Enum.all?(countries, &zero_trunk?/1),
-          do: code <> String.replace_prefix(digits, code <> "0", ""),
-          else: digits
+        if code in @zero_keeping_codes,
+          do: code <> String.replace(rest, "~", "0"),
+          else: after_code(code, String.replace(rest, "~", ""), countries)
     end
   end
 
-  defp zero_trunk?(country) do
-    {prefixes, _lengths} = Map.get(@trunk_prefixes, country, @default_trunk)
-    "0" in prefixes
+  defp after_code(code, rest, countries) do
+    number =
+      case countries |> Enum.map(&Map.get(@trunk_prefixes, &1, @default_trunk)) |> Enum.uniq() do
+        [{prefixes, lengths}] -> without_trunk(rest, prefixes, lengths)
+        _rules_differ -> rest
+      end
+
+    with number when is_binary(number) <- number,
+         :ok <- significant(number, nil),
+         do: code <> number
+  end
+
+  # The longest calling code `digits` begins with, and its countries.
+  defp code_of(digits) do
+    found =
+      for %{country_code: code, alpha2: country} <- CountryData.list_countries(),
+          is_binary(code) and code != "" and String.starts_with?(digits, code),
+          do: {code, country}
+
+    case found do
+      [] ->
+        nil
+
+      found ->
+        code = found |> Enum.map(&elem(&1, 0)) |> Enum.max_by(&String.length/1)
+        {code, for({^code, country} <- found, do: country)}
+    end
   end
 
   defp national(local, country) do
