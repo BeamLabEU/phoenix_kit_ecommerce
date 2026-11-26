@@ -37,7 +37,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   ## The data sent
 
   The parcels, the recipient (`name`, `email`, `phone` from the order's
-  `billing_snapshot`, the phone in E.164) and the destination are copied from
+  `billing_snapshot`, the phone in E.164 beside the `raw_phone` as typed) and
+  the destination are copied from
   the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
   corrections as `:parcels`, `:recipient` and `:destination`.
 
@@ -565,9 +566,20 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   defp billing_recipient(_snapshot), do: %{}
 
+  # The number as it was typed is kept beside the normalised one: a stored
+  # recipient (a retry) carries both, a new one only the typed `phone`.
   defp recipient_map(recipient, country) do
-    %{name: name, email: email, phone: phone} = ShipmentRequest.recipient(recipient)
-    %{"name" => name, "email" => email, "phone" => ShipmentRequest.e164_phone(phone, country)}
+    %{name: name, email: email, phone: phone, raw_phone: raw} =
+      ShipmentRequest.recipient(recipient)
+
+    raw = raw || phone
+
+    %{
+      "name" => name,
+      "email" => email,
+      "phone" => ShipmentRequest.e164_phone(raw, country),
+      "raw_phone" => raw
+    }
   end
 
   defp goods_lines(%Order{line_items: lines}) when is_list(lines),

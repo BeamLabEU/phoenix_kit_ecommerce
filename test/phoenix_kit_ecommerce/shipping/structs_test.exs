@@ -146,7 +146,12 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
         country: "EE",
         destination: %Destination{locality: locality(), pickup_point: point()},
         parcels: [parcel()],
-        recipient: %{name: "Mari Maasikas", email: "mari@example.com", phone: "+37255551234"},
+        recipient: %{
+          name: "Mari Maasikas",
+          email: "mari@example.com",
+          phone: "+37255551234",
+          raw_phone: "5555 1234"
+        },
         payer: :recipient,
         description: "Vase x2, Lamp",
         declared_value: Decimal.new("59.90"),
@@ -423,9 +428,14 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
 
     test "a recipient keeps what it is given, trimmed, and blank values are nil" do
       assert ShipmentRequest.recipient(%{"name" => " Mari ", "email" => "", phone: "5555"}) ==
-               %{name: "Mari", email: nil, phone: "5555"}
+               %{name: "Mari", email: nil, phone: "5555", raw_phone: nil}
 
-      assert ShipmentRequest.recipient(nil) == %{name: nil, email: nil, phone: nil}
+      assert ShipmentRequest.recipient(nil) == %{
+               name: nil,
+               email: nil,
+               phone: nil,
+               raw_phone: nil
+             }
     end
   end
 
@@ -434,6 +444,21 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("5555 1234", "EE") == "+37255551234"
       assert ShipmentRequest.e164_phone("(5555) 12-34", "ee") == "+37255551234"
       assert ShipmentRequest.e164_phone("6123 4567", "LV") == "+37161234567"
+    end
+
+    test "the national trunk 0 is dropped when the country code is added, except IT, SM and VA" do
+      assert ShipmentRequest.e164_phone("067 123 45 67", "UA") == "+380671234567"
+      assert ShipmentRequest.e164_phone("040 123 4567", "FI") == "+358401234567"
+      assert ShipmentRequest.e164_phone("0151 2345678", "DE") == "+491512345678"
+      assert ShipmentRequest.e164_phone("06 1234 5678", "IT") == "+390612345678"
+      assert ShipmentRequest.e164_phone("0549 123456", "SM") == "+3780549123456"
+      assert ShipmentRequest.e164_phone("06 6988 1234", "VA") == "+390669881234"
+    end
+
+    test "an (0) is never dialled from abroad" do
+      assert ShipmentRequest.e164_phone("+44 (0)20 7946 0958", nil) == "+442079460958"
+      assert ShipmentRequest.e164_phone("(0)151 2345678", "DE") == "+491512345678"
+      assert ShipmentRequest.e164_phone("+49 (0) 151 2345678", "EE") == "+491512345678"
     end
 
     test "a number with a country code keeps it" do

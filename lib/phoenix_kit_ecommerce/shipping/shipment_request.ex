@@ -8,9 +8,10 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     * `country` - ISO 3166-1 alpha-2 code of the destination country, or `nil`
     * `destination` - where the parcels go
     * `parcels` - what is sent
-    * `recipient` - `%{name, email, phone}` from the order's frozen
-      `billing_snapshot` (as the admin may have corrected it); `phone` is in
-      E.164 (`e164_phone/2`) or `nil`
+    * `recipient` - `%{name, email, phone, raw_phone}` from the order's
+      frozen `billing_snapshot` (as the admin may have corrected it); `phone`
+      is in E.164 (`e164_phone/2`) or `nil`, `raw_phone` is the number as it
+      was typed, for an adapter that normalises it its own way
     * `payer` - `:shop`, or `:recipient` when the order is paid to the
       carrier on delivery (`metadata["shipping_pay_on_delivery"]`)
     * `description` - the goods, from the order lines, at most 100 characters
@@ -27,6 +28,8 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   @payers [:shop, :recipient]
   @description_max 100
+  # Countries whose leading 0 is part of the number, not a trunk prefix.
+  @keeps_leading_zero ~w(IT SM VA)
 
   defstruct order_uuid: nil,
             reference: nil,
@@ -34,7 +37,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
             country: nil,
             destination: %Destination{},
             parcels: [],
-            recipient: %{name: nil, email: nil, phone: nil},
+            recipient: %{name: nil, email: nil, phone: nil, raw_phone: nil},
             payer: :shop,
             description: nil,
             declared_value: Decimal.new(0),
@@ -45,7 +48,8 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   @type recipient :: %{
           name: String.t() | nil,
           email: String.t() | nil,
-          phone: String.t() | nil
+          phone: String.t() | nil,
+          raw_phone: String.t() | nil
         }
 
   @type t :: %__MODULE__{
@@ -95,19 +99,20 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   @doc """
   The recipient part of a request from a map with string or atom keys
-  (`name`, `email`, `phone`). Blank values become `nil`; the phone is kept as
-  given (see `e164_phone/2`).
+  (`name`, `email`, `phone`, `raw_phone`). Blank values become `nil`; the
+  phones are kept as given (see `e164_phone/2`).
   """
   @spec recipient(term()) :: recipient()
   def recipient(map) when is_map(map) do
     %{
       name: map |> Codec.get(:name) |> present(),
       email: map |> Codec.get(:email) |> present(),
-      phone: map |> Codec.get(:phone) |> present()
+      phone: map |> Codec.get(:phone) |> present(),
+      raw_phone: map |> Codec.get(:raw_phone) |> present()
     }
   end
 
-  def recipient(_other), do: %{name: nil, email: nil, phone: nil}
+  def recipient(_other), do: %{name: nil, email: nil, phone: nil, raw_phone: nil}
 
   @doc "Cuts a description to #{@description_max} characters; blank becomes `nil`."
   @spec description(term()) :: String.t() | nil
@@ -123,28 +128,43 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   @doc """
   A phone number in E.164 (`+` and 8 to 15 digits), or `nil`.
 
-  Spaces, dashes, dots and brackets are dropped. A number that starts with
-  `+` or `00` already has its country code; any other number takes the
-  calling code of `country` (ISO 3166-1 alpha-2), so `"5555 1234"` for `"EE"`
-  is `"+37255551234"`. A national trunk prefix is not removed. `nil` when
-  there is no number, the number has other characters, or it has no country
-  code and `country` gives none.
+  An `(0)` (the trunk prefix written next to a country code) is dropped, then
+  spaces, dashes, dots and brackets. A number that starts with `+` or `00`
+  already has its country code. Any other number takes the calling code of
+  `country` (ISO 3166-1 alpha-2) in place of one leading trunk `0`:
+  `"5555 1234"` for `"EE"` is `"+37255551234"`, `"067 123 45 67"` for `"UA"`
+  is `"+380671234567"`. Italy, San Marino and the Vatican keep the leading
+  `0`, which is part of their numbers. `nil` when there is no number, the
+  number has other characters, or it has no country code and `country` gives
+  none.
   """
   @spec e164_phone(term(), term()) :: String.t() | nil
   def e164_phone(phone, country) when is_binary(phone) do
-    compact = String.replace(phone, ~r/[\s\-\.\(\)\/]/u, "")
+    compact =
+      phone
+      |> String.replace(~r/\(\s*0\s*\)/u, "")
+      |> String.replace(~r/[\s\-\.\(\)\/]/u, "")
 
     digits =
       case compact do
-        "+" <> rest -> rest
-        "00" <> rest -> rest
-        local -> with code when is_binary(code) <- calling_code(country), do: code <> local
+        "+" <> rest ->
+          rest
+
+        "00" <> rest ->
+          rest
+
+        local ->
+          with code when is_binary(code) <- calling_code(country),
+               do: code <> national(local, Codec.country(country))
       end
 
     if is_binary(digits) and Regex.match?(~r/\A[1-9]\d{7,14}\z/, digits), do: "+" <> digits
   end
 
   def e164_phone(_phone, _country), do: nil
+
+  defp national("0" <> rest, country) when country not in @keeps_leading_zero, do: rest
+  defp national(local, _country), do: local
 
   defp calling_code(country) do
     case country |> Codec.country() |> CountryData.get_country() do

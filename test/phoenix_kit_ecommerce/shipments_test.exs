@@ -202,7 +202,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert request.recipient == %{
                name: "Mari Maasikas",
                email: "mari@example.com",
-               phone: "+37255551234"
+               phone: "+37255551234",
+               raw_phone: "5555 1234"
              }
 
       assert request.payer == :shop
@@ -233,7 +234,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert request.recipient == %{
                name: "Kask OÜ",
                email: "kask@example.com",
-               phone: "+37161234567"
+               phone: "+37161234567",
+               raw_phone: "+371 6123 4567"
              }
     end
 
@@ -252,7 +254,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert shipment.recipient == %{
                "name" => "Jaan Tamm",
                "email" => nil,
-               "phone" => "+37251234567"
+               "phone" => "+37251234567",
+               "raw_phone" => "5123 4567"
              }
 
       assert [%{"weight_g" => 3000}] = shipment.parcels
