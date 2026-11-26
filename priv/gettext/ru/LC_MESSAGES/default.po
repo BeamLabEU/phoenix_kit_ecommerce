@@ -9081,6 +9081,26 @@ msgstr "Заказ отправлен"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Отправляется покупателю один раз на каждое отправление, когда перевозчик сообщает, что посылка в пути, с номером и ссылкой для отслеживания."
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:724
+#, elixir-autogen, elixir-format
+msgid "Register shipments when an order is paid"
+msgstr "Регистрировать отправления, когда заказ оплачен"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+msgstr "Перевозчик получает запрос, как только поступает оплата, для способов, чей перевозчик умеет регистрировать отправления. Отправление, от которого он отказался, ждёт на странице «Отправления»."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2391
+#, elixir-autogen, elixir-format
+msgid "Shipment registration updated"
+msgstr "Регистрация отправлений изменена"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2395
+#, elixir-autogen, elixir-format
+msgid "Failed to update the shipment registration"
+msgstr "Не удалось изменить регистрацию отправлений"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:816
 #, elixir-autogen, elixir-format
 msgid "Email the buyer when a shipment is on its way"

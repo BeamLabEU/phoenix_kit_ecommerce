@@ -9083,6 +9083,26 @@ msgstr "Замовлення надіслано"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Надсилається покупцю один раз на кожне відправлення, коли перевізник повідомляє, що посилка в дорозі, з номером і посиланням для відстеження."
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:724
+#, elixir-autogen, elixir-format
+msgid "Register shipments when an order is paid"
+msgstr "Реєструвати відправлення, коли замовлення оплачено"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+msgstr "Перевізник отримує запит, щойно надходить оплата, для способів, чий перевізник уміє реєструвати відправлення. Відправлення, яке він відхилив, чекає на сторінці «Відправлення»."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2391
+#, elixir-autogen, elixir-format
+msgid "Shipment registration updated"
+msgstr "Реєстрацію відправлень змінено"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2395
+#, elixir-autogen, elixir-format
+msgid "Failed to update the shipment registration"
+msgstr "Не вдалося змінити реєстрацію відправлень"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:816
 #, elixir-autogen, elixir-format
 msgid "Email the buyer when a shipment is on its way"

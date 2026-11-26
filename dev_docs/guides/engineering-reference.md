@@ -772,6 +772,11 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   page renders **no** shipping section at all, so nothing may redirect a
   shopper there to "pick another method"; `CheckoutPage` re-enters its own
   `:shipping` step instead.
+- `shop_shipping_auto_create` — boolean (default off): register a paid
+  order's shipment with its carrier on billing's `:paid`
+  (`ShipmentAutoCreateHandler`). Read via `shipping_auto_create?/0` (a read
+  error is off), written via `set_shipping_auto_create/1`; the settings
+  LiveView logs `shop.shipping_auto_create_changed`.
 - `shop_shipping_label_format` — `"a4"` (default), `"a5"` or `"a6"`: the
   paper size shipment labels are asked in (`LabelOptions.format`). Read via
   `shipping_label_format/0`; an unknown value is `:a4`.

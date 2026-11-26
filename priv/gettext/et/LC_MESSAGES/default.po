@@ -9017,6 +9017,26 @@ msgstr "Tellimus saadetud"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Saadetakse ostjale üks kord iga saadetise kohta, kui vedaja teatab, et pakk on teel, koos jälgimisnumbri ja lingiga."
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:724
+#, elixir-autogen, elixir-format
+msgid "Register shipments when an order is paid"
+msgstr "Registreeri saadetised, kui tellimus on makstud"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+msgstr "Vedajalt küsitakse kohe, kui makse laekub, nende tarneviiside puhul, mille vedaja saab saadetisi registreerida. Saadetis, mille vedaja tagasi lükkab, ootab lehel Saadetised."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2391
+#, elixir-autogen, elixir-format
+msgid "Shipment registration updated"
+msgstr "Saadetiste registreerimine uuendatud"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2395
+#, elixir-autogen, elixir-format
+msgid "Failed to update the shipment registration"
+msgstr "Saadetiste registreerimise uuendamine ebaõnnestus"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:816
 #, elixir-autogen, elixir-format
 msgid "Email the buyer when a shipment is on its way"

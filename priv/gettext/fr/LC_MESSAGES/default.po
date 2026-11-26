@@ -9019,6 +9019,26 @@ msgstr "Commande expédiée"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Envoyé à l'acheteur une fois par envoi, quand le transporteur signale le colis en route, avec le numéro et le lien de suivi."
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:724
+#, elixir-autogen, elixir-format
+msgid "Register shipments when an order is paid"
+msgstr "Enregistrer les envois dès qu'une commande est payée"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+msgstr "Le transporteur est sollicité dès l'arrivée du paiement, pour les modes dont le transporteur peut enregistrer des envois. Un envoi qu'il refuse attend sur la page Envois."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2391
+#, elixir-autogen, elixir-format
+msgid "Shipment registration updated"
+msgstr "Enregistrement des envois mis à jour"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2395
+#, elixir-autogen, elixir-format
+msgid "Failed to update the shipment registration"
+msgstr "Échec de la mise à jour de l'enregistrement des envois"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:816
 #, elixir-autogen, elixir-format
 msgid "Email the buyer when a shipment is on its way"

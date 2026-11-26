@@ -383,6 +383,30 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  @doc """
+  Whether a paid order's shipment is registered with the carrier on its own
+  (setting `shop_shipping_auto_create`, see
+  `PhoenixKitEcommerce.ShipmentAutoCreateHandler`). Off by default; a
+  settings-layer error counts as off.
+  """
+  @spec shipping_auto_create?() :: boolean()
+  def shipping_auto_create? do
+    Settings.get_boolean_setting("shop_shipping_auto_create", false)
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  @doc "Turns the automatic registration of paid orders' shipments on or off."
+  @spec set_shipping_auto_create(boolean()) :: {:ok, boolean()} | {:error, :update_failed}
+  def set_shipping_auto_create(enabled) when is_boolean(enabled) do
+    case Settings.update_boolean_setting_with_module("shop_shipping_auto_create", enabled, "shop") do
+      {:ok, _} -> {:ok, enabled}
+      _error -> {:error, :update_failed}
+    end
+  end
+
   @parcel_defaults_key "shop_shipping_parcel_defaults"
   @parcel_default_fields [:length_mm, :width_mm, :height_mm, :weight_g]
   @max_parcel_value 10_000_000
@@ -1451,11 +1475,16 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Order-event handlers this package contributes (duck-typed discovery by
   `PhoenixKitBilling.OrderEvents`): one writes a paid order's goods off the
-  warehouse stock, the other sends its emails. They are separate so that a
-  failure of one retries alone.
+  warehouse stock, one sends its emails, one registers its shipment when
+  `shipping_auto_create?/0` is on. They are separate so that a failure of one
+  retries alone.
   """
   def billing_order_event_handlers do
-    [PhoenixKitEcommerce.OrderStockHandler, PhoenixKitEcommerce.OrderEmailHandler]
+    [
+      PhoenixKitEcommerce.OrderStockHandler,
+      PhoenixKitEcommerce.OrderEmailHandler,
+      PhoenixKitEcommerce.ShipmentAutoCreateHandler
+    ]
   end
 
   @doc "The order emails, for core's email preview (`PhoenixKit.Email.Catalog`)."
