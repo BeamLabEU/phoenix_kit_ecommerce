@@ -1019,7 +1019,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
             </.table_default_cell>
             <.table_default_cell>
               <div class="font-medium">{order.order_number}</div>
-              <div :if={order.status in ["cancelled", "refunded"]} id={"shipment-order-closed-#{shipment.uuid}"} class="badge badge-error badge-sm">
+              <div :if={Shipments.closed_order?(order)} id={"shipment-order-closed-#{shipment.uuid}"} class="badge badge-error badge-sm">
                 {StatusLabels.order(order.status)}
               </div>
               <div class="text-xs text-base-content/60">{format_datetime(shipment.updated_at)}</div>
@@ -1078,7 +1078,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
                   {gettext("Print label")}
                 </.button>
                 <.button
-                  :if={shipment.status == "failed"}
+                  :if={shipment.status == "failed" and not Shipments.closed_order?(order)}
                   id={"shipment-retry-#{shipment.uuid}"}
                   type="button"
                   size="xs"
@@ -1088,7 +1088,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
                   {gettext("Retry")}
                 </.button>
                 <.button
-                  :if={shipment.status == "failed" and order.status in ["cancelled", "refunded"]}
+                  :if={shipment.status == "failed" and Shipments.closed_order?(order)}
                   id={"shipment-close-#{shipment.uuid}"}
                   type="button"
                   size="xs"

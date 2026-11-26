@@ -864,6 +864,9 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = open_page(conn, "needs_attention")
       refute has_element?(view, "#shipment-close-#{open_order.uuid}")
+      assert has_element?(view, "#shipment-retry-#{open_order.uuid}")
+      # Its retry could only answer that the order is not paid.
+      refute has_element?(view, "#shipment-retry-#{shipment.uuid}")
       view |> element("#shipment-close-#{shipment.uuid}") |> render_click()
 
       assert %Shipment{status: "cancelled"} = Shipments.get_shipment(shipment.uuid)

@@ -899,6 +899,10 @@ defmodule PhoenixKitEcommerce.Shipments do
     )
   end
 
+  @doc "Whether the order has been cancelled or refunded."
+  @spec closed_order?(Order.t()) :: boolean()
+  def closed_order?(%Order{status: status}), do: status in @closed_order_statuses
+
   @doc """
   Closes a `failed` shipment of an order that has been cancelled or refunded
   since: `cancelled`, locally (the carrier never registered it). Retrying it
