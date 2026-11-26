@@ -136,15 +136,16 @@ defmodule PhoenixKitEcommerce.ShipmentsRaceTest do
     refute_received :carrier_called
   end
 
-  # Waits (up to 5 s) until `count` UPDATEs of the shipments table wait on a
-  # lock.
+  # Waits (up to 5 s) until `count` UPDATEs of the shipments table in this
+  # database wait on a lock (another suite's database on the same server does
+  # not count).
   defp wait_for_blocked_updates(count, tries \\ 100) do
     blocked =
       unboxed(fn ->
         %{rows: [[n]]} =
           Repo.query!(
-            "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' " <>
-              "AND query ILIKE 'UPDATE%phoenix_kit_shop_shipments%'"
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() " <>
+              "AND wait_event_type = 'Lock' AND query ILIKE 'UPDATE%phoenix_kit_shop_shipments%'"
           )
 
         n
