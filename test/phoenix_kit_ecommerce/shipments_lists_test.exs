@@ -216,18 +216,26 @@ defmodule PhoenixKitEcommerce.ShipmentsListsTest do
   end
 
   test "stuck?/1 draws the 10-minute line where the lists do" do
-    # The lists compare the stored second with a cutoff truncated to the
-    # second; a shipment exactly on it is not stuck yet in either.
-    on_the_line = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-600)
+    method = method!()
+    fresh = method |> order!() |> register!(%ShipmentResult{tracking_number: "T1"})
+    old = method |> order!() |> register!(%ShipmentResult{tracking_number: "T2"})
 
-    refute Shipments.stuck?(%Shipment{status: "creating", updated_at: on_the_line})
+    # Two seconds either side of the line, so the clock moving on between
+    # here and the reads below cannot move a row across it.
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    shipment = method!() |> order!() |> register!(%ShipmentResult{tracking_number: "T"})
+    for {shipment, age} <- [{fresh, 598}, {old, 602}] do
+      Repo.update_all(from(s in Shipment, where: s.uuid == ^shipment.uuid),
+        set: [status: "creating", updated_at: DateTime.add(now, -age)]
+      )
+    end
 
-    Repo.update_all(from(s in Shipment, where: s.uuid == ^shipment.uuid),
-      set: [status: "creating", updated_at: on_the_line]
-    )
+    attention = Shipments.list_needs_attention() |> Enum.map(fn {s, _order} -> s.uuid end)
+    open = Shipments.list_open() |> Enum.map(fn {s, _order} -> s.uuid end)
 
-    assert Shipments.list_needs_attention() == []
+    refute Shipments.stuck?(Shipments.get_shipment(fresh.uuid))
+    assert open == [fresh.uuid]
+    assert Shipments.stuck?(Shipments.get_shipment(old.uuid))
+    assert attention == [old.uuid]
   end
 end
