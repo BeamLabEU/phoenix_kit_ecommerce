@@ -307,8 +307,8 @@ defmodule PhoenixKitEcommerce.Shipments do
             {:error, reason} -> {:error, {:not_sent, reason}}
           end
 
-        log_outcome(shipment, outcome)
-        store_outcome(shipment, outcome, actor_uuid)
+        Logger.info("Shipment #{shipment.uuid}: " <> outcome_text(outcome))
+        store_logged(shipment, outcome, actor_uuid)
 
       {:refused, result} ->
         result
@@ -364,16 +364,26 @@ defmodule PhoenixKitEcommerce.Shipments do
   # The answer is in the log before the write, so a write that fails still
   # leaves the admin the tracking number. The reason of a failure is not: it
   # may quote the recipient (the facade logged its shape).
-  defp log_outcome(shipment, {:ok, %ShipmentResult{} = result}) do
-    Logger.info(
-      "Shipment #{shipment.uuid}: the carrier registered it, tracking number " <>
-        "#{inspect(result.tracking_number)}, carrier reference #{inspect(result.carrier_ref)}"
-    )
+  defp outcome_text({:ok, %ShipmentResult{} = result}) do
+    "the carrier registered it, tracking number #{inspect(result.tracking_number)}, " <>
+      "carrier reference #{inspect(result.carrier_ref)}"
   end
 
-  defp log_outcome(shipment, {:error, reason}) do
-    status = if definite?(reason), do: "failed", else: "unknown"
-    Logger.info("Shipment #{shipment.uuid}: the carrier call ended #{status}")
+  defp outcome_text({:error, reason}),
+    do: "the carrier call ended #{if(definite?(reason), do: "failed", else: "unknown")}"
+
+  # The info line above is gone on a host that logs warnings and up; a write
+  # that fails is logged again, as an error, with the answer it lost.
+  defp store_logged(shipment, outcome, actor_uuid) do
+    store_outcome(shipment, outcome, actor_uuid)
+  rescue
+    error ->
+      Logger.error(
+        "Shipment #{shipment.uuid}: storing it failed (#{Exception.message(error)}); " <>
+          outcome_text(outcome)
+      )
+
+      reraise error, __STACKTRACE__
   end
 
   @doc """

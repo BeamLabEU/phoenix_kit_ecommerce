@@ -482,6 +482,22 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                Shipments.get_shipment(shipment.uuid)
     end
 
+    test "an answer that cannot be written is logged as an error with its tracking number" do
+      order = paid_order!(method!())
+      # Longer than the column takes: the write raises.
+      number = "TOO-LONG-" <> String.duplicate("9", 300)
+      stub(%{create: %ShipmentResult{tracking_number: number}})
+
+      log =
+        capture_log(fn ->
+          assert {:error, :submit_crashed} = Shipments.register(order)
+        end)
+
+      assert log =~ "[error]"
+      assert log =~ "storing it failed"
+      assert log =~ number
+    end
+
     test "an order no longer paid is not sent, and the shipment fails" do
       order = paid_order!(method!())
       {:ok, shipment} = Shipments.begin_shipment(order)
