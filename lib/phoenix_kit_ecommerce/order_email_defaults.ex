@@ -39,6 +39,8 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
   @paid "shop_order_paid"
   @received "shop_order_received"
   @shipped "shop_order_shipped"
+  # Not a template: the copy of `@shipped` for a shipment already delivered.
+  @delivered "shop_order_shipped:delivered"
   @templates [@confirmation, @paid, @received, @shipped]
 
   @layout_group "shop"
@@ -67,7 +69,11 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
     present = present(variables)
 
     fn ->
-      %{subject: subject(name), markdown: markdown(name, present), text: text(name, present)}
+      %{
+        subject: subject(copy(name, present)),
+        markdown: markdown(name, present),
+        text: text(name, present)
+      }
     end
   end
 
@@ -85,29 +91,42 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
   defp has?(:all, _variable), do: true
   defp has?(present, variable), do: MapSet.member?(present, variable)
 
+  # The shipped email of a shipment already delivered when it goes says so
+  # (`shipment_delivered`); the preview shows the "on its way" copy.
+  defp copy(@shipped, present) when present != :all do
+    if MapSet.member?(present, "shipment_delivered"), do: @delivered, else: @shipped
+  end
+
+  defp copy(name, _present), do: name
+
   # -- copy -------------------------------------------------------------------
 
   defp subject(@confirmation), do: gettext("Your order {{order_number}}")
   defp subject(@paid), do: gettext("Payment received for order {{order_number}}")
   defp subject(@received), do: gettext("New order {{order_number}}")
   defp subject(@shipped), do: gettext("Your order {{order_number}} is on its way")
+  defp subject(@delivered), do: gettext("Your order {{order_number}} has been delivered")
 
   defp heading(@confirmation), do: gettext("Thank you for your order")
   defp heading(@paid), do: gettext("Your payment has arrived")
   defp heading(@received), do: gettext("New order {{order_number}}")
   defp heading(@shipped), do: gettext("Your order is on its way")
+  defp heading(@delivered), do: gettext("Your order has been delivered")
 
   defp intro(@confirmation), do: gettext("We have received your order {{order_number}}.")
   defp intro(@paid), do: gettext("Your order {{order_number}} is paid and confirmed.")
   defp intro(@received), do: gettext("Status: {{order_status}}")
   defp intro(@shipped), do: gettext("Your order {{order_number}} has been sent with {{carrier}}.")
 
+  defp intro(@delivered),
+    do: gettext("Your order {{order_number}} has been delivered by {{carrier}}.")
+
   # The shipped email is about the parcel, not the bill: no order table.
   defp markdown(@shipped, present) do
     join([
-      "## " <> heading(@shipped),
+      "## " <> heading(copy(@shipped, present)),
       hello(@shipped, present),
-      intro(@shipped),
+      intro(copy(@shipped, present)),
       join_lines("  \n", [
         has?(present, "tracking_number") &&
           gettext("**Tracking number:** {{tracking_number}}"),
@@ -133,9 +152,9 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
 
   defp text(@shipped, present) do
     join([
-      heading(@shipped),
+      heading(copy(@shipped, present)),
       hello(@shipped, present),
-      intro(@shipped),
+      intro(copy(@shipped, present)),
       join_lines("\n", [
         has?(present, "tracking_number") && gettext("Tracking number: {{tracking_number}}"),
         has?(present, "tracking_url") && gettext("Track your parcel: {{tracking_url}}")
@@ -239,15 +258,18 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
 
   @doc """
   The variables of the shipped email about `shipment` (`nil` gives none): who
-  carries it (`Shipments.carrier_name/1`), its tracking number and its tracking
-  link, only ever a web address (`Shipments.web_url/1`). A missing one is `""`.
+  carries it (`Shipments.carrier_name/1`), its tracking number, its tracking
+  link, only ever a web address (`Shipments.web_url/1`), and
+  `shipment_delivered` (`"true"` once it is delivered: the email then says
+  so). A missing one is `""`.
   """
   @spec shipment_variables(Shipment.t() | nil) :: %{String.t() => String.t()}
   def shipment_variables(%Shipment{} = shipment) do
     %{
       "carrier" => Shipments.carrier_name(shipment),
       "tracking_number" => shipment.tracking_number || "",
-      "tracking_url" => Shipments.web_url(shipment.tracking_url) || ""
+      "tracking_url" => Shipments.web_url(shipment.tracking_url) || "",
+      "shipment_delivered" => if(shipment.status == "delivered", do: "true", else: "")
     }
   end
 

@@ -9135,3 +9135,18 @@ msgstr "Отслеживание снова отвечает"
 #, elixir-autogen, elixir-format
 msgid "Tracking failing since %{time}"
 msgstr "Отслеживание не работает с %{time}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:108
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been delivered"
+msgstr "Ваш заказ {{order_number}} доставлен"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:114
+#, elixir-autogen, elixir-format
+msgid "Your order has been delivered"
+msgstr "Ваш заказ доставлен"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:122
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been delivered by {{carrier}}."
+msgstr "Ваш заказ {{order_number}} доставлен перевозчиком {{carrier}}."

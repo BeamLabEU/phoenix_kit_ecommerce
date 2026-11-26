@@ -104,6 +104,22 @@ defmodule PhoenixKitEcommerce.OrderEmailsShippedTest do
     end
   end
 
+  test "a shipment already delivered when it goes says so", %{order: order} do
+    shipment = shipment!(order, %{status: "delivered", carrier_label: "Omniva"})
+
+    assert :ok = deliver(order, shipment)
+
+    assert_received {:email, mail}
+    assert mail.subject == "Your order #{order.order_number} has been delivered"
+
+    for body <- [mail.html_body, mail.text_body] do
+      assert body =~ "Your order has been delivered"
+      assert body =~ "has been delivered by Omniva."
+      refute body =~ "on its way"
+      assert body =~ shipment.tracking_number
+    end
+  end
+
   test "without a carrier label names the provider", %{order: order} do
     shipment = shipment!(order)
 

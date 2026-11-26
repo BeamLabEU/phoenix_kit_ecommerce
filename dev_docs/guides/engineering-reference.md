@@ -593,7 +593,7 @@ to the shop.
   `in_transit`, `ready_for_pickup` or `delivered` the tracking run stores (in
   that write's transaction), or at `created` for a provider without
   `track/2` (after the write, never failing it). A delivery sends nothing for
-  a shipment that is no longer `Shipments.shipped?/1` or not the order's.
+  a shipment that is no longer `Shipments.shipped?/1` or not the order's; one already `delivered` when it goes gets the "has been delivered" subject and intro (`{{shipment_delivered}}`), the same kind and mark.
 - **Settings**, through `OrderEmails`: `shop_order_emails_to_buyer` (default on,
   a read error counts as off), `shop_order_email_shipped` (the shipped email
   alone; default on like the other buyer emails, a read error counts as off), `shop_order_email_recipients` (addresses; none
