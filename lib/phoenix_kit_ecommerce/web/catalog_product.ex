@@ -838,7 +838,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                   src={@selected_image}
                   alt={@localized_title}
                   class="w-full h-full object-cover"
-                  onerror={"this.src='#{placeholder_image_url()}'"}
+                  data-pkec-img-fallback={placeholder_image_url()}
                 />
               <% else %>
                 <div class="w-full h-full flex items-center justify-center">
@@ -872,7 +872,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                       src={thumb_url}
                       alt={gettext("Thumbnail")}
                       class="w-full h-full object-cover"
-                      onerror={"this.src='#{placeholder_image_url()}'"}
+                      data-pkec-img-fallback={placeholder_image_url()}
                     />
                   </button>
                 <% end %>
@@ -903,7 +903,7 @@ defmodule PhoenixKitEcommerce.Web.CatalogProduct do
                         src={url}
                         alt={gettext("Thumbnail")}
                         class="w-full h-full object-cover"
-                        onerror={"this.src='#{placeholder_image_url()}'"}
+                        data-pkec-img-fallback={placeholder_image_url()}
                       />
                     </button>
                   <% end %>

@@ -350,14 +350,17 @@ defmodule PhoenixKitEcommerce.Web.Components.CatalogSidebar do
           <span class="badge badge-primary badge-xs ml-1">{length(@active_list)}</span>
           <%!-- Clears THIS filter only. The sidebar's "Clear filters"
                 empties every one of them, which is the wrong tool for
-                starting one facet over. `preventDefault` because the
+                starting one facet over. `data-pkec-no-toggle` because the
                 button sits inside a <summary>, whose own click would
-                otherwise fold the section shut. --%>
+                otherwise fold the section shut: the module's JS cancels
+                that default and nothing else (an inline `onclick` is
+                blocked by a nonce Content-Security-Policy, and its
+                `stopPropagation` kept the click from LiveView). --%>
           <button
             type="button"
             phx-click="clear_filter"
             phx-value-key={@filter["key"]}
-            onclick="event.preventDefault(); event.stopPropagation();"
+            data-pkec-no-toggle
             class="btn btn-ghost btn-xs px-1 ml-auto"
             title={gettext("Clear this filter")}
             aria-label={gettext("Clear this filter")}

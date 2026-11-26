@@ -251,7 +251,9 @@ defmodule PhoenixKitEcommerce.MixProject do
       # `priv/gettext`, not `priv`: Hex ignores .gitignore, and the test
       # Storage writes real files into `priv/media`, which pushed a release
       # tarball past Hex's 16 MB limit.
-      files: ~w(lib priv/gettext .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
+      # `priv/static` holds the storefront's JS bundle (`js_sources/0`).
+      files:
+        ~w(lib priv/gettext priv/static .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 

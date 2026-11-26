@@ -141,7 +141,10 @@ pages.
   the bundled admin UI instead.
 - **No order, payment or address through the API.** The public cart tools
   only fill a cart and hand the buyer to the site's own checkout.
-- **No JavaScript.** There is no `js_sources/0` and no hook of its own.
+- **No LiveView hooks.** `js_sources/0` ships one small file,
+  `priv/static/assets/phoenix_kit_ecommerce.js`, with two delegated listeners
+  that stand in for inline event handlers (see AGENTS.md,
+  "Content-Security-Policy").
 - **No tables owned by another module.** This module's chain adopts the ten
   baseline shop tables where core 2.x created them, and builds them itself
   on core 3.x. It also creates `phoenix_kit_shop_search_index` (V4) and

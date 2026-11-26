@@ -977,6 +977,26 @@ defmodule PhoenixKitEcommerce do
   @impl PhoenixKit.Module
   def css_sources, do: [:phoenix_kit_ecommerce]
 
+  @doc """
+  The storefront's JavaScript, folded into the host's `phoenix_kit_modules.js`
+  by core's `:phoenix_kit_js_sources` compiler.
+
+  It holds no LiveView hook, only two delegated listeners that do what inline
+  event handlers used to (`data-pkec-img-fallback`, `data-pkec-no-toggle`): a
+  Content-Security-Policy with a nonce blocks every inline handler. The
+  global is an empty hook map, there because an entry has to name one.
+  """
+  @impl PhoenixKit.Module
+  def js_sources do
+    [
+      %{
+        app: :phoenix_kit_ecommerce,
+        file: "static/assets/phoenix_kit_ecommerce.js",
+        global: "PhoenixKitEcommerceHooks"
+      }
+    ]
+  end
+
   @impl PhoenixKit.Module
   def version, do: @version
 

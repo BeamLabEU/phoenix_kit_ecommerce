@@ -27,7 +27,7 @@ from BEAM files and generates routes from tabs and `route_module/0`.
 - Public context APIs stay scope-less; bundled admin pages enforce permissions.
   Public cart tools fill a cart and hand off to checkout; they expose no order,
   address or payment mutation.
-- The storefront uses the host's layout. No module JavaScript or hooks.
+- The storefront uses the host's layout. No LiveView hooks.
   Deprecated `compat/` delegates are for old hosts only; add no new delegates.
 - Core 2.x creates the ten baseline shop tables and core 3.x does not: this
   chain adopts them where they exist, builds them where they do not, and adds
@@ -170,10 +170,12 @@ Repo-local aliases:
   page; an unknown name or a payload no clause takes must not crash the view.
 - **Text stored on an order line is resolved in the locale of the process
   converting the cart** — the buyer's — and never re-translated on read.
-- **JS hooks:** none. If one is ever needed, ship it as a prebuilt bundle
-  declared by `js_sources/0` under a namespaced global — never registered from
-  an inline `<script>`, which morphdom does not execute on LiveView
-  navigation, so the hook vanishes on the first live nav.
+- **Content-Security-Policy:** pages must work under a host nonce policy.
+  No inline handler (`onclick=`, `onerror=`) or `javascript:` URL: use a
+  `data-pkec-*` attribute (`-img-fallback`, `-no-toggle`) handled in
+  `priv/static/assets/phoenix_kit_ecommerce.js` (`js_sources/0`), or a `phx-`
+  binding. An inline `<script>`/`<style>` takes `PhoenixKitWeb.CSP.nonce/1`,
+  feature-detected. Lint: `csp_inline_tags_test.exs`.
 - **CSS:** `css_sources/0` returns `[:phoenix_kit_ecommerce]` so core's CSS
   compiler adds the `@source` directive to the host's `app.css`. Without it
   Tailwind purges every class used only by this module's templates, and the
