@@ -821,6 +821,48 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert failed.error =~ "[phone]"
       assert failed.error =~ "unknown; write to"
     end
+
+    test "a national number written with spaces is masked too" do
+      order = paid_order!(method!())
+      message = "Bad number 5555 1234 (also 55-55-12-34, 372 5555 1234) for the locker"
+      stub(%{create: {:error, {:rejected, message}}})
+
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      refute failed.error =~ ~r/\d{2}/, failed.error
+      assert failed.error =~ "for the locker"
+    end
+
+    test "a company is masked as a whole, its words elsewhere are not" do
+      billing = %{
+        "type" => "company",
+        "company_name" => "Best Prints OÜ",
+        "first_name" => "Mari",
+        "last_name" => "Maasikas",
+        "email" => "office@example.com",
+        "country" => "EE"
+      }
+
+      order = paid_order!(method!(), billing: billing)
+      message = "Best Prints OÜ: the best service and prints are not available here"
+      stub(%{create: {:error, {:rejected, message}}})
+
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      assert failed.error == "[redacted]: the best service and prints are not available here"
+    end
+
+    test "text that is not valid UTF-8 is stored, not raised on" do
+      order = paid_order!(method!())
+      stub(%{create: {:error, {:rejected, "bad " <> <<0xFF>> <> " Maasikas"}}})
+
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      assert failed.status == "failed"
+      assert String.valid?(failed.error)
+      assert failed.error =~ "[redacted]"
+      refute failed.error =~ "Maasikas"
+    end
   end
 
   defp flush_messages(acc \\ []) do
