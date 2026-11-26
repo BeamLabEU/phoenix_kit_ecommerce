@@ -222,9 +222,20 @@ defmodule PhoenixKitEcommerce.ShipmentAutoCreateHandlerTest do
     stub(%{points: {:error, :timeout}})
     order = order!(method!("stub")) |> paid!()
 
-    assert {:error, {:destination_unverified, :timeout}} =
+    assert {:error, {:destination_unverified, "timeout"}} =
              OrderEventWorker.perform(paid_job(order))
 
     assert rows(order) == []
+  end
+
+  test "the error a retried job keeps names the reason's tag, never the carrier's text" do
+    auto_create!(true)
+    stub(%{points: {:error, {:http_status, 503, "Mari Maasikas is unknown"}}})
+    order = order!(method!("stub")) |> paid!()
+
+    capture_log(fn ->
+      assert {:error, {:destination_unverified, "http_status"}} =
+               OrderEventWorker.perform(paid_job(order))
+    end)
   end
 end

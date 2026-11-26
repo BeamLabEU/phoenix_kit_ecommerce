@@ -65,8 +65,9 @@ defmodule PhoenixKitEcommerce.ShipmentAutoCreateHandler do
       {:error, :live_shipment_exists} ->
         :ok
 
-      {:error, {:destination_unverified, _reason}} = error ->
-        error
+      # Kept by Oban in the job's errors: the tag only, never the carrier's text.
+      {:error, {:destination_unverified, reason}} ->
+        {:error, {:destination_unverified, reason_text(reason)}}
 
       {:error, reason} ->
         Logger.warning(
@@ -102,5 +103,9 @@ defmodule PhoenixKitEcommerce.ShipmentAutoCreateHandler do
 
   # The reason's tag only: a destination refusal quotes the carrier's text.
   defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp reason_text({tag, _detail}) when is_atom(tag), do: Atom.to_string(tag)
+
+  defp reason_text(reason) when is_tuple(reason) and is_atom(elem(reason, 0)),
+    do: reason |> elem(0) |> Atom.to_string()
+
+  defp reason_text(_reason), do: "error"
 end
