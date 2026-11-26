@@ -8524,3 +8524,8 @@ msgstr "Le transporteur ne propose plus le service de livraison de cette command
 #, elixir-autogen, elixir-format
 msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
 msgstr "L'envoi n'a pas pu être transmis au transporteur. Vérifiez-le auprès du transporteur avant de réessayer."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:211
+#, elixir-autogen, elixir-format
+msgid "The carrier refused the cancellation: %{reason}"
+msgstr "Le transporteur a refusé l'annulation : %{reason}"

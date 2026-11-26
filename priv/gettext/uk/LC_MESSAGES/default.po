@@ -8586,3 +8586,8 @@ msgstr "Перевізник більше не пропонує спосіб д�
 #, elixir-autogen, elixir-format
 msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
 msgstr "Не вдалося передати відправлення перевізнику. Перевірте його в перевізника, перш ніж пробувати знову."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:211
+#, elixir-autogen, elixir-format
+msgid "The carrier refused the cancellation: %{reason}"
+msgstr "Перевізник відмовив у скасуванні: %{reason}"

@@ -105,6 +105,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :unknown_service
           | :shipments_not_supported
           | :cancel_not_supported
+          | {:cancel_refused, String.t()}
           | :invalid_destination
           | :pickup_point_unavailable
           | {:destination_rejected, String.t()}
@@ -435,6 +436,7 @@ defmodule PhoenixKitEcommerce.Shipments do
 
       number ->
         changes = [
+          error: nil,
           tracking_number: number,
           tracking_url: opts |> Keyword.get(:tracking_url) |> Codec.string() |> blank_to_nil(),
           carrier_ref: opts |> Keyword.get(:carrier_ref) |> Codec.string() |> blank_to_nil()
@@ -477,8 +479,9 @@ defmodule PhoenixKitEcommerce.Shipments do
   @doc """
   Cancels a `created`, `in_transit` or `ready_for_pickup` shipment at the
   carrier (the provider's `cancel_shipment/2`), then records it `cancelled`.
-  `{:error, :cancel_not_supported}` for a provider without the callback;
-  the carrier's refusal is returned as it is and nothing is written.
+  `{:error, :cancel_not_supported}` for a provider without the callback.
+  The carrier's refusal (or a failed call) writes nothing and is
+  `{:error, {:cancel_refused, text}}`, the text masked like a stored error.
 
   Options: `:actor_uuid`, `:context_opts`.
   """
@@ -492,8 +495,18 @@ defmodule PhoenixKitEcommerce.Shipments do
              do: :ok,
              else: {:error, :cancel_not_supported}
            ),
-         :ok <- Shipping.cancel_shipment(ctx, shipment_ref(shipment)) do
+         :ok <- cancel_at_carrier(ctx, shipment) do
       resolve(shipment, @cancellable_statuses, false, "cancelled", "cancelled", [], opts)
+    end
+  end
+
+  defp cancel_at_carrier(ctx, shipment) do
+    case Shipping.cancel_shipment(ctx, shipment_ref(shipment)) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:cancel_refused, shipment |> masked(error_text(reason)) |> cut()}}
     end
   end
 
@@ -954,7 +967,9 @@ defmodule PhoenixKitEcommerce.Shipments do
   defp error_text({:http_status, status, detail}) when is_binary(detail),
     do: "HTTP #{status}: #{detail}"
 
-  defp error_text({:http_status, status, _detail}), do: "HTTP #{status}"
+  # A detail the carrier gave as data (its JSON errors) is shown as JSON, so
+  # the admin sees what to correct.
+  defp error_text({:http_status, status, detail}), do: "HTTP #{status}: #{detail_text(detail)}"
 
   defp error_text({:provider_crashed, message}) when is_binary(message),
     do: "crashed: " <> message
@@ -963,6 +978,13 @@ defmodule PhoenixKitEcommerce.Shipments do
   defp error_text(%{__exception__: true} = error), do: Exception.message(error)
   defp error_text(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp error_text(reason), do: inspect(reason, limit: 20, printable_limit: @error_max)
+
+  defp detail_text(detail) do
+    case Jason.encode(detail) do
+      {:ok, json} -> json
+      {:error, _not_json} -> inspect(detail, limit: 20, printable_limit: @error_max)
+    end
+  end
 
   defp filled?(value), do: is_binary(value) and String.trim(value) != ""
 

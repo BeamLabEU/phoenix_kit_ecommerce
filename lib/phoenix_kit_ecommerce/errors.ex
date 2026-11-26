@@ -34,6 +34,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :all_urls_invalid
           | :already_migrated
           | :cancel_not_supported
+          | {:cancel_refused, String.t()}
           | :cart_already_converting
           | :cart_base_unavailable
           | :cart_empty
@@ -205,6 +206,9 @@ defmodule PhoenixKitEcommerce.Errors do
 
   def message(:cancel_not_supported),
     do: gettext("This carrier cannot cancel shipments from the shop.")
+
+  def message({:cancel_refused, reason}),
+    do: gettext("The carrier refused the cancellation: %{reason}", reason: label(reason))
 
   def message(:pickup_point_unavailable),
     do: gettext("The chosen pickup point is no longer available. Choose another one.")

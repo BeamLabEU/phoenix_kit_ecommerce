@@ -8524,3 +8524,8 @@ msgstr "Der Versanddienst bietet die Zustellart dieser Bestellung nicht mehr an.
 #, elixir-autogen, elixir-format
 msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
 msgstr "Die Sendung konnte nicht an den Versanddienst übergeben werden. Prüfen Sie sie beim Versanddienst, bevor Sie es erneut versuchen."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:211
+#, elixir-autogen, elixir-format
+msgid "The carrier refused the cancellation: %{reason}"
+msgstr "Der Versanddienst hat die Stornierung abgelehnt: %{reason}"

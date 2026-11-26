@@ -8522,3 +8522,8 @@ msgstr "Vedaja ei paku enam selle tellimuse tarneteenust."
 #, elixir-autogen, elixir-format
 msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
 msgstr "Saadetist ei õnnestunud vedajale üle anda. Kontrollige seda vedaja juures, enne kui uuesti proovite."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:211
+#, elixir-autogen, elixir-format
+msgid "The carrier refused the cancellation: %{reason}"
+msgstr "Vedaja keeldus tühistamisest: %{reason}"

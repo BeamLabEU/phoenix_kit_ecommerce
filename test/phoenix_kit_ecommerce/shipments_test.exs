@@ -371,6 +371,9 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       cases = [
         {{:rejected, "Phone is missing"}, "failed", "Phone is missing"},
         {{:http_status, 422, "bad postcode"}, "failed", "HTTP 422: bad postcode"},
+        {{:http_status, 422, %{"errors" => %{"phone" => "invalid"}}}, "failed",
+         ~s(HTTP 422: {"errors":{"phone":"invalid"}})},
+        {{:http_status, 400, {:unreadable, ~c"x"}}, "failed", ~s(HTTP 400: {:unreadable, ~c"x"})},
         {{:http_status, 429}, "failed", "HTTP 429"},
         {:econnrefused, "failed", "econnrefused"},
         {%Req.TransportError{reason: :econnrefused}, "failed", "connection refused"},
@@ -658,6 +661,10 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                 tracking_url: "https://t/CE9EE"
               }} =
                Shipments.enter_tracking_number(two, " CE9EE ", tracking_url: "https://t/CE9EE")
+
+      # The timeout that made it unknown is not the shipment's error any more.
+      assert two.error == "timeout"
+      assert Shipments.get_shipment(two.uuid).error == nil
     end
 
     test "only an unknown shipment, or one stuck in creating for 10 minutes, is resolved" do
@@ -693,10 +700,11 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       method = method!()
       {:ok, created} = Shipments.register(paid_order!(method))
 
-      stub(%{cancel: {:error, :too_late}})
+      stub(%{cancel: {:error, {:rejected, "Mari Maasikas: too late to cancel"}}})
 
       capture_log(fn ->
-        assert {:error, :too_late} = Shipments.cancel_shipment(created)
+        assert {:error, {:cancel_refused, "[redacted]: too late to cancel"}} =
+                 Shipments.cancel_shipment(created)
       end)
 
       assert %Shipment{status: "created"} = Shipments.get_shipment(created.uuid)
