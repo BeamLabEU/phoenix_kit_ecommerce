@@ -385,6 +385,8 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
     test "each reason of PhoenixKitEcommerce.Shipments has its sentence" do
       for {reason, text} <- [
             {:order_not_paid, "The order is not paid."},
+            {:order_not_closed,
+             "Only a shipment of a cancelled or refunded order can be closed."},
             {:live_shipment_exists, "This order already has a shipment in progress."},
             {:shipments_not_supported, "This carrier cannot register shipments from the shop."},
             {:cancel_not_supported, "This carrier cannot cancel shipments from the shop."},

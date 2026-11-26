@@ -131,6 +131,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :tracking_number_required
           | :invalid_recipient
           | :invalid_tracking_url
+          | :order_not_closed
           | :invalid_shipment_ids
           | :too_many_labels
           | :mixed_label_providers
@@ -862,6 +863,26 @@ defmodule PhoenixKitEcommerce.Shipments do
       [],
       opts
     )
+  end
+
+  @doc """
+  Closes a `failed` shipment of an order that has been cancelled or refunded
+  since: `cancelled`, locally (the carrier never registered it). Retrying it
+  is refused (`:order_not_paid`), so without this it would wait for the admin
+  for good. `{:error, :order_not_closed}` while the order is open.
+
+  Options: `:actor_uuid`.
+  """
+  @spec close_shipment(Shipment.t(), keyword()) :: {:ok, Shipment.t()} | {:error, error()}
+  def close_shipment(%Shipment{} = shipment, opts \\ []) do
+    with %Shipment{} = shipment <- get_shipment(shipment.uuid) || {:error, :not_found},
+         %Order{status: status} when status in @closed_order_statuses <-
+           fetch_order(shipment.order_uuid) || {:error, :not_found} do
+      resolve(shipment, ["failed"], false, "closed", "cancelled", [], opts)
+    else
+      %Order{} -> {:error, :order_not_closed}
+      {:error, _reason} = error -> error
+    end
   end
 
   @doc """

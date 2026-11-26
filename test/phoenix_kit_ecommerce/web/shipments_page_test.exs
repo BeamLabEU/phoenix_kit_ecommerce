@@ -601,6 +601,33 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       )
     end
 
+    test "Close ends a failed shipment of a refunded order, locally", %{
+      conn: conn,
+      actor_uuid: actor_uuid
+    } do
+      method = method!()
+      shipment = shipment!(method, "failed")
+      open_order = shipment!(method, "failed")
+
+      Repo.update_all(
+        from(o in PhoenixKitBilling.Order, where: o.uuid == ^shipment.order_uuid),
+        set: [status: "refunded"]
+      )
+
+      {:ok, view, _html} = open_page(conn, "needs_attention")
+      refute has_element?(view, "#shipment-close-#{open_order.uuid}")
+      view |> element("#shipment-close-#{shipment.uuid}") |> render_click()
+
+      assert %Shipment{status: "cancelled"} = Shipments.get_shipment(shipment.uuid)
+      refute has_element?(view, "#shipment-#{shipment.uuid}")
+      refute_received {:stub_called, :cancel_shipment, _args}
+
+      assert_activity_logged("shop.shipment_closed",
+        resource_uuid: shipment.uuid,
+        actor_uuid: actor_uuid
+      )
+    end
+
     test "the ticked shipments get one labels link", %{conn: conn} do
       method = method!()
       first = shipment!(method, "created")

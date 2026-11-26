@@ -253,6 +253,10 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
     end
   end
 
+  defp gated_event("close", %{"uuid" => uuid}, socket) do
+    resolve(socket, uuid, "shop.shipment_closed", &Shipments.close_shipment(&1, &2))
+  end
+
   defp gated_event("mark_failed", %{"uuid" => uuid}, socket) do
     resolve(socket, uuid, "shop.shipment_marked_failed", &Shipments.mark_failed(&1, &2))
   end
@@ -971,6 +975,17 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
                   {gettext("Retry")}
                 </.button>
                 <.button
+                  :if={shipment.status == "failed" and order.status in ["cancelled", "refunded"]}
+                  id={"shipment-close-#{shipment.uuid}"}
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  phx-click="close"
+                  phx-value-uuid={shipment.uuid}
+                >
+                  {gettext("Close")}
+                </.button>
+                <.button
                   :if={resolvable?(shipment)}
                   id={"shipment-enter-tracking-#{shipment.uuid}"}
                   type="button"
@@ -1236,6 +1251,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp event_action("tracking_entered"), do: gettext("Tracking number entered")
   defp event_action("cancelled"), do: gettext("Cancelled at the carrier by the shop")
   defp event_action("cancelled_at_carrier"), do: gettext("Recorded as cancelled at the carrier")
+  defp event_action("closed"), do: gettext("Closed, the order was cancelled or refunded")
   defp event_action(action), do: to_string(action)
 
   defp format_datetime(nil), do: "-"

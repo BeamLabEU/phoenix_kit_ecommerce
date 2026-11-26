@@ -92,6 +92,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :payment_start_failed
           | :payment_unavailable
           | :order_not_paid
+          | :order_not_closed
           | {:option_missing_keys, [String.t()]}
           | {:option_type_invalid, term()}
           | {:option_values_not_a_list, String.t()}
@@ -206,6 +207,9 @@ defmodule PhoenixKitEcommerce.Errors do
 
   # Shipments (`PhoenixKitEcommerce.Shipments`).
   def message(:order_not_paid), do: gettext("The order is not paid.")
+
+  def message(:order_not_closed),
+    do: gettext("Only a shipment of a cancelled or refunded order can be closed.")
 
   def message(:live_shipment_exists),
     do: gettext("This order already has a shipment in progress.")

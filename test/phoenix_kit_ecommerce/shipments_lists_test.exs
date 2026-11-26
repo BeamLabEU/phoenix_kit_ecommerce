@@ -139,6 +139,30 @@ defmodule PhoenixKitEcommerce.ShipmentsListsTest do
     assert Shipments.count_sections().to_ship == 0
   end
 
+  test "a failed shipment of a refunded order is closed locally, one of a paid order is not" do
+    method = method!()
+    refunded_order = order!(method)
+    refunded = register!(refunded_order, {:error, {:rejected, "no"}})
+    set_order_status!(refunded_order, "refunded")
+    paid = method |> order!() |> register!({:error, {:rejected, "no"}})
+    actor = Ecto.UUID.generate()
+
+    assert {:error, :order_not_closed} = Shipments.close_shipment(paid, actor_uuid: actor)
+    assert Shipments.get_shipment(paid.uuid).status == "failed"
+
+    assert {:ok, %Shipment{status: "cancelled"} = closed} =
+             Shipments.close_shipment(refunded, actor_uuid: actor)
+
+    assert %{"action" => "closed", "status" => "cancelled", "actor_uuid" => ^actor} =
+             List.last(closed.events)
+
+    refute_received {:stub_called, :cancel_shipment, _args}
+    assert Enum.map(Shipments.list_needs_attention(), fn {s, _o} -> s.uuid end) == [paid.uuid]
+
+    # Only a failed shipment is closed this way.
+    assert {:error, :shipment_changed} = Shipments.close_shipment(closed)
+  end
+
   test "the carrier filter applies to every section" do
     ours = order!(method!("stub"))
     theirs = method!("nocancel") |> order!() |> register!(%ShipmentResult{tracking_number: "T"})
