@@ -71,6 +71,11 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   ## Callers
 
+  `submit_shipment/2` and `register/2` must not be called inside a
+  transaction (they raise `ArgumentError`): the attempt runs in its own
+  process, which would wait for the rows the caller's transaction holds, and
+  the carrier call must not sit inside a transaction.
+
   Every function that changes a shipment takes `:actor_uuid` (who did it; it
   is recorded on the events, and as `created_by_uuid` on a new shipment).
   These functions write no Activity: the admin LiveView logs on success, as
@@ -293,6 +298,14 @@ defmodule PhoenixKitEcommerce.Shipments do
   """
   @spec submit_shipment(Shipment.t(), keyword()) :: {:ok, Shipment.t()} | {:error, error()}
   def submit_shipment(%Shipment{uuid: uuid}, opts \\ []) do
+    # The attempt runs in its own process: it would wait for the rows this
+    # transaction holds while this transaction waits for it, and the carrier
+    # call would sit inside the transaction.
+    if repo().in_transaction?() do
+      raise ArgumentError,
+            "Shipments.submit_shipment/2 (and register/2) must not run inside a transaction"
+    end
+
     task = Task.Supervisor.async_nolink(@task_supervisor, fn -> attempt(uuid, opts) end)
 
     case Task.yield(task, :infinity) do

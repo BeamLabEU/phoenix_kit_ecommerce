@@ -573,6 +573,22 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                Shipments.get_shipment(shipment.uuid)
     end
 
+    test "is refused inside the caller's transaction" do
+      order = paid_order!(method!())
+      {:ok, shipment} = Shipments.begin_shipment(order)
+
+      assert_raise ArgumentError, ~r/inside a transaction/, fn ->
+        Repo.transaction(fn -> Shipments.submit_shipment(shipment) end)
+      end
+
+      assert_raise ArgumentError, ~r/inside a transaction/, fn ->
+        Repo.transaction(fn -> Shipments.register(paid_order!(method!())) end)
+      end
+
+      assert %Shipment{status: "creating", submitted_at: nil} =
+               Shipments.get_shipment(shipment.uuid)
+    end
+
     test "a shipment that is not creating is not sent" do
       order = paid_order!(method!())
       {:ok, created} = Shipments.register(order)
