@@ -151,6 +151,19 @@ defmodule PhoenixKitEcommerce.Web.BuyerShipmentsTest do
   end
 
   describe "the account's order list" do
+    test "the status filter matches the label the buyer reads", %{conn: conn, order: order} do
+      shipped = another_order!(order)
+      shipment!(shipped, %{status: "in_transit"})
+
+      {:ok, view, _html} = live(conn, "/dashboard/orders?status=shipped")
+      assert has_element?(view, "#order-status-#{shipped.uuid}", "Shipped")
+      refute has_element?(view, "#order-status-#{order.uuid}")
+
+      {:ok, view, _html} = live(conn, "/dashboard/orders?status=paid")
+      assert has_element?(view, "#order-status-#{order.uuid}", "Paid")
+      refute has_element?(view, "#order-status-#{shipped.uuid}")
+    end
+
     test "labels each order by its shipment, reading the shipments in one query", %{
       conn: conn,
       order: order
