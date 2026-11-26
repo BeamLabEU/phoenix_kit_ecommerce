@@ -258,11 +258,12 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   @doc """
   Whether a `creating` shipment has waited 10 minutes for its attempt's
-  answer: the admin may then resolve it like an `unknown` one.
+  answer: the admin may then resolve it like an `unknown` one. The line is
+  the one the lists and the resolutions draw (a cutoff to the second).
   """
   @spec stuck?(Shipment.t()) :: boolean()
   def stuck?(%Shipment{status: "creating", updated_at: %DateTime{} = updated_at}),
-    do: DateTime.diff(DateTime.utc_now(), updated_at, :second) >= @stuck_after_seconds
+    do: DateTime.compare(updated_at, stuck_cutoff()) == :lt
 
   def stuck?(%Shipment{}), do: false
 

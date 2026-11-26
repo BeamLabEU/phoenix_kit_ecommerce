@@ -214,4 +214,20 @@ defmodule PhoenixKitEcommerce.ShipmentsListsTest do
     refute Shipments.stuck?(%Shipment{status: "creating", updated_at: DateTime.add(now, -30)})
     refute Shipments.stuck?(%Shipment{status: "unknown", updated_at: DateTime.add(now, -3600)})
   end
+
+  test "stuck?/1 draws the 10-minute line where the lists do" do
+    # The lists compare the stored second with a cutoff truncated to the
+    # second; a shipment exactly on it is not stuck yet in either.
+    on_the_line = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-600)
+
+    refute Shipments.stuck?(%Shipment{status: "creating", updated_at: on_the_line})
+
+    shipment = method!() |> order!() |> register!(%ShipmentResult{tracking_number: "T"})
+
+    Repo.update_all(from(s in Shipment, where: s.uuid == ^shipment.uuid),
+      set: [status: "creating", updated_at: on_the_line]
+    )
+
+    assert Shipments.list_needs_attention() == []
+  end
 end
