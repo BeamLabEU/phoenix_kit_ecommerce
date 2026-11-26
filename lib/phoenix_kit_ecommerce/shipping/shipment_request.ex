@@ -234,14 +234,14 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   end
 
   defp without_trunk(local, prefixes, lengths) do
-    if String.length(local) in lengths do
-      local
-    else
-      Enum.find_value(prefixes, fn prefix ->
-        rest = String.replace_prefix(local, prefix, "")
-        if String.starts_with?(local, prefix) and String.length(rest) in lengths, do: rest
-      end)
-    end
+    if String.length(local) in lengths,
+      do: local,
+      else: Enum.find_value(prefixes, &trunk_dropped(local, &1, lengths))
+  end
+
+  defp trunk_dropped(local, prefix, lengths) do
+    rest = String.replace_prefix(local, prefix, "")
+    if String.starts_with?(local, prefix) and String.length(rest) in lengths, do: rest
   end
 
   defp calling_code(country) do

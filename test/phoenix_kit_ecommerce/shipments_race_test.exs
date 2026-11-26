@@ -150,15 +150,13 @@ defmodule PhoenixKitEcommerce.ShipmentsRaceTest do
         n
       end)
 
-    cond do
-      blocked >= count or tries == 0 ->
-        blocked
-
-      true ->
-        receive do
-        after
-          50 -> wait_for_blocked_updates(count, tries - 1)
-        end
+    if blocked >= count or tries == 0 do
+      blocked
+    else
+      receive do
+      after
+        50 -> wait_for_blocked_updates(count, tries - 1)
+      end
     end
   end
 
