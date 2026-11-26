@@ -34,8 +34,32 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   @payers [:shop, :recipient]
   @description_max 100
-  # Countries whose leading 0 is part of the number, not a trunk prefix.
+  # Countries whose leading 0 is part of the number, not a trunk prefix, and
+  # their calling codes (the Vatican shares Italy's +39).
   @keeps_leading_zero ~w(IT SM VA)
+  @zero_keeping_codes ["39", "378"]
+
+  # `{trunk prefixes, lengths of the national number}` by country; the length
+  # decides when the trunk digit can also begin a number. Anything else
+  # drops one leading 0, the trunk prefix of most numbering plans.
+  @default_trunk {["0"], nil}
+  @no_trunk {[], nil}
+  @trunk_prefixes Map.merge(
+                    Map.new(
+                      ~w(EE LV PL CZ ES PT NO DK IS GR CY MT LU IT SM VA),
+                      &{&1, @no_trunk}
+                    ),
+                    %{
+                      "LT" => {["8", "0"], [8]},
+                      "RU" => {["8"], [10]},
+                      "KZ" => {["8"], [10]},
+                      "BY" => {["80"], [9]},
+                      "UA" => {["80", "0"], [9]},
+                      "HU" => {["06"], nil},
+                      "US" => {["1"], [10]},
+                      "CA" => {["1"], [10]}
+                    }
+                  )
 
   defstruct order_uuid: nil,
             reference: nil,
@@ -140,34 +164,43 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   @doc """
   A phone number in E.164 (`+` and 8 to 15 digits), or `nil`.
 
-  An `(0)` (the trunk prefix written next to a country code) is dropped, then
-  spaces, dashes, dots and brackets. A number that starts with `+` or `00`
-  already has its country code. Any other number takes the calling code of
-  `country` (ISO 3166-1 alpha-2) in place of one leading trunk `0`:
-  `"5555 1234"` for `"EE"` is `"+37255551234"`, `"067 123 45 67"` for `"UA"`
-  is `"+380671234567"`. Italy, San Marino and the Vatican keep the leading
-  `0`, which is part of their numbers. `nil` when there is no number, the
-  number has other characters, or it has no country code and `country` gives
-  none.
+  Spaces, dashes, dots and brackets are dropped. A number that starts with
+  `+` or `00` already has its country code. Any other number takes the
+  calling code of `country` (ISO 3166-1 alpha-2) in place of the country's
+  national trunk prefix:
+
+    * `0` in most countries (`"040 123 4567"` for `"FI"` is
+      `"+358401234567"`);
+    * none in Estonia, Latvia, Poland, Czechia, Spain, Portugal, Norway,
+      Denmark, Iceland, Greece, Cyprus, Malta and Luxembourg; Italy, San
+      Marino and the Vatican keep their leading `0`, which is part of their
+      numbers;
+    * `8` or `0` in Lithuania, `8` in Russia and Kazakhstan, `80` in Belarus,
+      `0` or `80` in Ukraine, `1` in the US and Canada: these are dropped only
+      when what is left has the length of the country's numbers, since the
+      same digit can begin a number (St Petersburg is `812`), and a number
+      that fits neither form is `nil` rather than a guess;
+    * `06` in Hungary.
+
+  An `(0)` written next to a country code is the trunk prefix and is dropped,
+  except in Italy, San Marino and the Vatican, where it is the number's own
+  `0`. `nil` when there is no number, the number has other characters, or it
+  has no country code and `country` gives none.
   """
   @spec e164_phone(term(), term()) :: String.t() | nil
   def e164_phone(phone, country) when is_binary(phone) do
+    country = Codec.country(country)
+
     compact =
       phone
-      |> String.replace(~r/\(\s*0\s*\)/u, "")
+      |> String.replace(~r/\(\s*0\s*\)/u, "~")
       |> String.replace(~r/[\s\-\.\(\)\/]/u, "")
 
     digits =
       case compact do
-        "+" <> rest ->
-          rest
-
-        "00" <> rest ->
-          rest
-
-        local ->
-          with code when is_binary(code) <- calling_code(country),
-               do: code <> national(local, Codec.country(country))
+        "+" <> rest -> international(rest)
+        "00" <> rest -> international(rest)
+        local -> national(local, country)
       end
 
     if is_binary(digits) and Regex.match?(~r/\A[1-9]\d{7,14}\z/, digits), do: "+" <> digits
@@ -175,8 +208,39 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   def e164_phone(_phone, _country), do: nil
 
-  defp national("0" <> rest, country) when country not in @keeps_leading_zero, do: rest
-  defp national(local, _country), do: local
+  # `~` marks an `(0)`.
+  defp international(digits) do
+    if String.starts_with?(digits, @zero_keeping_codes),
+      do: String.replace(digits, "~", "0"),
+      else: String.replace(digits, "~", "")
+  end
+
+  defp national(local, country) do
+    {prefixes, lengths} = Map.get(@trunk_prefixes, country, @default_trunk)
+    local = String.replace(local, "~", if(country in @keeps_leading_zero, do: "0", else: ""))
+
+    with code when is_binary(code) <- calling_code(country),
+         number when is_binary(number) <- without_trunk(local, prefixes, lengths),
+         do: code <> number
+  end
+
+  defp without_trunk(local, prefixes, nil) do
+    case Enum.find(prefixes, &String.starts_with?(local, &1)) do
+      nil -> local
+      prefix -> String.replace_prefix(local, prefix, "")
+    end
+  end
+
+  defp without_trunk(local, prefixes, lengths) do
+    if String.length(local) in lengths do
+      local
+    else
+      Enum.find_value(prefixes, fn prefix ->
+        rest = String.replace_prefix(local, prefix, "")
+        if String.starts_with?(local, prefix) and String.length(rest) in lengths, do: rest
+      end)
+    end
+  end
 
   defp calling_code(country) do
     case country |> Codec.country() |> CountryData.get_country() do

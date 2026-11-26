@@ -454,10 +454,46 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("06 6988 1234", "VA") == "+390669881234"
     end
 
+    test "each country's own trunk prefix is dropped" do
+      # Lithuania: 8 (and 0, the prefix it moves to), 8-digit numbers.
+      assert ShipmentRequest.e164_phone("8 612 34567", "LT") == "+37061234567"
+      assert ShipmentRequest.e164_phone("0 612 34567", "LT") == "+37061234567"
+      assert ShipmentRequest.e164_phone("612 34567", "LT") == "+37061234567"
+      # Russia and Kazakhstan: 8, 10-digit numbers; a number that is already
+      # ten digits keeps its 8 (St Petersburg is 812).
+      assert ShipmentRequest.e164_phone("8 495 123 45 67", "RU") == "+74951234567"
+      assert ShipmentRequest.e164_phone("812 123 45 67", "RU") == "+78121234567"
+      assert ShipmentRequest.e164_phone("8 701 123 45 67", "KZ") == "+77011234567"
+      # Belarus: 8 0, 9-digit numbers.
+      assert ShipmentRequest.e164_phone("8 029 123 45 67", "BY") == "+375291234567"
+      # Hungary: 06.
+      assert ShipmentRequest.e164_phone("06 30 123 4567", "HU") == "+36301234567"
+      assert ShipmentRequest.e164_phone("06 1 234 5678", "HU") == "+3612345678"
+      # Ukraine: 0, and the old 8 0.
+      assert ShipmentRequest.e164_phone("8 067 123 45 67", "UA") == "+380671234567"
+      # The US and Canada: 1.
+      assert ShipmentRequest.e164_phone("1 212 555 0123", "US") == "+12125550123"
+      assert ShipmentRequest.e164_phone("212 555 0123", "US") == "+12125550123"
+      # No trunk prefix: Latvia, Poland.
+      assert ShipmentRequest.e164_phone("2612 3456", "LV") == "+37126123456"
+      assert ShipmentRequest.e164_phone("512 345 678", "PL") == "+48512345678"
+    end
+
+    test "a number that fits none of its country's forms is nil, not a guess" do
+      assert ShipmentRequest.e164_phone("8 612 345", "LT") == nil
+      assert ShipmentRequest.e164_phone("9 495 123 45 67", "RU") == nil
+    end
+
     test "an (0) is never dialled from abroad" do
       assert ShipmentRequest.e164_phone("+44 (0)20 7946 0958", nil) == "+442079460958"
       assert ShipmentRequest.e164_phone("(0)151 2345678", "DE") == "+491512345678"
       assert ShipmentRequest.e164_phone("+49 (0) 151 2345678", "EE") == "+491512345678"
+    end
+
+    test "an (0) in Italy, San Marino or the Vatican is part of the number" do
+      assert ShipmentRequest.e164_phone("+39 (0)6 1234 5678", nil) == "+390612345678"
+      assert ShipmentRequest.e164_phone("+378 (0)549 123456", nil) == "+3780549123456"
+      assert ShipmentRequest.e164_phone("(0)6 1234 5678", "IT") == "+390612345678"
     end
 
     test "a number with a country code keeps it" do
