@@ -148,10 +148,12 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
         parcels: [parcel()],
         recipient: %{
           name: "Mari Maasikas",
+          company: "Kask OÜ",
           email: "mari@example.com",
           phone: "+37255551234",
           raw_phone: "5555 1234"
         },
+        idempotency_key: "019b669c-3c9d-7256-8ed1-edbc6ae29705:1795600000000000",
         payer: :recipient,
         description: "Vase x2, Lamp",
         declared_value: Decimal.new("59.90"),
@@ -174,6 +176,7 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       },
       %TrackingUpdate{
         tracking_number: "CE123456789EE",
+        carrier_ref: "C-1",
         status: :ready_for_pickup,
         occurred_at: ~U[2026-11-25 10:00:00Z],
         description: "Arrived at the parcel machine"
@@ -428,14 +431,10 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
 
     test "a recipient keeps what it is given, trimmed, and blank values are nil" do
       assert ShipmentRequest.recipient(%{"name" => " Mari ", "email" => "", phone: "5555"}) ==
-               %{name: "Mari", email: nil, phone: "5555", raw_phone: nil}
+               %{name: "Mari", company: nil, email: nil, phone: "5555", raw_phone: nil}
 
-      assert ShipmentRequest.recipient(nil) == %{
-               name: nil,
-               email: nil,
-               phone: nil,
-               raw_phone: nil
-             }
+      assert ShipmentRequest.recipient(nil) ==
+               %{name: nil, company: nil, email: nil, phone: nil, raw_phone: nil}
     end
   end
 

@@ -8,10 +8,16 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     * `country` - ISO 3166-1 alpha-2 code of the destination country, or `nil`
     * `destination` - where the parcels go
     * `parcels` - what is sent
-    * `recipient` - `%{name, email, phone, raw_phone}` from the order's
-      frozen `billing_snapshot` (as the admin may have corrected it); `phone`
-      is in E.164 (`e164_phone/2`) or `nil`, `raw_phone` is the number as it
-      was typed, for an adapter that normalises it its own way
+    * `recipient` - `%{name, company, email, phone, raw_phone}` from the
+      order's frozen `billing_snapshot` (as the admin may have corrected it):
+      `name` is the person, `company` the company of a company buyer (else
+      `nil`); `phone` is in E.164 (`e164_phone/2`) or `nil`, `raw_phone` is
+      the number as it was typed, for an adapter that normalises it its own
+      way
+    * `idempotency_key` - unique to this attempt of this shipment: send it
+      where the carrier's API takes one, so a request the network repeated is
+      not registered twice. A retry of a failed shipment is a new attempt
+      with a new key
     * `payer` - `:shop`, or `:recipient` when the order is paid to the
       carrier on delivery (`metadata["shipping_pay_on_delivery"]`)
     * `description` - the goods, from the order lines, at most 100 characters
@@ -37,7 +43,8 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
             country: nil,
             destination: %Destination{},
             parcels: [],
-            recipient: %{name: nil, email: nil, phone: nil, raw_phone: nil},
+            recipient: %{name: nil, company: nil, email: nil, phone: nil, raw_phone: nil},
+            idempotency_key: nil,
             payer: :shop,
             description: nil,
             declared_value: Decimal.new(0),
@@ -47,6 +54,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   @type recipient :: %{
           name: String.t() | nil,
+          company: String.t() | nil,
           email: String.t() | nil,
           phone: String.t() | nil,
           raw_phone: String.t() | nil
@@ -60,6 +68,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
           destination: Destination.t(),
           parcels: [Parcel.t()],
           recipient: recipient(),
+          idempotency_key: String.t() | nil,
           payer: :shop | :recipient,
           description: String.t() | nil,
           declared_value: Decimal.t(),
@@ -86,6 +95,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
         map |> Codec.get(:destination) |> Codec.struct_from(Destination) || %Destination{},
       parcels: map |> Codec.get(:parcels) |> Codec.list(&Codec.struct_from(&1, Parcel)),
       recipient: map |> Codec.get(:recipient) |> recipient(),
+      idempotency_key: map |> Codec.get(:idempotency_key) |> Codec.string(),
       payer: map |> Codec.get(:payer) |> Codec.atom(@payers) || :shop,
       description: map |> Codec.get(:description) |> Codec.string() |> description(),
       declared_value: map |> Codec.get(:declared_value) |> Codec.decimal() || Decimal.new(0),
@@ -99,20 +109,22 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   @doc """
   The recipient part of a request from a map with string or atom keys
-  (`name`, `email`, `phone`, `raw_phone`). Blank values become `nil`; the
+  (`name`, `company`, `email`, `phone`, `raw_phone`). Blank values become
+  `nil`; the
   phones are kept as given (see `e164_phone/2`).
   """
   @spec recipient(term()) :: recipient()
   def recipient(map) when is_map(map) do
     %{
       name: map |> Codec.get(:name) |> present(),
+      company: map |> Codec.get(:company) |> present(),
       email: map |> Codec.get(:email) |> present(),
       phone: map |> Codec.get(:phone) |> present(),
       raw_phone: map |> Codec.get(:raw_phone) |> present()
     }
   end
 
-  def recipient(_other), do: %{name: nil, email: nil, phone: nil, raw_phone: nil}
+  def recipient(_other), do: %{name: nil, company: nil, email: nil, phone: nil, raw_phone: nil}
 
   @doc "Cuts a description to #{@description_max} characters; blank becomes `nil`."
   @spec description(term()) :: String.t() | nil

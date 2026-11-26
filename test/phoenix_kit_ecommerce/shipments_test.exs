@@ -209,10 +209,16 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       assert request.recipient == %{
                name: "Mari Maasikas",
+               company: nil,
                email: "mari@example.com",
                phone: "+37255551234",
                raw_phone: "5555 1234"
              }
+
+      claimed = Shipments.get_shipment(request.idempotency_key |> String.split(":") |> hd())
+
+      assert request.idempotency_key ==
+               "#{claimed.uuid}:#{DateTime.to_unix(claimed.submitted_at, :microsecond)}"
 
       assert request.payer == :shop
       assert request.description == "Vase x2, Lamp"
@@ -222,12 +228,13 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert request.cod_currency == nil
     end
 
-    test "a pay-on-delivery order is paid by the recipient, a company is named by its name" do
+    test "a pay-on-delivery order is paid by the recipient, a company keeps its contact person" do
       billing = %{
         "type" => "company",
         "company_name" => "Kask OÜ",
         "email" => "kask@example.com",
         "first_name" => "Mari",
+        "last_name" => "Maasikas",
         "phone" => "+371 6123 4567",
         "country" => "EE"
       }
@@ -240,7 +247,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert request.payer == :recipient
 
       assert request.recipient == %{
-               name: "Kask OÜ",
+               name: "Mari Maasikas",
+               company: "Kask OÜ",
                email: "kask@example.com",
                phone: "+37161234567",
                raw_phone: "+371 6123 4567"
@@ -261,6 +269,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       assert shipment.recipient == %{
                "name" => "Jaan Tamm",
+               "company" => nil,
                "email" => nil,
                "phone" => "+37251234567",
                "raw_phone" => "5123 4567"
@@ -574,6 +583,15 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert {:ok, %Shipment{status: "created", tracking_number: "OK-2"}} =
                Shipments.submit_shipment(again)
 
+      # Each attempt has its own idempotency key.
+      keys =
+        for {:stub_called, :create_shipment, [request]} <- flush_messages(),
+            do: request.idempotency_key
+
+      assert [first_key, second_key] = keys
+      assert String.starts_with?(first_key, failed.uuid <> ":")
+      refute first_key == second_key
+
       assert [_one] = rows(order)
       assert {:error, :shipment_changed} = Shipments.retry_shipment(again)
     end
@@ -802,6 +820,14 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert failed.error =~ "[email]"
       assert failed.error =~ "[phone]"
       assert failed.error =~ "unknown; write to"
+    end
+  end
+
+  defp flush_messages(acc \\ []) do
+    receive do
+      message -> flush_messages([message | acc])
+    after
+      0 -> Enum.reverse(acc)
     end
   end
 

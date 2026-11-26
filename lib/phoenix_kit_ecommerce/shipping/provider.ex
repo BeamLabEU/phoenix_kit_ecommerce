@@ -95,6 +95,11 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
       unsure: the shipment is marked unknown and the admin checks the
       carrier's portal. It is never retried automatically
 
+  The adapter never retries `create_shipment/2` itself: a repeat of a call
+  whose outcome it does not know may register a second shipment. It sends
+  `ShipmentRequest.idempotency_key` where the carrier's API takes one, and
+  otherwise answers with what it knows; the admin decides the rest.
+
   `Shipping.definite_failure?/1` applies this rule. Error reasons are logged
   by their shape only; the message itself is stored masked on the shipment.
 

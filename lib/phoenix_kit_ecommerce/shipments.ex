@@ -54,7 +54,7 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   ## The data sent
 
-  The parcels, the recipient (`name`, `email`, `phone` from the order's
+  The parcels, the recipient (`name`, `company`, `email`, `phone` from the order's
   `billing_snapshot`, the phone in E.164 beside the `raw_phone` as typed) and
   the destination are copied from
   the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
@@ -165,12 +165,19 @@ defmodule PhoenixKitEcommerce.Shipments do
       destination: Destination.from_map(shipment.destination) || %Destination{},
       parcels: Codec.list(shipment.parcels, &Parcel.from_map/1),
       recipient: ShipmentRequest.recipient(shipment.recipient),
+      idempotency_key: idempotency_key(shipment),
       payer: if(pay_on_delivery?(order), do: :recipient, else: :shop),
       description: goods |> Enum.map_join(", ", &goods_label/1) |> ShipmentRequest.description(),
       declared_value: goods_total(goods),
       currency: order.currency
     }
   end
+
+  # Unique per attempt: the claim's time, to the microsecond, on the shipment.
+  defp idempotency_key(%Shipment{submitted_at: %DateTime{} = at, uuid: uuid}),
+    do: "#{uuid}:#{DateTime.to_unix(at, :microsecond)}"
+
+  defp idempotency_key(_unclaimed), do: nil
 
   @doc """
   The provider context of a stored shipment, rebuilt from its
@@ -655,16 +662,24 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   defp environment(_credentials), do: nil
 
+  # A company buyer is sent as its company and its contact person; a company
+  # with no person named is addressed by the company name.
   defp billing_recipient(snapshot) when is_map(snapshot) do
-    name =
-      if Codec.get(snapshot, :type) == "company" and filled?(Codec.get(snapshot, :company_name)),
-        do: Codec.get(snapshot, :company_name),
-        else:
-          [Codec.get(snapshot, :first_name), Codec.get(snapshot, :last_name)]
-          |> Enum.filter(&filled?/1)
-          |> Enum.join(" ")
+    person =
+      [Codec.get(snapshot, :first_name), Codec.get(snapshot, :last_name)]
+      |> Enum.filter(&filled?/1)
+      |> Enum.join(" ")
 
-    %{name: name, email: Codec.get(snapshot, :email), phone: Codec.get(snapshot, :phone)}
+    company =
+      if Codec.get(snapshot, :type) == "company" and filled?(Codec.get(snapshot, :company_name)),
+        do: Codec.get(snapshot, :company_name)
+
+    %{
+      name: if(person == "", do: company, else: person),
+      company: company,
+      email: Codec.get(snapshot, :email),
+      phone: Codec.get(snapshot, :phone)
+    }
   end
 
   defp billing_recipient(_snapshot), do: %{}
@@ -672,13 +687,14 @@ defmodule PhoenixKitEcommerce.Shipments do
   # The number as it was typed is kept beside the normalised one: a stored
   # recipient (a retry) carries both, a new one only the typed `phone`.
   defp recipient_map(recipient, country) do
-    %{name: name, email: email, phone: phone, raw_phone: raw} =
+    %{name: name, company: company, email: email, phone: phone, raw_phone: raw} =
       ShipmentRequest.recipient(recipient)
 
     raw = raw || phone
 
     %{
       "name" => name,
+      "company" => company,
       "email" => email,
       "phone" => ShipmentRequest.e164_phone(raw, country),
       "raw_phone" => raw
