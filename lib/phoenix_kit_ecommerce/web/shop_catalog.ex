@@ -2,6 +2,11 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
   @moduledoc """
   Public shop catalog main page.
   Shows categories and featured/active products.
+
+  The page opens with its breadcrumb row (the shop's own name, sharing the row
+  with the cart/Edit bar) unless `shop_show_index_breadcrumbs` is off; then the
+  bar sits alone, right-aligned, and nothing is rendered when the cart bar and
+  the Edit button are off too.
   """
 
   use PhoenixKitEcommerce.Web, :live_view
@@ -122,6 +127,7 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
       )
       |> assign(:show_categories_grid, Helpers.sidebar_categories_enabled?())
       |> assign(:sidebar_enabled, Helpers.sidebar_enabled?())
+      |> assign(:show_index_breadcrumbs, Helpers.index_breadcrumbs_enabled?())
       # The row of buttons stands in for the cards and the phone category list;
       # it follows "Show Categories in Shop" like the cards do.
       |> assign(
@@ -305,10 +311,16 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
            Matches catalog_category.ex. --%>
       <%!-- `pt-0`: the host layout already pads the top of every page. --%>
       <div class="px-6 pt-0 pb-6 max-w-7xl mx-auto">
-        <%!-- One row under the site header. This page is the first crumb
-              itself, so the left side carries the shop's own name rather than
-              a link back to where the visitor already is. --%>
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <%!-- One row under the site header (`shop_show_index_breadcrumbs`,
+              default on). This page is the shop's front page, so its trail is
+              one crumb carrying the shop's own name rather than a link back to
+              where the visitor already is. On, that crumb and the bar share one
+              row; off, the bar sits alone, right-aligned, and renders nothing
+              when both of its buttons are off, leaving no empty row or spacing. --%>
+        <div
+          :if={@show_index_breadcrumbs}
+          class="flex flex-wrap items-center justify-between gap-3 mb-4"
+        >
           <div class="breadcrumbs text-sm">
             <ul>
               <li class="font-medium inline-flex items-center gap-1">
@@ -325,6 +337,15 @@ defmodule PhoenixKitEcommerce.Web.ShopCatalog do
             admin_edit_label={assigns[:admin_edit_label]}
           />
         </div>
+
+        <ShopCards.storefront_bar
+          :if={not @show_index_breadcrumbs}
+          class="justify-end mb-4"
+          language={@current_language}
+          cart_count={@cart_count}
+          admin_edit_url={assigns[:admin_edit_url]}
+          admin_edit_label={assigns[:admin_edit_label]}
+        />
 
         <%!-- Hero Section --%>
         <header class="w-full relative mb-6">

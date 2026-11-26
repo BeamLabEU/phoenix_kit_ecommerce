@@ -3277,6 +3277,26 @@ msgstr ""
 msgid "Storefront admin Edit button enabled"
 msgstr ""
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1654
+#, elixir-autogen, elixir-format
+msgid "Show the breadcrumb row on the shop index"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1656
+#, elixir-autogen, elixir-format
+msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2722
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs disabled"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2721
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs enabled"
+msgstr ""
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

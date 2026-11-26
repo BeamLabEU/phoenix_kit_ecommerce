@@ -667,6 +667,13 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   reads those assigns (e.g. with core's `user_dropdown/1`). A host that does
   not show it turns this on. The permission gate is
   `Web.Helpers.maybe_assign_admin_edit/4` either way.
+- `shop_show_index_breadcrumbs` — render the shop index's breadcrumb row
+  (default: `true`). The index is the shop's front page, so the row is one
+  crumb, itself, linking nowhere; on, it shares the row with the storefront
+  bar exactly as before. Off, the index has no breadcrumbs and the bar sits
+  alone, right-aligned (nothing at all when the cart bar and the Edit button
+  are both off). Category and product pages keep their breadcrumbs either
+  way. Read through `Web.Helpers.index_breadcrumbs_enabled?/0`.
 - `shop_catalog_vocabulary` — `"products"` (default), `"services"` or
   `"mixed"`. What the storefront calls what it sells. Read through
   `PhoenixKitEcommerce.Vocabulary`, never directly. Each variant is a

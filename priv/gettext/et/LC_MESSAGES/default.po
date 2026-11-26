@@ -3275,6 +3275,26 @@ msgstr "Poe administraatori muutmisnupp välja lülitatud"
 msgid "Storefront admin Edit button enabled"
 msgstr "Poe administraatori muutmisnupp sisse lülitatud"
 
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1654
+#, elixir-autogen, elixir-format
+msgid "Show the breadcrumb row on the shop index"
+msgstr "Näita poe avalehel leivapurude rida"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:1656
+#, elixir-autogen, elixir-format
+msgid "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+msgstr "Poe avaleht on ise esimene kirje, seega sisaldab selle leivapurude rida ainult ühte silti ilma lingita. Lülita see välja, et see rida eemaldada ja jätta ostukorvi riba ning muutmisnupp ainsana paremale; kategooria- ja tootelehed säilitavad oma leivapurud."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2722
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs disabled"
+msgstr "Poe avalehe leivapurud välja lülitatud"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2721
+#, elixir-autogen, elixir-format
+msgid "Shop index breadcrumbs enabled"
+msgstr "Poe avalehe leivapurud sisse lülitatud"
+
 #: lib/phoenix_kit_ecommerce/web/catalog_product.ex:1150
 #, elixir-autogen, elixir-format
 msgid "Add More to Cart"

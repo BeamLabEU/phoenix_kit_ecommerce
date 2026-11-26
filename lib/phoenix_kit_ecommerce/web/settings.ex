@@ -84,6 +84,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:related_limit, RelatedProducts.limit())
       |> assign(:show_cart_bar, get_show_cart_bar())
       |> assign(:show_admin_edit_button, get_show_admin_edit_button())
+      |> assign(:show_index_breadcrumbs, Helpers.index_breadcrumbs_enabled?())
       |> assign(:storefront_filters, storefront_filters)
       |> assign(:discovered_options, discovered_options)
       |> assign(
@@ -444,6 +445,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_admin_edit_button", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_admin_edit_button", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_index_breadcrumbs", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_index_breadcrumbs", params, socket)
     end)
   end
 
@@ -1639,6 +1647,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               event="toggle_admin_edit_button"
             />
 
+            <%!-- The shop index's one-crumb row. Category and product pages
+                  keep their breadcrumbs either way. --%>
+            <.setting_toggle
+              id="toggle-shop-show-index-breadcrumbs"
+              title={gettext("Show the breadcrumb row on the shop index")}
+              description={
+                gettext(
+                "The shop's front page is the first crumb itself, so its breadcrumb row holds one label that links nowhere. Turn it off to drop that row and leave the cart bar and Edit button alone at the right; category and product pages keep their breadcrumbs."
+                )
+              }
+              checked={@show_index_breadcrumbs}
+              event="toggle_index_breadcrumbs"
+            />
+
             <div class="divider"></div>
 
             <%!-- Category Name Display --%>
@@ -2669,6 +2691,35 @@ defmodule PhoenixKitEcommerce.Web.Settings do
            if(new_value,
              do: gettext("Storefront admin Edit button enabled"),
              else: gettext("Storefront admin Edit button disabled")
+           )
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update setting"))}
+    end
+  end
+
+  defp gated_event("toggle_index_breadcrumbs", _params, socket) do
+    new_value = !socket.assigns.show_index_breadcrumbs
+    value_str = if(new_value, do: "true", else: "false")
+
+    case Settings.update_setting("shop_show_index_breadcrumbs", value_str) do
+      {:ok, _} ->
+        Activity.log("shop.index_breadcrumbs_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "setting",
+          metadata: %{"show_index_breadcrumbs" => new_value}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:show_index_breadcrumbs, new_value)
+         |> put_flash(
+           :info,
+           if(new_value,
+             do: gettext("Shop index breadcrumbs enabled"),
+             else: gettext("Shop index breadcrumbs disabled")
            )
          )}
 
