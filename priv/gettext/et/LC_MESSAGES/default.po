@@ -8517,3 +8517,8 @@ msgstr "See vedaja ei ole enam seadistatud."
 #, elixir-autogen, elixir-format
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr "Vedaja ei paku enam selle tellimuse tarneteenust."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:239
+#, elixir-autogen, elixir-format
+msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
+msgstr "Saadetist ei õnnestunud vedajale üle anda. Kontrollige seda vedaja juures, enne kui uuesti proovite."

@@ -103,7 +103,9 @@ defmodule PhoenixKitEcommerce.Migrations do
   service, the connection and a `context_snapshot` of the method settings;
   the parcels, recipient and destination that were sent; the carrier's
   answer; the status; the last 50 events and the last error, both masked;
-  who created it and when it was last tracked. A partial unique index on
+  who created it, when it was last tracked, and when the current attempt was
+  handed to the carrier (`submitted_at`, the claim that lets one attempt
+  reach the carrier once). A partial unique index on
   `order_uuid` over the live statuses (`creating`, `unknown`, `created`,
   `in_transit`, `ready_for_pickup`) keeps an order to one live shipment.
   `down/1` keeps the table, like every table of this chain.
@@ -549,6 +551,7 @@ defmodule PhoenixKitEcommerce.Migrations do
         "error" text,
         "created_by_uuid" uuid,
         "last_tracked_at" timestamp with time zone,
+        "submitted_at" timestamp with time zone,
         "inserted_at" timestamp with time zone DEFAULT now() NOT NULL,
         "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
         CONSTRAINT phoenix_kit_shop_shipments_pkey PRIMARY KEY ("uuid"),

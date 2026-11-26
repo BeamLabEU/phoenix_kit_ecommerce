@@ -2697,7 +2697,7 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         since: 1,
         class: :column,
         revisions: [
-          {1, %{default: "now()", type: "timestamp with time zone", pos: 21, not_null: true}}
+          {1, %{default: "now()", type: "timestamp with time zone", pos: 22, not_null: true}}
         ],
         presence: :required,
         backfill: :default
@@ -2824,6 +2824,22 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         backfill: nil
       },
       %{
+        id: "column:phoenix_kit_shop_shipments.submitted_at",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "submitted_at", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"submitted_at\" timestamp with time zone",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: nil, type: "timestamp with time zone", pos: 21, not_null: false}}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
         id: "column:phoenix_kit_shop_shipments.tracking_number",
         owner: :phoenix_kit_ecommerce,
         check:
@@ -2863,7 +2879,7 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         since: 1,
         class: :column,
         revisions: [
-          {1, %{default: "now()", type: "timestamp with time zone", pos: 22, not_null: true}}
+          {1, %{default: "now()", type: "timestamp with time zone", pos: 23, not_null: true}}
         ],
         presence: :required,
         backfill: :default

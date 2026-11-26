@@ -18,6 +18,7 @@ defmodule PhoenixKitEcommerce.MigrationsShipmentsTest do
     assert table =~ ~s|"status" character varying(32) NOT NULL|
     assert table =~ ~s|"context_snapshot" jsonb DEFAULT '{}'::jsonb NOT NULL|
     assert table =~ ~s|"events" jsonb DEFAULT '[]'::jsonb NOT NULL|
+    assert table =~ ~s|"submitted_at" timestamp with time zone,|
     assert table =~ ~s|REFERENCES public.phoenix_kit_orders("uuid") ON DELETE CASCADE|
 
     assert table =~
@@ -52,7 +53,8 @@ defmodule PhoenixKitEcommerce.MigrationsShipmentsTest do
     assert Enum.any?(stmts, &String.contains?(&1, "tenant_x.phoenix_kit_shop_shipments"))
   end
 
-  # Fixed once released, like every version of the chain.
+  # Fixed once released, like every version of the chain (V7 is not released
+  # yet: `submitted_at` was added to it in review).
   test "the SQL of V7 is pinned, in the public schema and under a prefix" do
     digest = fn statements ->
       statements
@@ -62,10 +64,10 @@ defmodule PhoenixKitEcommerce.MigrationsShipmentsTest do
     end
 
     assert digest.(Migrations.shipments_statements("public")) ==
-             "be7fb0fc8c7cc2c6d9dc83dc9bd5db1962966f0860c4e4693eaf9105b7f28c0e"
+             "28a1b70cc82e4669e907d1772741e09a719d15be9dca78665b501c6383630bac"
 
     assert digest.(Migrations.shipments_statements("tenant_x")) ==
-             "b9c3fd0ea51f95f23db15233a19ea60b0c6250dea48e4d47d4af80366ce7e5a3"
+             "9c728389ac90da02e8f9dbd62e109d9783347221df907ca8ae669f9fb95f09f1"
   end
 
   test "the prefix is validated before it reaches DDL" do

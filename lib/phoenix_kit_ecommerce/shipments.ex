@@ -14,16 +14,34 @@ defmodule PhoenixKitEcommerce.Shipments do
   row. The partial unique index over the live statuses refuses a second live
   shipment of the order: `{:error, :live_shipment_exists}`.
 
-  `submit_shipment/2` then calls the carrier, outside any transaction (a
-  LiveView runs it in `start_async`), and stores the outcome only while the
-  shipment is still `creating`:
+  `submit_shipment/2` then makes one attempt. The attempt runs in its own
+  process under `PhoenixKitEcommerce.Shipments.TaskSupervisor` (started by
+  `PhoenixKitEcommerce.children/0`), not linked to the caller: the caller
+  waits for the answer, but a caller that dies meanwhile (a LiveView's
+  `start_async` when the admin closes the tab) does not stop it, and the
+  carrier's answer is still logged and stored. The attempt
 
-    * an answer - `created`, with the tracking number;
-    * a definite failure (`Shipping.definite_failure?/1`) - `failed`;
-    * anything else (a timeout, a crash, an ambiguous HTTP status...) -
-      `unknown`. The admin checks the carrier's portal, then records the
-      tracking number (`enter_tracking_number/3`) or marks it failed
-      (`mark_failed/2`). It is never retried automatically.
+    * claims the shipment (`submitted_at`, set only on a `creating` shipment
+      no attempt has claimed, while the order is still `paid`): a second
+      submit of the same shipment is `{:error, :shipment_changed}` and never
+      reaches the carrier. A shipment whose order is no longer paid is
+      `failed` without a call;
+    * calls the carrier outside any transaction;
+    * logs the answer, then stores it on condition that the shipment is still
+      `creating` under its own claim:
+
+      * an answer - `created`, with the tracking number;
+      * a definite failure (`Shipping.definite_failure?/1`), or nothing sent
+        (the provider does not support it, the context cannot be rebuilt) -
+        `failed`;
+      * anything else (a timeout, a crash, an ambiguous HTTP status...) -
+        `unknown`. The admin checks the carrier's portal, then records the
+        tracking number (`enter_tracking_number/3`) or marks it failed
+        (`mark_failed/2`). It is never retried automatically.
+
+  An Oban job would add nothing here: a job retried after a node restart may
+  not call the carrier again (the claim refuses it), so a stale claim is left
+  to the admin either way, and the admin wants the answer while waiting.
 
   An answer that arrives after the shipment has left `creating` changes
   nothing (`{:error, :shipment_changed}`; it is logged with the tracking
@@ -69,6 +87,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   alias PhoenixKitEcommerce.Shipping.{CartQuote, Codec, Context, Destination, Parcel}
   alias PhoenixKitEcommerce.Shipping.{Service, ShipmentRef, ShipmentRequest, ShipmentResult}
 
+  @task_supervisor PhoenixKitEcommerce.Shipments.TaskSupervisor
   @max_events 50
   @error_max 300
   @stuck_after_seconds 600
@@ -92,6 +111,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | {:destination_unverified, term()}
           | :live_shipment_exists
           | :shipment_changed
+          | :submit_crashed
           | :connection_changed
           | :connection_environment_changed
           | :tracking_number_required
@@ -237,30 +257,106 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   @doc """
-  Calls the carrier for a `creating` shipment and stores the outcome, on
-  condition that the shipment is still `creating`: `{:ok, shipment}` in
-  `created`, `failed` or `unknown`. `{:error, :shipment_changed}` when it left
-  `creating` before the answer was stored (or was not in it), and nothing is
-  written.
+  Makes one attempt to register a `creating` shipment with the carrier (see
+  the moduledoc) and waits for it: `{:ok, shipment}` in `created`, `failed`
+  or `unknown`. `{:error, :shipment_changed}` when the shipment is not
+  `creating`, another attempt has claimed it, or it left `creating` before
+  the answer was stored; nothing is written then. `{:error,
+  :submit_crashed}` when the attempt itself crashed (the shipment is left to
+  the admin like one stuck in `creating`).
 
   Options: `:actor_uuid`, `:context_opts` (`:timeout` bounds the carrier
   call, 30 seconds by default).
   """
   @spec submit_shipment(Shipment.t(), keyword()) :: {:ok, Shipment.t()} | {:error, error()}
-  def submit_shipment(%Shipment{} = shipment, opts \\ []) do
-    with %Shipment{status: "creating"} = shipment <- get_shipment(shipment.uuid) || :not_found,
-         %Order{} = order <- fetch_order(shipment.order_uuid) || :not_found do
-      outcome =
-        case shipment_context(shipment, opts) do
-          {:ok, ctx} -> Shipping.create_shipment(ctx, shipment_request(shipment, order))
-          {:error, reason} -> {:error, {:not_sent, reason}}
-        end
+  def submit_shipment(%Shipment{uuid: uuid}, opts \\ []) do
+    task = Task.Supervisor.async_nolink(@task_supervisor, fn -> attempt(uuid, opts) end)
 
-      store_outcome(shipment, outcome, opts[:actor_uuid])
-    else
-      :not_found -> {:error, :not_found}
-      %Shipment{} -> {:error, :shipment_changed}
+    case Task.yield(task, :infinity) do
+      {:ok, result} ->
+        result
+
+      {:exit, reason} ->
+        Logger.error("Shipment #{uuid}: the attempt crashed: #{Exception.format_exit(reason)}")
+        {:error, :submit_crashed}
     end
+  end
+
+  defp attempt(uuid, opts) do
+    actor_uuid = opts[:actor_uuid]
+
+    case claim(uuid, actor_uuid) do
+      {:claimed, shipment, order} ->
+        outcome =
+          case shipment_context(shipment, opts) do
+            {:ok, ctx} -> Shipping.create_shipment(ctx, shipment_request(shipment, order))
+            {:error, reason} -> {:error, {:not_sent, reason}}
+          end
+
+        log_outcome(shipment, outcome)
+        store_outcome(shipment, outcome, actor_uuid)
+
+      {:refused, result} ->
+        result
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # One attempt per claim: `submitted_at` is set only on a `creating` shipment
+  # that no attempt holds, with the order row held and still `paid`.
+  defp claim(uuid, actor_uuid) do
+    with %Shipment{status: "creating", submitted_at: nil} = shipment <-
+           get_shipment(uuid) || {:error, :not_found},
+         {:ok, claimed} <-
+           repo().transaction(fn -> claim_under_order(shipment, actor_uuid) end) do
+      claimed
+    else
+      %Shipment{} -> {:error, :shipment_changed}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp claim_under_order(shipment, actor_uuid) do
+    order =
+      repo().one(from(o in Order, where: o.uuid == ^shipment.order_uuid, lock: "FOR SHARE"))
+
+    case order do
+      %Order{status: "paid"} ->
+        now = DateTime.utc_now()
+
+        shipment.uuid
+        |> compare_and_set(["creating"], [submitted_at: now], unclaimed: true)
+        |> then(fn
+          {:ok, claimed} -> {:claimed, claimed, order}
+          error -> error
+        end)
+
+      _not_paid ->
+        changes = [
+          status: "failed",
+          error: "order_not_paid",
+          events: append_event(shipment, "result", "failed", actor_uuid, "order_not_paid")
+        ]
+
+        {:refused, compare_and_set(shipment.uuid, ["creating"], changes, unclaimed: true)}
+    end
+  end
+
+  # The answer is in the log before the write, so a write that fails still
+  # leaves the admin the tracking number. The reason of a failure is not: it
+  # may quote the recipient (the facade logged its shape).
+  defp log_outcome(shipment, {:ok, %ShipmentResult{} = result}) do
+    Logger.info(
+      "Shipment #{shipment.uuid}: the carrier registered it, tracking number " <>
+        "#{inspect(result.tracking_number)}, carrier reference #{inspect(result.carrier_ref)}"
+    )
+  end
+
+  defp log_outcome(shipment, {:error, reason}) do
+    status = if definite?(reason), do: "failed", else: "unknown"
+    Logger.info("Shipment #{shipment.uuid}: the carrier call ended #{status}")
   end
 
   @doc """
@@ -285,6 +381,7 @@ defmodule PhoenixKitEcommerce.Shipments do
         |> Map.merge(%{
           status: "creating",
           error: nil,
+          submitted_at: nil,
           events: append_event(shipment, "retry", "creating", opts[:actor_uuid], nil)
         })
         |> Map.to_list()
@@ -691,7 +788,7 @@ defmodule PhoenixKitEcommerce.Shipments do
       events: append_event(shipment, "result", "created", actor_uuid, nil)
     ]
 
-    case compare_and_set(shipment.uuid, ["creating"], changes) do
+    case compare_and_set(shipment.uuid, ["creating"], changes, claim: shipment.submitted_at) do
       {:ok, stored} ->
         {:ok, stored}
 
@@ -709,15 +806,22 @@ defmodule PhoenixKitEcommerce.Shipments do
     status = if definite?(reason), do: "failed", else: "unknown"
     message = shipment |> masked(error_text(reason)) |> cut()
 
-    compare_and_set(shipment.uuid, ["creating"],
-      status: status,
-      error: message,
-      events: append_event(shipment, "result", status, actor_uuid, message)
+    compare_and_set(
+      shipment.uuid,
+      ["creating"],
+      [
+        status: status,
+        error: message,
+        events: append_event(shipment, "result", status, actor_uuid, message)
+      ],
+      claim: shipment.submitted_at
     )
   end
 
-  # Nothing reached the carrier when the context could not be rebuilt.
+  # Nothing reached the carrier when the context could not be rebuilt, or the
+  # facade had no callback to call.
   defp definite?({:not_sent, _reason}), do: true
+  defp definite?(reason) when reason in [:not_supported, :unknown_provider], do: true
   defp definite?(reason), do: Shipping.definite_failure?(reason)
 
   defp resolve(shipment, statuses, stuck?, action, status, changes, opts) do
@@ -726,7 +830,7 @@ defmodule PhoenixKitEcommerce.Shipments do
         changes ++
           [status: status, events: append_event(shipment, action, status, opts[:actor_uuid], nil)]
 
-      compare_and_set(shipment.uuid, statuses, changes, stuck?)
+      compare_and_set(shipment.uuid, statuses, changes, stuck: stuck?)
     end
   end
 
@@ -735,26 +839,45 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   # The write happens only while the shipment is in one of `statuses` (or, with
-  # `stuck?`, still `creating` after 10 minutes): two writers racing for the
-  # same transition cannot both win.
-  defp compare_and_set(uuid, statuses, changes, stuck? \\ false) do
+  # `stuck: true`, still `creating` after 10 minutes), and, with `unclaimed:
+  # true`, no attempt holds it, or with `claim: at`, the attempt of that claim
+  # does: two writers racing for the same transition cannot both win.
+  defp compare_and_set(uuid, statuses, changes, opts \\ []) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    cutoff = DateTime.add(now, -@stuck_after_seconds, :second)
 
     query =
-      if stuck?,
-        do:
-          from(s in Shipment,
-            where:
-              s.uuid == ^uuid and
-                (s.status in ^statuses or (s.status == "creating" and s.updated_at < ^cutoff)),
-            select: s
-          ),
-        else: from(s in Shipment, where: s.uuid == ^uuid and s.status in ^statuses, select: s)
+      from(s in Shipment, where: s.uuid == ^uuid, select: s)
+      |> where_status(statuses, Keyword.get(opts, :stuck, false), now)
+      |> where_claim(opts)
 
     case repo().update_all(query, set: Keyword.put(changes, :updated_at, now)) do
       {1, [shipment]} -> {:ok, shipment}
       {0, _none} -> {:error, :shipment_changed}
+    end
+  end
+
+  defp where_status(query, statuses, false, _now),
+    do: from(s in query, where: s.status in ^statuses)
+
+  defp where_status(query, statuses, true, now) do
+    cutoff = DateTime.add(now, -@stuck_after_seconds, :second)
+
+    from(s in query,
+      where: s.status in ^statuses or (s.status == "creating" and s.updated_at < ^cutoff)
+    )
+  end
+
+  defp where_claim(query, opts) do
+    cond do
+      Keyword.get(opts, :unclaimed, false) ->
+        from(s in query, where: is_nil(s.submitted_at))
+
+      Keyword.has_key?(opts, :claim) ->
+        claim = Keyword.fetch!(opts, :claim)
+        from(s in query, where: s.submitted_at == ^claim)
+
+      true ->
+        query
     end
   end
 

@@ -403,6 +403,8 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             {:provider_changed,
              "The shipping method now uses another carrier than the one the order was placed with."},
             {:tracking_number_required, "Enter the tracking number."},
+            {:submit_crashed,
+             "The shipment could not be handed to the carrier. Check it with the carrier before you try again."},
             {:unknown_provider, "This carrier is not configured any more."},
             {:unknown_service,
              "The carrier no longer offers the delivery service of this order."},

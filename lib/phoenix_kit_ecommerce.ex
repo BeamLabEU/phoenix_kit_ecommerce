@@ -947,11 +947,18 @@ defmodule PhoenixKitEcommerce do
   # `PhoenixKit.ModuleRegistry.static_children/0` - no host wiring - and
   # started after `PhoenixKit.Cache.Registry`, a fixed earlier child of the
   # same supervisor.
-  # The shipping lookup cache (`Shipping.Cache`) and the search-index subscriber
-  # (`Search.Subscriber`) go in the same list.
+  # The shipping lookup cache (`Shipping.Cache`), the search-index subscriber
+  # (`Search.Subscriber`) and the supervisor of the shipment attempts
+  # (`Shipments.TaskSupervisor`) go in the same list.
   @impl PhoenixKit.Module
   def children,
-    do: StorefrontCache.children() ++ [Shipping.Cache, PhoenixKitEcommerce.Search.Subscriber]
+    do:
+      StorefrontCache.children() ++
+        [
+          Shipping.Cache,
+          PhoenixKitEcommerce.Search.Subscriber,
+          {Task.Supervisor, name: PhoenixKitEcommerce.Shipments.TaskSupervisor}
+        ]
 
   @impl PhoenixKit.Module
   def permission_metadata do

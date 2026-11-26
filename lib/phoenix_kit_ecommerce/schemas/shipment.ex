@@ -9,6 +9,8 @@ defmodule PhoenixKitEcommerce.Shipment do
   order. `parcels`, `recipient` and `destination` are the data sent: copied
   from the order and corrected by the admin before an attempt. `events` keeps
   the last 50 changes and `error` the last failure, both masked.
+  `submitted_at` is set when an attempt claims the shipment for the carrier
+  call and cleared by a retry: one attempt reaches the carrier once.
 
   Statuses: `creating` and `unknown` while the outcome is open; the carrier
   states `created`, `in_transit`, `ready_for_pickup`, `delivered` and
@@ -47,6 +49,7 @@ defmodule PhoenixKitEcommerce.Shipment do
     field :error, :string
     field :created_by_uuid, UUIDv7
     field :last_tracked_at, :utc_datetime
+    field :submitted_at, :utc_datetime_usec
 
     timestamps(type: :utc_datetime)
   end

@@ -12,6 +12,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
   import ExUnit.CaptureLog
 
+  require Logger
+
   alias PhoenixKitBilling.Order
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.{OrderFixtures, Shipment, Shipments}
@@ -41,13 +43,18 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
         else: Application.delete_env(:phoenix_kit_ecommerce, :shipping_providers)
     end)
 
+    # Started by `PhoenixKitEcommerce.children/0` in a host.
+    start_supervised!({Task.Supervisor, name: PhoenixKitEcommerce.Shipments.TaskSupervisor})
+
     stub(%{})
     :ok
   end
 
   # The stub's behaviour, with the order's pickup point listed by default.
+  # The carrier is called from the attempt's own process, so the stub reports
+  # to the test process by pid.
   defp stub(config),
-    do: StubProvider.put(Map.merge(%{points: [StubProvider.point("P1")]}, config))
+    do: StubProvider.put(Map.merge(%{points: [StubProvider.point("P1")], notify: self()}, config))
 
   defp method!(provider \\ "stub", service \\ "branch", settings \\ @settings) do
     {:ok, method} =
@@ -380,6 +387,105 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       capture_log(fn ->
         assert {:ok, %Shipment{status: "unknown", error: "unexpected answer: " <> _}} =
+                 Shipments.register(order)
+      end)
+    end
+
+    test "two submits of one shipment call the carrier once" do
+      order = paid_order!(method!())
+      test_pid = self()
+
+      stub(%{
+        create: fn _request, _ctx ->
+          send(test_pid, {:carrier_called, self()})
+
+          receive do
+            :answer -> {:ok, %ShipmentResult{tracking_number: "ONCE-1"}}
+          end
+        end
+      })
+
+      {:ok, shipment} = Shipments.begin_shipment(order)
+      first = Task.async(fn -> Shipments.submit_shipment(shipment) end)
+      assert_receive {:carrier_called, carrier}, 5_000
+
+      second = Task.async(fn -> Shipments.submit_shipment(shipment) end)
+      assert {:ok, {:error, :shipment_changed}} = Task.yield(second, 5_000)
+      refute_received {:carrier_called, _}
+
+      send(carrier, :answer)
+
+      assert {:ok, %Shipment{status: "created", tracking_number: "ONCE-1"}} =
+               Task.await(first, 10_000)
+    end
+
+    test "the answer is stored even when the caller is gone" do
+      order = paid_order!(method!())
+      test_pid = self()
+
+      stub(%{
+        create: fn _request, _ctx ->
+          send(test_pid, {:carrier_called, self(), Process.get(:"$callers")})
+
+          receive do
+            :answer -> {:ok, %ShipmentResult{tracking_number: "ORPHAN-1"}}
+          end
+        end
+      })
+
+      {:ok, shipment} = Shipments.begin_shipment(order)
+
+      # A LiveView's start_async: the caller dies with the page.
+      page = spawn(fn -> receive do: (:never -> :ok) end)
+
+      {:ok, caller} =
+        Task.start(fn ->
+          Process.link(page)
+          Shipments.submit_shipment(shipment)
+        end)
+
+      # The answer is logged at info, before it is written.
+      level = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: level) end)
+
+      caller_ref = Process.monitor(caller)
+      assert_receive {:carrier_called, carrier, [attempt | _]}, 5_000
+      attempt_ref = Process.monitor(attempt)
+
+      Process.exit(page, {:shutdown, :closed})
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, _}, 5_000
+
+      log =
+        capture_log(fn ->
+          send(carrier, :answer)
+          assert_receive {:DOWN, ^attempt_ref, :process, ^attempt, _}, 10_000
+        end)
+
+      assert log =~ "ORPHAN-1"
+
+      assert %Shipment{status: "created", tracking_number: "ORPHAN-1"} =
+               Shipments.get_shipment(shipment.uuid)
+    end
+
+    test "an order no longer paid is not sent, and the shipment fails" do
+      order = paid_order!(method!())
+      {:ok, shipment} = Shipments.begin_shipment(order)
+      set_order!(order, status: "refunded")
+      flush_stub_calls()
+
+      assert {:ok, %Shipment{status: "failed", error: "order_not_paid"}} =
+               Shipments.submit_shipment(shipment)
+
+      refute_received {:stub_called, :create_shipment, _}
+    end
+
+    test "a provider that turns out not to support create sent nothing: failed" do
+      order = paid_order!(method!())
+      stub(%{create: {:error, :not_supported}})
+
+      capture_log(fn ->
+        assert {:ok, %Shipment{status: "failed", error: "not_supported"}} =
                  Shipments.register(order)
       end)
     end

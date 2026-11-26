@@ -8579,3 +8579,8 @@ msgstr "Этот перевозчик больше не настроен."
 #, elixir-autogen, elixir-format
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr "Перевозчик больше не предлагает способ доставки этого заказа."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:239
+#, elixir-autogen, elixir-format
+msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
+msgstr "Не удалось передать отправление перевозчику. Проверьте его у перевозчика, прежде чем пробовать снова."

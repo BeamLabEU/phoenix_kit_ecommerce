@@ -101,6 +101,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :server_error
           | :shipment_changed
           | :shipments_not_supported
+          | :submit_crashed
           | :shipping_quote_required
           | :temp_file_missing
           | :timeout
@@ -231,6 +232,12 @@ defmodule PhoenixKitEcommerce.Errors do
     do:
       gettext(
         "The shipping method now uses another carrier than the one the order was placed with."
+      )
+
+  def message(:submit_crashed),
+    do:
+      gettext(
+        "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
       )
 
   def message(:tracking_number_required), do: gettext("Enter the tracking number.")

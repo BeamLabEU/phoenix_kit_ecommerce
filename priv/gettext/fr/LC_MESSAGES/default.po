@@ -8519,3 +8519,8 @@ msgstr "Ce transporteur n'est plus configuré."
 #, elixir-autogen, elixir-format
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr "Le transporteur ne propose plus le service de livraison de cette commande."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:239
+#, elixir-autogen, elixir-format
+msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
+msgstr "L'envoi n'a pas pu être transmis au transporteur. Vérifiez-le auprès du transporteur avant de réessayer."
