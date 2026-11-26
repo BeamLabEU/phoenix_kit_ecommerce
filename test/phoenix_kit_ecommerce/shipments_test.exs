@@ -215,10 +215,13 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                raw_phone: "5555 1234"
              }
 
-      claimed = Shipments.get_shipment(request.idempotency_key |> String.split(":") |> hd())
+      # A UUID (version 5) derived from the shipment and its claim, so it is
+      # the same for the same attempt.
+      assert request.idempotency_key =~
+               ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
 
-      assert request.idempotency_key ==
-               "#{claimed.uuid}:#{DateTime.to_unix(claimed.submitted_at, :microsecond)}"
+      [claimed] = rows(order)
+      assert Shipments.shipment_request(claimed, order).idempotency_key == request.idempotency_key
 
       assert request.payer == :shop
       assert request.description == "Vase x2, Lamp"
@@ -392,6 +395,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
          ~s(HTTP 422: {"errors":{"phone":"invalid"}})},
         {{:http_status, 400, {:unreadable, ~c"x"}}, "failed", ~s(HTTP 400: {:unreadable, ~c"x"})},
         {{:http_status, 429}, "failed", "HTTP 429"},
+        {{:http_status, 422, nil}, "failed", "HTTP 422"},
         {:econnrefused, "failed", "econnrefused"},
         {%Req.TransportError{reason: :econnrefused}, "failed", "connection refused"},
         {{:http_status, 409}, "unknown", "HTTP 409"},
@@ -629,7 +633,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
             do: request.idempotency_key
 
       assert [first_key, second_key] = keys
-      assert String.starts_with?(first_key, failed.uuid <> ":")
+      assert {:ok, _uuid} = Ecto.UUID.cast(first_key)
       refute first_key == second_key
 
       assert [_one] = rows(order)

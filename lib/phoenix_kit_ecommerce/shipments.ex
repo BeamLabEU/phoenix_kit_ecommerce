@@ -182,9 +182,15 @@ defmodule PhoenixKitEcommerce.Shipments do
     }
   end
 
-  # Unique per attempt: the claim's time, to the microsecond, on the shipment.
-  defp idempotency_key(%Shipment{submitted_at: %DateTime{} = at, uuid: uuid}),
-    do: "#{uuid}:#{DateTime.to_unix(at, :microsecond)}"
+  # Unique per attempt and the same for the same attempt: a UUID (version 5
+  # layout) from the SHA-1 of the shipment's uuid and its claim's time to the
+  # microsecond, so it fits a carrier that takes only UUIDs.
+  defp idempotency_key(%Shipment{submitted_at: %DateTime{} = at, uuid: uuid}) do
+    <<head::binary-size(6), _version::4, mid::bits-size(12), _variant::2, tail::bits-size(62),
+      _rest::binary>> = :crypto.hash(:sha, "#{uuid}:#{DateTime.to_unix(at, :microsecond)}")
+
+    Ecto.UUID.load!(<<head::binary, 5::4, mid::bits, 2::2, tail::bits>>)
+  end
 
   defp idempotency_key(_unclaimed), do: nil
 
@@ -1024,6 +1030,7 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   # A detail the carrier gave as data (its JSON errors) is shown as JSON, so
   # the admin sees what to correct.
+  defp error_text({:http_status, status, nil}), do: "HTTP #{status}"
   defp error_text({:http_status, status, detail}), do: "HTTP #{status}: #{detail_text(detail)}"
 
   defp error_text({:provider_crashed, message}) when is_binary(message),

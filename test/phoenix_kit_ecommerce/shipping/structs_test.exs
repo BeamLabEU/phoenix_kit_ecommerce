@@ -153,7 +153,7 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
           phone: "+37255551234",
           raw_phone: "5555 1234"
         },
-        idempotency_key: "019b669c-3c9d-7256-8ed1-edbc6ae29705:1795600000000000",
+        idempotency_key: "6f1c2a9e-4b7d-5e21-9a3c-0d8e7f6a5b4c",
         payer: :recipient,
         description: "Vase x2, Lamp",
         declared_value: Decimal.new("59.90"),

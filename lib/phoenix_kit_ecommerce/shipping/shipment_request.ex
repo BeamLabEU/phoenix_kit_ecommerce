@@ -14,10 +14,12 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
       `nil`); `phone` is in E.164 (`e164_phone/2`) or `nil`, `raw_phone` is
       the number as it was typed, for an adapter that normalises it its own
       way
-    * `idempotency_key` - unique to this attempt of this shipment: send it
-      where the carrier's API takes one, so a request the network repeated is
-      not registered twice. A retry of a failed shipment is a new attempt
-      with a new key
+    * `idempotency_key` - unique to this attempt of this shipment, and the
+      same for the same attempt: a UUID string (36 characters, version 5
+      layout) derived from the shipment and the moment the attempt claimed
+      it. Send it where the carrier's API takes one, so a request the network
+      repeated is not registered twice. A retry of a failed shipment is a
+      new attempt with a new key
     * `payer` - `:shop`, or `:recipient` when the order is paid to the
       carrier on delivery (`metadata["shipping_pay_on_delivery"]`)
     * `description` - the goods, from the order lines, at most 100 characters
