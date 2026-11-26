@@ -76,14 +76,15 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
       carrier hands out a URL, the adapter downloads it itself (from that
       carrier's hosts only) and returns the whole document
     * `track/2` - the current state of several `ShipmentRef`s, all of one
-      connection: `{:ok, [TrackingUpdate.t()]}`. It must answer for every
-      ref it is given (at least the latest state of each shipment the
-      carrier knows); the shop passes the whole group in one call, at most
-      1000 refs, and splitting them into carrier calls (a page size, one
-      call per run for a carrier that lists everything since a time) is the
-      adapter's job. A ref left out of the answer is asked again first next
-      time. The facade waits `ctx.opts[:timeout]`, 60 seconds by default,
-      for the whole call
+      connection: `{:ok, [TrackingUpdate.t()]}`, updates for the refs that
+      have news. A ref the answer leaves out has none: silence means no
+      change (a carrier that lists only what changed since a time answers
+      that way), so an adapter does not repeat a state it has nothing new
+      about, and returns an error rather than a short answer when it could
+      not ask. The shop passes the whole group in one call, at most 1000
+      refs; splitting them into carrier calls (a page size, one call per run)
+      is the adapter's job. The facade waits `ctx.opts[:timeout]`, 60
+      seconds by default, for the whole call
 
   **The errors of `create_shipment/2` decide what the shop does next**, so
   they must be honest about whether the carrier may have the shipment:

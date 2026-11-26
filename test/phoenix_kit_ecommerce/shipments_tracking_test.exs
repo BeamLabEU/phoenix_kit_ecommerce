@@ -458,22 +458,26 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert %Shipment{status: "cancelled", events: []} = reload(shipment)
     end
 
-    test "a shipment the answer leaves out keeps its place at the head of the queue" do
-      answered = shipment!(%{inserted_at: ago(7200)})
-      left_out = shipment!(%{inserted_at: ago(3600)})
+    test "a shipment the answer says nothing about has no news: it is stamped, and the count logged" do
+      answered = shipment!(%{})
+      silent = shipment!(%{})
 
-      track(fn _refs, _ctx -> {:ok, [report(answered, :created)]} end)
-      Shipments.track_shipments()
+      track(fn _refs, _ctx -> {:ok, [report(answered, :in_transit)]} end)
 
-      assert %DateTime{} = reload(answered).last_tracked_at
-      assert reload(left_out).last_tracked_at == nil
+      # The count is an info line; the suite logs warnings and up.
+      level = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: level) end)
 
-      # The same answer again: the left-out one is still asked, and first.
-      Shipments.track_shipments()
-      assert_received {:stub_called, :track, [[%ShipmentRef{} = first | _]]}
-      assert_received {:stub_called, :track, [[%ShipmentRef{} = again | _]]}
-      assert first.tracking_number == answered.tracking_number
-      assert again.tracking_number == left_out.tracking_number
+      log = capture_log(fn -> assert %{updated: 1} = Shipments.track_shipments() end)
+
+      assert log =~ "stub answered for 1 of 2 shipments"
+      refute log =~ silent.tracking_number
+
+      assert %Shipment{status: "created", last_tracked_at: %DateTime{}, events: []} =
+               reload(silent)
+
+      assert reload(answered).status == "in_transit"
     end
 
     test "asks at most 1000 shipments a run, those asked longest ago first" do

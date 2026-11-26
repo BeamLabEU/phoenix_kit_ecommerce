@@ -1030,10 +1030,10 @@ defmodule PhoenixKitEcommerce.Shipments do
       Each group is one `Shipping.track/2` call with all its references,
       through the context of a shipment of the group; the adapter decides
       how many carrier calls that makes (a carrier may take one per run).
-      `track/2` must answer for every reference it is given; a shipment
-      the answer says nothing about keeps its `last_tracked_at`, so it is
-      among the first asked next time and a short answer cannot hold the
-      others back. An error of one group (the carrier's, or no context to
+      `track/2` answers for the references that have news; one the answer
+      says nothing about has none (a carrier may report only what changed
+      since its last answer): it is stamped `last_tracked_at` like the
+      others, and how many were answered for is logged when it is not all. An error of one group (the carrier's, or no context to
       rebuild from the group's first shipment) is logged and leaves the
       other groups alone. The group's shipments are stamped, so a dead
       carrier does not hold the head of the queue either, and get a
@@ -1111,7 +1111,8 @@ defmodule PhoenixKitEcommerce.Shipments do
         covered =
           Enum.filter(shipments, fn shipment -> Enum.any?(updates, &about?(&1, shipment)) end)
 
-        stamp_tracked(covered)
+        stamp_tracked(shipments)
+        log_silent(first.provider, length(covered), length(shipments))
         Enum.each(covered, &note_tracking(&1, :resumed, nil))
         Enum.count(covered, &(track_one(&1, updates) == :updated))
 
@@ -1191,6 +1192,17 @@ defmodule PhoenixKitEcommerce.Shipments do
     else
       _none -> nil
     end
+  end
+
+  # A carrier that answers only for parcels with news (the ones that changed
+  # since its last answer) leaves the others out: no news, not an error.
+  defp log_silent(_provider, count, count), do: :ok
+
+  defp log_silent(provider, covered, asked) do
+    Logger.info(
+      "Shipment tracking: #{provider} answered for #{covered} of #{asked} shipments; " <>
+        "the others had no news"
+    )
   end
 
   defp stamp_tracked(shipments) do
