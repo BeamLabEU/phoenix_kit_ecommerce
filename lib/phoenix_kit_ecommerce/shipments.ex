@@ -250,6 +250,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   """
   @spec register(Order.t() | String.t(), keyword()) :: {:ok, Shipment.t()} | {:error, error()}
   def register(order, opts \\ []) do
+    refuse_transaction!()
     with {:ok, shipment} <- begin_shipment(order, opts), do: submit_shipment(shipment, opts)
   end
 
@@ -301,10 +302,7 @@ defmodule PhoenixKitEcommerce.Shipments do
     # The attempt runs in its own process: it would wait for the rows this
     # transaction holds while this transaction waits for it, and the carrier
     # call would sit inside the transaction.
-    if repo().in_transaction?() do
-      raise ArgumentError,
-            "Shipments.submit_shipment/2 (and register/2) must not run inside a transaction"
-    end
+    refuse_transaction!()
 
     task = Task.Supervisor.async_nolink(@task_supervisor, fn -> attempt(uuid, opts) end)
 
@@ -315,6 +313,13 @@ defmodule PhoenixKitEcommerce.Shipments do
       {:exit, reason} ->
         Logger.error("Shipment #{uuid}: the attempt crashed: #{Exception.format_exit(reason)}")
         {:error, :submit_crashed}
+    end
+  end
+
+  defp refuse_transaction! do
+    if repo().in_transaction?() do
+      raise ArgumentError,
+            "Shipments.submit_shipment/2 (and register/2) must not run inside a transaction"
     end
   end
 

@@ -581,9 +581,15 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
         Repo.transaction(fn -> Shipments.submit_shipment(shipment) end)
       end
 
+      other = paid_order!(method!())
+      flush_stub_calls()
+
+      # Refused before begin_shipment/2 reads the carrier or writes a row.
       assert_raise ArgumentError, ~r/inside a transaction/, fn ->
-        Repo.transaction(fn -> Shipments.register(paid_order!(method!())) end)
+        Repo.transaction(fn -> Shipments.register(other) end)
       end
+
+      refute_received {:stub_called, _, _}
 
       assert %Shipment{status: "creating", submitted_at: nil} =
                Shipments.get_shipment(shipment.uuid)
