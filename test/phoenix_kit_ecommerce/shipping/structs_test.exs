@@ -527,6 +527,11 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("00372 5555 1234", nil) == "+37255551234"
     end
 
+    test "a tilde typed in the number is not taken for an (0)" do
+      assert ShipmentRequest.e164_phone("123456~78", "EE") == nil
+      assert ShipmentRequest.e164_phone("+39~6 1234 5678", nil) == nil
+    end
+
     test "nothing usable is nil" do
       assert ShipmentRequest.e164_phone("5555 1234", nil) == nil
       assert ShipmentRequest.e164_phone("call me", "EE") == nil

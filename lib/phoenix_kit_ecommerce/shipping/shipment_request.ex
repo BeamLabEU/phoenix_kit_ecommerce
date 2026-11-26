@@ -190,9 +190,14 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   `country` gives none.
   """
   @spec e164_phone(term(), term()) :: String.t() | nil
+  # `~` marks an `(0)` below, so a typed one makes the number unusable.
   def e164_phone(phone, country) when is_binary(phone) do
-    country = Codec.country(country)
+    if String.contains?(phone, "~"), do: nil, else: normalised(phone, Codec.country(country))
+  end
 
+  def e164_phone(_phone, _country), do: nil
+
+  defp normalised(phone, country) do
     compact =
       phone
       |> String.replace(~r/\(\s*0\s*\)/u, "~")
@@ -207,8 +212,6 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
     if is_binary(digits) and Regex.match?(~r/\A[1-9]\d{7,14}\z/, digits), do: "+" <> digits
   end
-
-  def e164_phone(_phone, _country), do: nil
 
   # `~` marks an `(0)`.
   defp international(digits) do
