@@ -267,10 +267,11 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                  destination: other
                )
 
+      # The fields the correction does not name are the order's.
       assert shipment.recipient == %{
                "name" => "Jaan Tamm",
                "company" => nil,
-               "email" => nil,
+               "email" => "mari@example.com",
                "phone" => "+37251234567",
                "raw_phone" => "5123 4567"
              }
@@ -612,6 +613,26 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       assert {:ok, again} = Shipments.retry_shipment(failed)
       assert again.recipient["name"] == "Fixed Name"
+      assert again.recipient["email"] == "mari@example.com"
+    end
+
+    test "a correction changes only what it names, and a blank clears it" do
+      order = paid_order!(method!())
+      stub(%{create: {:error, {:rejected, "No"}}})
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      assert {:ok, again} =
+               Shipments.retry_shipment(failed,
+                 recipient: %{"phone" => "5123 4567", "email" => ""}
+               )
+
+      assert again.recipient == %{
+               "name" => "Mari Maasikas",
+               "company" => nil,
+               "email" => nil,
+               "phone" => "+37251234567",
+               "raw_phone" => "5123 4567"
+             }
     end
 
     test "a conflict with another live shipment is reported, not raised" do
@@ -752,6 +773,25 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert {:ok, %Shipment{status: "created"} = created} = Task.await(task, 10_000)
 
       assert Enum.map(created.events, & &1["action"]) == ["register", "submit", "other", "result"]
+    end
+
+    test "an order's shipments are listed newest first, even within one second" do
+      order = paid_order!(method!())
+      stub(%{create: {:error, {:rejected, "No"}}})
+      {:ok, first} = capture_log_result(fn -> Shipments.register(order) end)
+      stub(%{})
+      {:ok, second} = Shipments.register(order)
+
+      same_second = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      Repo.update_all(from(s in Shipment, where: s.order_uuid == ^order.uuid),
+        set: [inserted_at: same_second]
+      )
+
+      assert Enum.map(Shipments.list_order_shipments(order.uuid), & &1.uuid) == [
+               second.uuid,
+               first.uuid
+             ]
     end
 
     test "events keep the last 50" do

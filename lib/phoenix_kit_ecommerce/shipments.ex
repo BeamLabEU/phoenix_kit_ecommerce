@@ -58,7 +58,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   `billing_snapshot`, the phone in E.164 beside the `raw_phone` as typed) and
   the destination are copied from
   the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
-  corrections as `:parcels`, `:recipient` and `:destination`.
+  corrections as `:parcels`, `:recipient` and `:destination`. A recipient
+  correction changes only the fields it names (a blank one clears it).
 
   ## Masking
 
@@ -89,6 +90,7 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   @task_supervisor PhoenixKitEcommerce.Shipments.TaskSupervisor
   @max_events 50
+  @recipient_keys [:name, :company, :email, :phone, :raw_phone]
   @error_max 300
   @stuck_after_seconds 600
   @context_keys [:provider, :settings, :service, :country, :currency, :locale]
@@ -134,7 +136,10 @@ defmodule PhoenixKitEcommerce.Shipments do
   @spec list_order_shipments(String.t()) :: [Shipment.t()]
   def list_order_shipments(order_uuid) when is_binary(order_uuid) do
     repo().all(
-      from(s in Shipment, where: s.order_uuid == ^order_uuid, order_by: [desc: s.inserted_at])
+      from(s in Shipment,
+        where: s.order_uuid == ^order_uuid,
+        order_by: [desc: s.inserted_at, desc: s.uuid]
+      )
     )
   end
 
@@ -385,7 +390,7 @@ defmodule PhoenixKitEcommerce.Shipments do
     with %Shipment{status: "failed"} = shipment <- get_shipment(shipment.uuid) || :not_found,
          {:ok, order} <- fetch_paid_order(shipment.order_uuid),
          {:ok, ctx} <- order_context(order, opts),
-         data = sent_data(order, ctx, previous_data(shipment, opts)),
+         data = sent_data(order, ctx, previous_data(shipment, opts), shipment.recipient),
          :ok <- check_destination(ctx, data.destination) do
       changes =
         data
@@ -620,7 +625,9 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   # -- the data sent -----------------------------------------------------
 
-  defp sent_data(order, ctx, opts) do
+  # `recipient` is what a correction applies to: the order's buyer, or what
+  # the shipment sent last time.
+  defp sent_data(order, ctx, opts, recipient \\ nil) do
     metadata = order.metadata || %{}
     country = ctx.country
 
@@ -636,8 +643,8 @@ defmodule PhoenixKitEcommerce.Shipments do
         |> Codec.list(&Codec.struct_from(&1, Parcel))
         |> Enum.map(&Parcel.to_map/1),
       recipient:
-        opts
-        |> Keyword.get_lazy(:recipient, fn -> billing_recipient(order.billing_snapshot) end)
+        (recipient || billing_recipient(order.billing_snapshot))
+        |> corrected(Keyword.get(opts, :recipient))
         |> recipient_map(country),
       destination:
         opts
@@ -651,7 +658,6 @@ defmodule PhoenixKitEcommerce.Shipments do
   defp previous_data(shipment, opts) do
     opts
     |> Keyword.put_new(:parcels, shipment.parcels)
-    |> Keyword.put_new(:recipient, shipment.recipient)
     |> Keyword.put_new(:destination, shipment.destination)
   end
 
@@ -696,6 +702,25 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   defp billing_recipient(_snapshot), do: %{}
+
+  # A correction changes the fields it names (a blank one clears it) and
+  # leaves the others. A corrected phone is the number as typed now.
+  defp corrected(recipient, nil), do: recipient
+
+  defp corrected(recipient, correction) when is_map(correction) do
+    given =
+      for key <- @recipient_keys,
+          Map.has_key?(correction, key) or Map.has_key?(correction, Atom.to_string(key)),
+          into: %{},
+          do: {key, Codec.get(correction, key)}
+
+    given =
+      if Map.has_key?(given, :phone) and not Map.has_key?(given, :raw_phone),
+        do: Map.put(given, :raw_phone, nil),
+        else: given
+
+    recipient |> ShipmentRequest.recipient() |> Map.merge(given)
+  end
 
   # The number as it was typed is kept beside the normalised one: a stored
   # recipient (a retry) carries both, a new one only the typed `phone`.
