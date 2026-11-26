@@ -240,6 +240,7 @@ All use UUIDv7 primary keys.
 | `Cart` | `phoenix_kit_shop_carts` | guest (session-based, 30-day expiry) and user (persistent); status `active → converted \| merged \| abandoned \| expired` |
 | `CartItem` | `phoenix_kit_shop_cart_items` | price snapshots, selected specs, weight |
 | `CartClaim` | `phoenix_kit_shop_cart_claims` | one-time checkout claim of a cart the public cart API created: hashed token, expiry, used and superseded stamps |
+| `Shipment` | `phoenix_kit_shop_shipments` | a paid order's shipment with a carrier: context snapshot, data sent, the carrier's answer, masked events and error; status `creating \| unknown → created → in_transit → ready_for_pickup → delivered \| returned`, `cancelled`, `failed`; one live shipment per order (partial unique index) |
 | `ShippingMethod` | `phoenix_kit_shop_shipping_methods` | weight/price constraints, geographic restrictions, free-shipping thresholds, delivery estimates |
 | `ShopConfig` | `phoenix_kit_shop_config` | JSONB key-value store; also carries the migration marker |
 | `ImportConfig` | `phoenix_kit_shop_import_configs` | CSV import profiles: keyword filtering, category rules, option mappings |
@@ -1006,7 +1007,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V6. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V7. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -1058,6 +1059,13 @@ V6 adds the base-currency columns core's V186 added (`base_currency` and
 `exchange_rate` on `phoenix_kit_shop_carts`, `base_unit_price` on
 `phoenix_kit_shop_cart_items`) with `ADD COLUMN IF NOT EXISTS`, so the chain
 builds the shop tables without core. No backfill; `down/1` keeps the columns.
+V7 creates `phoenix_kit_shop_shipments` (`Shipment`): the order (`ON DELETE
+CASCADE` to billing's `phoenix_kit_orders`) and its method (`ON DELETE SET
+NULL`), the provider, service, connection and `context_snapshot`, the data
+sent, the carrier's answer, `events` and `error`, `created_by_uuid` and
+`last_tracked_at`; indexes on `order_uuid`, `(status, last_tracked_at)` and
+`tracking_number`, and the partial unique `idx_shop_shipments_live_order` on
+`order_uuid` over the live statuses. `down/1` keeps the table.
 
 Rules for the chain, all of which have been broken at least once:
 

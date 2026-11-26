@@ -219,6 +219,17 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         backfill: nil
       },
       %{
+        id: "table:phoenix_kit_shop_shipments",
+        owner: :phoenix_kit_ecommerce,
+        check: {:catalog, %{name: "phoenix_kit_shop_shipments", kind: :table}},
+        create: "CREATE TABLE IF NOT EXISTS __SCHEMA__.phoenix_kit_shop_shipments ()",
+        since: 1,
+        class: :table,
+        revisions: [{1, %{}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
         id: "table:phoenix_kit_shop_shipping_methods",
         owner: :phoenix_kit_ecommerce,
         check: {:catalog, %{name: "phoenix_kit_shop_shipping_methods", kind: :table}},
@@ -2568,6 +2579,310 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         backfill: nil
       },
       %{
+        id: "column:phoenix_kit_shop_shipments.carrier_label",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "carrier_label", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"carrier_label\" character varying(255)",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: nil, type: "character varying(255)", pos: 15, not_null: false}}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.carrier_ref",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "carrier_ref", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"carrier_ref\" character varying(255)",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: nil, type: "character varying(255)", pos: 14, not_null: false}}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.context_snapshot",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "context_snapshot", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"context_snapshot\" jsonb DEFAULT '{}'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'{}'::jsonb", type: "jsonb", pos: 7, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.created_by_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "created_by_uuid", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"created_by_uuid\" uuid",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "uuid", pos: 19, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.destination",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "destination", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"destination\" jsonb DEFAULT '{}'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'{}'::jsonb", type: "jsonb", pos: 10, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.error",
+        owner: :phoenix_kit_ecommerce,
+        check: {:catalog, %{table: "phoenix_kit_shop_shipments", column: "error", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"error\" text",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "text", pos: 18, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.events",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "events", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"events\" jsonb DEFAULT '[]'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'[]'::jsonb", type: "jsonb", pos: 17, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.extra",
+        owner: :phoenix_kit_ecommerce,
+        check: {:catalog, %{table: "phoenix_kit_shop_shipments", column: "extra", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"extra\" jsonb DEFAULT '{}'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'{}'::jsonb", type: "jsonb", pos: 16, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.inserted_at",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "inserted_at", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"inserted_at\" timestamp with time zone DEFAULT now() NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: "now()", type: "timestamp with time zone", pos: 21, not_null: true}}
+        ],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.integration_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "integration_uuid", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"integration_uuid\" uuid",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "uuid", pos: 4, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.last_tracked_at",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "last_tracked_at", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"last_tracked_at\" timestamp with time zone",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: nil, type: "timestamp with time zone", pos: 20, not_null: false}}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.method_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "method_uuid", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"method_uuid\" uuid",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "uuid", pos: 3, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.order_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "order_uuid", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"order_uuid\" uuid",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "uuid", pos: 2, not_null: true}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.parcels",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "parcels", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"parcels\" jsonb DEFAULT '[]'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'[]'::jsonb", type: "jsonb", pos: 8, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.provider",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "provider", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"provider\" character varying(255)",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "character varying(255)", pos: 5, not_null: true}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.recipient",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "recipient", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"recipient\" jsonb DEFAULT '{}'::jsonb NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: "'{}'::jsonb", type: "jsonb", pos: 9, not_null: true}}],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.service",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "service", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"service\" character varying(255)",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "character varying(255)", pos: 6, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.status",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "status", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"status\" character varying(32)",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "character varying(32)", pos: 11, not_null: true}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.tracking_number",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "tracking_number", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"tracking_number\" character varying(255)",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: nil, type: "character varying(255)", pos: 12, not_null: false}}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.tracking_url",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{table: "phoenix_kit_shop_shipments", column: "tracking_url", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"tracking_url\" text",
+        since: 1,
+        class: :column,
+        revisions: [{1, %{default: nil, type: "text", pos: 13, not_null: false}}],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.updated_at",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog, %{table: "phoenix_kit_shop_shipments", column: "updated_at", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"updated_at\" timestamp with time zone DEFAULT now() NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: "now()", type: "timestamp with time zone", pos: 22, not_null: true}}
+        ],
+        presence: :required,
+        backfill: :default
+      },
+      %{
+        id: "column:phoenix_kit_shop_shipments.uuid",
+        owner: :phoenix_kit_ecommerce,
+        check: {:catalog, %{table: "phoenix_kit_shop_shipments", column: "uuid", kind: :column}},
+        create:
+          "ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD COLUMN IF NOT EXISTS \"uuid\" uuid DEFAULT __SCHEMA__.uuid_generate_v7() NOT NULL",
+        since: 1,
+        class: :column,
+        revisions: [
+          {1, %{default: "__SCHEMA__.uuid_generate_v7()", type: "uuid", pos: 1, not_null: true}}
+        ],
+        presence: :required,
+        backfill: :default
+      },
+      %{
         id: "column:phoenix_kit_shop_shipping_methods.active",
         owner: :phoenix_kit_ecommerce,
         check:
@@ -3453,6 +3768,131 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
              method: "btree",
              definition:
                "CREATE INDEX idx_shop_products_type ON __SCHEMA__.phoenix_kit_shop_products USING btree (product_type)",
+             predicate: nil,
+             opclasses: ["text_ops"],
+             name_template: nil
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "index:idx_shop_shipments_live_order",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "idx_shop_shipments_live_order",
+             table: "phoenix_kit_shop_shipments",
+             kind: :index
+           }},
+        create:
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_shipments_live_order ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (order_uuid) WHERE ((status)::text = ANY ((ARRAY['creating'::character varying, 'unknown'::character varying, 'created'::character varying, 'in_transit'::character varying, 'ready_for_pickup'::character varying])::text[]))",
+        since: 1,
+        class: :index,
+        revisions: [
+          {1,
+           %{
+             table: "phoenix_kit_shop_shipments",
+             keys: ["order_uuid"],
+             unique: true,
+             definition:
+               "CREATE UNIQUE INDEX idx_shop_shipments_live_order ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (order_uuid) WHERE ((status)::text = ANY ((ARRAY['creating'::character varying, 'unknown'::character varying, 'created'::character varying, 'in_transit'::character varying, 'ready_for_pickup'::character varying])::text[]))",
+             method: "btree",
+             predicate:
+               "((status)::text = ANY ((ARRAY['creating'::character varying, 'unknown'::character varying, 'created'::character varying, 'in_transit'::character varying, 'ready_for_pickup'::character varying])::text[]))",
+             opclasses: ["uuid_ops"],
+             name_template: nil
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "index:idx_shop_shipments_order_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "idx_shop_shipments_order_uuid",
+             table: "phoenix_kit_shop_shipments",
+             kind: :index
+           }},
+        create:
+          "CREATE INDEX IF NOT EXISTS idx_shop_shipments_order_uuid ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (order_uuid)",
+        since: 1,
+        class: :index,
+        revisions: [
+          {1,
+           %{
+             table: "phoenix_kit_shop_shipments",
+             keys: ["order_uuid"],
+             unique: false,
+             definition:
+               "CREATE INDEX idx_shop_shipments_order_uuid ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (order_uuid)",
+             method: "btree",
+             predicate: nil,
+             opclasses: ["uuid_ops"],
+             name_template: nil
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "index:idx_shop_shipments_status_last_tracked_at",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "idx_shop_shipments_status_last_tracked_at",
+             table: "phoenix_kit_shop_shipments",
+             kind: :index
+           }},
+        create:
+          "CREATE INDEX IF NOT EXISTS idx_shop_shipments_status_last_tracked_at ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (status, last_tracked_at)",
+        since: 1,
+        class: :index,
+        revisions: [
+          {1,
+           %{
+             table: "phoenix_kit_shop_shipments",
+             keys: ["status", "last_tracked_at"],
+             unique: false,
+             definition:
+               "CREATE INDEX idx_shop_shipments_status_last_tracked_at ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (status, last_tracked_at)",
+             method: "btree",
+             predicate: nil,
+             opclasses: ["text_ops", "timestamptz_ops"],
+             name_template: nil
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "index:idx_shop_shipments_tracking_number",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "idx_shop_shipments_tracking_number",
+             table: "phoenix_kit_shop_shipments",
+             kind: :index
+           }},
+        create:
+          "CREATE INDEX IF NOT EXISTS idx_shop_shipments_tracking_number ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (tracking_number)",
+        since: 1,
+        class: :index,
+        revisions: [
+          {1,
+           %{
+             table: "phoenix_kit_shop_shipments",
+             keys: ["tracking_number"],
+             unique: false,
+             definition:
+               "CREATE INDEX idx_shop_shipments_tracking_number ON __SCHEMA__.phoenix_kit_shop_shipments USING btree (tracking_number)",
+             method: "btree",
              predicate: nil,
              opclasses: ["text_ops"],
              name_template: nil
@@ -4691,6 +5131,36 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
         backfill: nil
       },
       %{
+        id: "constraint:phoenix_kit_shop_shipments.phoenix_kit_shop_shipments_pkey",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "phoenix_kit_shop_shipments_pkey",
+             table: "phoenix_kit_shop_shipments",
+             kind: :constraint
+           }},
+        create:
+          "DO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1\n    FROM pg_constraint c\n    JOIN pg_class t ON t.oid = c.conrelid\n    JOIN pg_namespace n ON n.oid = t.relnamespace\n    WHERE c.conname = 'phoenix_kit_shop_shipments_pkey'\n      AND t.relname = 'phoenix_kit_shop_shipments'\n      AND n.nspname = '__SCHEMA__'\n  ) THEN\n    ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD CONSTRAINT phoenix_kit_shop_shipments_pkey PRIMARY KEY (uuid);\n  END IF;\nEND\n$$",
+        since: 1,
+        class: :constraint,
+        revisions: [
+          {1,
+           %{
+             type: "p",
+             columns: ["uuid"],
+             definition: "PRIMARY KEY (uuid)",
+             on_delete: nil,
+             on_update: nil,
+             name_template: nil,
+             foreign_table: nil,
+             foreign_columns: nil
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
         id: "constraint:phoenix_kit_shop_shipping_methods.phoenix_kit_shop_shipping_methods_pkey",
         owner: :phoenix_kit_ecommerce,
         check:
@@ -5147,6 +5617,68 @@ defmodule PhoenixKitEcommerce.ExpectedSchema do
              foreign_columns: ["uuid"],
              on_delete: "n",
              on_update: "a"
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "constraint:phoenix_kit_shop_shipments.fk_shop_shipments_method_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "fk_shop_shipments_method_uuid",
+             table: "phoenix_kit_shop_shipments",
+             kind: :constraint
+           }},
+        create:
+          "DO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1\n    FROM pg_constraint c\n    JOIN pg_class t ON t.oid = c.conrelid\n    JOIN pg_namespace n ON n.oid = t.relnamespace\n    WHERE c.conname = 'fk_shop_shipments_method_uuid'\n      AND t.relname = 'phoenix_kit_shop_shipments'\n      AND n.nspname = '__SCHEMA__'\n  ) THEN\n    ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD CONSTRAINT fk_shop_shipments_method_uuid FOREIGN KEY (method_uuid) REFERENCES __SCHEMA__.phoenix_kit_shop_shipping_methods(uuid) ON DELETE SET NULL;\n  END IF;\nEND\n$$",
+        since: 1,
+        class: :constraint,
+        revisions: [
+          {1,
+           %{
+             type: "f",
+             columns: ["method_uuid"],
+             definition:
+               "FOREIGN KEY (method_uuid) REFERENCES __SCHEMA__.phoenix_kit_shop_shipping_methods(uuid) ON DELETE SET NULL",
+             on_delete: "n",
+             on_update: "a",
+             name_template: nil,
+             foreign_table: "phoenix_kit_shop_shipping_methods",
+             foreign_columns: ["uuid"]
+           }}
+        ],
+        presence: :required,
+        backfill: nil
+      },
+      %{
+        id: "constraint:phoenix_kit_shop_shipments.fk_shop_shipments_order_uuid",
+        owner: :phoenix_kit_ecommerce,
+        check:
+          {:catalog,
+           %{
+             name: "fk_shop_shipments_order_uuid",
+             table: "phoenix_kit_shop_shipments",
+             kind: :constraint
+           }},
+        create:
+          "DO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1\n    FROM pg_constraint c\n    JOIN pg_class t ON t.oid = c.conrelid\n    JOIN pg_namespace n ON n.oid = t.relnamespace\n    WHERE c.conname = 'fk_shop_shipments_order_uuid'\n      AND t.relname = 'phoenix_kit_shop_shipments'\n      AND n.nspname = '__SCHEMA__'\n  ) THEN\n    ALTER TABLE __SCHEMA__.phoenix_kit_shop_shipments ADD CONSTRAINT fk_shop_shipments_order_uuid FOREIGN KEY (order_uuid) REFERENCES __SCHEMA__.phoenix_kit_orders(uuid) ON DELETE CASCADE;\n  END IF;\nEND\n$$",
+        since: 1,
+        class: :constraint,
+        revisions: [
+          {1,
+           %{
+             type: "f",
+             columns: ["order_uuid"],
+             definition:
+               "FOREIGN KEY (order_uuid) REFERENCES __SCHEMA__.phoenix_kit_orders(uuid) ON DELETE CASCADE",
+             on_delete: "c",
+             on_update: "a",
+             name_template: nil,
+             foreign_table: "phoenix_kit_orders",
+             foreign_columns: ["uuid"]
            }}
         ],
         presence: :required,

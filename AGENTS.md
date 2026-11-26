@@ -420,7 +420,7 @@ Repo-local aliases:
   tables, functions or triggers; it unstamps the marker and restores V2 defaults.
   Match core's schema-specific index names. The guide documents the five
   indexes whose names include a non-public schema prefix.
-- The chain is currently V6; `up/1`, `down/1` and `up_statements/2` honor the
+- The chain is currently V7; `up/1`, `down/1` and `up_statements/2` honor the
   target version. Hosts use `mix phoenix_kit.update` / `mix phoenix_kit.status`.
 - `mix test` always runs unit tests; `:integration` tests auto-skip without
   Postgres. Check the excluded count: optional dependency/API capability tags
