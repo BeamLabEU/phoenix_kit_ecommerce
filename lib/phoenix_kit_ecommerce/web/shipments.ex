@@ -40,6 +40,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   alias PhoenixKitEcommerce.Web.StatusLabels
 
   @sections ~w(to_ship open needs_attention)
+  @max_batch 50
   @max_parcels 20
   @max_dimension 10_000_000
   @recipient_fields ~w(name company email phone)
@@ -245,6 +246,14 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
       {:ok, []} ->
         {:noreply, socket}
 
+      {:ok, selected} when length(selected) > @max_batch ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("At most %{count} orders can be registered at once.", count: @max_batch)
+         )}
+
       {:ok, [first | rest] = selected} ->
         {:noreply,
          socket
@@ -441,10 +450,16 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp action(:retry), do: "shop.shipment_retried"
   defp action(:cancel), do: "shop.shipment_cancelled"
 
+  # Each order of a batch is a carrier call of its own: a key taken away
+  # meanwhile stops the batch.
   defp next_in_batch(%{assigns: %{batch: %{queue: [next | rest]} = batch}} = socket) do
-    socket
-    |> assign(batch: %{batch | queue: rest, done: batch.done + 1})
-    |> run(:register, next, nil, actor_uuid: Activity.actor_uuid(socket))
+    if Authz.can?(socket, :manage_shipments) do
+      socket
+      |> assign(batch: %{batch | queue: rest, done: batch.done + 1})
+      |> run(:register, next, nil, actor_uuid: Activity.actor_uuid(socket))
+    else
+      socket |> assign(batch: nil) |> Authz.deny() |> load()
+    end
   end
 
   defp next_in_batch(%{assigns: %{batch: %{}}} = socket),
@@ -753,7 +768,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         <% end %>
       </fieldset>
 
-      <.editor_modal :if={@editor} editor={@editor} />
+      <.editor_modal :if={@editor} editor={@editor} scope={@phoenix_kit_current_scope} />
       <.tracking_modal :if={@tracking} tracking={@tracking} />
 
       <.confirm_modal
@@ -1063,6 +1078,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   end
 
   attr :editor, :map, required: true
+  attr :scope, :any, required: true
 
   defp editor_modal(assigns) do
     ~H"""
@@ -1118,6 +1134,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
           context={@editor.context}
           service={@editor.service}
           destination={@editor.destination}
+          phoenix_kit_current_scope={@scope}
         />
       </div>
 

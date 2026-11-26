@@ -427,6 +427,79 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
     end
   end
 
+  describe "the permission while the page is open" do
+    defp without_shipments,
+      do:
+        fake_scope(
+          roles: ["Employee"],
+          permissions: List.delete(shop_permissions(), "shop.manage_shipments")
+        )
+
+    test "a batch stops when the key is taken away between two orders", %{conn: conn} do
+      method = method!()
+      first = order!(method)
+      second = order!(method)
+      test = self()
+
+      gated = fn request, _ctx ->
+        send(test, {:create_waiting, self(), request.order_uuid})
+
+        receive do
+          :answer -> {:ok, %ShipmentResult{carrier_ref: "C", tracking_number: "T"}}
+        end
+      end
+
+      stub(%{create: gated})
+      {:ok, view, _html} = live(conn, @page)
+
+      view
+      |> form("#to-ship-selection", %{"order_uuids" => [first.uuid, second.uuid]})
+      |> render_change()
+
+      view |> element("#shipments-register-selected") |> render_click()
+      assert_receive {:create_waiting, carrier, _order_uuid}, 5_000
+
+      swap_scope(view, without_shipments())
+      send(carrier, :answer)
+      settle(view)
+
+      refute_receive {:create_waiting, _carrier, _order_uuid}, 200
+      assert rows(second) == []
+      refute has_element?(view, "#shipments-running")
+      assert render(view) =~ "permission"
+    end
+
+    test "the destination editor asks the carrier nothing once the key is gone", %{conn: conn} do
+      order = order!(method!())
+      {:ok, view, _html} = live(conn, @page)
+      view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
+
+      swap_scope(view, without_shipments())
+      # Any render passes the page's current scope down to the editor.
+      render_click(view, "editor_change", %{})
+
+      view |> element("#shipment-editor-destination-change") |> render_click()
+      settle(view)
+
+      refute has_element?(view, "#shipment-editor-destination-editor")
+      refute_received {:stub_called, :list_pickup_points, _args}
+    end
+
+    test "a batch takes at most 50 orders", %{conn: conn} do
+      order!(method!())
+      {:ok, view, _html} = live(conn, @page)
+      uuids = for _ <- 1..51, do: Ecto.UUID.generate()
+
+      render_change(view, "select_orders", %{"order_uuids" => uuids})
+      view |> element("#shipments-register-selected") |> render_click()
+
+      refute has_element?(view, "#shipments-running")
+      assert render(view) =~ "At most 50 orders"
+      refute_received {:stub_called, :create_shipment, _args}
+    end
+  end
+
   describe "Open and Needs attention" do
     test "split the live shipments by what they wait for", %{conn: conn} do
       method = method!()

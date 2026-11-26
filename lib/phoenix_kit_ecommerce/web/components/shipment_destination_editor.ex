@@ -14,6 +14,8 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
       provider could not list its services (the destination is then shown,
       not edited)
     * `destination` - the `Shipping.Destination` to start from
+    * `phoenix_kit_current_scope` - the page's scope: every event, each of
+      which may ask the carrier, is checked against `shop.manage_shipments`
 
   A destination the admin completes is sent to the parent LiveView as
   `{ShipmentDestinationEditor, :destination, id, destination}`; nothing is
@@ -25,6 +27,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
 
   alias PhoenixKitEcommerce.Shipping
   alias PhoenixKitEcommerce.Shipping.{Address, CartQuote, Destination, Locality, PickupPoint}
+  alias PhoenixKitEcommerce.Web.Authz
 
   @max_points 50
   @query_length 64
@@ -124,15 +127,21 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
   # -- events -------------------------------------------------------------
 
   @impl true
-  def handle_event("edit", _params, socket) do
+  def handle_event(event, params, socket) do
+    if Authz.can?(socket, :manage_shipments),
+      do: editor_event(event, params, socket),
+      else: {:noreply, socket |> reset() |> Authz.deny()}
+  end
+
+  defp editor_event("edit", _params, socket) do
     if editable?(socket.assigns.service),
       do: {:noreply, socket |> reset() |> assign(editing: true) |> maybe_load_points()},
       else: {:noreply, socket}
   end
 
-  def handle_event("cancel", _params, socket), do: {:noreply, reset(socket)}
+  defp editor_event("cancel", _params, socket), do: {:noreply, reset(socket)}
 
-  def handle_event("locality_search", params, socket) do
+  defp editor_event("locality_search", params, socket) do
     text = query_param(params)
     socket = assign(socket, locality_query: text, lookup_error: nil)
 
@@ -148,7 +157,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     end
   end
 
-  def handle_event("pick_locality", %{"id" => id}, socket) when is_binary(id) do
+  defp editor_event("pick_locality", %{"id" => id}, socket) when is_binary(id) do
     case Enum.find(socket.assigns.localities, &(&1.id == id)) do
       nil ->
         {:noreply, socket}
@@ -162,15 +171,15 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     end
   end
 
-  def handle_event("change_locality", _params, socket) do
+  defp editor_event("change_locality", _params, socket) do
     {:noreply, assign(socket, locality: nil, points: [], points_state: :idle, locality_query: "")}
   end
 
-  def handle_event("filter_points", params, socket) do
+  defp editor_event("filter_points", params, socket) do
     {:noreply, socket |> assign(point_query: query_param(params)) |> maybe_load_points()}
   end
 
-  def handle_event("pick_point", %{"id" => id}, socket) when is_binary(id) do
+  defp editor_event("pick_point", %{"id" => id}, socket) when is_binary(id) do
     case Enum.find(socket.assigns.points, &(&1.id == id)) do
       nil ->
         {:noreply, socket}
@@ -181,19 +190,19 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     end
   end
 
-  def handle_event("apply_manual", %{"manual" => params}, socket) when is_map(params) do
+  defp editor_event("apply_manual", %{"manual" => params}, socket) when is_map(params) do
     if serves?(socket, :pickup_point),
       do: apply_manual(socket, params),
       else: {:noreply, socket}
   end
 
-  def handle_event("apply_address", %{"address" => params}, socket) when is_map(params) do
+  defp editor_event("apply_address", %{"address" => params}, socket) when is_map(params) do
     if serves?(socket, :address),
       do: apply_address(socket, params),
       else: {:noreply, socket}
   end
 
-  def handle_event(_event, _params, socket), do: {:noreply, socket}
+  defp editor_event(_event, _params, socket), do: {:noreply, socket}
 
   # The forms store only what the service asks for, and only while editing.
   defp serves?(%{assigns: %{editing: true, service: %Shipping.Service{destination: kind}}}, kind),
