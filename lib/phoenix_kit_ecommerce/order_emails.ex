@@ -453,9 +453,10 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   end
 
   @doc """
-  Whether the buyer gets the shipped email (`shop_order_email_shipped`), while
-  the buyer's emails are on (`buyer_emails_enabled?/0`). On by default, like
-  the buyer's other emails; a read error counts as off.
+  Whether the shipped email is on (`shop_order_email_shipped`). On by default,
+  like the buyer's other emails; a read error counts as off. A delivery also
+  needs the buyer's emails on (`buyer_emails_enabled?/0`); this switch does not
+  read that one.
   """
   @spec shipped_emails_enabled?() :: boolean()
   def shipped_emails_enabled? do

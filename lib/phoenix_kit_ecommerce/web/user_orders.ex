@@ -179,6 +179,9 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   defp status_badge_class("refunded"), do: "badge-neutral"
   defp status_badge_class(_), do: "badge-ghost"
 
+  # The order's status as the buyer reads it, from the page's shipments.
+  defp display_status(statuses, order), do: Map.get(statuses, order.uuid, order.status)
+
   defp format_date(nil), do: "-"
 
   defp format_date(%DateTime{} = dt) do

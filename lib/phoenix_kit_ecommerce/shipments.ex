@@ -48,6 +48,11 @@ defmodule PhoenixKitEcommerce.Shipments do
   number). `register/2` is the two steps in one. A shipment that waits in
   `creating` for 10 minutes is moved to `unknown` by `sweep_stuck/0`.
 
+  A `failed` shipment is retried on the same row (`retry_shipment/2`): the
+  same checks, then a compare-and-set `failed -> creating`, and
+  `submit_shipment/2` again. A conflict with another live shipment is
+  `{:error, :live_shipment_exists}`, never a raise.
+
   ## Tracking
 
   `track_shipments/1` asks the carriers for the state of the `created`,
@@ -64,11 +69,6 @@ defmodule PhoenixKitEcommerce.Shipments do
   carrier's answer, or the tracking number the admin entered), after that
   write and without ever failing it: the carrier's answer is not lost to the
   e-mail. `shipped?/1` is the same rule.
-
-  A `failed` shipment is retried on the same row (`retry_shipment/2`): the
-  same checks, then a compare-and-set `failed -> creating`, and
-  `submit_shipment/2` again. A conflict with another live shipment is
-  `{:error, :live_shipment_exists}`, never a raise.
 
   ## The data sent
 
