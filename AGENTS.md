@@ -156,7 +156,8 @@ Repo-local aliases:
 - **Never wrap in `gettext`:** `push_event` names, URL paths, route segments,
   setting keys. Translating one breaks at runtime in every non-English locale.
 - **A stored status is rendered through `Web.StatusLabels`** (`order/1`,
-  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`),
+  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`,
+  `shipment/1`),
   never as its raw value: the value keys badge classes, filters and audit
   metadata, the label is what a person reads. A new status value needs its
   own `gettext` clause there.
