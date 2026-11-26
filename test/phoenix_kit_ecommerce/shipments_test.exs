@@ -524,9 +524,12 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       # What the tracking run's sweep does to a shipment stuck in creating.
       set!(shipment, status: "unknown")
-      send(carrier, :answer)
 
-      log = capture_log(fn -> assert {:error, :shipment_changed} = Task.await(task, 10_000) end)
+      log =
+        capture_log(fn ->
+          send(carrier, :answer)
+          assert {:error, :shipment_changed} = Task.await(task, 10_000)
+        end)
       assert log =~ "LATE-1"
 
       assert %Shipment{status: "unknown", tracking_number: nil} =
