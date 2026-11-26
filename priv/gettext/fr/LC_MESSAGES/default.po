@@ -8534,3 +8534,8 @@ msgstr "Le transporteur a refusé l'annulation : %{reason}"
 #, elixir-autogen, elixir-format
 msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
 msgstr "Le transporteur n'a pas confirmé l'annulation (%{reason}), et il a peut-être annulé l'envoi. Vérifiez le portail du transporteur."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:257
+#, elixir-autogen, elixir-format
+msgid "The recipient details are not valid."
+msgstr "Les coordonnées du destinataire ne sont pas valides."

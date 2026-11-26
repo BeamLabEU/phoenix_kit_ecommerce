@@ -59,7 +59,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   the destination are copied from
   the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
   corrections as `:parcels`, `:recipient` and `:destination`. A recipient
-  correction changes only the fields it names (a blank one clears it).
+  correction changes only the fields it names (a blank one clears it); one
+  that is not a map is `{:error, :invalid_recipient}`.
 
   ## Masking
 
@@ -119,6 +120,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :connection_changed
           | :connection_environment_changed
           | :tracking_number_required
+          | :invalid_recipient
 
   # -- reading ----------------------------------------------------------
 
@@ -251,7 +253,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   @spec begin_shipment(Order.t() | String.t(), keyword()) ::
           {:ok, Shipment.t()} | {:error, error()}
   def begin_shipment(order, opts \\ []) do
-    with {:ok, order} <- fetch_paid_order(order),
+    with :ok <- valid_corrections(opts),
+         {:ok, order} <- fetch_paid_order(order),
          {:ok, ctx} <- order_context(order, opts),
          data = sent_data(order, ctx, opts),
          :ok <- check_destination(ctx, data.destination) do
@@ -398,7 +401,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   """
   @spec retry_shipment(Shipment.t(), keyword()) :: {:ok, Shipment.t()} | {:error, error()}
   def retry_shipment(%Shipment{} = shipment, opts \\ []) do
-    with %Shipment{status: "failed"} = shipment <- get_shipment(shipment.uuid) || :not_found,
+    with :ok <- valid_corrections(opts),
+         %Shipment{status: "failed"} = shipment <- get_shipment(shipment.uuid) || :not_found,
          {:ok, order} <- fetch_paid_order(shipment.order_uuid),
          {:ok, ctx} <- order_context(order, opts),
          data = sent_data(order, ctx, previous_data(shipment, opts), shipment.recipient),
@@ -721,6 +725,13 @@ defmodule PhoenixKitEcommerce.Shipments do
   end
 
   defp billing_recipient(_snapshot), do: %{}
+
+  defp valid_corrections(opts) do
+    case Keyword.get(opts, :recipient) do
+      recipient when is_nil(recipient) or is_map(recipient) -> :ok
+      _other -> {:error, :invalid_recipient}
+    end
+  end
 
   # A correction changes the fields it names (a blank one clears it) and
   # leaves the others. A corrected phone is the number as typed now.

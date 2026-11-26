@@ -403,6 +403,7 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             {:provider_changed,
              "The shipping method now uses another carrier than the one the order was placed with."},
             {:tracking_number_required, "Enter the tracking number."},
+            {:invalid_recipient, "The recipient details are not valid."},
             {{:cancel_refused, "too late"}, "The carrier refused the cancellation: too late"},
             {:submit_crashed,
              "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."},

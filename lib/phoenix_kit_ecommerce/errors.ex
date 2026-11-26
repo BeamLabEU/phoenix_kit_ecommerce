@@ -56,6 +56,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :invalid_destination
           | :invalid_host
           | :invalid_quantity
+          | :invalid_recipient
           | :invalid_scheme
           | :live_shipment_exists
           | :missing_base_currency
@@ -253,6 +254,7 @@ defmodule PhoenixKitEcommerce.Errors do
       )
 
   def message(:tracking_number_required), do: gettext("Enter the tracking number.")
+  def message(:invalid_recipient), do: gettext("The recipient details are not valid.")
   def message(:unknown_provider), do: gettext("This carrier is not configured any more.")
 
   def message(:unknown_service),

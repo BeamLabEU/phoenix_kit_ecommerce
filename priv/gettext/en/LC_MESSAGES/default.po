@@ -8533,3 +8533,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
 msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:257
+#, elixir-autogen, elixir-format
+msgid "The recipient details are not valid."
+msgstr ""

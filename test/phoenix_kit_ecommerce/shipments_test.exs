@@ -346,6 +346,22 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert rows(order) == []
     end
 
+    test "a recipient correction that is not a map" do
+      order = paid_order!(method!())
+
+      for bad <- ["Jaan Tamm", [name: "Jaan Tamm"], 42] do
+        assert {:error, :invalid_recipient} = Shipments.begin_shipment(order, recipient: bad)
+      end
+
+      assert rows(order) == []
+
+      stub(%{create: {:error, {:rejected, "No"}}})
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      assert {:error, :invalid_recipient} = Shipments.retry_shipment(failed, recipient: "Jaan")
+      assert %Shipment{status: "failed"} = Shipments.get_shipment(failed.uuid)
+    end
+
     test "a second live shipment of the same order" do
       order = paid_order!(method!())
 
