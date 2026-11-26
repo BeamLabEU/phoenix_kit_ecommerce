@@ -598,7 +598,7 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   @doc """
   Whether an error of `create_shipment/2` means the carrier certainly does
-  not have the shipment (or of `cancel_shipment/2`, that it did not cancel it): `{:rejected, message}`, an HTTP status 400, 401,
+  not have the shipment: `{:rejected, message}`, an HTTP status 400, 401,
   403, 404, 422 or 429 (`{:http_status, status}` or
   `{:http_status, status, detail}`), or a connection refused before anything
   was sent (`:econnrefused`, or a transport error with that `reason`).
