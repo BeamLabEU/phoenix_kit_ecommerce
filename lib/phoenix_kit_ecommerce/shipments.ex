@@ -133,9 +133,9 @@ defmodule PhoenixKitEcommerce.Shipments do
   @buyer_statuses ["created" | @shipped_statuses] ++ ["returned"]
   @tracking_days 60
   @track_limit 1000
-  # An update never moves a shipment to a lower rank unless the carrier's
-  # times say it is newer. The return leg ranks above the outbound one, and
-  # the carrier's cancellation with it: both are terminal.
+  # An update moves a shipment only to a higher rank. The return leg ranks
+  # above the outbound one, and the carrier's cancellation with it: both are
+  # terminal.
   @rank %{
     "created" => 0,
     "in_transit" => 1,
@@ -1034,13 +1034,13 @@ defmodule PhoenixKitEcommerce.Shipments do
       logged and leaves the other groups alone. Every shipment asked gets
       `last_tracked_at`.
     * An update belongs to the shipment of its group with its tracking
-      number or carrier reference. Of a shipment's updates the newest by
-      `occurred_at` counts, or the highest status when none has a time.
-    * A status never moves backwards. An update with a time must be newer
-      than the last one stored; without a time, or with none stored to
-      compare with, it must rank above the current status (`created <
-      in_transit < ready_for_pickup < delivered < returned`, the carrier's
-      `cancelled` with `returned`).
+      number or carrier reference.
+    * A status never moves backwards: an update must rank above the
+      current status (`created < in_transit < ready_for_pickup < delivered
+      < returned`, the return leg above the outbound one, the carrier's
+      `cancelled` with `returned`), and one with a time must also be newer
+      than the last time stored. Of the updates that qualify the highest
+      status counts, timed or not.
     * The write is conditional on the status the update was weighed
       against, and appends the event: the carrier's text masked, and its
       time.
@@ -1152,24 +1152,28 @@ defmodule PhoenixKitEcommerce.Shipments do
   defp track_error_text(_reason), do: "error"
 
   defp track_one(shipment, updates) do
-    with %TrackingUpdate{} = update <- latest_update(shipment, updates),
-         status = Atom.to_string(update.status),
-         true <- forward?(shipment, status, update.occurred_at) do
-      store_tracking(shipment, status, update)
-    else
-      _no_change -> :unchanged
+    case best_update(shipment, updates) do
+      %TrackingUpdate{} = update ->
+        store_tracking(shipment, Atom.to_string(update.status), update)
+
+      nil ->
+        :unchanged
     end
   end
 
-  defp latest_update(shipment, updates) do
-    candidates =
-      Enum.filter(updates, &(about?(&1, shipment) and &1.status in TrackingUpdate.statuses()))
+  # Of the shipment's updates that would move it forward, the highest status,
+  # and of two with the same status the timed one, then the later one.
+  defp best_update(shipment, updates) do
+    last = last_occurred_at(shipment)
 
-    case Enum.filter(candidates, &match?(%DateTime{}, &1.occurred_at)) do
-      [] -> Enum.max_by(candidates, &rank(&1.status), fn -> nil end)
-      timed -> Enum.max_by(timed, & &1.occurred_at, DateTime)
-    end
+    updates
+    |> Enum.filter(&(about?(&1, shipment) and &1.status in TrackingUpdate.statuses()))
+    |> Enum.filter(&forward?(shipment, &1, last))
+    |> Enum.max_by(&{rank(&1.status), unix(&1.occurred_at)}, fn -> nil end)
   end
+
+  defp unix(%DateTime{} = at), do: {1, DateTime.to_unix(at, :microsecond)}
+  defp unix(_no_time), do: {0, 0}
 
   defp about?(%TrackingUpdate{} = update, shipment) do
     same?(update.tracking_number, shipment.tracking_number) or
@@ -1180,13 +1184,12 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   defp same?(value, stored), do: filled?(value) and value == stored
 
-  defp forward?(%Shipment{status: status}, status, _occurred_at), do: false
-
-  defp forward?(shipment, status, occurred_at) do
-    case {occurred_at, last_occurred_at(shipment)} do
-      {%DateTime{} = at, %DateTime{} = last} -> DateTime.compare(at, last) == :gt
-      _no_times -> rank(status) > rank(shipment.status)
-    end
+  # Forward means a higher status (the return leg ranks above the outbound
+  # one); an update with a time must also be newer than the last one stored.
+  defp forward?(shipment, %TrackingUpdate{status: status, occurred_at: at}, last) do
+    rank(status) > rank(shipment.status) and
+      (not match?(%DateTime{}, at) or not match?(%DateTime{}, last) or
+         DateTime.compare(at, last) == :gt)
   end
 
   defp rank(status) when is_atom(status), do: rank(Atom.to_string(status))

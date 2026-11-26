@@ -293,6 +293,33 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert reload(shipment).status == "delivered"
     end
 
+    test "a later-timed update of a lower status does not move it back" do
+      shipment =
+        shipment!(%{status: "ready_for_pickup", events: [tracked_event("2026-11-20T12:00:00Z")]})
+
+      track(fn _refs, _ctx ->
+        {:ok, [report(shipment, :created, at: ~U[2026-11-21 08:00:00Z])]}
+      end)
+
+      assert %{updated: 0} = Shipments.track_shipments()
+      assert reload(shipment).status == "ready_for_pickup"
+    end
+
+    test "an untimed higher status is not dropped because a timed one came with it" do
+      shipment = shipment!(%{status: "in_transit"})
+
+      track(fn _refs, _ctx ->
+        {:ok,
+         [
+           report(shipment, :delivered),
+           report(shipment, :in_transit, at: ~U[2026-11-21 07:00:00Z])
+         ]}
+      end)
+
+      assert %{updated: 1} = Shipments.track_shipments()
+      assert reload(shipment).status == "delivered"
+    end
+
     test "without times an update must rank above the current status" do
       shipment = shipment!(%{status: "ready_for_pickup"})
 
