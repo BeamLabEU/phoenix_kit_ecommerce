@@ -19,9 +19,9 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   The carrier is called from `start_async`: `register/2` (or
   `retry_shipment/2` and `submit_shipment/2`) and `cancel_shipment/2`. One such
   call runs at a time; the page shows which and, for a batch, how far it got,
-  and lists the outcome of each. The shipment attempt itself does not depend
-  on this process (see `Shipments`), so closing the page does not lose a
-  carrier's answer.
+  and lists the outcome of each. The call and its Activity entry run in a
+  process of their own under `Shipments.TaskSupervisor`, so closing the page
+  loses neither the carrier's answer nor the entry.
 
   Activity is logged here on every change (no recipient data); the labels'
   print is logged by `Web.ShipmentLabelsController`.
@@ -304,7 +304,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
            tracking_url: form["tracking_url"]
          ) do
       {:ok, shipment} ->
-        log(socket, "shop.shipment_tracking_entered", shipment)
+        log(actor(socket), "shop.shipment_tracking_entered", shipment)
 
         {:noreply,
          socket
@@ -379,7 +379,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   defp resolve(socket, uuid, action, fun) do
     with %Shipment{} = shipment <- Shipments.get_shipment(uuid) || {:error, :not_found},
          {:ok, shipment} <- fun.(shipment, actor_uuid: Activity.actor_uuid(socket)) do
-      log(socket, action, shipment)
+      log(actor(socket), action, shipment)
 
       {:noreply,
        socket
@@ -399,33 +399,50 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   # -- carrier calls ----------------------------------------------------------
 
   defp run(socket, :register, order_uuid, number, opts) do
-    socket
-    |> assign(
-      running: %{kind: :register, uuid: order_uuid, number: number || order_number_of(order_uuid)}
-    )
-    |> start_async(:register, fn -> Shipments.register(order_uuid, opts) end)
+    running = %{kind: :register, uuid: order_uuid, number: number || order_number_of(order_uuid)}
+    call(socket, running, fn -> Shipments.register(order_uuid, opts) end)
   end
 
   defp run(socket, :retry, shipment_uuid, number, opts) do
-    socket
-    |> assign(running: %{kind: :retry, uuid: shipment_uuid, number: number})
-    |> start_async(:retry, fn ->
+    call(socket, %{kind: :retry, uuid: shipment_uuid, number: number}, fn ->
       with {:ok, shipment} <- Shipments.retry_shipment(%Shipment{uuid: shipment_uuid}, opts),
            do: Shipments.submit_shipment(shipment, opts)
     end)
   end
 
   defp run(socket, :cancel, shipment_uuid, _number, opts) do
-    socket
-    |> assign(
-      running: %{
-        kind: :cancel,
-        uuid: shipment_uuid,
-        number: order_number_of_shipment(shipment_uuid)
-      }
-    )
-    |> start_async(:cancel, fn ->
+    running = %{
+      kind: :cancel,
+      uuid: shipment_uuid,
+      number: order_number_of_shipment(shipment_uuid)
+    }
+
+    call(socket, running, fn ->
       Shipments.cancel_shipment(%Shipment{uuid: shipment_uuid}, opts)
+    end)
+  end
+
+  # The carrier call and its Activity entry run in a process of their own
+  # (under `Shipments.TaskSupervisor`), which the async task only waits for:
+  # an admin who closes the tab while the carrier is answering still leaves
+  # the entry behind.
+  defp call(socket, %{kind: kind} = running, work) do
+    actor = actor(socket)
+
+    socket
+    |> assign(running: running)
+    |> start_async(kind, fn ->
+      task =
+        Task.Supervisor.async_nolink(PhoenixKitEcommerce.Shipments.TaskSupervisor, fn ->
+          result = work.()
+          with {:ok, %Shipment{} = shipment} <- result, do: log(actor, action(kind), shipment)
+          result
+        end)
+
+      case Task.yield(task, :infinity) do
+        {:ok, result} -> result
+        {:exit, reason} -> exit(reason)
+      end
     end)
   end
 
@@ -433,11 +450,6 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   def handle_async(kind, result, socket) when kind in [:register, :retry, :cancel] do
     running = socket.assigns.running
     result = carrier_result(kind, result)
-
-    case result do
-      {:ok, shipment} -> log(socket, action(kind), shipment)
-      {:error, _reason} -> :ok
-    end
 
     socket
     |> assign(running: nil, outcomes: socket.assigns.outcomes ++ [outcome(running, result)])
@@ -512,10 +524,12 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
 
   defp outcome_text(%Shipment{status: status}), do: StatusLabels.shipment(status)
 
-  defp log(socket, action, %Shipment{} = shipment) do
+  defp actor(socket), do: %{uuid: Activity.actor_uuid(socket), role: Activity.actor_role(socket)}
+
+  defp log(%{uuid: uuid, role: role}, action, %Shipment{} = shipment) do
     Activity.log(action,
-      actor_uuid: Activity.actor_uuid(socket),
-      actor_role: Activity.actor_role(socket),
+      actor_uuid: uuid,
+      actor_role: role,
       resource_type: "shipment",
       resource_uuid: shipment.uuid,
       target_uuid: shipment.order_uuid,

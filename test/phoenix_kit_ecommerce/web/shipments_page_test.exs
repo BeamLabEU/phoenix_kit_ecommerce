@@ -260,6 +260,53 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       )
     end
 
+    test "the Activity entry is written even when the page dies before the carrier answers", %{
+      conn: conn,
+      actor_uuid: actor_uuid
+    } do
+      order = order!(method!())
+      test = self()
+
+      gated = fn _request, _ctx ->
+        send(test, {:create_waiting, self()})
+
+        receive do
+          :answer -> {:ok, %ShipmentResult{carrier_ref: "C", tracking_number: "LATE1"}}
+        end
+      end
+
+      stub(%{create: gated})
+      {:ok, view, _html} = live(conn, @page)
+      view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
+      view |> form("#shipment-editor-form") |> render_submit()
+      assert_receive {:create_waiting, carrier}, 5_000
+
+      # The admin closes the tab: the page and its async task go.
+      running =
+        for pid <- Task.Supervisor.children(PhoenixKitEcommerce.Shipments.TaskSupervisor),
+            do: {pid, Process.monitor(pid)}
+
+      assert running != []
+
+      Process.unlink(view.pid)
+      ref = Process.monitor(view.pid)
+      Process.exit(view.pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, _pid, :killed}
+
+      send(carrier, :answer)
+
+      for {pid, ref} <- running,
+          do: assert_receive({:DOWN, ^ref, :process, ^pid, _reason}, 5_000)
+
+      assert [%Shipment{status: "created", tracking_number: "LATE1"} = shipment] = rows(order)
+
+      assert_activity_logged("shop.shipment_created",
+        resource_uuid: shipment.uuid,
+        actor_uuid: actor_uuid
+      )
+    end
+
     test "the admin's corrections of the recipient and the parcels are what is sent", %{
       conn: conn
     } do
