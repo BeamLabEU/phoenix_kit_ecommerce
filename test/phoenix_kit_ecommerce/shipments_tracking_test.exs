@@ -543,6 +543,30 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert length(shipped_jobs(shipment)) == 1
     end
 
+    test "a shipped email that cannot be queued leaves the status, and the rest of the group" do
+      refused = shipment!(%{inserted_at: ago(7200)})
+      stored = shipment!(%{inserted_at: ago(3600)})
+
+      track(fn _refs, _ctx ->
+        {:ok, [report(refused, :in_transit), report(stored, :cancelled)]}
+      end)
+
+      # The e-mail job's unique check is refused, as a mail queue that is down.
+      Process.put(:test_repo_refuse_source, "oban_jobs")
+
+      log =
+        try do
+          capture_log(fn -> assert %{updated: 1} = Shipments.track_shipments() end)
+        after
+          Process.delete(:test_repo_refuse_source)
+        end
+
+      assert log =~ "Shipment #{refused.uuid}: storing its tracking raised"
+      assert %Shipment{status: "created", events: []} = reload(refused)
+      assert shipped_jobs(refused) == []
+      assert reload(stored).status == "cancelled"
+    end
+
     test "a move that is not on the way queues no email" do
       shipment = shipment!(%{})
 

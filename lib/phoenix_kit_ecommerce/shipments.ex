@@ -1206,6 +1206,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   defp track_error_text({tag, _detail}) when is_atom(tag), do: Atom.to_string(tag)
   defp track_error_text(_reason), do: "error"
 
+  # A shipment whose write raises (its e-mail cannot be queued, say) is
+  # logged and left as it was; the rest of the group is still stored.
   defp track_one(shipment, updates) do
     case best_update(shipment, updates) do
       %TrackingUpdate{} = update ->
@@ -1214,6 +1216,13 @@ defmodule PhoenixKitEcommerce.Shipments do
       nil ->
         :unchanged
     end
+  rescue
+    error ->
+      Logger.error(
+        "Shipment #{shipment.uuid}: storing its tracking raised #{inspect(error.__struct__)}"
+      )
+
+      :error
   end
 
   # Of the shipment's updates that would move it forward, the highest status,
