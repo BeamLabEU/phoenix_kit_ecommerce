@@ -9035,3 +9035,58 @@ msgstr "Магазин отключён."
 #, elixir-autogen, elixir-format
 msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
 msgstr "Ссылка для отслеживания должна быть веб-адресом, начинающимся с http:// или https://, длиной не более 2048 символов."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:93
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} is on its way"
+msgstr "Ваш заказ {{order_number}} в пути"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:98
+#, elixir-autogen, elixir-format
+msgid "Your order is on its way"
+msgstr "Ваш заказ в пути"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:103
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been sent with {{carrier}}."
+msgstr "Ваш заказ {{order_number}} отправлен через {{carrier}}."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:113
+#, elixir-autogen, elixir-format
+msgid "**Tracking number:** {{tracking_number}}"
+msgstr "**Номер отслеживания:** {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:114
+#, elixir-autogen, elixir-format
+msgid "[Track your parcel]({{tracking_url}})"
+msgstr "[Отследить посылку]({{tracking_url}})"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:140
+#, elixir-autogen, elixir-format
+msgid "Tracking number: {{tracking_number}}"
+msgstr "Номер отслеживания: {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:141
+#, elixir-autogen, elixir-format
+msgid "Track your parcel: {{tracking_url}}"
+msgstr "Отследить посылку: {{tracking_url}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:416
+#, elixir-autogen, elixir-format
+msgid "Order shipped"
+msgstr "Заказ отправлен"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:418
+#, elixir-autogen, elixir-format
+msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
+msgstr "Отправляется покупателю один раз на каждое отправление, когда перевозчик сообщает, что посылка в пути, с номером и ссылкой для отслеживания."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:816
+#, elixir-autogen, elixir-format
+msgid "Email the buyer when a shipment is on its way"
+msgstr "Отправлять покупателю письмо, когда отправление в пути"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:817
+#, elixir-autogen, elixir-format
+msgid "With the carrier, the tracking number and the tracking link."
+msgstr "С перевозчиком, номером отслеживания и ссылкой для отслеживания."

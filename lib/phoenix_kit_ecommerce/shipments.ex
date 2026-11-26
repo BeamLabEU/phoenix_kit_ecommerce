@@ -55,6 +55,50 @@ defmodule PhoenixKitEcommerce.Shipments do
   old (see its doc). A status never moves backwards, and every write is
   conditional on the status the update was weighed against.
 
+  ## The buyer's e-mail
+
+  The buyer's "shipped" e-mail (`PhoenixKitEcommerce.OrderEmails`, once per
+  shipment) is queued when tracking first moves a shipment to `in_transit`,
+  `ready_for_pickup` or `delivered`, in the transaction of that write; for a
+  provider without `track/2`, when the shipment becomes `created` (the
+  carrier's answer, or the tracking number the admin entered), after that
+  write and without ever failing it: the carrier's answer is not lost to the
+  e-mail. `shipped?/1` is the same rule.
+
+  A `failed` shipment is retried on the same row (`retry_shipment/2`): the
+  same checks, then a compare-and-set `failed -> creating`, and
+  `submit_shipment/2` again. A conflict with another live shipment is
+  `{:error, :live_shipment_exists}`, never a raise.
+
+  ## The data sent
+
+  The parcels, the recipient (`name`, `company`, `email`, `phone` from the order's
+  `billing_snapshot`, the phone in E.164 beside the `raw_phone` as typed) and
+  the destination are copied from
+  the order; `begin_shipment/2` and `retry_shipment/2` take the admin's
+  corrections as `:parcels`, `:recipient` and `:destination`. A recipient
+  correction changes only the fields it names (a blank one clears it); one
+  that is not a map is `{:error, :invalid_recipient}`.
+
+  ## Masking
+
+  The error and the events of a shipment are stored masked: the recipient's
+  name, e-mail, phone and street address, and anything shaped like an e-mail
+  address or an international phone number. The error is cut to 300
+  characters; the last 50 events are kept.
+
+  ## Callers
+
+  `submit_shipment/2` and `register/2` must not be called inside a
+  transaction (they raise `ArgumentError`): the attempt runs in its own
+  process, which would wait for the rows the caller's transaction holds, and
+  the carrier call must not sit inside a transaction.
+
+  Every function that changes a shipment takes `:actor_uuid` (who did it; it
+  is recorded on the events, and as `created_by_uuid` on a new shipment).
+  These functions write no Activity: the admin LiveView logs on success, as
+  everywhere else in the module. Errors are atoms or tagged tuples with a
+  clause in `PhoenixKitEcommerce.Errors.message/1`.
   """
 
   import Ecto.Query, only: [from: 2, exclude: 2]
@@ -62,7 +106,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   require Logger
 
   alias PhoenixKitBilling.Order
-  alias PhoenixKitEcommerce.{Shipment, ShippingMethod}
+  alias PhoenixKitEcommerce.{OrderEmails, Shipment, ShippingMethod}
   alias PhoenixKitEcommerce.Shipments.Mask
   alias PhoenixKitEcommerce.Shipping
   alias PhoenixKitEcommerce.Shipping.{CartQuote, Codec, Context, Destination, LabelOptions}
@@ -85,6 +129,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   @list_limit 200
   @max_labels 50
   @max_url_length 2048
+  @shipped_statuses ["in_transit", "ready_for_pickup", "delivered"]
   @tracking_days 60
   @track_limit 1000
   # An update never moves a shipment to a lower rank unless the carrier's
@@ -855,15 +900,12 @@ defmodule PhoenixKitEcommerce.Shipments do
           carrier_ref: opts |> Keyword.get(:carrier_ref) |> Codec.string() |> blank_to_nil()
         ]
 
-        resolve(
-          shipment,
-          @resolvable_statuses,
-          true,
-          "tracking_entered",
-          "created",
-          changes,
-          opts
-        )
+        shipment
+        |> resolve(@resolvable_statuses, true, "tracking_entered", "created", changes, opts)
+        |> then(fn
+          {:ok, stored} -> {:ok, created(stored)}
+          error -> error
+        end)
     end
   end
 
@@ -1166,6 +1208,8 @@ defmodule PhoenixKitEcommerce.Shipments do
     |> Enum.max(DateTime, fn -> nil end)
   end
 
+  # The status and its e-mail commit together: an e-mail that cannot be
+  # queued leaves the status for the next run to find again.
   defp store_tracking(shipment, status, update) do
     message = shipment |> masked(Codec.string(update.description)) |> cut()
 
@@ -1174,9 +1218,74 @@ defmodule PhoenixKitEcommerce.Shipments do
       |> event(status, nil, message)
       |> Map.put("occurred_at", update.occurred_at && DateTime.to_iso8601(update.occurred_at))
 
+    {:ok, result} = repo().transaction(fn -> write_tracking(shipment, status, tracked) end)
+    result
+  end
+
+  defp write_tracking(shipment, status, tracked) do
     case compare_and_set(shipment.uuid, [shipment.status], [status: status], event: tracked) do
-      {:ok, _stored} -> :updated
-      {:error, :shipment_changed} -> :unchanged
+      {:ok, stored} ->
+        if status in @shipped_statuses, do: OrderEmails.shipment_shipped(stored)
+        :updated
+
+      {:error, :shipment_changed} ->
+        :unchanged
+    end
+  end
+
+  # A provider without `track/2` never reports the parcel moving: its
+  # shipment is shipped once the carrier has it. The answer is stored
+  # already, and an e-mail that cannot be queued must not lose it.
+  defp created(%Shipment{status: "created"} = shipment) do
+    if shipped?(shipment), do: queue_shipped_email(shipment)
+    shipment
+  end
+
+  defp created(shipment), do: shipment
+
+  defp queue_shipped_email(shipment) do
+    OrderEmails.shipment_shipped(shipment)
+  rescue
+    error -> log_unqueued(shipment, Exception.message(error))
+  catch
+    kind, reason -> log_unqueued(shipment, Exception.format_banner(kind, reason))
+  end
+
+  defp log_unqueued(shipment, why),
+    do: Logger.error("Shipment #{shipment.uuid}: the buyer's e-mail was not queued (#{why})")
+
+  # -- the buyer's view --------------------------------------------------
+
+  @doc """
+  Whether the buyer is told the shipment is on its way: it is `in_transit`,
+  `ready_for_pickup` or `delivered`, or `created` with a provider that does
+  not track (`track/2`), which never reports the parcel moving.
+  """
+  @spec shipped?(Shipment.t()) :: boolean()
+  def shipped?(%Shipment{status: status}) when status in @shipped_statuses, do: true
+  def shipped?(%Shipment{status: "created", provider: key}), do: not tracked_provider?(key)
+  def shipped?(%Shipment{}), do: false
+
+  defp tracked_provider?(key) do
+    case Shipping.provider(key) do
+      {:ok, provider} -> Shipping.supports?(provider, :track)
+      :error -> false
+    end
+  end
+
+  @doc """
+  Who carries the shipment, for the buyer: the carrier behind an aggregator
+  (`carrier_label`), else the provider's label, else its key.
+  """
+  @spec carrier_name(Shipment.t()) :: String.t()
+  def carrier_name(%Shipment{carrier_label: label, provider: key}) do
+    if filled?(label) do
+      String.trim(label)
+    else
+      case Shipping.provider(key) do
+        {:ok, provider} -> provider.label()
+        :error -> key || ""
+      end
     end
   end
 
@@ -1524,7 +1633,7 @@ defmodule PhoenixKitEcommerce.Shipments do
            event: event("result", "created", actor_uuid, nil)
          ) do
       {:ok, stored} ->
-        {:ok, stored}
+        {:ok, created(stored)}
 
       {:error, :shipment_changed} = changed ->
         Logger.warning(

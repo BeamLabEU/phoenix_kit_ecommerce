@@ -4,7 +4,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
   of shipments stuck in `creating` and the tracking of the open ones
   (`Shipments.sweep_stuck/0`, `Shipments.track_shipments/1`) against the stub
   provider: the groups and their calls, the order of updates, the 60-day
-  cutoff and the masked events.
+  cutoff, the masked events and the shipped email the run queues.
   """
 
   # Changes the application env (provider registry) and the shop switch.
@@ -16,7 +16,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
   alias PhoenixKitEcommerce.{OrderFixtures, Shipment, Shipments}
   alias PhoenixKitEcommerce.Shipping.{ShipmentRef, TrackingUpdate}
   alias PhoenixKitEcommerce.Test.Shipping.{NoCancelProvider, StubProvider}
-  alias PhoenixKitEcommerce.Workers.ShipmentTrackingWorker
+  alias PhoenixKitEcommerce.Workers.{OrderEmailWorker, ShipmentTrackingWorker}
 
   defmodule OtherTracker do
     @moduledoc false
@@ -96,6 +96,13 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
 
   defp tracked_event(at),
     do: %{"action" => "tracked", "status" => "ready_for_pickup", "occurred_at" => at}
+
+  defp shipped_jobs(shipment) do
+    worker = inspect(OrderEmailWorker)
+
+    Repo.all(from(j in Oban.Job, where: j.worker == ^worker))
+    |> Enum.filter(&(&1.args["shipment_uuid"] == shipment.uuid))
+  end
 
   defp connection!(environment) do
     {:ok, %{uuid: uuid}} =
@@ -352,6 +359,32 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
 
       assert %{groups: 0} = Shipments.track_shipments()
       refute_received {:stub_called, :track, _}
+    end
+
+    test "the first move on the way queues the buyer's shipped email, once" do
+      shipment = shipment!(%{})
+
+      track(fn _refs, _ctx -> {:ok, [report(shipment, :in_transit)]} end)
+      Shipments.track_shipments()
+
+      assert [%Oban.Job{args: %{"email" => "buyer_shipped"} = args}] = shipped_jobs(shipment)
+      assert args["order_uuid"] == shipment.order_uuid
+
+      track(fn _refs, _ctx -> {:ok, [report(shipment, :delivered)]} end)
+      Shipments.track_shipments()
+
+      assert reload(shipment).status == "delivered"
+      assert length(shipped_jobs(shipment)) == 1
+    end
+
+    test "a move that is not on the way queues no email" do
+      shipment = shipment!(%{})
+
+      track(fn _refs, _ctx -> {:ok, [report(shipment, :cancelled)]} end)
+      Shipments.track_shipments()
+
+      assert reload(shipment).status == "cancelled"
+      assert shipped_jobs(shipment) == []
     end
   end
 

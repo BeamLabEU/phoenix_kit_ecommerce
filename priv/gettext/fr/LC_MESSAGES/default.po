@@ -8973,3 +8973,58 @@ msgstr "La boutique est désactivée."
 #, elixir-autogen, elixir-format
 msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
 msgstr "Le lien de suivi doit être une adresse web commençant par http:// ou https://, de 2048 caractères au plus."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:93
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} is on its way"
+msgstr "Votre commande {{order_number}} est en route"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:98
+#, elixir-autogen, elixir-format
+msgid "Your order is on its way"
+msgstr "Votre commande est en route"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:103
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been sent with {{carrier}}."
+msgstr "Votre commande {{order_number}} a été expédiée avec {{carrier}}."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:113
+#, elixir-autogen, elixir-format
+msgid "**Tracking number:** {{tracking_number}}"
+msgstr "**Numéro de suivi :** {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:114
+#, elixir-autogen, elixir-format
+msgid "[Track your parcel]({{tracking_url}})"
+msgstr "[Suivre votre colis]({{tracking_url}})"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:140
+#, elixir-autogen, elixir-format
+msgid "Tracking number: {{tracking_number}}"
+msgstr "Numéro de suivi : {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:141
+#, elixir-autogen, elixir-format
+msgid "Track your parcel: {{tracking_url}}"
+msgstr "Suivre votre colis : {{tracking_url}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:416
+#, elixir-autogen, elixir-format
+msgid "Order shipped"
+msgstr "Commande expédiée"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:418
+#, elixir-autogen, elixir-format
+msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
+msgstr "Envoyé à l'acheteur une fois par envoi, quand le transporteur signale le colis en route, avec le numéro et le lien de suivi."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:816
+#, elixir-autogen, elixir-format
+msgid "Email the buyer when a shipment is on its way"
+msgstr "Envoyer un e-mail à l'acheteur lorsqu'un envoi est en route"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:817
+#, elixir-autogen, elixir-format
+msgid "With the carrier, the tracking number and the tracking link."
+msgstr "Avec le transporteur, le numéro de suivi et le lien de suivi."

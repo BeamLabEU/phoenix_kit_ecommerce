@@ -709,6 +709,7 @@ preferences say:
 | `shop_order_confirmation` | Buyer | The order is placed, unless it awaits online payment |
 | `shop_order_paid` | Buyer | The order becomes paid |
 | `shop_order_received` | The shop's addresses | The order is placed, or paid if it waited for online payment |
+| `shop_order_shipped` | Buyer | A shipment is on its way (once per shipment), with the carrier, the tracking number and the link |
 
 The buyer's are in the language of the checkout; turn them off under **Order
 emails** on the shop settings page. The shop's email adds the buyer's contacts and

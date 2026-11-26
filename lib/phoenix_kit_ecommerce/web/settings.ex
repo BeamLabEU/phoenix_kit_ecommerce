@@ -108,6 +108,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       )
       |> assign(:notification_recipients, notification_recipients())
       |> assign(:order_emails_to_buyer, OrderEmails.buyer_emails_enabled?())
+      |> assign(:order_email_shipped, OrderEmails.shipped_emails_enabled?())
       |> assign(:order_email_recipients, Enum.join(OrderEmails.shop_recipients(), ", "))
       |> assign(:order_email_copy_recipients, Enum.join(OrderEmails.copy_recipients(), ", "))
       |> assign(:order_email_language, OrderEmails.chosen_shop_email_language() || "")
@@ -327,6 +328,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("toggle_order_emails_to_buyer", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("toggle_order_emails_to_buyer", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_order_email_shipped", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_order_email_shipped", params, socket)
     end)
   end
 
@@ -700,6 +708,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 </label>
               </div>
             </div>
+
           </div>
         </div>
 
@@ -775,6 +784,16 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               title={gettext("Email the buyer when an order is placed and when it is paid")}
               checked={@order_emails_to_buyer}
               event="toggle_order_emails_to_buyer"
+              toggle_class="toggle-secondary"
+              class="py-2"
+            />
+
+            <.setting_toggle
+              id="toggle-order-email-shipped"
+              title={gettext("Email the buyer when a shipment is on its way")}
+              description={gettext("With the carrier, the tracking number and the tracking link.")}
+              checked={@order_email_shipped}
+              event="toggle_order_email_shipped"
               toggle_class="toggle-secondary"
               class="py-2"
             />
@@ -2186,6 +2205,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
         {:noreply,
          socket
          |> assign(:order_emails_to_buyer, enabled)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
+  defp gated_event("toggle_order_email_shipped", _params, socket) do
+    case OrderEmails.set_shipped_emails_enabled(!socket.assigns.order_email_shipped) do
+      {:ok, enabled} ->
+        {:noreply,
+         socket
+         |> assign(:order_email_shipped, enabled)
          |> put_flash(:info, gettext("Notification setting updated"))}
 
       {:error, _} ->

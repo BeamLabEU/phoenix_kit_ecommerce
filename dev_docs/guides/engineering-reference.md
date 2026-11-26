@@ -538,9 +538,10 @@ primary operator of a default install.
 ### Order emails
 
 `OrderEmails` sends real emails, apart from the notifications above and from
-each user's preferences. Three templates, overridable and previewable like any
-other (`email_templates/0`, layout group `shop`): `shop_order_confirmation` and
-`shop_order_paid` to the buyer, `shop_order_received` to the shop.
+each user's preferences. Four templates, overridable and previewable like any
+other (`email_templates/0`, layout group `shop`): `shop_order_confirmation`,
+`shop_order_paid` and `shop_order_shipped` to the buyer, `shop_order_received`
+to the shop.
 
 - **When.** On placing, the buyer's confirmation and the shop's email, unless the
   order awaits online payment; on `:paid`, the buyer's paid email and the shop's
@@ -584,8 +585,18 @@ other (`email_templates/0`, layout group `shop`): `shop_order_confirmation` and
 - **The order link.** A confirmed account gets `/dashboard/orders/:uuid`. A guest
   gets `/checkout/complete/:uuid` only under the `:link` lookup policy: under
   `:strict` that page opens only in the placing session, so the link is left out.
+- **Shipped.** `shop_order_shipped` goes once per SHIPMENT (kind
+  `buyer_shipped`; the job's args and unique key carry `shipment_uuid`; marks
+  `"buyer_shipped:<shipment uuid>"` and `"buyer_shipped_copy:<shipment uuid>"`),
+  with `{{carrier}}`, `{{tracking_number}}` and `{{tracking_url}}` (only a web
+  address, `Shipments.web_url/1`). `Shipments` queues it at the first
+  `in_transit`, `ready_for_pickup` or `delivered` the tracking run stores (in
+  that write's transaction), or at `created` for a provider without
+  `track/2` (after the write, never failing it). A delivery sends nothing for
+  a shipment that is no longer `Shipments.shipped?/1` or not the order's.
 - **Settings**, through `OrderEmails`: `shop_order_emails_to_buyer` (default on,
-  a read error counts as off), `shop_order_email_recipients` (addresses; none
+  a read error counts as off), `shop_order_email_shipped` (the shipped email
+  alone; default on like the other buyer emails, a read error counts as off), `shop_order_email_recipients` (addresses; none
   means no shop email), `shop_order_email_copy_recipients` (addresses; none means
   no copies) and `shop_order_email_language` (an enabled language code, `""` for
   the primary language; the selector shows only with two or more languages
