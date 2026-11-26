@@ -10,8 +10,9 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
   import Ecto.Query, only: [from: 2]
 
   alias PhoenixKitEcommerce, as: Shop
-  alias PhoenixKitEcommerce.{OrderFixtures, Shipments}
+  alias PhoenixKitEcommerce.{OrderFixtures, Shipment, Shipments}
   alias PhoenixKitEcommerce.Shipping.{Destination, LabelOptions, Locality, Parcel, ShipmentRef}
+  alias PhoenixKitEcommerce.Test.Repo
   alias PhoenixKitEcommerce.Test.Shipping.{NoCancelProvider, StubProvider}
 
   @path "/shop-shipments/labels"
@@ -183,8 +184,8 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
     live = shipment!()
     sandbox = shipment!()
 
-    PhoenixKitEcommerce.Test.Repo.update_all(
-      from(s in PhoenixKitEcommerce.Shipment, where: s.uuid == ^sandbox.uuid),
+    Repo.update_all(
+      from(s in Shipment, where: s.uuid == ^sandbox.uuid),
       set: [context_snapshot: Map.put(sandbox.context_snapshot, "environment", "test")]
     )
 

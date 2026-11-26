@@ -464,9 +464,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
     |> start_async(kind, fn ->
       task =
         Task.Supervisor.async_nolink(PhoenixKitEcommerce.Shipments.TaskSupervisor, fn ->
-          result = work.()
-          with {:ok, %Shipment{} = shipment} <- result, do: log(actor, action(kind), shipment)
-          result
+          logged(actor, kind, work.())
         end)
 
       case Task.yield(task, :infinity) do
@@ -475,6 +473,13 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
       end
     end)
   end
+
+  defp logged(actor, kind, {:ok, %Shipment{} = shipment} = result) do
+    log(actor, action(kind), shipment)
+    result
+  end
+
+  defp logged(_actor, _kind, result), do: result
 
   @impl true
   def handle_async(:draft, result, socket) do
