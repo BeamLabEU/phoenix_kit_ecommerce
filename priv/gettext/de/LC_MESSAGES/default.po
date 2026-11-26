@@ -9019,6 +9019,11 @@ msgstr "Bestellung versandt"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Wird dem Käufer einmal pro Sendung geschickt, sobald der Versanddienst das Paket als unterwegs meldet, mit Sendungsnummer und Link."
 
+#: lib/phoenix_kit_ecommerce/web/components/shipping_display.ex:159
+#, elixir-autogen, elixir-format
+msgid "Track your parcel"
+msgstr "Sendung verfolgen"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:724
 #, elixir-autogen, elixir-format
 msgid "Register shipments when an order is paid"

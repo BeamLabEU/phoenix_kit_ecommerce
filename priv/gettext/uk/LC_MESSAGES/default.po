@@ -9083,6 +9083,11 @@ msgstr "Замовлення надіслано"
 msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
 msgstr "Надсилається покупцю один раз на кожне відправлення, коли перевізник повідомляє, що посилка в дорозі, з номером і посиланням для відстеження."
 
+#: lib/phoenix_kit_ecommerce/web/components/shipping_display.ex:159
+#, elixir-autogen, elixir-format
+msgid "Track your parcel"
+msgstr "Відстежити посилку"
+
 #: lib/phoenix_kit_ecommerce/web/settings.ex:724
 #, elixir-autogen, elixir-format
 msgid "Register shipments when an order is paid"

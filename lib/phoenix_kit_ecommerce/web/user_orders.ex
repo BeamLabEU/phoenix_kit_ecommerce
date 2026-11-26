@@ -3,12 +3,15 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   LiveView for displaying user's shop orders.
 
   Users can view only their own orders with status filtering and pagination.
-  This is the user-facing order portal, using the dashboard layout.
+  This is the user-facing order portal, using the dashboard layout. An order's
+  label follows its shipment (`Shipments.buyer_order_status/2`); the shipments
+  of a page are read in one query.
   """
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Web.StatusLabels
 
@@ -27,6 +30,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
         |> assign(:page_title, gettext("My Orders"))
         |> assign(:current_user, current_user)
         |> assign(:orders, [])
+        |> assign(:display_statuses, %{})
         |> assign(:total_count, 0)
         |> assign(:loading, true)
         |> assign_filter_defaults()
@@ -132,9 +136,16 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
     page = socket.assigns.page |> min(total_pages) |> max(1)
 
     orders = all_orders |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
+    shipments = orders |> Enum.map(& &1.uuid) |> Shipments.buyer_shipments()
+
+    display_statuses =
+      Map.new(orders, fn order ->
+        {order.uuid, Shipments.buyer_order_status(order, Map.get(shipments, order.uuid, []))}
+      end)
 
     socket
     |> assign(:orders, orders)
+    |> assign(:display_statuses, display_statuses)
     |> assign(:total_count, total_count)
     |> assign(:total_pages, total_pages)
     |> assign(:page, page)

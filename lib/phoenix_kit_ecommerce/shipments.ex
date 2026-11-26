@@ -130,6 +130,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   @max_labels 50
   @max_url_length 2048
   @shipped_statuses ["in_transit", "ready_for_pickup", "delivered"]
+  @buyer_statuses ["created" | @shipped_statuses] ++ ["returned"]
   @tracking_days 60
   @track_limit 1000
   # An update never moves a shipment to a lower rank unless the carrier's
@@ -1272,6 +1273,46 @@ defmodule PhoenixKitEcommerce.Shipments do
       :error -> false
     end
   end
+
+  @doc """
+  The shipments the buyer is shown, of each of `order_uuids`, the newest
+  first: `created` and later (`in_transit`, `ready_for_pickup`,
+  `delivered`, `returned`). One query for all the orders; an order without
+  one has no key.
+  """
+  @spec buyer_shipments([String.t()]) :: %{String.t() => [Shipment.t()]}
+  def buyer_shipments(order_uuids) when is_list(order_uuids) do
+    case order_uuids |> Enum.map(&uuid_or_nil/1) |> Enum.reject(&is_nil/1) |> Enum.uniq() do
+      [] ->
+        %{}
+
+      uuids ->
+        from(s in Shipment,
+          where: s.order_uuid in ^uuids and s.status in ^@buyer_statuses,
+          order_by: [desc: s.inserted_at, desc: s.uuid]
+        )
+        |> repo().all()
+        |> Enum.group_by(& &1.order_uuid)
+    end
+  end
+
+  @doc """
+  The order status the buyer reads (for `Web.StatusLabels.order/1`), given
+  the order's shipments from `buyer_shipments/1`: while the order is `paid`
+  or `processing`, `"delivered"` when its newest shipment is delivered and
+  `"shipped"` when it is `shipped?/1`; the order's own status otherwise.
+  """
+  @spec buyer_order_status(%{:status => String.t(), optional(atom()) => any()}, [Shipment.t()]) ::
+          String.t()
+  def buyer_order_status(%{status: status}, shipments) when status in ["paid", "processing"] do
+    case shipments do
+      [%Shipment{status: "delivered"} | _] -> "delivered"
+      [%Shipment{} = newest | _] -> if shipped?(newest), do: "shipped", else: status
+      _none -> status
+    end
+  end
+
+  def buyer_order_status(%{status: status}, _shipments), do: status
 
   @doc """
   Who carries the shipment, for the buyer: the carrier behind an aggregator
