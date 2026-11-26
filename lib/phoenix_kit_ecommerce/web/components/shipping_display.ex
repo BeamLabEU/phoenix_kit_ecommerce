@@ -3,7 +3,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDisplay do
   What a carrier quote looks like to the buyer, shared by the destination
   picker, the checkout review and the order pages: the delivery time, the
   cash-on-delivery fee, the "estimated price" note and the friendly reason a
-  method cannot serve a cart.
+  method cannot serve a cart; and on the order pages, the order's shipments.
 
   The functions take plain values (a `Quote` eta with atom keys or the string
   keyed map an order keeps), so the same lines render for a live cart and for
@@ -17,7 +17,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDisplay do
   import PhoenixKitWeb.Components.Core.Icon
 
   alias PhoenixKit.Utils.Date, as: UtilsDate
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Shipping.Codec
+  alias PhoenixKitEcommerce.Web.StatusLabels
 
   attr :id, :string, required: true, doc: "prefix of the ids of the lines"
   attr :eta, :any, default: nil
@@ -102,6 +104,61 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDisplay do
         fallback={@fallback}
       />
     </div>
+    """
+  end
+
+  attr :shipments, :list,
+    required: true,
+    doc: "the order's shipments the buyer is shown, newest first (`Shipments.buyer_shipments/1`)"
+
+  @doc """
+  The order's shipments for the buyer, one block each (`id="order-shipment-<uuid>"`):
+  the carrier, the status, the tracking number and the tracking link, which is
+  rendered only when it is a web address (`Shipments.web_url/1`). Nothing
+  without a shipment.
+  """
+  def order_shipments(assigns) do
+    ~H"""
+    <div :if={@shipments != []} id="order-shipments" class="space-y-3">
+      <div
+        :for={shipment <- @shipments}
+        id={"order-shipment-#{shipment.uuid}"}
+        class="flex items-start gap-3 text-sm"
+      >
+        <.icon name="hero-truck" class="w-5 h-5 mt-0.5 shrink-0 text-base-content/60" />
+        <div class="min-w-0 space-y-0.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium">{Shipments.carrier_name(shipment)}</span>
+            <span class="badge badge-ghost badge-sm">{StatusLabels.shipment(shipment.status)}</span>
+          </div>
+          <div :if={shipment.tracking_number} class="text-base-content/70">
+            {gettext("Tracking number")}:
+            <span class="font-mono break-all">{shipment.tracking_number}</span>
+          </div>
+          <.tracking_link shipment={shipment} />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :shipment, :map, required: true
+
+  defp tracking_link(assigns) do
+    assigns = assign(assigns, :url, Shipments.web_url(assigns.shipment.tracking_url))
+
+    ~H"""
+    <a
+      :if={@url}
+      id={"order-shipment-#{@shipment.uuid}-tracking"}
+      href={@url}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="link link-primary inline-flex items-center gap-1"
+    >
+      {gettext("Track your parcel")}
+      <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
+    </a>
     """
   end
 

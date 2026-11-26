@@ -6,12 +6,17 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     Context,
     Destination,
     Field,
+    LabelOptions,
     Locality,
     Parcel,
     PickupPoint,
     Quote,
     RateRequest,
-    Service
+    Service,
+    ShipmentRef,
+    ShipmentRequest,
+    ShipmentResult,
+    TrackingUpdate
   }
 
   alias PhoenixKitEcommerce.Shipping.Providers.{Fixed, Table}
@@ -26,7 +31,12 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     Parcel,
     RateRequest,
     Quote,
-    Context
+    Context,
+    ShipmentRequest,
+    ShipmentResult,
+    ShipmentRef,
+    TrackingUpdate,
+    LabelOptions
   ]
 
   defp locality,
@@ -124,10 +134,54 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
         provider: PhoenixKitEcommerce.Shipping.Providers.Fixed,
         service: "branch",
         settings: %{"sender_city" => %{"id" => "c1"}},
+        integration_uuid: "019b669c-3c9d-7256-8ed1-edbc6ae29703",
         locale: "uk",
         currency: "UAH",
         country: "UA"
-      }
+      },
+      %ShipmentRequest{
+        order_uuid: "019b669c-3c9d-7256-8ed1-edbc6ae29704",
+        reference: "ORD-2026-0001",
+        service: "branch",
+        country: "EE",
+        destination: %Destination{locality: locality(), pickup_point: point()},
+        parcels: [parcel()],
+        recipient: %{
+          name: "Mari Maasikas",
+          company: "Kask OÜ",
+          email: "mari@example.com",
+          phone: "+37255551234",
+          raw_phone: "5555 1234"
+        },
+        idempotency_key: "6f1c2a9e-4b7d-5e21-9a3c-0d8e7f6a5b4c",
+        payer: :recipient,
+        description: "Vase x2, Lamp",
+        declared_value: Decimal.new("59.90"),
+        currency: "EUR",
+        cod_amount: nil,
+        cod_currency: nil
+      },
+      %ShipmentResult{
+        carrier_ref: "C-1",
+        tracking_number: "CE123456789EE",
+        tracking_url: "https://track.example/CE123456789EE",
+        carrier_label: "Omniva",
+        extra: %{"sender" => %{"phone" => "+3725000000"}}
+      },
+      %ShipmentRef{
+        carrier_ref: "C-1",
+        tracking_number: "CE123456789EE",
+        service: "branch",
+        extra: %{"barcode" => "123"}
+      },
+      %TrackingUpdate{
+        tracking_number: "CE123456789EE",
+        carrier_ref: "C-1",
+        status: :ready_for_pickup,
+        occurred_at: ~U[2026-11-25 10:00:00Z],
+        description: "Arrived at the parcel machine"
+      },
+      %LabelOptions{format: :a6}
     ]
   end
 
@@ -358,6 +412,153 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     test "from_map ignores providers that are not loaded" do
       assert %Context{provider: nil} = Context.from_map(%{"provider" => "Elixir.Nope.Nothing"})
       assert %Context{provider: nil} = Context.from_map(%{"provider" => "plain"})
+    end
+  end
+
+  describe "shipment structs" do
+    test "a request without a payer, a known status or a format falls back to the defaults" do
+      assert %ShipmentRequest{payer: :shop, parcels: [], cod_amount: nil} =
+               ShipmentRequest.from_map(%{"payer" => "carrier", "parcels" => [nil, "x"]})
+
+      assert %TrackingUpdate{status: nil} = TrackingUpdate.from_map(%{"status" => "lost"})
+      assert %LabelOptions{format: :a4} = LabelOptions.from_map(%{"format" => "letter"})
+    end
+
+    test "the description is cut to 100 characters and blank is nil" do
+      assert String.length(ShipmentRequest.description(String.duplicate("x", 150))) == 100
+      assert ShipmentRequest.description("   ") == nil
+    end
+
+    test "a recipient keeps what it is given, trimmed, and blank values are nil" do
+      assert ShipmentRequest.recipient(%{"name" => " Mari ", "email" => "", phone: "5555"}) ==
+               %{name: "Mari", company: nil, email: nil, phone: "5555", raw_phone: nil}
+
+      assert ShipmentRequest.recipient(nil) ==
+               %{name: nil, company: nil, email: nil, phone: nil, raw_phone: nil}
+    end
+  end
+
+  describe "ShipmentRequest.e164_phone/2" do
+    test "a number without a country code takes the destination country's" do
+      assert ShipmentRequest.e164_phone("5555 1234", "EE") == "+37255551234"
+      assert ShipmentRequest.e164_phone("(5555) 12-34", "ee") == "+37255551234"
+      assert ShipmentRequest.e164_phone("6123 4567", "LV") == "+37161234567"
+    end
+
+    test "the national trunk 0 is dropped when the country code is added, except IT, SM and VA" do
+      assert ShipmentRequest.e164_phone("067 123 45 67", "UA") == "+380671234567"
+      assert ShipmentRequest.e164_phone("040 123 4567", "FI") == "+358401234567"
+      assert ShipmentRequest.e164_phone("0151 2345678", "DE") == "+491512345678"
+      assert ShipmentRequest.e164_phone("06 1234 5678", "IT") == "+390612345678"
+      assert ShipmentRequest.e164_phone("0549 123456", "SM") == "+3780549123456"
+      assert ShipmentRequest.e164_phone("06 6988 1234", "VA") == "+390669881234"
+    end
+
+    test "each country's own trunk prefix is dropped" do
+      # Lithuania: 8 (and 0, the prefix it moves to), 8-digit numbers.
+      assert ShipmentRequest.e164_phone("8 612 34567", "LT") == "+37061234567"
+      assert ShipmentRequest.e164_phone("0 612 34567", "LT") == "+37061234567"
+      assert ShipmentRequest.e164_phone("612 34567", "LT") == "+37061234567"
+      # Russia and Kazakhstan: 8, 10-digit numbers; a number that is already
+      # ten digits keeps its 8 (St Petersburg is 812).
+      assert ShipmentRequest.e164_phone("8 495 123 45 67", "RU") == "+74951234567"
+      assert ShipmentRequest.e164_phone("812 123 45 67", "RU") == "+78121234567"
+      assert ShipmentRequest.e164_phone("8 701 123 45 67", "KZ") == "+77011234567"
+      # Belarus: 8 0, 9-digit numbers.
+      assert ShipmentRequest.e164_phone("8 029 123 45 67", "BY") == "+375291234567"
+      # Hungary: 06.
+      assert ShipmentRequest.e164_phone("06 30 123 4567", "HU") == "+36301234567"
+      assert ShipmentRequest.e164_phone("06 1 234 5678", "HU") == "+3612345678"
+      # Ukraine: 0, and the old 8 0.
+      assert ShipmentRequest.e164_phone("8 067 123 45 67", "UA") == "+380671234567"
+      # The US and Canada: 1.
+      assert ShipmentRequest.e164_phone("1 212 555 0123", "US") == "+12125550123"
+      assert ShipmentRequest.e164_phone("212 555 0123", "US") == "+12125550123"
+      # No trunk prefix: Latvia, Poland.
+      assert ShipmentRequest.e164_phone("2612 3456", "LV") == "+37126123456"
+      assert ShipmentRequest.e164_phone("512 345 678", "PL") == "+48512345678"
+    end
+
+    test "a number that fits none of its country's forms is nil, not a guess" do
+      assert ShipmentRequest.e164_phone("8 612 345", "LT") == nil
+      assert ShipmentRequest.e164_phone("9 495 123 45 67", "RU") == nil
+      # A 0 that is not Hungary's 06 trunk: no Hungarian number begins with 0.
+      assert ShipmentRequest.e164_phone("030 123 4567", "HU") == nil
+      assert ShipmentRequest.e164_phone("0 30 123 4567", "HU") == nil
+    end
+
+    test "a 0 typed before a number of a country without a trunk prefix is dropped" do
+      # No number there begins with 0, so the 0 is a habit, not a digit.
+      assert ShipmentRequest.e164_phone("05123 4567", "EE") == "+37251234567"
+      assert ShipmentRequest.e164_phone("0 5123 4567", "EE") == "+37251234567"
+      assert ShipmentRequest.e164_phone("02612 3456", "LV") == "+37126123456"
+      assert ShipmentRequest.e164_phone("0512 345 678", "PL") == "+48512345678"
+      assert ShipmentRequest.e164_phone("0912 345 678", "PT") == "+351912345678"
+      # Italy, San Marino and the Vatican keep it: it is part of the number.
+      assert ShipmentRequest.e164_phone("06 1234 5678", "IT") == "+390612345678"
+    end
+
+    test "an (0) is never dialled from abroad" do
+      assert ShipmentRequest.e164_phone("+44 (0)20 7946 0958", nil) == "+442079460958"
+      assert ShipmentRequest.e164_phone("(0)151 2345678", "DE") == "+491512345678"
+      assert ShipmentRequest.e164_phone("+49 (0) 151 2345678", "EE") == "+491512345678"
+    end
+
+    test "a trunk 0 typed after the country code is dropped where the trunk is 0" do
+      assert ShipmentRequest.e164_phone("+49 0151 1234567", nil) == "+491511234567"
+      assert ShipmentRequest.e164_phone("+358 040 123 4567", "EE") == "+358401234567"
+      assert ShipmentRequest.e164_phone("00372 05123 4567", nil) == "+37251234567"
+      # Italy and San Marino: the 0 is the number's own.
+      assert ShipmentRequest.e164_phone("+39 06 1234 5678", nil) == "+390612345678"
+      assert ShipmentRequest.e164_phone("+378 0549 123456", nil) == "+3780549123456"
+      # Not a 0 trunk: Hungary's is 06, Russia's 8, the US's 1.
+      assert ShipmentRequest.e164_phone("+36 30 123 4567", nil) == "+36301234567"
+      assert ShipmentRequest.e164_phone("+7 495 123 45 67", nil) == "+74951234567"
+    end
+
+    test "a 0 after the code of a country whose numbers begin with 0 is kept" do
+      assert ShipmentRequest.e164_phone("+225 07 1234 5678", nil) == "+2250712345678"
+      assert ShipmentRequest.e164_phone("+242 06 123 4567", nil) == "+242061234567"
+      assert ShipmentRequest.e164_phone("+241 06 12 34 56", nil) == "+24106123456"
+      assert ShipmentRequest.e164_phone("+229 01 97 12 34 56", nil) == "+2290197123456"
+      assert ShipmentRequest.e164_phone("07 1234 5678", "CI") == "+2250712345678"
+    end
+
+    test "a trunk typed after a code whose trunk is not 0 follows the national rule" do
+      assert ShipmentRequest.e164_phone("+370 8 612 34567", nil) == "+37061234567"
+      assert ShipmentRequest.e164_phone("+7 8 495 123 45 67", nil) == "+74951234567"
+      assert ShipmentRequest.e164_phone("+7 812 123 45 67", nil) == "+78121234567"
+      assert ShipmentRequest.e164_phone("+36 06 30 123 4567", nil) == "+36301234567"
+      assert ShipmentRequest.e164_phone("+375 80 29 123 45 67", nil) == "+375291234567"
+      # A 0 left after such a code is no number there.
+      assert ShipmentRequest.e164_phone("+7 0 495 123 45 67", nil) == nil
+      assert ShipmentRequest.e164_phone("+36 030 123 4567", nil) == nil
+      assert ShipmentRequest.e164_phone("+1 0212 555 0123", nil) == nil
+      assert ShipmentRequest.e164_phone("+375 029 123 45 67", nil) == nil
+    end
+
+    test "an (0) in Italy, San Marino or the Vatican is part of the number" do
+      assert ShipmentRequest.e164_phone("+39 (0)6 1234 5678", nil) == "+390612345678"
+      assert ShipmentRequest.e164_phone("+378 (0)549 123456", nil) == "+3780549123456"
+      assert ShipmentRequest.e164_phone("(0)6 1234 5678", "IT") == "+390612345678"
+    end
+
+    test "a number with a country code keeps it" do
+      assert ShipmentRequest.e164_phone("+372 5555 1234", "LV") == "+37255551234"
+      assert ShipmentRequest.e164_phone("00372 5555 1234", nil) == "+37255551234"
+    end
+
+    test "a tilde typed in the number is not taken for an (0)" do
+      assert ShipmentRequest.e164_phone("123456~78", "EE") == nil
+      assert ShipmentRequest.e164_phone("+39~6 1234 5678", nil) == nil
+    end
+
+    test "nothing usable is nil" do
+      assert ShipmentRequest.e164_phone("5555 1234", nil) == nil
+      assert ShipmentRequest.e164_phone("call me", "EE") == nil
+      assert ShipmentRequest.e164_phone("+372 12", "EE") == nil
+      assert ShipmentRequest.e164_phone("+0 5555 1234 5678 9", "EE") == nil
+      assert ShipmentRequest.e164_phone(nil, "EE") == nil
     end
   end
 end

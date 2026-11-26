@@ -195,6 +195,16 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
       refute table?(prefix, "phoenix_kit_shop_cart_claims")
     end
 
+    test "version: 6 stops before the shipments" do
+      prefix = create_schema("pke_up_six")
+
+      run_up(prefix: prefix, version: 6)
+
+      assert version(prefix) == 6
+      assert table?(prefix, "phoenix_kit_shop_cart_claims")
+      refute table?(prefix, "phoenix_kit_shop_shipments")
+    end
+
     test "no :version means the current version" do
       prefix = create_schema("pke_up_default")
 
@@ -205,6 +215,25 @@ defmodule PhoenixKitEcommerce.MigrationsUpVersionTest do
       assert shopify_row?(prefix)
       assert table?(prefix, "phoenix_kit_shop_search_index")
       assert table?(prefix, "phoenix_kit_shop_cart_claims")
+      assert table?(prefix, "phoenix_kit_shop_shipments")
+    end
+
+    test "V7 up, up again, down to V6 and up again ends where one run does" do
+      prefix = create_schema("pke_up_seven")
+
+      run_up(prefix: prefix)
+      once = catalog(prefix)
+
+      run_up(prefix: prefix)
+      assert catalog(prefix) == once
+
+      Enum.each(Migrations.down_statements(prefix, 6), &Repo.query!/1)
+      assert version(prefix) == 6
+      assert table?(prefix, "phoenix_kit_shop_shipments")
+
+      run_up(prefix: prefix)
+      assert version(prefix) == 7
+      assert catalog(prefix) == once
     end
   end
 

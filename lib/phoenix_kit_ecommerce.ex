@@ -369,6 +369,44 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
+  @doc """
+  The paper size shipment labels are printed in (setting
+  `shop_shipping_label_format`): `:a4` (the default), `:a5` or `:a6`. An
+  unknown stored value is `:a4`.
+  """
+  @spec shipping_label_format() :: Shipping.LabelOptions.format()
+  def shipping_label_format do
+    case Settings.get_setting_cached("shop_shipping_label_format", "a4") do
+      "a5" -> :a5
+      "a6" -> :a6
+      _ -> :a4
+    end
+  end
+
+  @doc """
+  Whether a paid order's shipment is registered with the carrier on its own
+  (setting `shop_shipping_auto_create`, see
+  `PhoenixKitEcommerce.ShipmentAutoCreateHandler`). Off by default; a
+  settings-layer error counts as off.
+  """
+  @spec shipping_auto_create?() :: boolean()
+  def shipping_auto_create? do
+    Settings.get_boolean_setting("shop_shipping_auto_create", false)
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  @doc "Turns the automatic registration of paid orders' shipments on or off."
+  @spec set_shipping_auto_create(boolean()) :: {:ok, boolean()} | {:error, :update_failed}
+  def set_shipping_auto_create(enabled) when is_boolean(enabled) do
+    case Settings.update_boolean_setting_with_module("shop_shipping_auto_create", enabled, "shop") do
+      {:ok, _} -> {:ok, enabled}
+      _error -> {:error, :update_failed}
+    end
+  end
+
   @parcel_defaults_key "shop_shipping_parcel_defaults"
   @parcel_default_fields [:length_mm, :width_mm, :height_mm, :weight_g]
   @max_parcel_value 10_000_000
@@ -947,11 +985,18 @@ defmodule PhoenixKitEcommerce do
   # `PhoenixKit.ModuleRegistry.static_children/0` - no host wiring - and
   # started after `PhoenixKit.Cache.Registry`, a fixed earlier child of the
   # same supervisor.
-  # The shipping lookup cache (`Shipping.Cache`) and the search-index subscriber
-  # (`Search.Subscriber`) go in the same list.
+  # The shipping lookup cache (`Shipping.Cache`), the search-index subscriber
+  # (`Search.Subscriber`) and the supervisor of the shipment attempts
+  # (`Shipments.TaskSupervisor`) go in the same list.
   @impl PhoenixKit.Module
   def children,
-    do: StorefrontCache.children() ++ [Shipping.Cache, PhoenixKitEcommerce.Search.Subscriber]
+    do:
+      StorefrontCache.children() ++
+        [
+          Shipping.Cache,
+          PhoenixKitEcommerce.Search.Subscriber,
+          {Task.Supervisor, name: PhoenixKitEcommerce.Shipments.TaskSupervisor}
+        ]
 
   @impl PhoenixKit.Module
   def permission_metadata do
@@ -999,6 +1044,12 @@ defmodule PhoenixKitEcommerce do
           key: "run_imports",
           label: "Run imports",
           description: "Start CSV imports and manage import configurations"
+        },
+        %{
+          key: "manage_shipments",
+          label: "Manage shipments",
+          description:
+            "Register paid orders with the carrier, resolve and cancel shipments and print their labels (includes the recipients' contact details)"
         }
       ]
     }
@@ -1202,6 +1253,18 @@ defmodule PhoenixKitEcommerce do
         # so `get_setting_cached/2` is required here — this is a hot path.
         visible: fn _scope -> TranslationSweepSettings.translations_enabled?() end,
         gettext_backend: PhoenixKitEcommerce.Gettext
+      ),
+      Tab.new!(
+        id: :admin_shop_shipments,
+        label: "Shipments",
+        icon: "hero-archive-box",
+        path: "shop/shipments",
+        priority: 539,
+        level: :admin,
+        permission: "shop.manage_shipments",
+        live_view: {PhoenixKitEcommerce.Web.Shipments, :index},
+        parent: :admin_shop,
+        gettext_backend: PhoenixKitEcommerce.Gettext
       )
     ]
   end
@@ -1298,7 +1361,10 @@ defmodule PhoenixKitEcommerce do
       # `default` queue and do nothing while the shop is off.
       {"17 * * * *", PhoenixKitEcommerce.Workers.ApiCartSweepWorker},
       {"40 4 * * *", PhoenixKitEcommerce.Workers.ApiCartPruneWorker},
-      {"50 4 * * *", PhoenixKitEcommerce.Workers.ApiClaimPruneWorker}
+      {"50 4 * * *", PhoenixKitEcommerce.Workers.ApiClaimPruneWorker},
+      # The shipments' run every 30 minutes, off the hour: the stuck sweep and
+      # the carriers' tracking. On `default`, a no-op while the shop is off.
+      {"7,37 * * * *", PhoenixKitEcommerce.Workers.ShipmentTrackingWorker}
     ]
   end
 
@@ -1409,11 +1475,16 @@ defmodule PhoenixKitEcommerce do
   @doc """
   Order-event handlers this package contributes (duck-typed discovery by
   `PhoenixKitBilling.OrderEvents`): one writes a paid order's goods off the
-  warehouse stock, the other sends its emails. They are separate so that a
-  failure of one retries alone.
+  warehouse stock, one sends its emails, one registers its shipment when
+  `shipping_auto_create?/0` is on. They are separate so that a failure of one
+  retries alone.
   """
   def billing_order_event_handlers do
-    [PhoenixKitEcommerce.OrderStockHandler, PhoenixKitEcommerce.OrderEmailHandler]
+    [
+      PhoenixKitEcommerce.OrderStockHandler,
+      PhoenixKitEcommerce.OrderEmailHandler,
+      PhoenixKitEcommerce.ShipmentAutoCreateHandler
+    ]
   end
 
   @doc "The order emails, for core's email preview (`PhoenixKit.Email.Catalog`)."
@@ -5114,7 +5185,9 @@ defmodule PhoenixKitEcommerce do
 
     * `:not_needed` - nothing ships, no method is selected, or its price is fixed
     * `:needs_destination` - the service needs a pickup point or an address
-      that is missing (or that the provider refuses)
+      that is missing (or that the provider refuses: its
+      `validate_destination/3`, or a quote answered with
+      `:invalid_destination`)
     * `:missing` - no quote yet (`quote_cart_shipping/2`)
     * `:stale` - the quote was asked for a different cart, destination,
       payment or method configuration
@@ -5167,13 +5240,18 @@ defmodule PhoenixKitEcommerce do
 
   # `{status, stored, reason}`; `stored` is the stored entry only when it is
   # current, `reason` says why a `:needs_destination` is one (`"point_limits"`:
-  # the chosen pickup point cannot take the parcels) and is `nil` otherwise.
+  # the chosen pickup point cannot take the parcels; `"invalid_destination"`:
+  # the carrier's quote refused it) and is `nil` otherwise.
   defp cart_quote_state(cart, method, items, service_lookup \\ nil) do
     with {:ok, request} <- shipping_rate_request(cart, method, items),
-         :ok <-
-           check_destination(lookup_shipping_service(service_lookup, method, request), request) do
-      {status, stored} = stored_quote_state(CartQuote.stored(cart.metadata), request, method)
-      {status, stored, nil}
+         service_result = lookup_shipping_service(service_lookup, method, request),
+         :ok <- check_destination(service_result, request) do
+      stored_quote_state(
+        CartQuote.stored(cart.metadata),
+        request,
+        method,
+        destination_kind(service_result)
+      )
     else
       {:error, :needs_destination} ->
         {:needs_destination, nil, nil}
@@ -5189,13 +5267,28 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp stored_quote_state(nil, _request, _method), do: {:missing, nil}
+  defp stored_quote_state(nil, _request, _method, _kind), do: {:missing, nil, nil}
 
-  defp stored_quote_state(stored, request, method) do
-    if stored_quote_current?(stored, request, method),
-      do: {stored.status, stored},
-      else: {:stale, nil}
+  # A carrier that refused the destination itself (`:invalid_destination`)
+  # asks for another one, when the service takes one the shopper can change
+  # (a pickup point, an address); for any other service it is the method
+  # that cannot serve the cart.
+  defp stored_quote_state(stored, request, method, kind) do
+    cond do
+      not stored_quote_current?(stored, request, method) -> {:stale, nil, nil}
+      refused_destination?(stored, kind) -> {:needs_destination, nil, "invalid_destination"}
+      true -> {stored.status, stored, nil}
+    end
   end
+
+  defp refused_destination?(%{status: :unavailable, reason: "invalid_destination"}, kind)
+       when kind in [:pickup_point, :address],
+       do: true
+
+  defp refused_destination?(_stored, _kind), do: false
+
+  defp destination_kind({:ok, %ShippingService{destination: kind}, _context}), do: kind
+  defp destination_kind(_service_result), do: nil
 
   # Asked for this very request, of the provider that prices the method now,
   # and not too long ago.
@@ -9003,7 +9096,8 @@ defmodule PhoenixKitEcommerce do
     * `status` - `shipping_quote_status/1`
     * `reason` - why a `:needs_destination` is one when it is not just a
       missing destination: `"point_limits"` (the chosen pickup point cannot
-      take the parcels of the cart, by weight, size or declared value);
+      take the parcels of the cart, by weight, size or declared value),
+      `"invalid_destination"` (the carrier's quote refused the destination);
       `nil` otherwise
     * `entry` - `cart_shipping_quote/1`
     * `presented` - `present_shipping_method/2` (`nil` without a method)

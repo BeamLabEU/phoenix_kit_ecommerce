@@ -36,6 +36,10 @@ defmodule PhoenixKitEcommerce.Web.ClaimRoutesTest do
       plug(:accepts, ["html"])
     end
 
+    pipeline :phoenix_kit_admin_only do
+      plug(:accepts, ["html"])
+    end
+
     Splice.claim_routes()
   end
 
@@ -49,7 +53,7 @@ defmodule PhoenixKitEcommerce.Web.ClaimRoutesTest do
                plug_opts: :show
              }
            ] =
-             Enum.filter(routes, &(&1.verb == :get))
+             Enum.filter(routes, &(&1.verb == :get and &1.path =~ "claim"))
 
     assert [%{path: "/checkout/claim/:token", plug_opts: :create}] =
              Enum.filter(routes, &(&1.verb == :post))
@@ -63,5 +67,13 @@ defmodule PhoenixKitEcommerce.Web.ClaimRoutesTest do
                pipe_through: @pipelines
              } = Phoenix.Router.route_info(ProbeRouter, verb, "/checkout/claim/abc", "")
     end
+  end
+
+  test "the label route is outside any locale and admin prefix, behind the admin pipeline" do
+    assert %{
+             plug: PhoenixKitEcommerce.Web.ShipmentLabelsController,
+             plug_opts: :index,
+             pipe_through: [:browser, :phoenix_kit_admin_only]
+           } = Phoenix.Router.route_info(ProbeRouter, "GET", "/shop-shipments/labels", "")
   end
 end

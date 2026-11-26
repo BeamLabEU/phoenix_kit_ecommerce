@@ -40,6 +40,25 @@ defmodule PhoenixKitEcommerce.Test.Router do
     plug(:assign_test_user)
   end
 
+  # Stands in for core's `:phoenix_kit_admin_only` (it assigns the scope and
+  # admits an admin): the scope from the test session, the gate left to the
+  # controller, which is what the label route's tests are about.
+  pipeline :phoenix_kit_admin_only do
+    plug(:assign_test_scope)
+  end
+
+  def assign_test_scope(conn, _opts) do
+    case Plug.Conn.get_session(conn, "phoenix_kit_test_scope") do
+      %{user: user} = scope ->
+        conn
+        |> Plug.Conn.assign(:phoenix_kit_current_scope, scope)
+        |> Plug.Conn.assign(:phoenix_kit_current_user, user)
+
+      _ ->
+        conn
+    end
+  end
+
   def assign_test_user(conn, _opts) do
     case Plug.Conn.get_session(conn, "phoenix_kit_test_scope") do
       %{user: user} -> Plug.Conn.assign(conn, :phoenix_kit_current_user, user)
@@ -52,6 +71,14 @@ defmodule PhoenixKitEcommerce.Test.Router do
 
     get("/checkout/claim/:token", PhoenixKitEcommerce.Web.ClaimController, :show)
     post("/checkout/claim/:token", PhoenixKitEcommerce.Web.ClaimController, :create)
+  end
+
+  # The label route, the way `Web.Routes.generate/1` emits it: outside the
+  # admin segment and the locale prefix.
+  scope "/" do
+    pipe_through([:browser, :phoenix_kit_admin_only])
+
+    get("/shop-shipments/labels", PhoenixKitEcommerce.Web.ShipmentLabelsController, :index)
   end
 
   scope "/", PhoenixKitEcommerce.Web do
@@ -119,6 +146,9 @@ defmodule PhoenixKitEcommerce.Test.Router do
         # Carts
         live("/carts", Carts, :index, as: :shop_carts)
 
+        # Shipments
+        live("/shipments", Shipments, :index, as: :shop_shipments)
+
         # Settings
         live("/settings", Settings, :index, as: :shop_settings)
         live("/settings/options", OptionsSettings, :index, as: :shop_options_settings)
@@ -163,6 +193,9 @@ defmodule PhoenixKitEcommerce.Test.Router do
 
         # Carts
         live("/carts", Carts, :index, as: :shop_carts_prefixless)
+
+        # Shipments
+        live("/shipments", Shipments, :index, as: :shop_shipments_prefixless)
 
         # Settings
         live("/settings", Settings, :index, as: :shop_settings_prefixless)

@@ -5,7 +5,8 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   Users can view their own orders with full details including:
   - Order items and totals
   - Billing information
-  - Order status
+  - Order status, `shipped` / `delivered` once a shipment says so
+  - Its shipments: carrier, tracking number and tracking link
 
   Security:
   - Users can only view their own orders (user_uuid check)
@@ -16,6 +17,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Web.Components.ShippingDisplay
   alias PhoenixKitEcommerce.Web.Helpers, as: ShopHelpers
   alias PhoenixKitEcommerce.Web.StatusLabels
@@ -65,10 +67,13 @@ defmodule PhoenixKitEcommerce.Web.UserOrderDetails do
   defp setup_order_assigns(socket, order, current_user) do
     currency = Shop.currency_for_code(order.currency)
     billing_profile = get_billing_profile(order)
+    shipments = Map.get(Shipments.buyer_shipments([order.uuid]), order.uuid, [])
 
     socket
     |> assign(:page_title, gettext("Order %{number}", number: order.order_number))
     |> assign(:order, order)
+    |> assign(:shipments, shipments)
+    |> assign(:display_status, Shipments.buyer_order_status(order, shipments))
     |> assign(:current_user, current_user)
     |> assign(:currency, currency)
     |> assign(:billing_profile, billing_profile)

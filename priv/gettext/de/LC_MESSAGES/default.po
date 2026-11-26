@@ -8419,3 +8419,672 @@ msgstr "Mengenlimit erreicht"
 #, elixir-autogen, elixir-format
 msgid "cannot be added here right now"
 msgstr "kann hier gerade nicht hinzugefügt werden"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:68
+#, elixir-autogen, elixir-format
+msgid "Registering"
+msgstr "Wird registriert"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:69
+#, elixir-autogen, elixir-format
+msgid "Outcome unknown"
+msgstr "Ergebnis unbekannt"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:70
+#, elixir-autogen, elixir-format
+msgid "Registered"
+msgstr "Registriert"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:71
+#, elixir-autogen, elixir-format
+msgid "In transit"
+msgstr "Unterwegs"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:72
+#, elixir-autogen, elixir-format
+msgid "Ready for pickup"
+msgstr "Abholbereit"
+
+#: lib/phoenix_kit_ecommerce/web/status_labels.ex:74
+#, elixir-autogen, elixir-format
+msgid "Returned"
+msgstr "Zurückgesendet"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:197
+#, elixir-autogen, elixir-format
+msgid "The order is not paid."
+msgstr "Die Bestellung ist nicht bezahlt."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:200
+#, elixir-autogen, elixir-format
+msgid "This order already has a shipment in progress."
+msgstr "Für diese Bestellung gibt es bereits eine laufende Sendung."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:203
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot register shipments from the shop."
+msgstr "Dieser Versanddienst kann keine Sendungen aus dem Shop registrieren."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:206
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot cancel shipments from the shop."
+msgstr "Dieser Versanddienst kann keine Sendungen aus dem Shop stornieren."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:209
+#, elixir-autogen, elixir-format
+msgid "The chosen pickup point is no longer available. Choose another one."
+msgstr "Die gewählte Abholstelle ist nicht mehr verfügbar. Wählen Sie eine andere."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "The carrier does not accept this destination: %{reason}"
+msgstr "Der Versanddienst akzeptiert dieses Ziel nicht: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:215
+#, elixir-autogen, elixir-format
+msgid "The destination could not be checked with the carrier. Please try again."
+msgstr "Das Ziel konnte beim Versanddienst nicht geprüft werden. Bitte versuchen Sie es erneut."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:218
+#, elixir-autogen, elixir-format
+msgid "The shipment was changed in the meantime. Reload it and try again."
+msgstr "Die Sendung wurde inzwischen geändert. Laden Sie sie neu und versuchen Sie es erneut."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:222
+#, elixir-autogen, elixir-format
+msgid "The carrier connection this shipment was created through is no longer available."
+msgstr "Die Verbindung zum Versanddienst, über die diese Sendung erstellt wurde, ist nicht mehr verfügbar."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:226
+#, elixir-autogen, elixir-format
+msgid "The carrier connection now points to another environment (test or live) than the one this shipment was created in."
+msgstr "Die Verbindung zum Versanddienst zeigt jetzt auf eine andere Umgebung (Test oder Live) als die, in der diese Sendung erstellt wurde."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:232
+#, elixir-autogen, elixir-format
+msgid "The shipping method now uses another carrier than the one the order was placed with."
+msgstr "Die Versandart verwendet jetzt einen anderen Versanddienst als den, mit dem die Bestellung aufgegeben wurde."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:236
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number."
+msgstr "Geben Sie die Sendungsnummer ein."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:237
+#, elixir-autogen, elixir-format
+msgid "This carrier is not configured any more."
+msgstr "Dieser Versanddienst ist nicht mehr eingerichtet."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:240
+#, elixir-autogen, elixir-format
+msgid "The carrier no longer offers the delivery service of this order."
+msgstr "Der Versanddienst bietet die Zustellart dieser Bestellung nicht mehr an."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:251
+#, elixir-autogen, elixir-format
+msgid "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."
+msgstr "Die Registrierung der Sendung wurde unterbrochen, und der Versanddienst hat sie möglicherweise schon. Prüfen Sie das Portal des Versanddienstes: Nach 10 Minuten können Sie die Sendungsnummer eingeben oder die Sendung als fehlgeschlagen markieren."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:211
+#, elixir-autogen, elixir-format
+msgid "The carrier refused the cancellation: %{reason}"
+msgstr "Der Versanddienst hat die Stornierung abgelehnt: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:216
+#, elixir-autogen, elixir-format
+msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
+msgstr "Der Versanddienst hat die Stornierung nicht bestätigt (%{reason}), möglicherweise hat er die Sendung aber storniert. Prüfen Sie das Portal des Versanddienstes."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:257
+#, elixir-autogen, elixir-format
+msgid "The recipient details are not valid."
+msgstr "Die Empfängerangaben sind nicht gültig."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:717
+#, elixir-autogen, elixir-format
+msgid "(%{current} of %{total})"
+msgstr "(%{current} von %{total})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:775
+#, elixir-autogen, elixir-format
+msgid "1 order to ship"
+msgid_plural "%{count} orders to ship"
+msgstr[0] "%{count} Bestellung zu versenden"
+msgstr[1] "%{count} Bestellungen zu versenden"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:858
+#, elixir-autogen, elixir-format
+msgid "1 shipment"
+msgid_plural "%{count} shipments"
+msgstr[0] "%{count} Sendung"
+msgstr[1] "%{count} Sendungen"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:280
+#, elixir-autogen, elixir-format
+msgid "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."
+msgstr "Für eine ausgewählte Sendung hat der Versanddienst kein Etikett: Sie ist nicht registriert oder bereits zugestellt, zurückgesendet oder storniert."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1054
+#, elixir-autogen, elixir-format
+msgid "Add a parcel"
+msgstr "Paket hinzufügen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:696
+#, elixir-autogen, elixir-format
+msgid "All carriers"
+msgstr "Alle Versanddienste"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:706
+#, elixir-autogen, elixir-format
+msgid "All statuses"
+msgstr "Alle Status"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:270
+#, elixir-autogen, elixir-format
+msgid "At most 50 labels can be printed at once."
+msgstr "Es können höchstens 50 Etiketten auf einmal gedruckt werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1138
+#, elixir-autogen, elixir-format
+msgid "Cancel the shipment at the carrier?"
+msgstr "Sendung beim Versanddienst stornieren?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1017
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier"
+msgstr "Beim Versanddienst storniert"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1237
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier by the shop"
+msgstr "Vom Shop beim Versanddienst storniert"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1139
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier?"
+msgstr "Beim Versanddienst storniert?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1136
+#, elixir-autogen, elixir-format
+msgid "Cancelling the shipment of order %{number} at the carrier..."
+msgstr "Die Sendung der Bestellung %{number} wird beim Versanddienst storniert..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:695
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:878
+#, elixir-autogen, elixir-format
+msgid "Carrier"
+msgstr "Versanddienst"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1233
+#, elixir-autogen, elixir-format
+msgid "Carrier's answer"
+msgstr "Antwort des Versanddienstes"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1044
+#, elixir-autogen, elixir-format
+msgid "Company"
+msgstr "Firma"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:794
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1077
+#, elixir-autogen, elixir-format
+msgid "Destination"
+msgstr "Ziel"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:727
+#, elixir-autogen, elixir-format
+msgid "Dismiss"
+msgstr "Ausblenden"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1045
+#, elixir-autogen, elixir-format
+msgid "Email"
+msgstr "E-Mail"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:627
+#, elixir-autogen, elixir-format
+msgid "Enter each parcel's weight in grams, and its sizes in millimetres or nothing."
+msgstr "Geben Sie das Gewicht jedes Pakets in Gramm und seine Maße in Millimetern an oder lassen Sie sie leer."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1106
+#, elixir-autogen, elixir-format
+msgid "Enter the number the carrier's portal shows for this shipment. The shipment is then registered."
+msgstr "Geben Sie die Nummer ein, die das Portal des Versanddienstes für diese Sendung anzeigt. Die Sendung gilt dann als registriert."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1104
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number"
+msgstr "Sendungsnummer eingeben"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:982
+#, elixir-autogen, elixir-format
+msgid "Enter tracking number"
+msgstr "Sendungsnummer eingeben"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2313
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2318
+#, elixir-autogen, elixir-format
+msgid "Failed to update the label size"
+msgstr "Etikettengröße konnte nicht aktualisiert werden"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:477
+#, elixir-autogen, elixir-format
+msgid "Failed: %{error}"
+msgstr "Fehlgeschlagen: %{error}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:929
+#, elixir-autogen, elixir-format
+msgid "History"
+msgstr "Verlauf"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2310
+#, elixir-autogen, elixir-format
+msgid "Label size updated"
+msgstr "Etikettengröße aktualisiert"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:273
+#, elixir-autogen, elixir-format
+msgid "Labels can be printed together only for shipments of one carrier connection."
+msgstr "Etiketten können nur für Sendungen einer Versanddienst-Verbindung gemeinsam gedruckt werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:993
+#, elixir-autogen, elixir-format
+msgid "Mark failed"
+msgstr "Als fehlgeschlagen markieren"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1235
+#, elixir-autogen, elixir-format
+msgid "Marked failed"
+msgstr "Als fehlgeschlagen markiert"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:681
+#, elixir-autogen, elixir-format
+msgid "Needs attention"
+msgstr "Erfordert Aufmerksamkeit"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:923
+#, elixir-autogen, elixir-format
+msgid "No answer for 10 minutes"
+msgstr "Seit 10 Minuten keine Antwort"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:802
+#, elixir-autogen, elixir-format
+msgid "No paid order is waiting for a shipment."
+msgstr "Keine bezahlte Bestellung wartet auf eine Sendung."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1258
+#, elixir-autogen, elixir-format
+msgid "No point of this method takes this order."
+msgstr "Keine Abholstelle dieser Versandart nimmt diese Bestellung an."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:888
+#, elixir-autogen, elixir-format
+msgid "No shipment is on its way."
+msgstr "Keine Sendung ist unterwegs."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:889
+#, elixir-autogen, elixir-format
+msgid "No shipment needs attention."
+msgstr "Keine Sendung erfordert Aufmerksamkeit."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:678
+#, elixir-autogen, elixir-format
+msgid "Open"
+msgstr "Offen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:792
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:876
+#, elixir-autogen, elixir-format
+msgid "Order"
+msgstr "Bestellung"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1052
+#, elixir-autogen, elixir-format
+msgid "Parcels"
+msgstr "Pakete"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1046
+#, elixir-autogen, elixir-format
+msgid "Phone"
+msgstr "Telefon"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:209
+#, elixir-autogen, elixir-format
+msgid "Please enter the point code"
+msgstr "Bitte geben Sie den Code der Abholstelle ein"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:444
+#, elixir-autogen, elixir-format
+msgid "Point code"
+msgstr "Code der Abholstelle"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:961
+#, elixir-autogen, elixir-format
+msgid "Print label"
+msgstr "Etikett drucken"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:867
+#, elixir-autogen, elixir-format
+msgid "Print labels (%{count})"
+msgstr "Etiketten drucken (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:793
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:877
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1041
+#, elixir-autogen, elixir-format
+msgid "Recipient"
+msgstr "Empfänger"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Record the shipment as cancelled because it was cancelled in the carrier's portal. The carrier is not contacted."
+msgstr "Die Sendung als storniert erfassen, weil sie im Portal des Versanddienstes storniert wurde. Der Versanddienst wird nicht kontaktiert."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1238
+#, elixir-autogen, elixir-format
+msgid "Recorded as cancelled at the carrier"
+msgstr "Als beim Versanddienst storniert erfasst"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:839
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1092
+#, elixir-autogen, elixir-format
+msgid "Register"
+msgstr "Registrieren"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:783
+#, elixir-autogen, elixir-format
+msgid "Register selected (%{count})"
+msgstr "Ausgewählte registrieren (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1036
+#, elixir-autogen, elixir-format
+msgid "Register the shipment of order %{number}"
+msgstr "Sendung der Bestellung %{number} registrieren"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:474
+#, elixir-autogen, elixir-format
+msgid "Registered, tracking number %{number}"
+msgstr "Registriert, Sendungsnummer %{number}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1130
+#, elixir-autogen, elixir-format
+msgid "Registering the shipment of order %{number} with the carrier..."
+msgstr "Die Sendung der Bestellung %{number} wird beim Versanddienst registriert..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1231
+#, elixir-autogen, elixir-format
+msgid "Registration started"
+msgstr "Registrierung begonnen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1234
+#, elixir-autogen, elixir-format
+msgid "Retried"
+msgstr "Erneut versucht"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1035
+#, elixir-autogen, elixir-format
+msgid "Retry the shipment of order %{number}"
+msgstr "Sendung der Bestellung %{number} erneut versuchen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1133
+#, elixir-autogen, elixir-format
+msgid "Retrying the shipment of order %{number} with the carrier..."
+msgstr "Die Sendung der Bestellung %{number} wird erneut beim Versanddienst versucht..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1232
+#, elixir-autogen, elixir-format
+msgid "Sent to the carrier"
+msgstr "An den Versanddienst gesendet"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:678
+#, elixir-autogen, elixir-format
+msgid "Shipment label size"
+msgstr "Größe des Versandetiketts"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:366
+#, elixir-autogen, elixir-format
+msgid "Shipment of order %{number}: %{status}"
+msgstr "Sendung der Bestellung %{number}: %{status}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:56
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:669
+#, elixir-autogen, elixir-format
+msgid "Shipments"
+msgstr "Sendungen"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:112
+#, elixir-autogen, elixir-format
+msgid "The carrier did not answer. Please try again."
+msgstr "Der Versanddienst hat nicht geantwortet. Bitte versuchen Sie es erneut."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:285
+#, elixir-autogen, elixir-format
+msgid "The carrier did not return the labels. Try again later."
+msgstr "Der Versanddienst hat die Etiketten nicht geliefert. Versuchen Sie es später erneut."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1144
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked to cancel the shipment. This cannot be undone."
+msgstr "Der Versanddienst wird gebeten, die Sendung zu stornieren. Das kann nicht rückgängig gemacht werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:481
+#, elixir-autogen, elixir-format
+msgid "The carrier's answer is not known. Check the carrier's portal, then enter the tracking number or mark it failed."
+msgstr "Die Antwort des Versanddienstes ist nicht bekannt. Prüfen Sie das Portal des Versanddienstes und geben Sie dann die Sendungsnummer ein oder markieren Sie die Sendung als fehlgeschlagen."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:334
+#, elixir-autogen, elixir-format
+msgid "The carrier's services could not be loaded, so the destination cannot be changed now."
+msgstr "Die Dienste des Versanddienstes konnten nicht geladen werden, daher kann das Ziel jetzt nicht geändert werden."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:269
+#, elixir-autogen, elixir-format
+msgid "The list of shipments is not valid."
+msgstr "Die Liste der Sendungen ist ungültig."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:680
+#, elixir-autogen, elixir-format
+msgid "The paper size the carrier is asked to print shipment labels in. A carrier that cannot print a size answers with an error."
+msgstr "Das Papierformat, in dem der Versanddienst die Versandetiketten drucken soll. Ein Versanddienst, der ein Format nicht drucken kann, antwortet mit einem Fehler."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:290
+#, elixir-autogen, elixir-format
+msgid "The tracking number is recorded."
+msgstr "Die Sendungsnummer ist gespeichert."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:276
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot print labels from the shop."
+msgstr "Dieser Versanddienst kann keine Etiketten aus dem Shop drucken."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:677
+#, elixir-autogen, elixir-format
+msgid "To ship"
+msgstr "Zu versenden"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1110
+#, elixir-autogen, elixir-format
+msgid "Tracking link (optional)"
+msgstr "Sendungsverfolgungslink (optional)"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:880
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1109
+#, elixir-autogen, elixir-format
+msgid "Tracking number"
+msgstr "Sendungsnummer"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1236
+#, elixir-autogen, elixir-format
+msgid "Tracking number entered"
+msgstr "Sendungsnummer eingegeben"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:470
+#, elixir-autogen, elixir-format
+msgid "Use this address"
+msgstr "Diese Adresse verwenden"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:447
+#, elixir-autogen, elixir-format
+msgid "Use this point"
+msgstr "Diese Abholstelle verwenden"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:351
+#, elixir-autogen, elixir-format
+msgid "Wait until the carrier has answered the current request."
+msgstr "Warten Sie, bis der Versanddienst die aktuelle Anfrage beantwortet hat."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:267
+#, elixir-autogen, elixir-format
+msgid "At most %{count} orders can be registered at once."
+msgstr "Es können höchstens %{count} Bestellungen auf einmal registriert werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
+#, elixir-autogen, elixir-format
+msgctxt "shipment"
+msgid "Close"
+msgstr "Abschließen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1375
+#, elixir-autogen, elixir-format
+msgid "Closed, the order was cancelled or refunded"
+msgstr "Abgeschlossen, die Bestellung wurde storniert oder erstattet"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:842
+#, elixir-autogen, elixir-format
+msgid "Loading the order's shipping details from the carrier..."
+msgstr "Die Versanddaten der Bestellung werden beim Versanddienst geladen..."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "Only a shipment of a cancelled or refunded order can be closed."
+msgstr "Nur die Sendung einer stornierten oder erstatteten Bestellung kann abgeschlossen werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Showing the first %{limit} of %{count}. Narrow the list with the filters."
+msgstr "Die ersten %{limit} von %{count} werden angezeigt. Grenzen Sie die Liste mit den Filtern ein."
+
+#: lib/phoenix_kit_ecommerce/web/shipment_labels_controller.ex:27
+#, elixir-autogen, elixir-format
+msgid "The shop is switched off."
+msgstr "Der Shop ist ausgeschaltet."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:277
+#, elixir-autogen, elixir-format
+msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
+msgstr "Der Sendungsverfolgungslink muss eine Webadresse sein, die mit http:// oder https:// beginnt, mit höchstens 2048 Zeichen."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:93
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} is on its way"
+msgstr "Ihre Bestellung {{order_number}} ist unterwegs"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:98
+#, elixir-autogen, elixir-format
+msgid "Your order is on its way"
+msgstr "Ihre Bestellung ist unterwegs"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:103
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been sent with {{carrier}}."
+msgstr "Ihre Bestellung {{order_number}} wurde mit {{carrier}} verschickt."
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:113
+#, elixir-autogen, elixir-format
+msgid "**Tracking number:** {{tracking_number}}"
+msgstr "**Sendungsnummer:** {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:114
+#, elixir-autogen, elixir-format
+msgid "[Track your parcel]({{tracking_url}})"
+msgstr "[Sendung verfolgen]({{tracking_url}})"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:140
+#, elixir-autogen, elixir-format
+msgid "Tracking number: {{tracking_number}}"
+msgstr "Sendungsnummer: {{tracking_number}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:141
+#, elixir-autogen, elixir-format
+msgid "Track your parcel: {{tracking_url}}"
+msgstr "Sendung verfolgen: {{tracking_url}}"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:416
+#, elixir-autogen, elixir-format
+msgid "Order shipped"
+msgstr "Bestellung versandt"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:418
+#, elixir-autogen, elixir-format
+msgid "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
+msgstr "Wird dem Käufer einmal pro Sendung geschickt, sobald der Versanddienst das Paket als unterwegs meldet, mit Sendungsnummer und Link."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipping_display.ex:159
+#, elixir-autogen, elixir-format
+msgid "Track your parcel"
+msgstr "Sendung verfolgen"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:724
+#, elixir-autogen, elixir-format
+msgid "Register shipments when an order is paid"
+msgstr "Sendungen registrieren, sobald eine Bestellung bezahlt ist"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:727
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+msgstr "Der Versanddienst wird gefragt, sobald die Zahlung eingeht, bei Versandarten, deren Versanddienst Sendungen registrieren kann. Eine abgelehnte Sendung wartet auf der Seite Sendungen."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2391
+#, elixir-autogen, elixir-format
+msgid "Shipment registration updated"
+msgstr "Sendungsregistrierung aktualisiert"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2395
+#, elixir-autogen, elixir-format
+msgid "Failed to update the shipment registration"
+msgstr "Sendungsregistrierung konnte nicht aktualisiert werden"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:816
+#, elixir-autogen, elixir-format
+msgid "Email the buyer when a shipment is on its way"
+msgstr "Käufer per E-Mail benachrichtigen, wenn eine Sendung unterwegs ist"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:817
+#, elixir-autogen, elixir-format
+msgid "With the carrier, the tracking number and the tracking link."
+msgstr "Mit Versanddienst, Sendungsnummer und Link zur Sendungsverfolgung."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1426
+#, elixir-autogen, elixir-format
+msgid "Carrier's tracking"
+msgstr "Sendungsverfolgung des Versanddienstes"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1427
+#, elixir-autogen, elixir-format
+msgid "Tracking failed"
+msgstr "Sendungsverfolgung fehlgeschlagen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1428
+#, elixir-autogen, elixir-format
+msgid "Tracking answers again"
+msgstr "Sendungsverfolgung antwortet wieder"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1166
+#, elixir-autogen, elixir-format
+msgid "Tracking failing since %{time}"
+msgstr "Sendungsverfolgung schlägt seit %{time} fehl"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:108
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been delivered"
+msgstr "Ihre Bestellung {{order_number}} wurde zugestellt"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:114
+#, elixir-autogen, elixir-format
+msgid "Your order has been delivered"
+msgstr "Ihre Bestellung wurde zugestellt"
+
+#: lib/phoenix_kit_ecommerce/order_email_defaults.ex:122
+#, elixir-autogen, elixir-format
+msgid "Your order {{order_number}} has been delivered by {{carrier}}."
+msgstr "Ihre Bestellung {{order_number}} wurde von {{carrier}} zugestellt."

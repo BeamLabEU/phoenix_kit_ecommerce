@@ -381,6 +381,59 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
     end
   end
 
+  describe "message/1 for shipment errors" do
+    test "each reason of PhoenixKitEcommerce.Shipments has its sentence" do
+      for {reason, text} <- [
+            {:order_not_paid, "The order is not paid."},
+            {:order_not_closed,
+             "Only a shipment of a cancelled or refunded order can be closed."},
+            {:live_shipment_exists, "This order already has a shipment in progress."},
+            {:shipments_not_supported, "This carrier cannot register shipments from the shop."},
+            {:cancel_not_supported, "This carrier cannot cancel shipments from the shop."},
+            {:pickup_point_unavailable,
+             "The chosen pickup point is no longer available. Choose another one."},
+            {{:destination_rejected, "Locker is full"},
+             "The carrier does not accept this destination: Locker is full"},
+            {{:destination_unverified, :timeout},
+             "The destination could not be checked with the carrier. Please try again."},
+            {:shipment_changed,
+             "The shipment was changed in the meantime. Reload it and try again."},
+            {:connection_changed,
+             "The carrier connection this shipment was created through is no longer available."},
+            {:connection_environment_changed,
+             "The carrier connection now points to another environment (test or live) than the one this shipment was created in."},
+            {:provider_changed,
+             "The shipping method now uses another carrier than the one the order was placed with."},
+            {:tracking_number_required, "Enter the tracking number."},
+            {:invalid_recipient, "The recipient details are not valid."},
+            {{:cancel_refused, "too late"}, "The carrier refused the cancellation: too late"},
+            {:submit_crashed,
+             "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."},
+            {{:cancel_unconfirmed, "timeout"},
+             "The carrier did not confirm the cancellation (timeout), and it may have cancelled the shipment. Check the carrier's portal."},
+            {:unknown_provider, "This carrier is not configured any more."},
+            {:unknown_service,
+             "The carrier no longer offers the delivery service of this order."},
+            {:invalid_destination, "The delivery details are not valid."},
+            {:invalid_shipment_ids, "The list of shipments is not valid."},
+            {:invalid_tracking_url,
+             "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."},
+            {:too_many_labels, "At most 50 labels can be printed at once."},
+            {:mixed_label_providers,
+             "Labels can be printed together only for shipments of one carrier connection."},
+            {:labels_not_supported, "This carrier cannot print labels from the shop."},
+            {:label_unavailable,
+             "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."},
+            {{:labels_failed, :timeout},
+             "The carrier did not return the labels. Try again later."},
+            {:no_shipping_method, "No shipping method is available."},
+            {:not_found, "The requested record was not found."}
+          ] do
+        assert Errors.message(reason) == text, inspect(reason)
+      end
+    end
+  end
+
   describe "message/1 fallbacks" do
     test "passes strings through unchanged" do
       assert Errors.message("custom downstream message") == "custom downstream message"

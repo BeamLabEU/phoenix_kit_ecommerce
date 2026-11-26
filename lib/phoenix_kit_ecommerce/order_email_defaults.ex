@@ -10,6 +10,8 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
 
   The HTML carries the order as a ready-made table (`{{{order_table_html}}}`),
   every value escaped and styled inline; the plain text uses `{{order_text}}`.
+  The shipped email (`shop_order_shipped`) carries the shipment instead:
+  `{{carrier}}`, `{{tracking_number}}` and `{{tracking_url}}`.
 
   What an order line says here is what the order page says: a price-on-request
   line is never a 0.00, a pay-on-delivery shipping line is never free. Order
@@ -28,13 +30,18 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
   alias PhoenixKitEcommerce.NamePrefix
   alias PhoenixKitEcommerce.Options
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.Shipment
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Web.StatusLabels
 
   @confirmation "shop_order_confirmation"
   @paid "shop_order_paid"
   @received "shop_order_received"
-  @templates [@confirmation, @paid, @received]
+  @shipped "shop_order_shipped"
+  # Not a template: the copy of `@shipped` for a shipment already delivered.
+  @delivered "shop_order_shipped:delivered"
+  @templates [@confirmation, @paid, @received, @shipped]
 
   @layout_group "shop"
 
@@ -62,7 +69,11 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
     present = present(variables)
 
     fn ->
-      %{subject: subject(name), markdown: markdown(name, present), text: text(name, present)}
+      %{
+        subject: subject(copy(name, present)),
+        markdown: markdown(name, present),
+        text: text(name, present)
+      }
     end
   end
 
@@ -80,19 +91,51 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
   defp has?(:all, _variable), do: true
   defp has?(present, variable), do: MapSet.member?(present, variable)
 
+  # The shipped email of a shipment already delivered when it goes says so
+  # (`shipment_delivered`); the preview shows the "on its way" copy.
+  defp copy(@shipped, present) when present != :all do
+    if MapSet.member?(present, "shipment_delivered"), do: @delivered, else: @shipped
+  end
+
+  defp copy(name, _present), do: name
+
   # -- copy -------------------------------------------------------------------
 
   defp subject(@confirmation), do: gettext("Your order {{order_number}}")
   defp subject(@paid), do: gettext("Payment received for order {{order_number}}")
   defp subject(@received), do: gettext("New order {{order_number}}")
+  defp subject(@shipped), do: gettext("Your order {{order_number}} is on its way")
+  defp subject(@delivered), do: gettext("Your order {{order_number}} has been delivered")
 
   defp heading(@confirmation), do: gettext("Thank you for your order")
   defp heading(@paid), do: gettext("Your payment has arrived")
   defp heading(@received), do: gettext("New order {{order_number}}")
+  defp heading(@shipped), do: gettext("Your order is on its way")
+  defp heading(@delivered), do: gettext("Your order has been delivered")
 
   defp intro(@confirmation), do: gettext("We have received your order {{order_number}}.")
   defp intro(@paid), do: gettext("Your order {{order_number}} is paid and confirmed.")
   defp intro(@received), do: gettext("Status: {{order_status}}")
+  defp intro(@shipped), do: gettext("Your order {{order_number}} has been sent with {{carrier}}.")
+
+  defp intro(@delivered),
+    do: gettext("Your order {{order_number}} has been delivered by {{carrier}}.")
+
+  # The shipped email is about the parcel, not the bill: no order table.
+  defp markdown(@shipped, present) do
+    join([
+      "## " <> heading(copy(@shipped, present)),
+      hello(@shipped, present),
+      intro(copy(@shipped, present)),
+      join_lines("  \n", [
+        has?(present, "tracking_number") &&
+          gettext("**Tracking number:** {{tracking_number}}"),
+        has?(present, "tracking_url") && gettext("[Track your parcel]({{tracking_url}})")
+      ]),
+      has?(present, "delivery") && gettext("**Delivery:** {{delivery}}"),
+      link_markdown(@shipped, present)
+    ])
+  end
 
   defp markdown(name, present) do
     join([
@@ -104,6 +147,20 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
       has?(present, "delivery") && gettext("**Delivery:** {{delivery}}"),
       customer(name, present),
       link_markdown(name, present)
+    ])
+  end
+
+  defp text(@shipped, present) do
+    join([
+      heading(copy(@shipped, present)),
+      hello(@shipped, present),
+      intro(copy(@shipped, present)),
+      join_lines("\n", [
+        has?(present, "tracking_number") && gettext("Tracking number: {{tracking_number}}"),
+        has?(present, "tracking_url") && gettext("Track your parcel: {{tracking_url}}")
+      ]),
+      has?(present, "delivery") && gettext("Delivery: {{delivery}}"),
+      link_text(@shipped, present)
     ])
   end
 
@@ -198,6 +255,25 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
       "billing_address" => address(snapshot)
     }
   end
+
+  @doc """
+  The variables of the shipped email about `shipment` (`nil` gives none): who
+  carries it (`Shipments.carrier_name/1`), its tracking number, its tracking
+  link, only ever a web address (`Shipments.web_url/1`), and
+  `shipment_delivered` (`"true"` once it is delivered: the email then says
+  so). A missing one is `""`.
+  """
+  @spec shipment_variables(Shipment.t() | nil) :: %{String.t() => String.t()}
+  def shipment_variables(%Shipment{} = shipment) do
+    %{
+      "carrier" => Shipments.carrier_name(shipment),
+      "tracking_number" => shipment.tracking_number || "",
+      "tracking_url" => Shipments.web_url(shipment.tracking_url) || "",
+      "shipment_delivered" => if(shipment.status == "delivered", do: "true", else: "")
+    }
+  end
+
+  def shipment_variables(nil), do: %{}
 
   defp line_rows(order, currency) do
     Enum.map(order.line_items || [], fn line ->
@@ -356,6 +432,13 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
         gettext(
           "Sent to the shop's order email addresses when an order is placed, or paid if it waited for online payment."
         )
+      ),
+      entry(
+        @shipped,
+        gettext("Order shipped"),
+        gettext(
+          "Sent to the buyer once per shipment, when the carrier reports the parcel on its way, with the tracking number and link."
+        )
       )
     ]
   end
@@ -396,7 +479,10 @@ defmodule PhoenixKitEcommerce.OrderEmailDefaults do
       "customer_name" => "Jane Doe",
       "customer_email" => "jane.doe@example.com",
       "customer_phone" => "+372 555 5555",
-      "billing_address" => "Example street 1, 10111, Tallinn, EE"
+      "billing_address" => "Example street 1, 10111, Tallinn, EE",
+      "carrier" => "Example Post",
+      "tracking_number" => "CC123456789EE",
+      "tracking_url" => "https://example.com/track/CC123456789EE"
     }
   end
 end

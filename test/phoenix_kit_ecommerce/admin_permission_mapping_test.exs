@@ -58,6 +58,7 @@ defmodule PhoenixKitEcommerce.AdminPermissionMappingTest do
     PhoenixKitEcommerce.Web.ShippingMethods,
     PhoenixKitEcommerce.Web.ShippingMethodForm,
     PhoenixKitEcommerce.Web.Carts,
+    PhoenixKitEcommerce.Web.Shipments,
     PhoenixKitEcommerce.Web.Settings,
     PhoenixKitEcommerce.Web.OptionsSettings,
     PhoenixKitEcommerce.Web.Imports,

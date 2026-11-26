@@ -95,6 +95,21 @@ defmodule PhoenixKitEcommerce.Migrations do
   database has no rows to fill. `down/1` keeps the columns, like every table
   of this chain.
 
+  ## V7 — shipments
+
+  `phoenix_kit_shop_shipments` holds the shipments registered with a carrier
+  after an order is paid (`PhoenixKitEcommerce.Shipments`): the order
+  (ON DELETE CASCADE) and its method (ON DELETE SET NULL), the provider, the
+  service, the connection and a `context_snapshot` of the method settings;
+  the parcels, recipient and destination that were sent; the carrier's
+  answer; the status; the last 50 events and the last error, both masked;
+  who created it, when it was last tracked, and when the current attempt was
+  handed to the carrier (`submitted_at`, the claim that lets one attempt
+  reach the carrier once). A partial unique index on
+  `order_uuid` over the live statuses (`creating`, `unknown`, `created`,
+  `in_transit`, `ready_for_pickup`) keeps an order to one live shipment.
+  `down/1` keeps the table, like every table of this chain.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker and restores the V2 column
@@ -123,7 +138,7 @@ defmodule PhoenixKitEcommerce.Migrations do
   # has no row yet; the module is optional (see `claim_analytics_statements/1`).
   @compile {:no_warn_undefined, PhoenixKitWebAnalytics.Config}
 
-  @current_version 6
+  @current_version 7
   @marker_prefix "pke_schema:"
   @version_table "phoenix_kit_shop_config"
 
@@ -258,6 +273,7 @@ defmodule PhoenixKitEcommerce.Migrations do
     do: claims_statements(prefix) ++ claim_analytics_statements(prefix)
 
   defp version_statements(6, _prefix, p), do: do_v6_base_currency_columns(p)
+  defp version_statements(7, prefix, _p), do: shipments_statements(prefix)
 
   @doc false
   @spec v6_base_currency_columns(String.t()) :: [String.t()]
@@ -494,6 +510,75 @@ defmodule PhoenixKitEcommerce.Migrations do
         "idx_shop_cart_claims_cart_uuid",
         "phoenix_kit_shop_cart_claims",
         "btree (cart_uuid)"
+      )
+    ]
+  end
+
+  @live_shipment_statuses ~w(creating unknown created in_transit ready_for_pickup)
+
+  @doc """
+  The V7 table as data: the shipments of paid orders. The keys are inline in
+  `CREATE TABLE IF NOT EXISTS`, so the step is idempotent without the
+  `DO $$` guards `ADD CONSTRAINT` needs. The partial unique index over the
+  live statuses keeps an order to one live shipment.
+  """
+  @spec shipments_statements(String.t()) :: [String.t()]
+  def shipments_statements(prefix \\ "public") do
+    prefix = validated_prefix(prefix: prefix)
+    p = "#{prefix}."
+    live = Enum.map_join(@live_shipment_statuses, ", ", &"'#{&1}'")
+
+    [
+      """
+      CREATE TABLE IF NOT EXISTS #{p}phoenix_kit_shop_shipments (
+        "uuid" uuid DEFAULT #{p}uuid_generate_v7() NOT NULL,
+        "order_uuid" uuid NOT NULL,
+        "method_uuid" uuid,
+        "integration_uuid" uuid,
+        "provider" character varying(255) NOT NULL,
+        "service" character varying(255),
+        "context_snapshot" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "parcels" jsonb DEFAULT '[]'::jsonb NOT NULL,
+        "recipient" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "destination" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "status" character varying(32) NOT NULL,
+        "tracking_number" character varying(255),
+        "tracking_url" text,
+        "carrier_ref" character varying(255),
+        "carrier_label" character varying(255),
+        "extra" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "events" jsonb DEFAULT '[]'::jsonb NOT NULL,
+        "error" text,
+        "created_by_uuid" uuid,
+        "last_tracked_at" timestamp with time zone,
+        "submitted_at" timestamp with time zone,
+        "inserted_at" timestamp with time zone DEFAULT now() NOT NULL,
+        "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+        CONSTRAINT phoenix_kit_shop_shipments_pkey PRIMARY KEY ("uuid"),
+        CONSTRAINT fk_shop_shipments_order_uuid FOREIGN KEY ("order_uuid")
+          REFERENCES #{p}phoenix_kit_orders("uuid") ON DELETE CASCADE,
+        CONSTRAINT fk_shop_shipments_method_uuid FOREIGN KEY ("method_uuid")
+          REFERENCES #{p}phoenix_kit_shop_shipping_methods("uuid") ON DELETE SET NULL
+      )
+      """,
+      idx(p, "idx_shop_shipments_order_uuid", "phoenix_kit_shop_shipments", "btree (order_uuid)"),
+      idx(
+        p,
+        "idx_shop_shipments_status_last_tracked_at",
+        "phoenix_kit_shop_shipments",
+        "btree (status, last_tracked_at)"
+      ),
+      idx(
+        p,
+        "idx_shop_shipments_tracking_number",
+        "phoenix_kit_shop_shipments",
+        "btree (tracking_number)"
+      ),
+      unique_idx(
+        p,
+        "idx_shop_shipments_live_order",
+        "phoenix_kit_shop_shipments",
+        "btree (order_uuid) WHERE status IN (#{live})"
       )
     ]
   end

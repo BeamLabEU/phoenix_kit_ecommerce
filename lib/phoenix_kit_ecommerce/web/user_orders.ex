@@ -3,12 +3,15 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   LiveView for displaying user's shop orders.
 
   Users can view only their own orders with status filtering and pagination.
-  This is the user-facing order portal, using the dashboard layout.
+  This is the user-facing order portal, using the dashboard layout. An order's
+  label follows its shipment (`Shipments.buyer_order_status/2`), and so does the
+  status filter; the shipments of the account's orders are read in one query.
   """
   use PhoenixKitEcommerce.Web, :live_view
 
   alias PhoenixKitBilling, as: Billing
   alias PhoenixKitEcommerce, as: Shop
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Web.Helpers
   alias PhoenixKitEcommerce.Web.StatusLabels
 
@@ -27,6 +30,7 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
         |> assign(:page_title, gettext("My Orders"))
         |> assign(:current_user, current_user)
         |> assign(:orders, [])
+        |> assign(:display_statuses, %{})
         |> assign(:total_count, 0)
         |> assign(:loading, true)
         |> assign_filter_defaults()
@@ -117,9 +121,24 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   defp load_user_orders(socket) do
     user_uuid = socket.assigns.current_user.uuid
 
-    # Build filters for Billing.list_user_orders
-    filters = build_query_filters(socket)
-    all_orders = Billing.list_user_orders(user_uuid, filters)
+    # The status filter matches the label the buyer reads, which follows the
+    # orders' shipments: it is applied here, not by billing's own filter.
+    orders = Billing.list_user_orders(user_uuid, %{})
+
+    shipments =
+      orders |> Enum.map(& &1.uuid) |> Shipments.buyer_shipments(fields: [:status, :provider])
+
+    display_statuses =
+      Map.new(orders, fn order ->
+        {order.uuid, Shipments.buyer_order_status(order, Map.get(shipments, order.uuid, []))}
+      end)
+
+    all_orders =
+      case socket.assigns.status_filter do
+        nil -> orders
+        status -> Enum.filter(orders, &(display_statuses[&1.uuid] == status))
+      end
+
     total_count = length(all_orders)
 
     # Apply pagination manually
@@ -135,18 +154,10 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
 
     socket
     |> assign(:orders, orders)
+    |> assign(:display_statuses, display_statuses)
     |> assign(:total_count, total_count)
     |> assign(:total_pages, total_pages)
     |> assign(:page, page)
-  end
-
-  defp build_query_filters(socket) do
-    filters = %{}
-
-    case socket.assigns.status_filter do
-      nil -> filters
-      status -> Map.put(filters, :status, status)
-    end
   end
 
   defp build_current_params(socket) do
@@ -167,6 +178,9 @@ defmodule PhoenixKitEcommerce.Web.UserOrders do
   defp status_badge_class("cancelled"), do: "badge-error"
   defp status_badge_class("refunded"), do: "badge-neutral"
   defp status_badge_class(_), do: "badge-ghost"
+
+  # The order's status as the buyer reads it, from the page's shipments.
+  defp display_status(statuses, order), do: Map.get(statuses, order.uuid, order.status)
 
   defp format_date(nil), do: "-"
 

@@ -102,6 +102,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
     points: [],
     points_state: :idle,
     points_truncated?: false,
+    points_none_fit?: false,
     points_error: nil,
     point_query: "",
     form: %{},
@@ -355,7 +356,9 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   end
 
   # The packing and the declared value are read in the task: they take the
-  # database, and a filter box types often.
+  # database, and a filter box types often. The points that cannot take the
+  # cart are dropped here rather than by the facade, so the picker can tell a
+  # search that found nothing from a cart too big for every point it found.
   defp run_lookup(socket, :points) do
     %{method: method, locale: locale, locality: locality, point_query: query, cart: cart} =
       socket.assigns
@@ -366,12 +369,15 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
     |> put_lookup(:points, at: System.monotonic_time(:millisecond), pending: false)
     |> assign(points_state: :loading, points_error: nil)
     |> start_async(:points, fn ->
-      method
-      |> Shipping.context([locale: locale, country: cart.shipping_country] ++ context_opts)
-      |> Shipping.list_pickup_points(locality, query,
-        parcels: Shop.cart_parcels(cart),
-        declared_value: Shop.cart_declared_value(cart)
-      )
+      ctx =
+        Shipping.context(method, [locale: locale, country: cart.shipping_country] ++ context_opts)
+
+      with {:ok, points} <- Shipping.list_pickup_points(ctx, locality, query) do
+        parcels = Shop.cart_parcels(cart)
+        declared = Shop.cart_declared_value(cart)
+        fitting = Enum.filter(points, &Shipping.fits_point?(&1, parcels, declared))
+        {:ok, fitting, points != [] and fitting == []}
+      end
     end)
   end
 
@@ -497,7 +503,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
 
   def handle_async(:points, {:exit, {:shutdown, :cancel}}, socket), do: {:noreply, socket}
 
-  def handle_async(:points, {:ok, {:ok, points}}, socket) do
+  def handle_async(:points, {:ok, {:ok, points, none_fit?}}, socket) do
     points = Enum.filter(points, &point_with_id?/1)
 
     {:noreply,
@@ -505,6 +511,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
      |> assign(
        points: Enum.take(points, @max_points),
        points_truncated?: length(points) > @max_points,
+       points_none_fit?: none_fit?,
        points_state: :done,
        points_error: nil
      )
@@ -953,6 +960,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
               points={@points}
               state={@points_state}
               truncated={@points_truncated?}
+              none_fit={@points_none_fit?}
               error={@points_error}
               myself={@myself}
             />
@@ -1197,6 +1205,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
   attr :points, :list, required: true
   attr :state, :atom, required: true
   attr :truncated, :boolean, required: true
+  attr :none_fit, :boolean, default: false, doc: "every point found is too small for the cart"
   attr :error, :string, default: nil
   attr :myself, :any, required: true
 
@@ -1241,7 +1250,18 @@ defmodule PhoenixKitEcommerce.Web.Components.ShippingDestinationPicker do
             {gettext("Try again")}
           </button>
         </div>
-        <p :if={@state == :done and @points == []} class="text-base-content/60">
+        <p
+          :if={@state == :done and @points == [] and @none_fit}
+          id={"#{@pid}-points-none-fit"}
+          class="text-base-content/60"
+        >
+          {gettext("No point of this method takes this order.")}
+        </p>
+        <p
+          :if={@state == :done and @points == [] and not @none_fit}
+          id={"#{@pid}-points-none-found"}
+          class="text-base-content/60"
+        >
           {gettext("No delivery points found for this search.")}
         </p>
         <div

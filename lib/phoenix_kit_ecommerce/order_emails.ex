@@ -1,7 +1,8 @@
 defmodule PhoenixKitEcommerce.OrderEmails do
   @moduledoc """
   The emails a shop order sends: the buyer's confirmation, the buyer's paid
-  email, and the detailed email to the shop's own addresses.
+  email, the buyer's shipped email, and the detailed email to the shop's own
+  addresses.
 
   ## When
 
@@ -10,10 +11,18 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   | placed, not awaiting online payment | `shop_order_confirmation` | `shop_order_received` |
   | placed, awaiting online payment | nothing | nothing |
   | paid | `shop_order_paid` | `shop_order_received`, unless already sent |
+  | a shipment is on its way | `shop_order_shipped` | nothing |
 
   An online order's emails wait until the money lands. The in-app admin
   notification still goes immediately through
   `PhoenixKitEcommerce.Notifications.order_placed/2`.
+
+  The shipped email goes once per shipment (an order shipped in two parcels
+  sends two): `PhoenixKitEcommerce.Shipments` queues it when the shipment is on
+  its way (`Shipments.shipped?/1`), with the carrier, the tracking number and
+  the tracking link. It is marked `"buyer_shipped:<shipment uuid>"` (its copy
+  `"buyer_shipped_copy:<shipment uuid>"`), and `shipped_emails_enabled?/0` can
+  turn it off on its own.
 
   ## Delivery
 
@@ -76,12 +85,15 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   alias PhoenixKitEcommerce.OnlinePayment
   alias PhoenixKitEcommerce.OrderEmailDefaults
   alias PhoenixKitEcommerce.Policy
+  alias PhoenixKitEcommerce.Shipment
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Translations
   alias PhoenixKitEcommerce.Workers.OrderEmailWorker
 
   @emails %{
     "buyer_placed" => "shop_order_confirmation",
     "buyer_paid" => "shop_order_paid",
+    "buyer_shipped" => "shop_order_shipped",
     "shop" => "shop_order_received"
   }
 
@@ -89,6 +101,7 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   @claimed_key "claimed_at"
   @claim_seconds 300
   @buyer_setting "shop_order_emails_to_buyer"
+  @shipped_setting "shop_order_email_shipped"
   @recipients_setting "shop_order_email_recipients"
   @copy_setting "shop_order_email_copy_recipients"
   @language_setting "shop_order_email_language"
@@ -115,6 +128,24 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   @spec order_paid(map()) :: :ok
   def order_paid(order), do: enqueue(order, ~w(buyer_paid shop))
 
+  @doc """
+  Queues the buyer's shipped email of `shipment`. Called by
+  `PhoenixKitEcommerce.Shipments`, which decides when; a second call for the
+  same shipment queues nothing. Raises when the job cannot be inserted.
+  """
+  @spec shipment_shipped(Shipment.t()) :: :ok
+  def shipment_shipped(%Shipment{} = shipment) do
+    %{
+      "order_uuid" => shipment.order_uuid,
+      "email" => "buyer_shipped",
+      "shipment_uuid" => shipment.uuid
+    }
+    |> OrderEmailWorker.new()
+    |> Oban.insert!()
+
+    :ok
+  end
+
   defp enqueue(order, emails) do
     Enum.each(emails, fn email ->
       %{"order_uuid" => order.uuid, "email" => email}
@@ -124,35 +155,76 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   end
 
   @doc """
-  Sends one email of `order` (`"buyer_placed"`, `"buyer_paid"` or `"shop"`), and
-  a buyer email's copy, unless it was sent already or has nobody to go to.
-  Returns `{:error, reason}` for the job to retry; an email that went is marked.
-  `{:snooze, seconds}` means another delivery holds the email: nothing was sent,
-  and that many seconds later its claim has run out.
+  Sends one email of `order` (`"buyer_placed"`, `"buyer_paid"`,
+  `"buyer_shipped"` or `"shop"`), and a buyer email's copy, unless it was sent
+  already or has nobody to go to. Returns `{:error, reason}` for the job to
+  retry; an email that went is marked. `{:snooze, seconds}` means another
+  delivery holds the email: nothing was sent, and that many seconds later its
+  claim has run out.
+
+  `"buyer_shipped"` takes the shipment (option `:shipment_uuid`). It sends
+  nothing while `shipped_emails_enabled?/0` is off, or when the shipment is
+  not the order's or is no longer on its way (`Shipments.shipped?/1`).
   """
-  @spec deliver(String.t(), map()) :: :ok | {:snooze, pos_integer()} | {:error, term()}
-  def deliver("shop", order) do
+  @spec deliver(String.t(), map(), keyword()) ::
+          :ok | {:snooze, pos_integer()} | {:error, term()}
+  def deliver(email, order, opts \\ [])
+
+  def deliver("shop", order, _opts) do
     case shop_recipients() do
       [] -> :ok
       recipients -> once(order, "shop", fn -> send_to_shop(order, recipients) end)
     end
   end
 
-  def deliver(email, order) when is_map_key(@emails, email) do
+  def deliver("buyer_shipped", order, opts) do
+    case shipped_emails_enabled?() && shipped_shipment(order, opts[:shipment_uuid]) do
+      %Shipment{} = shipment -> deliver_buyer("buyer_shipped", order, shipment)
+      _off_or_not_shipped -> :ok
+    end
+  end
+
+  def deliver(email, order, _opts) when is_map_key(@emails, email),
+    do: deliver_buyer(email, order, nil)
+
+  defp shipped_shipment(order, shipment_uuid) do
+    case Shipments.get_shipment(shipment_uuid) do
+      %Shipment{order_uuid: order_uuid} = shipment when order_uuid == order.uuid ->
+        if Shipments.shipped?(shipment), do: shipment
+
+      _other ->
+        nil
+    end
+  end
+
+  defp deliver_buyer(email, order, shipment) do
     case buyer_emails_enabled?() && buyer_address(order) do
-      address when is_binary(address) -> deliver_to_buyer(email, order, address)
+      address when is_binary(address) -> deliver_to_buyer(email, order, address, shipment)
       _off_or_nobody -> :ok
     end
   end
 
-  defp deliver_to_buyer(email, order, address) do
+  defp deliver_to_buyer(email, order, address, shipment) do
     language = Notifications.buyer_language(order.metadata["checkout_language"])
-    url = order_url(order, language)
 
-    with :ok <- once(order, email, fn -> send_to_buyer(email, order, address, language, url) end) do
-      send_copy(email, order, address, language, url)
+    sent = %{
+      email: email,
+      language: language,
+      url: order_url(order, language),
+      shipment: shipment
+    }
+
+    with :ok <- once(order, mark(email, shipment), fn -> send_to_buyer(sent, order, address) end) do
+      send_copy(sent, order, address)
     end
   end
+
+  # One mark per order and email, and for the shipped email one per shipment.
+  defp mark(email, nil), do: email
+  defp mark(email, %Shipment{uuid: uuid}), do: email <> ":" <> uuid
+
+  defp copy_mark(email, nil), do: email <> "_copy"
+  defp copy_mark(email, %Shipment{uuid: uuid}), do: email <> "_copy:" <> uuid
 
   defp once(order, mark, send) do
     case claim(order.uuid, mark) do
@@ -254,20 +326,26 @@ defmodule PhoenixKitEcommerce.OrderEmails do
     )
   end
 
-  defp send_to_buyer(email, order, address, language, url) do
-    deliver_template(email, order, address, language, url, user_uuid: order.user_uuid)
+  defp send_to_buyer(sent, order, address) do
+    deliver_template(sent.email, order, address, sent.language, sent.url,
+      shipment: sent.shipment,
+      user_uuid: order.user_uuid
+    )
   end
 
   # The buyer's email as the buyer got it, for the shop to read: replies go to
   # the buyer, and it is tracked against no account.
-  defp send_copy(email, order, buyer, language, url) do
+  defp send_copy(sent, order, buyer) do
     case copy_recipients() do
       [] ->
         :ok
 
       recipients ->
-        once(order, email <> "_copy", fn ->
-          deliver_template(email, order, recipients, language, url, reply_to: buyer)
+        once(order, copy_mark(sent.email, sent.shipment), fn ->
+          deliver_template(sent.email, order, recipients, sent.language, sent.url,
+            shipment: sent.shipment,
+            reply_to: buyer
+          )
         end)
     end
   end
@@ -283,10 +361,13 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   defp deliver_template(email, order, to, language, order_url, opts) do
     template = Map.fetch!(@emails, email)
     locale = base_locale(language)
+    {shipment, opts} = Keyword.pop(opts, :shipment)
 
     variables =
       Gettext.with_locale(PhoenixKitEcommerce.Gettext, locale, fn ->
-        OrderEmailDefaults.variables(order, order_url)
+        order
+        |> OrderEmailDefaults.variables(order_url)
+        |> Map.merge(OrderEmailDefaults.shipment_variables(shipment))
       end)
 
     defaults = OrderEmailDefaults.defaults_for(template, variables)
@@ -366,6 +447,28 @@ defmodule PhoenixKitEcommerce.OrderEmails do
   @spec set_buyer_emails_enabled(boolean()) :: {:ok, boolean()} | {:error, :update_failed}
   def set_buyer_emails_enabled(enabled) when is_boolean(enabled) do
     case Settings.update_boolean_setting_with_module(@buyer_setting, enabled, "shop") do
+      {:ok, _} -> {:ok, enabled}
+      _error -> {:error, :update_failed}
+    end
+  end
+
+  @doc """
+  Whether the shipped email is on (`shop_order_email_shipped`). On by default,
+  like the buyer's other emails; a read error counts as off. A delivery also
+  needs the buyer's emails on (`buyer_emails_enabled?/0`); this switch does not
+  read that one.
+  """
+  @spec shipped_emails_enabled?() :: boolean()
+  def shipped_emails_enabled? do
+    Settings.get_setting_cached(@shipped_setting, "true") == "true"
+  rescue
+    _ -> false
+  end
+
+  @doc "Turns the buyer's shipped email on or off."
+  @spec set_shipped_emails_enabled(boolean()) :: {:ok, boolean()} | {:error, :update_failed}
+  def set_shipped_emails_enabled(enabled) when is_boolean(enabled) do
+    case Settings.update_boolean_setting_with_module(@shipped_setting, enabled, "shop") do
       {:ok, _} -> {:ok, enabled}
       _error -> {:error, :update_failed}
     end

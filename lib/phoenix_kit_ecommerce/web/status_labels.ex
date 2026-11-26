@@ -63,6 +63,19 @@ defmodule PhoenixKitEcommerce.Web.StatusLabels do
   def import("failed"), do: gettext("Failed")
   def import(status), do: fallback(status)
 
+  @doc "Label for a `Shipment` status."
+  @spec shipment(term()) :: String.t()
+  def shipment("creating"), do: gettext("Registering")
+  def shipment("unknown"), do: gettext("Outcome unknown")
+  def shipment("created"), do: gettext("Registered")
+  def shipment("in_transit"), do: gettext("In transit")
+  def shipment("ready_for_pickup"), do: gettext("Ready for pickup")
+  def shipment("delivered"), do: gettext("Delivered")
+  def shipment("returned"), do: gettext("Returned")
+  def shipment("cancelled"), do: gettext("Cancelled")
+  def shipment("failed"), do: gettext("Failed")
+  def shipment(status), do: fallback(status)
+
   @doc "Label for the status of an AI request log entry on the translations page."
   @spec translation_entry(term()) :: String.t()
   def translation_entry("success"), do: gettext("Success")

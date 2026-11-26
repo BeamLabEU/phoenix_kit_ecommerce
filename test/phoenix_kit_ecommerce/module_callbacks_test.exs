@@ -172,4 +172,13 @@ defmodule PhoenixKitEcommerce.ModuleCallbacksTest do
 
     assert PhoenixKitEcommerce.Search.Subscriber in ids
   end
+
+  test "children/0 starts the supervisor of the shipment attempts" do
+    names =
+      for child <- PhoenixKitEcommerce.children(),
+          %{start: {Task.Supervisor, :start_link, [opts]}} <- [Supervisor.child_spec(child, [])],
+          do: opts[:name]
+
+    assert PhoenixKitEcommerce.Shipments.TaskSupervisor in names
+  end
 end

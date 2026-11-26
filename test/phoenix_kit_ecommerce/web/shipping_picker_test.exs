@@ -146,6 +146,44 @@ defmodule PhoenixKitEcommerce.Web.ShippingPickerTest do
       refute has_element?(view, ps("point-P3"))
     end
 
+    test "a cart too big for every point found says so, a search that finds nothing says that",
+         %{conn: conn} do
+      tiny = fn _locality, _service, query ->
+        {:ok, points} = points(nil, nil, query)
+        {:ok, Enum.filter(points, &(&1.id == "P3"))}
+      end
+
+      stub!(%{points: tiny})
+      {conn, _cart, _method} = cart_session(conn)
+      {:ok, view, _html} = live(conn, "/cart")
+
+      view |> form(ps("locality-form"), %{"q" => "Pol"}) |> render_change()
+      settle(view)
+      view |> element(ps("locality-option-L1")) |> render_click()
+      settle(view)
+
+      # The carrier lists the 100 g locker; the cart weighs 500 g.
+      assert has_element?(
+               view,
+               ps("points-none-fit"),
+               "No point of this method takes this order."
+             )
+
+      refute has_element?(view, ps("points-none-found"))
+
+      # A filter that matches no point at all is a search that found nothing.
+      view |> form(ps("points-form"), %{"q" => "nowhere"}) |> render_change()
+      settle(view)
+
+      assert has_element?(
+               view,
+               ps("points-none-found"),
+               "No delivery points found for this search."
+             )
+
+      refute has_element?(view, ps("points-none-fit"))
+    end
+
     test "a chosen point that stops taking the parcel sends the shopper back to the list",
          %{conn: conn} do
       limited = %Destination{

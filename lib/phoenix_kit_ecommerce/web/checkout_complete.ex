@@ -1,6 +1,9 @@
 defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   @moduledoc """
-  Order confirmation page after successful checkout.
+  Order confirmation page after successful checkout. Once the order has a
+  shipment the buyer is shown, the page names the carrier, the tracking number
+  and the tracking link, and the status follows the shipment
+  (`Shipments.buyer_order_status/2`).
   """
 
   use PhoenixKitEcommerce.Web, :live_view
@@ -12,6 +15,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
   alias PhoenixKitEcommerce.OnlinePayment
   alias PhoenixKitEcommerce.Policy
   alias PhoenixKitEcommerce.PriceDisplay
+  alias PhoenixKitEcommerce.Shipments
   alias PhoenixKitEcommerce.Web.Components.ShippingDisplay
   alias PhoenixKitEcommerce.Web.Components.ShopLayouts
   alias PhoenixKitEcommerce.Web.Helpers
@@ -163,6 +167,15 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
     |> assign(:is_guest_order, is_guest_order)
     |> assign(:order_email, order_email)
     |> assign(:authenticated, authenticated)
+    |> assign_shipments(order)
+  end
+
+  defp assign_shipments(socket, order) do
+    shipments = Map.get(Shipments.buyer_shipments([order.uuid]), order.uuid, [])
+
+    socket
+    |> assign(:shipments, shipments)
+    |> assign(:display_status, Shipments.buyer_order_status(order, shipments))
   end
 
   # The order's own snapshot is the record of who it was billed to; the
@@ -252,7 +265,7 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
         socket
 
       order ->
-        socket |> assign(:order, order) |> assign_awaiting(order)
+        socket |> assign(:order, order) |> assign_shipments(order) |> assign_awaiting(order)
     end
   end
 
@@ -520,7 +533,10 @@ defmodule PhoenixKitEcommerce.Web.CheckoutComplete do
                   <% end %>
                 </p>
               </div>
-              <div id="order-status-badge" class="badge badge-warning badge-lg capitalize">{StatusLabels.order(@order.status)}</div>
+              <div id="order-status-badge" class="badge badge-warning badge-lg capitalize">{StatusLabels.order(@display_status)}</div>
+            </div>
+            <div :if={@shipments != []} class="border-t border-base-200 pt-4 mt-4">
+              <ShippingDisplay.order_shipments shipments={@shipments} />
             </div>
           </div>
         </div>

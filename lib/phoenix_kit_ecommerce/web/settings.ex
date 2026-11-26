@@ -108,6 +108,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       )
       |> assign(:notification_recipients, notification_recipients())
       |> assign(:order_emails_to_buyer, OrderEmails.buyer_emails_enabled?())
+      |> assign(:order_email_shipped, OrderEmails.shipped_emails_enabled?())
       |> assign(:order_email_recipients, Enum.join(OrderEmails.shop_recipients(), ", "))
       |> assign(:order_email_copy_recipients, Enum.join(OrderEmails.copy_recipients(), ", "))
       |> assign(:order_email_language, OrderEmails.chosen_shop_email_language() || "")
@@ -116,6 +117,8 @@ defmodule PhoenixKitEcommerce.Web.Settings do
       |> assign(:recipient_candidates, load_recipient_candidates())
       |> assign(:shipping_skip_mode, to_string(Shop.shipping_skip_mode()))
       |> assign(:shipping_selection_position, to_string(Shop.shipping_selection_position()))
+      |> assign(:shipping_label_format, to_string(Shop.shipping_label_format()))
+      |> assign(:shipping_auto_create, Shop.shipping_auto_create?())
       |> assign_parcel_form(Shop.shipping_parcel_defaults())
       |> assign(:shop_translations_enabled, TranslationSweepSettings.translations_enabled?())
       |> assign(:ai_translations_available, ai_translations_available?())
@@ -330,6 +333,13 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   end
 
   @impl true
+  def handle_event("toggle_order_email_shipped", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_order_email_shipped", params, socket)
+    end)
+  end
+
+  @impl true
   def handle_event("save_order_email_recipients", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("save_order_email_recipients", params, socket)
@@ -361,6 +371,20 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   def handle_event("update_shipping_selection_position", params, socket) do
     Authz.authorize(socket, :manage_settings, fn ->
       gated_event("update_shipping_selection_position", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("update_shipping_label_format", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("update_shipping_label_format", params, socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("toggle_shipping_auto_create", params, socket) do
+    Authz.authorize(socket, :manage_settings, fn ->
+      gated_event("toggle_shipping_auto_create", params, socket)
     end)
   end
 
@@ -663,6 +687,51 @@ defmodule PhoenixKitEcommerce.Web.Settings do
                 </label>
               </div>
             </div>
+
+            <div class="divider"></div>
+
+            <div>
+              <h3 class="font-medium mb-1">{gettext("Shipment label size")}</h3>
+              <p class="text-sm text-base-content/70 mb-3">
+                {gettext(
+                  "The paper size the carrier is asked to print shipment labels in. A carrier that cannot print a size answers with an error."
+                )}
+              </p>
+              <div class="flex flex-wrap gap-4">
+                <label
+                  :for={{value, label} <- [{"a4", "A4"}, {"a5", "A5"}, {"a6", "A6"}]}
+                  class="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="shipping_label_format"
+                    class="radio radio-primary"
+                    id={"shipping-label-format-#{value}"}
+                    value={value}
+                    checked={@shipping_label_format == value}
+                    phx-click="update_shipping_label_format"
+                    phx-value-format={value}
+                  />
+                  <span>{label}</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <.setting_toggle
+              id="toggle-shipping-auto-create"
+              title={gettext("Register shipments when an order is paid")}
+              description={
+                gettext(
+                  "The carrier is asked as soon as the payment lands, for methods whose carrier can register shipments. A shipment it refuses waits on the Shipments page."
+                )
+              }
+              checked={@shipping_auto_create}
+              event="toggle_shipping_auto_create"
+              toggle_class="toggle-secondary"
+              class="py-2"
+            />
           </div>
         </div>
 
@@ -738,6 +807,16 @@ defmodule PhoenixKitEcommerce.Web.Settings do
               title={gettext("Email the buyer when an order is placed and when it is paid")}
               checked={@order_emails_to_buyer}
               event="toggle_order_emails_to_buyer"
+              toggle_class="toggle-secondary"
+              class="py-2"
+            />
+
+            <.setting_toggle
+              id="toggle-order-email-shipped"
+              title={gettext("Email the buyer when a shipment is on its way")}
+              description={gettext("With the carrier, the tracking number and the tracking link.")}
+              checked={@order_email_shipped}
+              event="toggle_order_email_shipped"
               toggle_class="toggle-secondary"
               class="py-2"
             />
@@ -2156,6 +2235,19 @@ defmodule PhoenixKitEcommerce.Web.Settings do
     end
   end
 
+  defp gated_event("toggle_order_email_shipped", _params, socket) do
+    case OrderEmails.set_shipped_emails_enabled(!socket.assigns.order_email_shipped) do
+      {:ok, enabled} ->
+        {:noreply,
+         socket
+         |> assign(:order_email_shipped, enabled)
+         |> put_flash(:info, gettext("Notification setting updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update notification setting"))}
+    end
+  end
+
   defp gated_event("save_order_email_copy_recipients", params, socket) do
     case OrderEmails.set_copy_recipients(Map.get(params, "addresses", "")) do
       {:ok, addresses} ->
@@ -2211,6 +2303,7 @@ defmodule PhoenixKitEcommerce.Web.Settings do
   # setting being silently ignored.
   @shipping_skip_modes ~w(off fallback always)
   @shipping_positions ~w(cart checkout)
+  @shipping_label_formats ~w(a4 a5 a6)
 
   defp gated_event("update_shipping_skip_mode", %{"mode" => mode}, socket)
        when mode in @shipping_skip_modes do
@@ -2260,6 +2353,47 @@ defmodule PhoenixKitEcommerce.Web.Settings do
 
   defp gated_event("update_shipping_selection_position", _params, socket) do
     {:noreply, put_flash(socket, :error, gettext("Failed to update shipping selection step"))}
+  end
+
+  defp gated_event("update_shipping_label_format", %{"format" => format}, socket)
+       when format in @shipping_label_formats do
+    case Settings.update_setting_with_module("shop_shipping_label_format", format, "shop") do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:shipping_label_format, format)
+         |> put_flash(:info, gettext("Label size updated"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to update the label size"))}
+    end
+  end
+
+  defp gated_event("update_shipping_label_format", _params, socket) do
+    {:noreply, put_flash(socket, :error, gettext("Failed to update the label size"))}
+  end
+
+  # Logged: on, every paid order's shipment is registered with its carrier
+  # without anyone pressing a button.
+  defp gated_event("toggle_shipping_auto_create", _params, socket) do
+    case Shop.set_shipping_auto_create(!socket.assigns.shipping_auto_create) do
+      {:ok, enabled} ->
+        Activity.log("shop.shipping_auto_create_changed",
+          actor_uuid: Activity.actor_uuid(socket),
+          actor_role: Activity.actor_role(socket),
+          resource_type: "settings",
+          metadata: %{"enabled" => enabled}
+        )
+
+        {:noreply,
+         socket
+         |> assign(:shipping_auto_create, enabled)
+         |> put_flash(:info, gettext("Shipment registration updated"))}
+
+      {:error, _} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Failed to update the shipment registration"))}
+    end
   end
 
   defp gated_event("save_shipping_parcel_defaults", %{"parcel" => %{} = params}, socket) do

@@ -97,7 +97,7 @@ Repo-local aliases:
   unified `:phoenix_kit_public` live_session), `admin_routes/0` and
   `admin_locale_routes/0` for the admin pages that have no tab (forms,
   detail pages, settings sub-pages, the dashboard); `generate/1` emits the
-  one controller route pair, the checkout claim page. Every page with a tab
+  controller routes (checkout claim, shipment labels). Every page with a tab
   gets its route from the tab's `live_view:` instead, and must not be
   declared in `admin_routes/0` as well (two routes at one path;
   `sub_key_pages_test.exs` pins it). Never hand-register these routes in a
@@ -156,7 +156,8 @@ Repo-local aliases:
 - **Never wrap in `gettext`:** `push_event` names, URL paths, route segments,
   setting keys. Translating one breaks at runtime in every non-English locale.
 - **A stored status is rendered through `Web.StatusLabels`** (`order/1`,
-  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`),
+  `product/1`, `category/1`, `cart/1`, `import/1`, `translation_entry/1`,
+  `shipment/1`),
   never as its raw value: the value keys badge classes, filters and audit
   metadata, the label is what a person reads. A new status value needs its
   own `gettext` clause there.
@@ -234,7 +235,9 @@ Repo-local aliases:
   and the three public cart API cron workers (`ApiCartSweepWorker`,
   `ApiCartPruneWorker`, `ApiClaimPruneWorker`), on `default`: they are
   short, scheduled through `oban_crons/0`, and must not wait behind an import;
-  `OrderEmailWorker`, also on `default`, for the same reason.
+  `OrderEmailWorker`, also on `default`, for the same reason;
+  `ShipmentTrackingWorker`, on `default` every 30 minutes, NOT short: one
+  `track/2` call per carrier group, up to 60 s each, in a row.
   The Shopify sync runs ONE kind at a
   time: on a catalogue that does not honour `data_owned_paths`, images and
   variants each write an item's whole `data` map from a read taken when the
@@ -269,7 +272,8 @@ Repo-local aliases:
   wrapper adds the module key (`"shop"`) and `actor_role` to core's
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
-  Rows carry no PII.
+  Rows carry no PII. Exception: `ShipmentAutoCreateHandler` runs in billing's
+  job, where no LiveView logs, and logs as the system (`mode: "auto"`).
 - **The core pin keeps the compound form (`>= 3.5.0 and < 4.0.0`) on
   purpose.** A three-segment `~> 3.5.0` expands to `< 3.6.0` and breaks
   CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
@@ -338,30 +342,11 @@ Repo-local aliases:
   catalogue source locks no product rows. A rollback inside `add_to_cart`
   (`{:product_not_available, _}`, invalid specs) poisons the surrounding
   transaction, so a line is validated before the call.
-- **The test harness must apply billing's migration chain, not just core's.**
-  This module reads and writes billing's schemas directly, and billing owns
-  `phoenix_kit_currencies` from its own V2 on, so a test database built from
-  core's baseline alone is missing columns billing's `Currency` schema selects.
-  The symptom is an `undefined_column` on `rounding_rule` raised from a
-  currency read, hundreds of tests deep and nowhere near anything about
-  currencies. `test_helper.exs` runs core's chain, then this module's,
-  then billing's — and, when catalogue is loaded, entities' and
-  catalogue's. The catalogue pair matters the same way:
-  core's baseline creates `phoenix_kit_cat_*` in their V1 shape, catalogue's
-  own V2 adds the `slug` column its schemas insert, so a database without
-  that chain fails every `:catalogue` test with `undefined_column: slug`.
-- **Raising a dependency requirement means updating `mix.lock` in the same
-  change.** A requirement bumped without it leaves the repo refusing to
-  compile ("lock mismatch: the dependency is out of date") until someone runs
-  `mix deps.get`, and the failure names the dependency rather than the commit
-  that raised the floor.
-- A new public page that omits `put_content_locale/1` in `mount/3` renders
-  fully English while its siblings translate — the page looks correct in
-  tests and inert in production. Call it, or inherit it via
-  `put_content_locale_from/1`.
-- Reading `price_on_request` live from the product instead of the stored line
-  turns a committed "price on request" order into a "0.00" order; the product
-  row is `ON DELETE SET NULL`, so deleting a product is enough to trigger it.
+- Apply the migration chains in test-helper order: core, shop, billing, then
+  entities and catalogue when loaded. Billing owns currency rounding rules and
+  catalogue owns its slug column. Core's baseline lacks both.
+- When raising a dependency requirement, run `mix deps.get` and commit the
+  updated lockfile with the requirement.
 - A shipping method flagged `metadata["pay_on_delivery"]` (the buyer pays the
   carrier's own rates on delivery) is stored with price 0 —
   `ShippingMethod.changeset/2` forces it and clears `free_above_amount`.
@@ -420,7 +405,7 @@ Repo-local aliases:
   tables, functions or triggers; it unstamps the marker and restores V2 defaults.
   Match core's schema-specific index names. The guide documents the five
   indexes whose names include a non-public schema prefix.
-- The chain is currently V6; `up/1`, `down/1` and `up_statements/2` honor the
+- The chain is currently V7; `up/1`, `down/1` and `up_statements/2` honor the
   target version. Hosts use `mix phoenix_kit.update` / `mix phoenix_kit.status`.
 - `mix test` always runs unit tests; `:integration` tests auto-skip without
   Postgres. Check the excluded count: optional dependency/API capability tags

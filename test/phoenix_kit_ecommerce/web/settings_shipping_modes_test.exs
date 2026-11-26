@@ -44,6 +44,21 @@ defmodule PhoenixKitEcommerce.Web.SettingsShippingModesTest do
     assert Shop.shipping_selection_position() == :cart
   end
 
+  test "label size radios write the setting the label print reads", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/en/admin/shop/settings")
+    assert Shop.shipping_label_format() == :a4
+    assert has_element?(view, "#shipping-label-format-a4[checked]")
+
+    render_click(element(view, "#shipping-label-format-a6"))
+    assert Shop.shipping_label_format() == :a6
+
+    render_click(element(view, "#shipping-label-format-a5"))
+    assert Shop.shipping_label_format() == :a5
+
+    render_click(view, "update_shipping_label_format", %{"format" => "letter"})
+    assert PhoenixKit.Settings.get_setting("shop_shipping_label_format") == "a5"
+  end
+
   test "a value outside the closed enum is rejected, not stored", %{conn: conn} do
     # Both readers fall back to the safe legacy value on anything they don't
     # recognise, so an unvalidated write would read as the setting being

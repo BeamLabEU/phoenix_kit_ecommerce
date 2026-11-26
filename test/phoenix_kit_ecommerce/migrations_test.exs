@@ -16,8 +16,8 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     phoenix_kit_shop_import_logs
   )
 
-  test "chain is V6 and marks phoenix_kit_shop_config" do
-    assert Migrations.current_version() == 6
+  test "chain is V7 and marks phoenix_kit_shop_config" do
+    assert Migrations.current_version() == 7
     assert Migrations.version_table() == "phoenix_kit_shop_config"
   end
 
@@ -28,7 +28,7 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
       assert Enum.any?(stmts, &String.contains?(&1, "CREATE TABLE IF NOT EXISTS public.#{t} ("))
     end
 
-    assert List.last(stmts) == "COMMENT ON TABLE public.phoenix_kit_shop_config IS 'pke_schema:6'"
+    assert List.last(stmts) == "COMMENT ON TABLE public.phoenix_kit_shop_config IS 'pke_schema:7'"
   end
 
   test "no statement can destroy data, in either direction" do
@@ -71,8 +71,9 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
     # + 4 V2 `DROP DEFAULT`s + 1 V3 Shopify-default step
     # + 7 V4 search-index statements
     # + 1 V5 claims table + 3 V5 claim indexes + 1 V5 analytics step
-    # + 3 V6 base-currency columns + 1 marker
-    assert length(stmts) == 97
+    # + 3 V6 base-currency columns + 1 V7 shipments table + 4 V7 shipment indexes
+    # + 1 marker
+    assert length(stmts) == 102
 
     for name <- ~w(
           idx_shop_config_key
@@ -134,8 +135,8 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
 
     # 39 + the 4 guarded indexes of the search table + the trigram index
     # (created inside a DO block, behind the extension check)
-    # + the 3 indexes of the V5 claims table
-    assert length(names) == 47
+    # + the 3 indexes of the V5 claims table + the 4 of the V7 shipments table
+    assert length(names) == 51
 
     assert names |> Enum.filter(&String.starts_with?(&1, "tenant_x_")) |> Enum.sort() ==
              @exempt_uuid_indexes |> Enum.map(&("tenant_x_" <> &1)) |> Enum.sort()
@@ -267,7 +268,7 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
 
     assert Migrations.shopify_upgrade_statements("public") -- stmts == []
 
-    # V3's step is followed by V4's, V5's and V6's statements and then the marker.
+    # V3's step is followed by V4's to V7's statements and then the marker.
     step_at =
       Enum.find_index(stmts, &(&1 == hd(Migrations.shopify_upgrade_statements("public"))))
 
@@ -275,7 +276,8 @@ defmodule PhoenixKitEcommerce.MigrationsTest do
              length(stmts) - 2 - length(Migrations.search_index_statements("public")) -
                length(Migrations.claims_statements("public")) -
                length(Migrations.claim_analytics_statements("public")) -
-               length(Migrations.v6_base_currency_columns("public"))
+               length(Migrations.v6_base_currency_columns("public")) -
+               length(Migrations.shipments_statements("public"))
   end
 
   test "the Shopify-default step only ever inserts, and never overwrites" do

@@ -61,15 +61,21 @@ pages.
   `lib/phoenix_kit_ecommerce/compat/`; only a host written against them does.
 - **Admin surface:** tab `E-Commerce` at `/admin/shop`, subtabs Dashboard,
   Products, Categories, Shipping, Carts, CSV Import, Shopify Sync (hidden
-  while `shop_shopify_enabled` is off) and Translations
-  (`/admin/shop/translations`, hidden until `shop_translations_enabled`); a
+  while `shop_shopify_enabled` is off), Translations
+  (`/admin/shop/translations`, hidden until `shop_translations_enabled`) and
+  Shipments (`/admin/shop/shipments`); a
   settings subtab at `/admin/shop/settings`; user-dashboard tabs Shop
   (`/shop`) and My Cart (`/cart`, also in the avatar dropdown via the
   `Tab` option `user_menu: true`). Public storefront routes: `/shop`,
   `/shop/category/:slug`, `/shop/product/:slug`, `/cart`, `/checkout`,
   `/checkout/complete/:uuid`, and the assistant checkout hand-off
   `/checkout/claim/:token` (GET and POST, no locale prefix; a controller route
-  emitted by `Web.Routes.generate/1`, not a LiveView).
+  emitted by `Web.Routes.generate/1`, not a LiveView). The shipment labels,
+  `GET /shop-shipments/labels?ids=...` (`Web.ShipmentLabelsController`), are
+  the other controller route there: no locale prefix and not under `/admin`
+  (core does not rewrite these routes for a renamed admin path), behind
+  `:phoenix_kit_admin_only`; the controller checks `shop.manage_shipments`
+  itself, and links to it are built with `Routes.path(path, locale: :none)`.
 - **The claim token is in the request path** (`GET /checkout/claim/<token>`).
   Three log lines carry the path before any controller runs: the endpoint's
   request logger (`Plug.Telemetry`, `GET /checkout/claim/...` at info) and core's
@@ -182,7 +188,8 @@ lib/phoenix_kit_ecommerce/
 ├── workers/          # Oban: CSVImportWorker, ImageMigrationWorker,
 │                     # ShopifyMediaSyncWorker, TranslationSweepWorker,
 │                     # SearchReindexWorker, SearchRebuildWorker (queue shop_search),
-│                     # ApiCartSweepWorker, ApiCartPruneWorker, ApiClaimPruneWorker
+│                     # ApiCartSweepWorker, ApiCartPruneWorker, ApiClaimPruneWorker,
+│                     # ShipmentTrackingWorker (the stuck sweep + tracking cron)
 ├── search/           # public search index: Entry, Dictionary, Trigram, OptionKeys,
 │                     # Document, Indexer, Query, Jobs, Subscriber
 ├── api/              # public shop API tools: Visibility, Facts, Record, Loader, Context,
@@ -196,6 +203,7 @@ lib/phoenix_kit_ecommerce/
 │                     # list_unstamped_prices (read-only audit)
 ├── web/              # LiveViews, components, plugs, routes, helpers, authz,
 │                     # ClaimController + ClaimHTML (the checkout claim page);
+│                     # ShipmentLabelsController (the labels' download);
 │                     # components/related_products.ex (product page block),
 │                     # components/cross_sells.ex (cart "Add to your order")
 ├── activity.ex       # activity-log wrapper (module + actor metadata, never raises)
@@ -240,6 +248,7 @@ All use UUIDv7 primary keys.
 | `Cart` | `phoenix_kit_shop_carts` | guest (session-based, 30-day expiry) and user (persistent); status `active → converted \| merged \| abandoned \| expired` |
 | `CartItem` | `phoenix_kit_shop_cart_items` | price snapshots, selected specs, weight |
 | `CartClaim` | `phoenix_kit_shop_cart_claims` | one-time checkout claim of a cart the public cart API created: hashed token, expiry, used and superseded stamps |
+| `Shipment` | `phoenix_kit_shop_shipments` | a paid order's shipment with a carrier: context snapshot, data sent, the carrier's answer, masked events and error; status `creating \| unknown → created → in_transit → ready_for_pickup → delivered \| returned`, `cancelled`, `failed`; one live shipment per order (partial unique index) |
 | `ShippingMethod` | `phoenix_kit_shop_shipping_methods` | weight/price constraints, geographic restrictions, free-shipping thresholds, delivery estimates |
 | `ShopConfig` | `phoenix_kit_shop_config` | JSONB key-value store; also carries the migration marker |
 | `ImportConfig` | `phoenix_kit_shop_import_configs` | CSV import profiles: keyword filtering, category rules, option mappings |
@@ -298,9 +307,11 @@ different server) and turns events into Oban jobs; it never indexes inline.
 - **Admin LiveViews:** Dashboard, Products, ProductForm, ProductDetail,
   Categories, CategoryForm, ShippingMethods, ShippingMethodForm, Carts,
   Settings, OptionsSettings, Imports, ImportShow, ImportConfigs, ShopifySync,
-  Translations, TestShop.
+  Translations, TestShop, Shipments.
 - **Components:** ShopLayouts, ShopCards, CatalogSidebar, FilterHelpers,
-  TranslationTabs.
+  TranslationTabs, ShipmentDestinationEditor (the Shipments page's own
+  destination editor over the provider's lookups; the checkout picker is
+  bound to a cart and is not reused).
 - **Plug:** `Plugs.ShopSession` mints and reads the signed `shop_session_id`
   cookie (30 days) plus the Phoenix session entry, so a guest keeps one cart
   across pages. A disabled shop does not MINT a new identity but still
@@ -481,7 +492,7 @@ once per build and read the excluded count each time.
 
 ### Permissions
 
-The `"shop"` key opens the admin area's dashboard and nothing else. Five
+The `"shop"` key opens the admin area's dashboard and nothing else. Six
 sub-permissions carry the pages and capabilities (core enforces
 sub-implies-base); each page is refused at mount without its key:
 
@@ -492,6 +503,7 @@ sub-implies-base); each page is refused at mount without its key:
 | `shop.manage_carts` | the carts admin — **read included**, the rows carry customer contact details |
 | `shop.manage_settings` | the settings page (security policy and the rest), product options, shipping methods (list and form); every translations-page action (translate, stamp, reset, stop, run sweep, sweep settings) |
 | `shop.run_imports` | CSV imports and their detail pages, import configurations, Shopify sync |
+| `shop.manage_shipments` | the Shipments page — **read included**, the rows carry the recipients' contact details — every action on it, and the label download route |
 
 ⚠️ Core auto-grants a newly discovered sub-permission to the Admin system
 role only. A CUSTOM role holding base `"shop"` keeps the dashboard but loses
@@ -526,9 +538,10 @@ primary operator of a default install.
 ### Order emails
 
 `OrderEmails` sends real emails, apart from the notifications above and from
-each user's preferences. Three templates, overridable and previewable like any
-other (`email_templates/0`, layout group `shop`): `shop_order_confirmation` and
-`shop_order_paid` to the buyer, `shop_order_received` to the shop.
+each user's preferences. Four templates, overridable and previewable like any
+other (`email_templates/0`, layout group `shop`): `shop_order_confirmation`,
+`shop_order_paid` and `shop_order_shipped` to the buyer, `shop_order_received`
+to the shop.
 
 - **When.** On placing, the buyer's confirmation and the shop's email, unless the
   order awaits online payment; on `:paid`, the buyer's paid email and the shop's
@@ -572,8 +585,18 @@ other (`email_templates/0`, layout group `shop`): `shop_order_confirmation` and
 - **The order link.** A confirmed account gets `/dashboard/orders/:uuid`. A guest
   gets `/checkout/complete/:uuid` only under the `:link` lookup policy: under
   `:strict` that page opens only in the placing session, so the link is left out.
+- **Shipped.** `shop_order_shipped` goes once per SHIPMENT (kind
+  `buyer_shipped`; the job's args and unique key carry `shipment_uuid`; marks
+  `"buyer_shipped:<shipment uuid>"` and `"buyer_shipped_copy:<shipment uuid>"`),
+  with `{{carrier}}`, `{{tracking_number}}` and `{{tracking_url}}` (only a web
+  address, `Shipments.web_url/1`). `Shipments` queues it at the first
+  `in_transit`, `ready_for_pickup` or `delivered` the tracking run stores (in
+  that write's transaction), or at `created` for a provider without
+  `track/2` (after the write, never failing it). A delivery sends nothing for
+  a shipment that is no longer `Shipments.shipped?/1` or not the order's; one already `delivered` when it goes gets the "has been delivered" subject and intro (`{{shipment_delivered}}`), the same kind and mark.
 - **Settings**, through `OrderEmails`: `shop_order_emails_to_buyer` (default on,
-  a read error counts as off), `shop_order_email_recipients` (addresses; none
+  a read error counts as off), `shop_order_email_shipped` (the shipped email
+  alone; default on like the other buyer emails, a read error counts as off), `shop_order_email_recipients` (addresses; none
   means no shop email), `shop_order_email_copy_recipients` (addresses; none means
   no copies) and `shop_order_email_language` (an enabled language code, `""` for
   the primary language; the selector shows only with two or more languages
@@ -749,6 +772,14 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   page renders **no** shipping section at all, so nothing may redirect a
   shopper there to "pick another method"; `CheckoutPage` re-enters its own
   `:shipping` step instead.
+- `shop_shipping_auto_create` — boolean (default off): register a paid
+  order's shipment with its carrier on billing's `:paid`
+  (`ShipmentAutoCreateHandler`). Read via `shipping_auto_create?/0` (a read
+  error is off), written via `set_shipping_auto_create/1`; the settings
+  LiveView logs `shop.shipping_auto_create_changed`.
+- `shop_shipping_label_format` — `"a4"` (default), `"a5"` or `"a6"`: the
+  paper size shipment labels are asked in (`LabelOptions.format`). Read via
+  `shipping_label_format/0`; an unknown value is `:a4`.
 - `shop_shipping_parcel_defaults` — JSON `%{"length_mm", "width_mm",
   "height_mm", "weight_g"}`: the standard box and the weight assumed for a
   line without one. Read via `shipping_parcel_defaults/0`, written via
@@ -791,7 +822,12 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   against the cart whenever its shipping status is worked out
   (`check_destination`): a point that no longer takes the parcels makes the
   status `:needs_destination` with snapshot `reason: "point_limits"`, which
-  blocks checkout like any other missing destination.
+  blocks checkout like any other missing destination. A current quote the
+  carrier answered with `:invalid_destination` (for any provider) is
+  `:needs_destination` too, with `reason: "invalid_destination"`, rather than
+  `:unavailable`, when the service takes a pickup point or an address: the
+  shopper is asked for another place. For a service that takes none it stays
+  `:unavailable`.
 - Locality search and pickup point listing are rate limited per provider
   (`Shipping.RateLimit`, `:shipping_lookup_rate`, default 20/s; `{:error,
   :rate_limited}` is transient and never cached) and their cache entries are
@@ -1006,7 +1042,7 @@ settings-layer error.
 
 Owns a versioned chain: `PhoenixKitEcommerce.Migrations` via
 `migration_module/0`, marker `pke_schema:<N>` as a COMMENT ON
-`phoenix_kit_shop_config`, currently V6. `mix phoenix_kit.update` applies it
+`phoenix_kit_shop_config`, currently V7. `mix phoenix_kit.update` applies it
 in hosts (and `mix phoenix_kit.status` reports it); tests apply it by running
 `up_statements/1` directly. A marker-less or foreign-comment table reads as
 version 0 — the core-baseline shape from before the chain existed.
@@ -1058,6 +1094,13 @@ V6 adds the base-currency columns core's V186 added (`base_currency` and
 `exchange_rate` on `phoenix_kit_shop_carts`, `base_unit_price` on
 `phoenix_kit_shop_cart_items`) with `ADD COLUMN IF NOT EXISTS`, so the chain
 builds the shop tables without core. No backfill; `down/1` keeps the columns.
+V7 creates `phoenix_kit_shop_shipments` (`Shipment`): the order (`ON DELETE
+CASCADE` to billing's `phoenix_kit_orders`) and its method (`ON DELETE SET
+NULL`), the provider, service, connection and `context_snapshot`, the data
+sent, the carrier's answer, `events` and `error`, `created_by_uuid` and
+`last_tracked_at`, `submitted_at` (the claim of the current attempt); indexes on `order_uuid`, `(status, last_tracked_at)` and
+`tracking_number`, and the partial unique `idx_shop_shipments_live_order` on
+`order_uuid` over the live statuses. `down/1` keeps the table.
 
 Rules for the chain, all of which have been broken at least once:
 
@@ -1167,4 +1210,6 @@ and `schema_prefix_conformance_test.exs` (every table-backed schema uses
 | Cart currency and handoff | A cart's RATE is frozen while it stays in one currency (`refresh_cart_rate/1` is the shopper's explicit choice) and every CHANGE of currency re-freezes it at the CURRENT rate: a EUR cart frozen at an old rate, opened on the USD domain and then on the EUR domain, comes back at today's rate with no drift notice (accepted; pinned in `cart_redenominate_test.exs`). The CURRENCY follows the request, and only a page MOUNT moves it: the cart and checkout pages call `Web.Helpers.cart_in_request_currency/2`, which runs `redenominate_cart/2` (cart row locked, `rebase_cart/1` first, lines re-derived from `base_unit_price`, a stored carrier quote dropped, `compare_at_price` inverted through base with the old cart). An open page follows the cart it holds, whatever its currency (every place a page stores a cart goes through `assign_cart/2`, which sets `:currency` and, on checkout, `:fx_drift`) and never re-denominates on a broadcast. A request currency the shop cannot price in (disabled, unknown) is shown as the base but moves no cart (`cart_in_request_currency/1`); a cart that is not active is never touched. Charged amounts survive any number of round trips exactly; `compare_at_price` does not (it goes through the old currency's rounded amount: up to a cent into a plain 2-decimal currency, up to the rule's step into one with a rounding rule, `charm_99`: 180.00 -> 162.99 -> 179.29) and a line whose `compare_at_price` does not end up above its `unit_price` loses it. `move_cart_lines/3` (shared by the claim's "add" merge and the handoff) re-adds every line through `add_to_cart/4` at the target's currency and the current price. The quantity ceiling is the cart line's own (`CartItem.max_quantity/0`) unless the caller passes `:max_quantity`: the claim passes the cart API's cap, and the handoff does not, so a storefront quantity above that cap moves in full. It takes the user keys then the session keys sorted; ownership is the CALLER's to establish (`guest_source: true` re-checks, under the row lock, that the source is active, user-less, not an API cart and non-empty); `keep_skipped: true` (the handoff) leaves what cannot move in the source, which is `merged` only when nothing is left; outside a caller's transaction it announces once per cart after commit (`add_to_cart/4 broadcast: false` per line), inside one (the claim) the lines are announced as they go in. `handoff_snapshot/1` and `handoff_apply/2` are plain public functions on `PhoenixKitEcommerce` (the module core registers for `"shop"`), called by core's `PhoenixKit.Handoff` through `function_exported?/3` (optional callbacks, annotated when the installed core declares them); they never raise and `handoff_apply/2` always answers `{:ok, %{moved:, skipped:}}` plus `notices` (translated flash lines) and `cookies` (a minted `shop_session_id` for a guest's first arrival, with the plug's signing and lifetime options, letting core set the secure flag for the target scheme) when there is something to say. The shop session id is read from the verified signed cookie or the session, never from an unsigned value; when the endpoint's secret cannot be found, a cookie the browser sent cannot be judged and nothing is minted or moved (one warning), so it is not replaced. The currency is the caller's `:currency`, else none: core runs the hook in a task with no process dictionary and its context holds no currency (Billing has no currency-for-host hook), so an existing target cart keeps its own and a new one is made in the base currency, which the cart page re-denominates when the shopper opens it. A cart made under a minted id is deleted again when nothing moved into it (a session the visitor already had is never touched). The guest cart a payload names by uuid is adopted only while active, ownerless, not an API cart and not the target's own, judged again under the lock. A cart that cannot be brought into the request currency on a page mount shows the shopper a notice only for `:currency_unavailable`; any other reason is logged | `lib/phoenix_kit_ecommerce/cart_move.ex`, `lib/phoenix_kit_ecommerce/cart_handoff.ex`, `Web.Plugs.ShopSession` |
 | Public read API and search index | Visibility is decided only by `API.Visibility` and every public tool loads products through `API.Loader`; the index holds listed products and base-currency prices only; `Indexer` upserts first and deletes stale rows last, so a rebuild never empties the index, and does nothing when the shop catalogue cannot be resolved; a hidden product, a malformed id and an unknown id answer alike; products and cards are always read live while the `count`, the facets and the category counts come from the index and lag a change by the reindex delay, so every write path of a product source must enqueue its reindex (`Search.Jobs`; the Legacy bulk category change and bulk delete and the base-currency reprice, which writes silently, do it themselves, the rest reaches `Search.Subscriber` as events, and the events of other catalogues are dropped there); a UUID from a caller is accepted only through `API.Loader.canonical_uuid/1`; money is converted only by `API.Context.money/2`; no value in a public answer is a `Decimal`, a `DateTime` or a struct | `API.Visibility`, `Search.Indexer`, `Search.Query`, `API.Public.*` moduledocs |
 | Public cart API | The cart token is a signed bearer value and is never stored, logged or put in a notification; the cart row is created only by the first write, under core's cart-row limits; option keys are the ones `Search.OptionKeys` announces and `CartOptions` only maps them back; a line is addable only when `API.Visibility` says `:listed`, and a UUID from a caller goes through `API.Loader.canonical_uuid/1`; only the refusals `add_to_cart` makes before it opens its own transaction and that a retry cannot change (`CartWriter` `@line_refusals`) are that line's error, any other answer rolls the whole batch back for a retryable `state_changed`, because a refusal inside the writer's transaction dooms it; `shop.clear_cart` asks for confirmation only when the cart has lines; a carrier-priced method has no price until the buyer picks a destination; while a cart is checking out only `shop.get_cart` answers it (`checking_out`, no lines): the other read, `shop.get_shipping_options`, refuses it with `cart_locked` like a write (deliberate, pinned by a test); the claim route has no locale prefix, the claim URL's host must be one of `ctx.hosts` or the host of the `site_url` setting (else the first of `ctx.hosts`, else the `site_url` origin; no host to use at all refuses the call before a claim exists, a dry run refusing in exactly the same cases; core fills `hosts` with the request's Host header unless the host app's `:api_request_context` hook names the domains, so with core's defaults any Host header is believed and a multi-domain install should name its domains) and a GET never consumes a claim; the claim page's form carries the revision of the cart it showed, and a POST made after the agent changed the cart, or without that revision, shows the page again (`Claims.redeem/3` requires `revision` and answers `:reshow` for a missing or different one) instead of claiming lines the buyer did not see | `API.CartTools`, `API.Claims`, `API.CartStore` moduledocs |
+| Shipments | `Shipments.begin_shipment/2` checks before it writes (order `paid`, `Shipping.supports?(ctx, :create_shipment)`, the point still listed by the provider and accepted by `validate_destination/3`) and inserts `creating` holding the order row; `submit_shipment/2` runs one attempt in a process under `Shipments.TaskSupervisor`, not linked to the caller (a closed LiveView tab does not lose the answer), which claims the row (`submitted_at`, only while the order is still `paid`), calls the carrier outside any transaction, logs the answer and stores it only while the row is still `creating` under that claim (`created`; `failed` for `Shipping.definite_failure?/1`; `unknown` for anything else, resolved by the admin, never retried automatically); a retry is a compare-and-set `failed → creating` on the same row; the error and events are masked (`Shipments.Mask`); context functions log no Activity | `shipments.ex`, `shipping.ex`, `shipping/provider.ex` |
+| Shipment tracking, auto-registration, buyer view | `Workers.ShipmentTrackingWorker` (cron `7,37 * * * *`, `default`, no-op while the shop is off) runs `Shipments.sweep_stuck/0` (`creating` for 10 minutes → `unknown`, conditional, with an event) and `Shipments.track_shipments/1`: `created`/`in_transit`/`ready_for_pickup` rows younger than 60 days of providers exporting `track/2`, grouped by provider, connection and environment, one `Shipping.track/2` call per group (60 s by default; `track/2` answers for the refs with news, silence means no change, and the adapter splits them into carrier calls; every shipment of an answered group is stamped `last_tracked_at`, a short answer logged by count; at most 1000 a run, oldest `last_tracked_at` first); one group's error never stops another (a context is rebuilt from the group's first shipment only; a failure run is one masked `tracking_failed` event per shipment, tag only, closed by `tracking_resumed`, and the Shipments page shows `Shipments.tracking_failing_since/1`); a status never moves backwards (an update must rank higher, `created < in_transit < ready_for_pickup < delivered < returned`; `occurred_at` decides only between two updates of the same status); each write is conditional on the status it was weighed against. `ShipmentAutoCreateHandler` (billing `:paid`, behind `shop_shipping_auto_create`) re-reads the order, checks for any existing shipment again under the order write lock after destination validation, so a retried job never calls the carrier twice, and logs Activity as the system (it holds a `billing` slot for the carrier calls, about a minute at worst; the tracking run holds a `default` slot for up to 60 s per carrier group). The buyer's pages show shipments from `created` on (`Shipments.buyer_shipments/1`, one query for a list page) and the order label follows them (`Shipments.buyer_order_status/2`) | `shipments.ex`, `shipment_auto_create_handler.ex`, `workers/shipment_tracking_worker.ex`, `web/components/shipping_display.ex` |
 | Agentic Commerce / ACP | Assessed and deliberately not built: a bridge plugin, not code in this module, is the shape if it is ever built | `dev_docs/agentic_commerce_acp_research.md` |
