@@ -1338,7 +1338,8 @@ defmodule PhoenixKitEcommerce.Shipments do
     case web_url(url) do
       nil ->
         Logger.warning(
-          "Shipment #{shipment.uuid}: the carrier's tracking link is not a web address; not stored"
+          "Shipment #{shipment.uuid}: the carrier's tracking link is not a web " <>
+            "address; not stored"
         )
 
         nil

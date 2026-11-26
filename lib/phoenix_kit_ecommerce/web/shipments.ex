@@ -6,15 +6,17 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   Three sections (`PhoenixKitEcommerce.Shipments`):
 
     * **To ship** - paid orders whose method's carrier can register
-      shipments and that have none but cancelled ones (`list_to_ship/1`). One order is
-      registered at a time: alone, after the admin has looked at (and may
-      have corrected) the parcels, the recipient and the destination, or as a
-      batch of the orders ticked, each with the order's own data.
+      shipments and that have none but cancelled ones (`list_to_ship/1`).
+      One order is registered at a time: alone, after the admin has looked
+      at (and may have corrected) the parcels, the recipient and the
+      destination, or as a batch of at most 50 ticked orders, each with the
+      order's own data.
     * **Open** - live shipments that wait for nothing from the admin
       (`list_open/1`), with their labels.
     * **Needs attention** - `unknown`, `failed` and stuck `creating`
       shipments, and live ones of a cancelled or refunded order
-      (`list_needs_attention/1`), with the actions that resolve them.
+      (`list_needs_attention/1`), with the actions that resolve them (a
+      failed one of such an order is closed locally, `close_shipment/2`).
 
   The carrier is called from `start_async`: `register/2` (or
   `retry_shipment/2` and `submit_shipment/2`) and `cancel_shipment/2`. One such
