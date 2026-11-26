@@ -43,14 +43,12 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   # `{trunk prefixes, lengths of the national number}` by country; the length
   # decides when the trunk digit can also begin a number. Anything else
-  # drops one leading 0, the trunk prefix of most numbering plans.
+  # drops one leading 0: the trunk prefix of most numbering plans, and a
+  # habit in the countries that have none (no number there begins with 0).
   @default_trunk {["0"], nil}
   @no_trunk {[], nil}
   @trunk_prefixes Map.merge(
-                    Map.new(
-                      ~w(EE LV PL CZ ES PT NO DK IS GR CY MT LU IT SM VA),
-                      &{&1, @no_trunk}
-                    ),
+                    Map.new(@keeps_leading_zero, &{&1, @no_trunk}),
                     %{
                       "LT" => {["8", "0"], [8]},
                       "RU" => {["8"], [10]},
@@ -172,11 +170,10 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   national trunk prefix:
 
     * `0` in most countries (`"040 123 4567"` for `"FI"` is
-      `"+358401234567"`);
-    * none in Estonia, Latvia, Poland, Czechia, Spain, Portugal, Norway,
-      Denmark, Iceland, Greece, Cyprus, Malta and Luxembourg; Italy, San
-      Marino and the Vatican keep their leading `0`, which is part of their
-      numbers;
+      `"+358401234567"`). Where there is no trunk prefix (Estonia, Latvia,
+      Poland, Czechia, Portugal...) a 0 typed before the number is dropped
+      the same way: no number there begins with 0. Italy, San Marino and the
+      Vatican keep their leading `0`, which is part of their numbers;
     * `8` or `0` in Lithuania, `8` in Russia and Kazakhstan, `80` in Belarus,
       `0` or `80` in Ukraine, `1` in the US and Canada: these are dropped only
       when what is left has the length of the country's numbers, since the
@@ -186,8 +183,10 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   An `(0)` written next to a country code is the trunk prefix and is dropped,
   except in Italy, San Marino and the Vatican, where it is the number's own
-  `0`. `nil` when there is no number, the number has other characters, or it
-  has no country code and `country` gives none.
+  `0`. A national number that still begins with 0 (outside those three) is
+  `nil`: Hungary's `030 ...` is not its `06` trunk. `nil` also when there is
+  no number, the number has other characters, or it has no country code and
+  `country` gives none.
   """
   @spec e164_phone(term(), term()) :: String.t() | nil
   def e164_phone(phone, country) when is_binary(phone) do
@@ -223,8 +222,13 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
     with code when is_binary(code) <- calling_code(country),
          number when is_binary(number) <- without_trunk(local, prefixes, lengths),
+         :ok <- significant(number, country),
          do: code <> number
   end
+
+  # Only Italy, San Marino and the Vatican have numbers that begin with 0.
+  defp significant("0" <> _rest, country) when country not in @keeps_leading_zero, do: :unsure
+  defp significant(_number, _country), do: :ok
 
   defp without_trunk(local, prefixes, nil) do
     case Enum.find(prefixes, &String.starts_with?(local, &1)) do

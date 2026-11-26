@@ -482,6 +482,20 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     test "a number that fits none of its country's forms is nil, not a guess" do
       assert ShipmentRequest.e164_phone("8 612 345", "LT") == nil
       assert ShipmentRequest.e164_phone("9 495 123 45 67", "RU") == nil
+      # A 0 that is not Hungary's 06 trunk: no Hungarian number begins with 0.
+      assert ShipmentRequest.e164_phone("030 123 4567", "HU") == nil
+      assert ShipmentRequest.e164_phone("0 30 123 4567", "HU") == nil
+    end
+
+    test "a 0 typed before a number of a country without a trunk prefix is dropped" do
+      # No number there begins with 0, so the 0 is a habit, not a digit.
+      assert ShipmentRequest.e164_phone("05123 4567", "EE") == "+37251234567"
+      assert ShipmentRequest.e164_phone("0 5123 4567", "EE") == "+37251234567"
+      assert ShipmentRequest.e164_phone("02612 3456", "LV") == "+37126123456"
+      assert ShipmentRequest.e164_phone("0512 345 678", "PL") == "+48512345678"
+      assert ShipmentRequest.e164_phone("0912 345 678", "PT") == "+351912345678"
+      # Italy, San Marino and the Vatican keep it: it is part of the number.
+      assert ShipmentRequest.e164_phone("06 1234 5678", "IT") == "+390612345678"
     end
 
     test "an (0) is never dialled from abroad" do
