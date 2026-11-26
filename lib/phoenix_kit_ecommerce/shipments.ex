@@ -1231,8 +1231,10 @@ defmodule PhoenixKitEcommerce.Shipments do
     last = last_occurred_at(shipment)
 
     updates
-    |> Enum.filter(&(about?(&1, shipment) and &1.status in TrackingUpdate.statuses()))
-    |> Enum.filter(&forward?(shipment, &1, last))
+    |> Enum.filter(
+      &(about?(&1, shipment) and &1.status in TrackingUpdate.statuses() and
+          forward?(shipment, &1, last))
+    )
     |> Enum.max_by(&{rank(&1.status), unix(&1.occurred_at)}, fn -> nil end)
   end
 
