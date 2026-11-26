@@ -65,6 +65,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
        selected_shipments: [],
        labels_check: nil,
        editor: nil,
+       editor_loading: false,
        tracking: nil,
        confirm: nil,
        running: nil,
@@ -172,31 +173,34 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   end
 
   defp gated_event("open_register", %{"uuid" => uuid}, socket) do
-    with :ok <- idle(socket),
-         %Order{} = order <-
-           PhoenixKitBilling.get_order(uuid, preload: []) || {:error, :not_found},
-         {:ok, draft} <- Shipments.shipment_draft(order) do
-      {:noreply, assign(socket, editor: editor(:register, uuid, order, draft))}
-    else
-      {:error, reason} -> {:noreply, put_flash(socket, :error, Errors.message(reason))}
-    end
+    open_editor(socket, fn ->
+      with %Order{} = order <-
+             PhoenixKitBilling.get_order(uuid, preload: []) || {:error, :not_found},
+           {:ok, draft} <- Shipments.shipment_draft(order),
+           do: {:ok, editor(:register, uuid, order, draft)}
+    end)
   end
 
   defp gated_event("open_retry", %{"uuid" => uuid}, socket) do
-    with :ok <- idle(socket),
-         %Shipment{status: "failed"} = shipment <-
-           Shipments.get_shipment(uuid) || {:error, :not_found},
-         %Order{} = order <-
-           PhoenixKitBilling.get_order(shipment.order_uuid, preload: []) || {:error, :not_found},
-         {:ok, draft} <- Shipments.shipment_draft(shipment) do
-      {:noreply, assign(socket, editor: editor(:retry, uuid, order, draft))}
-    else
-      %Shipment{} -> {:noreply, put_flash(socket, :error, Errors.message(:shipment_changed))}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, Errors.message(reason))}
-    end
+    open_editor(socket, fn ->
+      with %Shipment{status: "failed"} = shipment <-
+             Shipments.get_shipment(uuid) || {:error, :not_found},
+           %Order{} = order <-
+             PhoenixKitBilling.get_order(shipment.order_uuid, preload: []) ||
+               {:error, :not_found},
+           {:ok, draft} <- Shipments.shipment_draft(shipment) do
+        {:ok, editor(:retry, uuid, order, draft)}
+      else
+        %Shipment{} -> {:error, :shipment_changed}
+        {:error, _reason} = error -> error
+      end
+    end)
   end
 
-  defp gated_event("close_editor", _params, socket), do: {:noreply, assign(socket, editor: nil)}
+  defp gated_event("close_editor", _params, socket) do
+    socket = if socket.assigns.editor_loading, do: cancel_async(socket, :draft), else: socket
+    {:noreply, assign(socket, editor: nil, editor_loading: false)}
+  end
 
   defp gated_event("editor_change", params, %{assigns: %{editor: %{} = editor}} = socket) do
     {:noreply, assign(socket, editor: take_form(editor, params))}
@@ -367,6 +371,19 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
 
   defp gated_event(_event, _params, socket), do: {:noreply, socket}
 
+  # The draft asks the carrier for its services, which may be slow: the
+  # editor opens at once and fills in when they arrive.
+  defp open_editor(socket, load) do
+    case idle(socket) do
+      :ok ->
+        {:noreply,
+         socket |> assign(editor: nil, editor_loading: true) |> start_async(:draft, load)}
+
+      {:error, :busy} ->
+        {:noreply, put_flash(socket, :error, busy_message())}
+    end
+  end
+
   defp idle(%{assigns: %{running: nil}}), do: :ok
   defp idle(_socket), do: {:error, :busy}
 
@@ -447,6 +464,22 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
   end
 
   @impl true
+  def handle_async(:draft, result, socket) do
+    socket = assign(socket, editor_loading: false)
+
+    case result do
+      {:ok, {:ok, editor}} ->
+        {:noreply, assign(socket, editor: editor)}
+
+      {:ok, {:error, reason}} ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
+
+      {:exit, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, gettext("The carrier did not answer. Please try again."))}
+    end
+  end
+
   def handle_async(kind, result, socket) when kind in [:register, :retry, :cancel] do
     running = socket.assigns.running
     result = carrier_result(kind, result)
@@ -792,6 +825,12 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         <% end %>
       </fieldset>
 
+      <.modal :if={@editor_loading} show={true} on_close="close_editor" id="shipment-editor-pending">
+        <div id="shipment-editor-loading" class="flex items-center gap-3 py-6" aria-live="polite">
+          <span class="loading loading-spinner loading-md"></span>
+          <span>{gettext("Loading the order's shipping details from the carrier...")}</span>
+        </div>
+      </.modal>
       <.editor_modal :if={@editor} editor={@editor} scope={@phoenix_kit_current_scope} />
       <.tracking_modal :if={@tracking} tracking={@tracking} />
 

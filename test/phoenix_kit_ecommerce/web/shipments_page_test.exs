@@ -236,6 +236,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
 
       assert has_element?(view, "#shipment-editor")
       assert has_element?(view, "#shipment-editor-name[value='Mari Maasikas']")
@@ -282,7 +283,10 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       view |> form("#shipment-editor-form") |> render_submit()
       assert_receive {:create_waiting, carrier}, 5_000
 
-      # The admin closes the tab: the page and its async task go.
+      # The admin closes the tab: the page and its async task go (the test
+      # process is linked to the page's test proxy).
+      Process.flag(:trap_exit, true)
+
       running =
         for pid <- Task.Supervisor.children(PhoenixKitEcommerce.Shipments.TaskSupervisor),
             do: {pid, Process.monitor(pid)}
@@ -314,6 +318,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
       view |> element("#shipment-editor-add-parcel") |> render_click()
 
       view
@@ -352,6 +357,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
 
       view |> element("#shipment-editor-destination-change") |> render_click()
       settle(view)
@@ -369,11 +375,25 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
                rows(order)
     end
 
+    test "the editor opens at once and fills in when the carrier's services arrive", %{
+      conn: conn
+    } do
+      order = order!(method!())
+      stub(%{modes: %{services: :hang}})
+
+      {:ok, view, _html} = live(conn, @page)
+      view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+
+      assert has_element?(view, "#shipment-editor-loading")
+      refute has_element?(view, "#shipment-editor-form")
+    end
+
     test "a parcel weight that is not a number is refused in the editor", %{conn: conn} do
       order = order!(method!())
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
 
       view
       |> form("#shipment-editor-form", %{"parcels" => %{"0" => %{"weight_g" => "heavy"}}})
@@ -389,6 +409,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
       view |> form("#shipment-editor-form") |> render_submit()
       settle(view)
 
@@ -410,6 +431,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = live(conn, @page)
       view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
 
       ExUnit.CaptureLog.capture_log(fn ->
         view |> form("#shipment-editor-form") |> render_submit()
@@ -644,6 +666,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       {:ok, view, _html} = open_page(conn, "needs_attention")
       view |> element("#shipment-retry-#{shipment.uuid}") |> render_click()
+      settle(view)
       assert has_element?(view, "#shipment-editor-phone[value='5555 1234']")
 
       view
@@ -887,6 +910,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
     {:ok, view, _html} = live(conn, @page)
     view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+    settle(view)
     view |> element("#shipment-editor-destination-change") |> render_click()
 
     view
