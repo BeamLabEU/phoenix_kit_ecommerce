@@ -1060,16 +1060,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
               </details>
             </.table_default_cell>
             <.table_default_cell>
-              <%= cond do %>
-                <% Shipments.web_url(shipment.tracking_url) && shipment.tracking_number -> %>
-                  <a href={Shipments.web_url(shipment.tracking_url)} target="_blank" rel="noopener noreferrer" class="link font-mono text-sm">
-                    {shipment.tracking_number}
-                  </a>
-                <% shipment.tracking_number -> %>
-                  <span class="font-mono text-sm">{shipment.tracking_number}</span>
-                <% true -> %>
-                  <span class="text-base-content/40">-</span>
-              <% end %>
+              <.tracking_number shipment={shipment} />
             </.table_default_cell>
             <.table_default_cell class="text-right">
               <div class="flex flex-wrap justify-end gap-1">
@@ -1102,7 +1093,7 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
                   phx-click="close"
                   phx-value-uuid={shipment.uuid}
                 >
-                  {gettext("Close")}
+                  {pgettext("shipment", "Close")}
                 </.button>
                 <.button
                   :if={resolvable?(shipment)}
@@ -1156,6 +1147,26 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
         </.table_default_body>
       </.table_default>
     </form>
+    """
+  end
+
+  attr :shipment, :map, required: true
+
+  # The number, as a link only when the stored link is a web address.
+  defp tracking_number(assigns) do
+    assigns = assign(assigns, :url, Shipments.web_url(assigns.shipment.tracking_url))
+
+    ~H"""
+    <%= cond do %>
+      <% @url && @shipment.tracking_number -> %>
+        <a href={@url} target="_blank" rel="noopener noreferrer" class="link font-mono text-sm">
+          {@shipment.tracking_number}
+        </a>
+      <% @shipment.tracking_number -> %>
+        <span class="font-mono text-sm">{@shipment.tracking_number}</span>
+      <% true -> %>
+        <span class="text-base-content/40">-</span>
+    <% end %>
     """
   end
 

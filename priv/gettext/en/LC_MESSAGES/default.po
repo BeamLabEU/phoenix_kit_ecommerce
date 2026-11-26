@@ -8939,6 +8939,7 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
 #, elixir-autogen, elixir-format
+msgctxt "shipment"
 msgid "Close"
 msgstr ""
 

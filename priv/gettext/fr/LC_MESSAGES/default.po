@@ -8940,6 +8940,7 @@ msgstr "Au plus %{count} commandes peuvent être enregistrées à la fois."
 
 #: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
 #, elixir-autogen, elixir-format
+msgctxt "shipment"
 msgid "Close"
 msgstr "Clôturer"
 

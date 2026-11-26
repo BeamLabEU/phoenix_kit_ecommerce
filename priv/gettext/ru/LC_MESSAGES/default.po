@@ -9002,6 +9002,7 @@ msgstr "За один раз можно зарегистрировать не б
 
 #: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
 #, elixir-autogen, elixir-format
+msgctxt "shipment"
 msgid "Close"
 msgstr "Закрыть"
 
