@@ -481,7 +481,14 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
 
   defp logged(_actor, _kind, result), do: result
 
+  # Closing the editor while it loads cancels the draft: neither the
+  # cancellation nor a draft that was already on its way opens anything.
   @impl true
+  def handle_async(:draft, {:exit, {:shutdown, :cancel}}, socket), do: {:noreply, socket}
+
+  def handle_async(:draft, _result, %{assigns: %{editor_loading: false}} = socket),
+    do: {:noreply, socket}
+
   def handle_async(:draft, result, socket) do
     socket = assign(socket, editor_loading: false)
 

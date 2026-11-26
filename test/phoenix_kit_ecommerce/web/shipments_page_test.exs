@@ -414,6 +414,35 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       assert has_element?(view, "#shipment-editor-destination-points-truncated")
     end
 
+    test "closing the editor while it loads is quiet, and a late draft does not reopen it", %{
+      conn: conn
+    } do
+      order = order!(method!())
+      stub(%{modes: %{services: :hang}})
+
+      {:ok, view, _html} = live(conn, @page)
+      view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      assert has_element?(view, "#shipment-editor-loading")
+
+      render_click(view, "close_editor", %{})
+      _ = :sys.get_state(view.pid)
+
+      refute has_element?(view, "#shipment-editor-loading")
+      refute render(view) =~ "did not answer"
+
+      # A draft that was already on its way when the editor was closed.
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, flash: %{}, editor: nil, editor_loading: false}
+      }
+
+      assert {:noreply, %{assigns: %{editor: nil, editor_loading: false}}} =
+               PhoenixKitEcommerce.Web.Shipments.handle_async(
+                 :draft,
+                 {:ok, {:ok, %{kind: :register}}},
+                 socket
+               )
+    end
+
     test "a parcel weight that is not a number is refused in the editor", %{conn: conn} do
       order = order!(method!())
 
