@@ -1175,11 +1175,15 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   @doc """
   Since when the carrier's tracking of the shipment has been failing (its
-  error, or a connection that cannot be rebuilt), or `nil` while it answers.
-  Read from the shipment's events: the run of failures starts with a
-  `tracking_failed` event and ends with the next answer.
+  error, or a connection that cannot be rebuilt), or `nil` while it answers
+  and once the shipment is no longer tracked (not `created`, `in_transit` or
+  `ready_for_pickup`). Read from the shipment's events: the run of failures
+  starts with a `tracking_failed` event and ends with the next answer.
   """
   @spec tracking_failing_since(Shipment.t()) :: DateTime.t() | nil
+  def tracking_failing_since(%Shipment{status: status}) when status not in @cancellable_statuses,
+    do: nil
+
   def tracking_failing_since(%Shipment{} = shipment) do
     with %{"at" => at} when is_binary(at) <- tracking_failure(shipment),
          {:ok, datetime, _offset} <- DateTime.from_iso8601(at) do

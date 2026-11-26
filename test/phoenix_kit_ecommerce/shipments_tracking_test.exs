@@ -289,6 +289,24 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert Shipments.tracking_failing_since(reload(second)) == nil
     end
 
+    test "a shipment no longer tracked is not failing, whatever its history says" do
+      failed = %{
+        "at" => "2026-11-21T10:00:00Z",
+        "action" => "tracking_failed",
+        "status" => "created"
+      }
+
+      for status <- ~w(created in_transit ready_for_pickup) do
+        assert %DateTime{} =
+                 Shipments.tracking_failing_since(%Shipment{status: status, events: [failed]})
+      end
+
+      for status <- ~w(delivered returned cancelled failed unknown creating) do
+        assert Shipments.tracking_failing_since(%Shipment{status: status, events: [failed]}) ==
+                 nil
+      end
+    end
+
     test "a group whose first shipment's context cannot be rebuilt fails without trying the rest" do
       connection = connection!("test")
       gone = Ecto.UUID.generate()
