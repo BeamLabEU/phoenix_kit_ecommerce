@@ -413,6 +413,15 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             {:unknown_service,
              "The carrier no longer offers the delivery service of this order."},
             {:invalid_destination, "The delivery details are not valid."},
+            {:invalid_shipment_ids, "The list of shipments is not valid."},
+            {:too_many_labels, "At most 50 labels can be printed at once."},
+            {:mixed_label_providers,
+             "Labels can be printed together only for shipments of one carrier connection."},
+            {:labels_not_supported, "This carrier cannot print labels from the shop."},
+            {:label_unavailable,
+             "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."},
+            {{:labels_failed, :timeout},
+             "The carrier did not return the labels. Try again later."},
             {:no_shipping_method, "No shipping method is available."},
             {:not_found, "The requested record was not found."}
           ] do

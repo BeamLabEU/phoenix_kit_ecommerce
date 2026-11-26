@@ -57,9 +57,14 @@ defmodule PhoenixKitEcommerce.Errors do
           | :invalid_host
           | :invalid_quantity
           | :invalid_recipient
+          | :label_unavailable
+          | :labels_not_supported
+          | {:labels_failed, term()}
           | :invalid_scheme
+          | :invalid_shipment_ids
           | :live_shipment_exists
           | :missing_base_currency
+          | :mixed_label_providers
           | :missing_content_type
           | :missing_slug
           | :missing_title
@@ -108,6 +113,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :shipping_quote_required
           | :temp_file_missing
           | :timeout
+          | :too_many_labels
           | :tracking_number_required
           | :unknown_format
           | :unknown_provider
@@ -259,6 +265,24 @@ defmodule PhoenixKitEcommerce.Errors do
 
   def message(:unknown_service),
     do: gettext("The carrier no longer offers the delivery service of this order.")
+
+  def message(:invalid_shipment_ids), do: gettext("The list of shipments is not valid.")
+  def message(:too_many_labels), do: gettext("At most 50 labels can be printed at once.")
+
+  def message(:mixed_label_providers),
+    do: gettext("Labels can be printed together only for shipments of one carrier connection.")
+
+  def message(:labels_not_supported),
+    do: gettext("This carrier cannot print labels from the shop.")
+
+  def message(:label_unavailable),
+    do:
+      gettext(
+        "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."
+      )
+
+  def message({:labels_failed, _reason}),
+    do: gettext("The carrier did not return the labels. Try again later.")
 
   # Option definitions (`OptionTypes.validate_option/1`, `Options`).
   def message(:option_not_a_map), do: gettext("An option must be a map.")

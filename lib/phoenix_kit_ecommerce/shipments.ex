@@ -83,7 +83,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   clause in `PhoenixKitEcommerce.Errors.message/1`.
   """
 
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query, only: [from: 2, exclude: 2]
 
   require Logger
 
@@ -91,7 +91,8 @@ defmodule PhoenixKitEcommerce.Shipments do
   alias PhoenixKitEcommerce.{Shipment, ShippingMethod}
   alias PhoenixKitEcommerce.Shipments.Mask
   alias PhoenixKitEcommerce.Shipping
-  alias PhoenixKitEcommerce.Shipping.{CartQuote, Codec, Context, Destination, Parcel}
+  alias PhoenixKitEcommerce.Shipping.{CartQuote, Codec, Context, Destination, LabelOptions}
+  alias PhoenixKitEcommerce.Shipping.{MethodConfig, Parcel}
   alias PhoenixKitEcommerce.Shipping.{Service, ShipmentRef, ShipmentRequest, ShipmentResult}
 
   @task_supervisor PhoenixKitEcommerce.Shipments.TaskSupervisor
@@ -103,6 +104,9 @@ defmodule PhoenixKitEcommerce.Shipments do
   @resolvable_statuses ["unknown"]
   @cancellable_statuses ["created", "in_transit", "ready_for_pickup"]
   @locally_cancellable_statuses ["unknown" | @cancellable_statuses]
+  @closed_order_statuses ["cancelled", "refunded"]
+  @list_limit 200
+  @max_labels 50
 
   @type error ::
           :not_found
@@ -126,6 +130,12 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :connection_environment_changed
           | :tracking_number_required
           | :invalid_recipient
+          | :invalid_shipment_ids
+          | :too_many_labels
+          | :mixed_label_providers
+          | :labels_not_supported
+          | :label_unavailable
+          | {:labels_failed, term()}
 
   # -- reading ----------------------------------------------------------
 
@@ -240,6 +250,300 @@ defmodule PhoenixKitEcommerce.Shipments do
       true ->
         {:ok, ctx}
     end
+  end
+
+  @doc """
+  Whether a `creating` shipment has waited 10 minutes for its attempt's
+  answer: the admin may then resolve it like an `unknown` one.
+  """
+  @spec stuck?(Shipment.t()) :: boolean()
+  def stuck?(%Shipment{status: "creating", updated_at: %DateTime{} = updated_at}),
+    do: DateTime.diff(DateTime.utc_now(), updated_at, :second) >= @stuck_after_seconds
+
+  def stuck?(%Shipment{}), do: false
+
+  @doc """
+  Whether the carrier has a label for the shipment: it is `created`,
+  `in_transit` or `ready_for_pickup`.
+  """
+  @spec printable?(Shipment.t()) :: boolean()
+  def printable?(%Shipment{status: status}), do: status in @cancellable_statuses
+
+  # -- the admin's lists -------------------------------------------------
+
+  @doc """
+  The paid orders waiting for a shipment, the oldest first (at most
+  #{@list_limit}): their shipping method's provider can register shipments
+  (`create_shipment/2`) and the order has no shipment at all. An order whose
+  shipment failed is in `list_needs_attention/1` instead.
+
+  `{order, method}` pairs. Options: `:provider`, a provider key.
+  """
+  @spec list_to_ship(keyword()) :: [{Order.t(), ShippingMethod.t()}]
+  def list_to_ship(opts \\ []) do
+    methods = shipment_methods(opts[:provider])
+
+    if methods == %{} do
+      []
+    else
+      from(o in to_ship_query(methods),
+        order_by: [asc: o.inserted_at, asc: o.uuid],
+        limit: @list_limit
+      )
+      |> repo().all()
+      |> Enum.map(fn order -> {order, Map.fetch!(methods, order_method_uuid(order))} end)
+    end
+  end
+
+  @doc """
+  The live shipments that wait for nothing from the admin, the newest first
+  (at most #{@list_limit}): `created`, `in_transit`, `ready_for_pickup`, and
+  `creating` for less than 10 minutes, of an order that is neither cancelled
+  nor refunded.
+
+  `{shipment, order}` pairs. Options: `:provider`, a provider key; `:status`.
+  """
+  @spec list_open(keyword()) :: [{Shipment.t(), Order.t()}]
+  def list_open(opts \\ []), do: list_shipments(open_query(opts))
+
+  @doc """
+  The shipments the admin has to resolve, the newest first (at most
+  #{@list_limit}): `unknown` and `failed` ones, `creating` ones that have
+  waited 10 minutes, and live ones of an order that has been cancelled or
+  refunded since.
+
+  `{shipment, order}` pairs. Options: `:provider`, a provider key; `:status`.
+  """
+  @spec list_needs_attention(keyword()) :: [{Shipment.t(), Order.t()}]
+  def list_needs_attention(opts \\ []), do: list_shipments(attention_query(opts))
+
+  @doc """
+  How many rows `list_to_ship/1`, `list_open/1` and `list_needs_attention/1`
+  have, without their limit. Takes the same options.
+  """
+  @spec count_sections(keyword()) :: %{
+          to_ship: non_neg_integer(),
+          open: non_neg_integer(),
+          needs_attention: non_neg_integer()
+        }
+  def count_sections(opts \\ []) do
+    methods = shipment_methods(opts[:provider])
+
+    %{
+      to_ship: if(methods == %{}, do: 0, else: count(to_ship_query(methods))),
+      open: count(open_query(opts)),
+      needs_attention: count(attention_query(opts))
+    }
+  end
+
+  @doc """
+  The providers that can register shipments (`create_shipment/2`), as
+  `{key, label}` pairs.
+  """
+  @spec shipment_providers() :: [{String.t(), String.t()}]
+  def shipment_providers do
+    for provider <- Shipping.providers(),
+        Shipping.supports?(provider, :create_shipment),
+        do: {provider.key(), provider.label()}
+  end
+
+  # The shipping methods whose provider can register shipments, by uuid.
+  defp shipment_methods(provider_key) do
+    supported = shipment_providers() |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+
+    for method <- repo().all(ShippingMethod),
+        key = MethodConfig.from_method(method).provider,
+        MapSet.member?(supported, key),
+        is_nil(provider_key) or key == provider_key,
+        into: %{},
+        do: {method.uuid, method}
+  end
+
+  defp to_ship_query(methods) do
+    method_uuids = Map.keys(methods)
+
+    from(o in Order,
+      as: :order,
+      where: o.status == "paid",
+      where:
+        fragment("?->>'shipping_method_uuid'", o.metadata) in type(
+          ^method_uuids,
+          {:array, :string}
+        ),
+      where:
+        not exists(from(s in Shipment, where: s.order_uuid == parent_as(:order).uuid, select: 1))
+    )
+  end
+
+  defp order_method_uuid(order),
+    do: order.metadata |> Codec.get(:shipping_method_uuid) |> Codec.string()
+
+  defp open_query(opts) do
+    cutoff = stuck_cutoff()
+
+    from([s, o] in shipments_query(opts),
+      where: s.status in ^List.delete(Shipment.live_statuses(), "unknown"),
+      where: s.status != "creating" or s.updated_at >= ^cutoff,
+      where: o.status not in ^@closed_order_statuses
+    )
+  end
+
+  defp attention_query(opts) do
+    cutoff = stuck_cutoff()
+
+    from([s, o] in shipments_query(opts),
+      where:
+        s.status in ["unknown", "failed"] or
+          (s.status == "creating" and s.updated_at < ^cutoff) or
+          (s.status in ^Shipment.live_statuses() and o.status in ^@closed_order_statuses)
+    )
+  end
+
+  defp shipments_query(opts) do
+    query = from(s in Shipment, join: o in Order, on: o.uuid == s.order_uuid)
+
+    query =
+      case opts[:provider] do
+        nil -> query
+        provider -> from([s, _o] in query, where: s.provider == ^provider)
+      end
+
+    case opts[:status] do
+      nil -> query
+      status -> from([s, _o] in query, where: s.status == ^status)
+    end
+  end
+
+  defp list_shipments(query) do
+    from([s, o] in query,
+      order_by: [desc: s.inserted_at, desc: s.uuid],
+      limit: @list_limit,
+      select: {s, o}
+    )
+    |> repo().all()
+  end
+
+  defp count(query), do: query |> exclude(:order_by) |> repo().aggregate(:count)
+
+  defp stuck_cutoff,
+    do:
+      DateTime.utc_now()
+      |> DateTime.add(-@stuck_after_seconds, :second)
+      |> DateTime.truncate(:second)
+
+  @doc """
+  What `begin_shipment/2` would send for `order`, or `retry_shipment/2` for a
+  `failed` shipment, before the admin corrects it: `:parcels` (`Parcel`s),
+  `:recipient` (string keys), `:destination` (a `Destination`), the provider
+  `:context` of the order's method and its `:service` (`nil` when the
+  provider could not list its services).
+
+  Options: `:context_opts`.
+  """
+  @spec shipment_draft(Order.t() | Shipment.t(), keyword()) :: {:ok, map()} | {:error, error()}
+  def shipment_draft(order_or_shipment, opts \\ [])
+
+  def shipment_draft(%Order{} = order, opts) do
+    with {:ok, ctx} <- order_context(order, opts) do
+      data = sent_data(order, ctx, [])
+      {:ok, draft(ctx, data.parcels, data.recipient, data.destination)}
+    end
+  end
+
+  def shipment_draft(%Shipment{} = shipment, opts) do
+    with %Order{} = order <- fetch_order(shipment.order_uuid) || {:error, :not_found},
+         {:ok, ctx} <- order_context(order, opts) do
+      {:ok, draft(ctx, shipment.parcels, shipment.recipient, shipment.destination)}
+    end
+  end
+
+  defp draft(ctx, parcels, recipient, destination) do
+    service =
+      case service_of(ctx) do
+        {:ok, service} -> service
+        {:error, _reason} -> nil
+      end
+
+    %{
+      context: ctx,
+      service: service,
+      parcels: Codec.list(parcels, &Parcel.from_map/1),
+      recipient: Codec.string_map(recipient || %{}),
+      destination: Destination.from_map(destination) || %Destination{}
+    }
+  end
+
+  # -- labels ------------------------------------------------------------
+
+  @doc """
+  The labels of the shipments `ids` as one document from their carrier
+  (`Shipping.print_labels/3`): `{:ok, %{content_type, body, shipments}}`.
+
+  At most #{@max_labels} ids, each a UUID of a shipment the carrier has a
+  label for (`printable?/1`), all of one provider and one connection.
+  Refused with `:invalid_shipment_ids`, `:too_many_labels`, `:not_found`,
+  `:label_unavailable`, `:mixed_label_providers` or `:labels_not_supported`;
+  a carrier's error is `{:labels_failed, reason}`.
+
+  Options: `:format` (`LabelOptions.formats/0`, `:a4` otherwise),
+  `:context_opts`.
+  """
+  @spec print_labels([String.t()], keyword()) ::
+          {:ok, %{content_type: String.t(), body: binary(), shipments: [Shipment.t()]}}
+          | {:error, error()}
+  def print_labels(ids, opts \\ []) do
+    with {:ok, uuids} <- label_uuids(ids),
+         {:ok, [first | _] = shipments} <- label_shipments(uuids),
+         {:ok, ctx} <- shipment_context(first, opts),
+         :ok <-
+           if(Shipping.supports?(ctx, :print_labels),
+             do: :ok,
+             else: {:error, :labels_not_supported}
+           ) do
+      options = %LabelOptions{format: label_format(opts[:format])}
+
+      case Shipping.print_labels(ctx, Enum.map(shipments, &shipment_ref/1), options) do
+        {:ok, document} -> {:ok, Map.put(document, :shipments, shipments)}
+        {:error, reason} -> {:error, {:labels_failed, reason}}
+      end
+    end
+  end
+
+  defp label_uuids(ids) when is_list(ids) do
+    uuids = ids |> Enum.map(&uuid_or_nil/1) |> Enum.uniq()
+
+    cond do
+      uuids == [] or Enum.any?(uuids, &is_nil/1) -> {:error, :invalid_shipment_ids}
+      length(uuids) > @max_labels -> {:error, :too_many_labels}
+      true -> {:ok, uuids}
+    end
+  end
+
+  defp label_uuids(_ids), do: {:error, :invalid_shipment_ids}
+
+  defp label_shipments(uuids) do
+    found =
+      from(s in Shipment, where: s.uuid in ^uuids) |> repo().all() |> Map.new(&{&1.uuid, &1})
+
+    shipments = Enum.map(uuids, &Map.get(found, &1))
+
+    cond do
+      Enum.any?(shipments, &is_nil/1) ->
+        {:error, :not_found}
+
+      not Enum.all?(shipments, &printable?/1) ->
+        {:error, :label_unavailable}
+
+      shipments |> Enum.uniq_by(&{&1.provider, &1.integration_uuid}) |> length() > 1 ->
+        {:error, :mixed_label_providers}
+
+      true ->
+        {:ok, shipments}
+    end
+  end
+
+  defp label_format(format) do
+    if format in LabelOptions.formats(), do: format, else: %LabelOptions{}.format
   end
 
   # -- registering ------------------------------------------------------
