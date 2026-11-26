@@ -289,6 +289,21 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert Shipments.tracking_failing_since(reload(second)) == nil
     end
 
+    test "a successful call ends the failure of a shipment it had no news about" do
+      answered = shipment!(%{})
+      silent = shipment!(%{})
+
+      track(fn _refs, _ctx -> {:error, :timeout} end)
+      capture_log(fn -> Shipments.track_shipments() end)
+      assert %DateTime{} = Shipments.tracking_failing_since(reload(silent))
+
+      track(fn _refs, _ctx -> {:ok, [report(answered, :created)]} end)
+      Shipments.track_shipments()
+
+      assert [_failed, %{"action" => "tracking_resumed"}] = reload(silent).events
+      assert Shipments.tracking_failing_since(reload(silent)) == nil
+    end
+
     test "a shipment no longer tracked is not failing, whatever its history says" do
       failed = %{
         "at" => "2026-11-21T10:00:00Z",

@@ -1033,13 +1033,14 @@ defmodule PhoenixKitEcommerce.Shipments do
       `track/2` answers for the references that have news; one the answer
       says nothing about has none (a carrier may report only what changed
       since its last answer): it is stamped `last_tracked_at` like the
-      others, and how many were answered for is logged when it is not all. An error of one group (the carrier's, or no context to
-      rebuild from the group's first shipment) is logged and leaves the
-      other groups alone. The group's shipments are stamped, so a dead
+      others, and how many were answered for is logged when it is not all.
+      An error of one group (the carrier's, or no context to rebuild from
+      the group's first shipment) is logged and leaves the other groups
+      alone. The group's shipments are stamped, so a dead
       carrier does not hold the head of the queue either, and get a
       `tracking_failed` event when a run of failures starts
-      (`tracking_failing_since/1`), a `tracking_resumed` one when the
-      carrier answers again.
+      (`tracking_failing_since/1`); every shipment of the group gets a
+      `tracking_resumed` one when the carrier answers again, news or not.
     * An update belongs to the shipment of its group with its tracking
       number or carrier reference.
     * A status never moves backwards: an update must rank above the
@@ -1113,7 +1114,8 @@ defmodule PhoenixKitEcommerce.Shipments do
 
         stamp_tracked(shipments)
         log_silent(first.provider, length(covered), length(shipments))
-        Enum.each(covered, &note_tracking(&1, :resumed, nil))
+        # The carrier answered: silence is no news, not a failure.
+        Enum.each(shipments, &note_tracking(&1, :resumed, nil))
         Enum.count(covered, &(track_one(&1, updates) == :updated))
 
       {:error, reason} ->
@@ -1342,7 +1344,8 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   Options: `:fields`, the fields to read (with `:uuid`, `:order_uuid` and
   `:inserted_at` always), for a caller that needs no full rows: the order
-  list reads only what `buyer_order_status/2` uses.
+  list reads only what `buyer_order_status/2` uses. A field not read keeps
+  its struct default (`nil`, `[]` or `%{}`), not the stored value.
   """
   @spec buyer_shipments([String.t()], keyword()) :: %{String.t() => [Shipment.t()]}
   def buyer_shipments(order_uuids, opts \\ []) when is_list(order_uuids) do
