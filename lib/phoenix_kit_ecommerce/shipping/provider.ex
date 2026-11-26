@@ -140,7 +140,11 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
   `:too_heavy`, `:too_large`, `:service_unavailable`, `:unsupported_destination`,
   `:invalid_destination`, `:unsupported_currency`, `:no_rates` (also as
   `{reason, details}`). They mean "this method cannot serve this cart", and
-  the shop shows the method as unavailable. Every other reason (timeout,
+  the shop shows the method as unavailable. The exception is
+  `:invalid_destination` from `quote/2` for a service that takes a pickup
+  point or an address: the shopper is asked for another one (the cart's
+  status is `:needs_destination`, reason `"invalid_destination"`; the public
+  cart API reports the same `quote_status`). Every other reason (timeout,
   crash, transport, HTTP, provider-specific tuples) is transient: the shop
   falls back to the price of the method and the facade caches the failure
   briefly. `PhoenixKitEcommerce.Shipping.business_error?/1` makes the

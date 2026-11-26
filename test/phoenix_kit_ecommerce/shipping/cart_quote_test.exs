@@ -496,6 +496,25 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
       assert Shop.shipping_quote_status(cart) == :missing
     end
 
+    test "a refused destination of a service that takes none is the method being unavailable" do
+      StubProvider.put(%{
+        services: [%Service{key: "home", label: "Home", destination: :none}],
+        quote: {:error, :invalid_destination}
+      })
+
+      method = method!(service: "home")
+      cart = cart_with!(product!(), 1)
+      {:ok, cart} = Shop.set_cart_shipping(cart, method, "US")
+
+      assert {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      # There is no place for the shopper to change.
+      assert Shop.shipping_quote_status(cart) == :unavailable
+
+      assert %{status: :unavailable, reason: "invalid_destination"} =
+               Shop.cart_shipping_quote(cart)
+    end
+
     test "the request errors come back" do
       cart = cart_with!(product!(), 1)
       assert {:error, :no_method} = Shop.quote_cart_shipping(cart)

@@ -5180,9 +5180,14 @@ defmodule PhoenixKitEcommerce do
   # the carrier's quote refused it) and is `nil` otherwise.
   defp cart_quote_state(cart, method, items, service_lookup \\ nil) do
     with {:ok, request} <- shipping_rate_request(cart, method, items),
-         :ok <-
-           check_destination(lookup_shipping_service(service_lookup, method, request), request) do
-      stored_quote_state(CartQuote.stored(cart.metadata), request, method)
+         service_result = lookup_shipping_service(service_lookup, method, request),
+         :ok <- check_destination(service_result, request) do
+      stored_quote_state(
+        CartQuote.stored(cart.metadata),
+        request,
+        method,
+        destination_kind(service_result)
+      )
     else
       {:error, :needs_destination} ->
         {:needs_destination, nil, nil}
@@ -5198,21 +5203,28 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp stored_quote_state(nil, _request, _method), do: {:missing, nil, nil}
+  defp stored_quote_state(nil, _request, _method, _kind), do: {:missing, nil, nil}
 
   # A carrier that refused the destination itself (`:invalid_destination`)
-  # asks for another one: the shopper can fix that, unlike a cart the method
-  # cannot serve at all.
-  defp stored_quote_state(stored, request, method) do
+  # asks for another one, when the service takes one the shopper can change
+  # (a pickup point, an address); for any other service it is the method
+  # that cannot serve the cart.
+  defp stored_quote_state(stored, request, method, kind) do
     cond do
       not stored_quote_current?(stored, request, method) -> {:stale, nil, nil}
-      refused_destination?(stored) -> {:needs_destination, nil, "invalid_destination"}
+      refused_destination?(stored, kind) -> {:needs_destination, nil, "invalid_destination"}
       true -> {stored.status, stored, nil}
     end
   end
 
-  defp refused_destination?(%{status: :unavailable, reason: "invalid_destination"}), do: true
-  defp refused_destination?(_stored), do: false
+  defp refused_destination?(%{status: :unavailable, reason: "invalid_destination"}, kind)
+       when kind in [:pickup_point, :address],
+       do: true
+
+  defp refused_destination?(_stored, _kind), do: false
+
+  defp destination_kind({:ok, %ShippingService{destination: kind}, _context}), do: kind
+  defp destination_kind(_service_result), do: nil
 
   # Asked for this very request, of the provider that prices the method now,
   # and not too long ago.

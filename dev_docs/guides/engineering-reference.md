@@ -795,7 +795,9 @@ All stored via `PhoenixKit.Settings`. Keys are **`shop_`-prefixed**, except `api
   blocks checkout like any other missing destination. A current quote the
   carrier answered with `:invalid_destination` (for any provider) is
   `:needs_destination` too, with `reason: "invalid_destination"`, rather than
-  `:unavailable`: the shopper is asked for another place.
+  `:unavailable`, when the service takes a pickup point or an address: the
+  shopper is asked for another place. For a service that takes none it stays
+  `:unavailable`.
 - Locality search and pickup point listing are rate limited per provider
   (`Shipping.RateLimit`, `:shipping_lookup_rate`, default 20/s; `{:error,
   :rate_limited}` is transient and never cached) and their cache entries are
