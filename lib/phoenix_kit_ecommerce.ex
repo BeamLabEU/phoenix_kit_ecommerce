@@ -5114,7 +5114,9 @@ defmodule PhoenixKitEcommerce do
 
     * `:not_needed` - nothing ships, no method is selected, or its price is fixed
     * `:needs_destination` - the service needs a pickup point or an address
-      that is missing (or that the provider refuses)
+      that is missing (or that the provider refuses: its
+      `validate_destination/3`, or a quote answered with
+      `:invalid_destination`)
     * `:missing` - no quote yet (`quote_cart_shipping/2`)
     * `:stale` - the quote was asked for a different cart, destination,
       payment or method configuration
@@ -5167,13 +5169,13 @@ defmodule PhoenixKitEcommerce do
 
   # `{status, stored, reason}`; `stored` is the stored entry only when it is
   # current, `reason` says why a `:needs_destination` is one (`"point_limits"`:
-  # the chosen pickup point cannot take the parcels) and is `nil` otherwise.
+  # the chosen pickup point cannot take the parcels; `"invalid_destination"`:
+  # the carrier's quote refused it) and is `nil` otherwise.
   defp cart_quote_state(cart, method, items, service_lookup \\ nil) do
     with {:ok, request} <- shipping_rate_request(cart, method, items),
          :ok <-
            check_destination(lookup_shipping_service(service_lookup, method, request), request) do
-      {status, stored} = stored_quote_state(CartQuote.stored(cart.metadata), request, method)
-      {status, stored, nil}
+      stored_quote_state(CartQuote.stored(cart.metadata), request, method)
     else
       {:error, :needs_destination} ->
         {:needs_destination, nil, nil}
@@ -5189,13 +5191,21 @@ defmodule PhoenixKitEcommerce do
     end
   end
 
-  defp stored_quote_state(nil, _request, _method), do: {:missing, nil}
+  defp stored_quote_state(nil, _request, _method), do: {:missing, nil, nil}
 
+  # A carrier that refused the destination itself (`:invalid_destination`)
+  # asks for another one: the shopper can fix that, unlike a cart the method
+  # cannot serve at all.
   defp stored_quote_state(stored, request, method) do
-    if stored_quote_current?(stored, request, method),
-      do: {stored.status, stored},
-      else: {:stale, nil}
+    cond do
+      not stored_quote_current?(stored, request, method) -> {:stale, nil, nil}
+      refused_destination?(stored) -> {:needs_destination, nil, "invalid_destination"}
+      true -> {stored.status, stored, nil}
+    end
   end
+
+  defp refused_destination?(%{status: :unavailable, reason: "invalid_destination"}), do: true
+  defp refused_destination?(_stored), do: false
 
   # Asked for this very request, of the provider that prices the method now,
   # and not too long ago.
@@ -9003,7 +9013,8 @@ defmodule PhoenixKitEcommerce do
     * `status` - `shipping_quote_status/1`
     * `reason` - why a `:needs_destination` is one when it is not just a
       missing destination: `"point_limits"` (the chosen pickup point cannot
-      take the parcels of the cart, by weight, size or declared value);
+      take the parcels of the cart, by weight, size or declared value),
+      `"invalid_destination"` (the carrier's quote refused the destination);
       `nil` otherwise
     * `entry` - `cart_shipping_quote/1`
     * `presented` - `present_shipping_method/2` (`nil` without a method)

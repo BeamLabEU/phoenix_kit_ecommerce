@@ -471,6 +471,31 @@ defmodule PhoenixKitEcommerce.Shipping.CartQuoteTest do
       assert reload(cart).status == "active"
     end
 
+    test "a quote that refuses the destination asks for another one, for any provider" do
+      {cart, method} = ready_cart!()
+      stub_quote({:error, :invalid_destination})
+
+      assert {:ok, cart} = Shop.quote_cart_shipping(cart)
+
+      # The answer is stored as it came; the status is worked out from it.
+      assert %{status: :unavailable, reason: "invalid_destination"} =
+               CartQuote.stored(cart.metadata)
+
+      assert Shop.shipping_quote_status(cart) == :needs_destination
+      assert Shop.shipping_quote_blocks_checkout?(cart)
+      assert Shop.cart_shipping_quote(cart) == nil
+
+      assert %{status: :needs_destination, reason: "invalid_destination", entry: nil} =
+               Shop.shipping_quote_snapshot(cart, method)
+
+      assert {:error, :shipping_quote_required} =
+               Shop.convert_cart_to_order(cart, billing_data: complete_billing("US"))
+
+      # Another point is a new request: the refusal no longer applies.
+      {:ok, cart} = Shop.set_cart_shipping_destination(cart, branch("P2"))
+      assert Shop.shipping_quote_status(cart) == :missing
+    end
+
     test "the request errors come back" do
       cart = cart_with!(product!(), 1)
       assert {:error, :no_method} = Shop.quote_cart_shipping(cart)
