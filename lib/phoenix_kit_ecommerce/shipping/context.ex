@@ -8,6 +8,9 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
       the default of the method
     * `settings` - the provider settings of the method (string keys)
     * `credentials` - the Integrations data of the provider, or `nil`
+    * `integration_uuid` - the uuid of the Integrations connection the
+      credentials came from, or `nil` (no connection, or the method names it
+      as `provider:name`)
     * `locale` / `currency` - the shopper locale and the currency of the order
     * `country` - ISO 3166-1 alpha-2 code of the destination country, or `nil`
       while it is not known (the cart page, the admin form); lookups should
@@ -15,7 +18,7 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
     * `opts` - pass-through options (for example `:req_options` in tests)
 
   `to_map/1` is deliberately lossy: credentials, the method struct and `opts`
-  never leave the process, so a serialised context is safe to log. For the
+  never leave the process (the connection's uuid does), so a serialised context is safe to log. For the
   same reason `inspect/1` hides `credentials`. `from_map/1` only resolves a
   provider that is registered in `PhoenixKitEcommerce.Shipping.providers/0`.
   """
@@ -29,6 +32,7 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
             service: nil,
             settings: %{},
             credentials: nil,
+            integration_uuid: nil,
             locale: nil,
             currency: nil,
             country: nil,
@@ -40,6 +44,7 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
           service: String.t() | nil,
           settings: map(),
           credentials: map() | nil,
+          integration_uuid: String.t() | nil,
           locale: String.t() | nil,
           currency: String.t() | nil,
           country: String.t() | nil,
@@ -54,6 +59,7 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
       "provider" => provider_name(context.provider),
       "service" => context.service,
       "settings" => Codec.dump(context.settings),
+      "integration_uuid" => context.integration_uuid,
       "locale" => context.locale,
       "currency" => context.currency,
       "country" => context.country
@@ -69,6 +75,7 @@ defmodule PhoenixKitEcommerce.Shipping.Context do
       provider: map |> Codec.get(:provider) |> registered_provider(),
       service: map |> Codec.get(:service) |> Codec.string(),
       settings: map |> Codec.get(:settings) |> Codec.string_map(),
+      integration_uuid: map |> Codec.get(:integration_uuid) |> Codec.string(),
       locale: map |> Codec.get(:locale) |> Codec.string(),
       currency: map |> Codec.get(:currency) |> Codec.string(),
       country: map |> Codec.get(:country) |> Codec.country()

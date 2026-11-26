@@ -41,6 +41,10 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
       `capabilities: [:shipping]`. The secret field must be called `api_key`
       or core will not encrypt it. When present, the facade loads the
       connection and passes it as `ctx.credentials` (`nil` if there is none)
+      and its uuid as `ctx.integration_uuid`. A setup field called
+      `environment` (`"sandbox"`, `"production"`...) is recorded with every
+      shipment, and a shipment is not touched through a connection whose
+      environment has changed since
 
     * `currencies/0` - ISO 4217 codes the provider prices in. When exported,
       `Shipping.quote/2` answers `{:error, :unsupported_currency}` for any
@@ -54,8 +58,45 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
       further with `Service.countries`. `Shipping.providers_for_country/1`
       lists the providers that serve a country
 
-  `create_shipment/2`, `cancel_shipment/2`, `track/2` and `label/2` are
-  reserved for waybills, tracking and printing. Nothing calls them yet.
+  ### After the order
+
+  A provider that can register shipments with the carrier exports
+  `create_shipment/2`; the shop offers its paid orders for shipping only
+  then. The other three are optional on their own. Call them through the
+  facade (`Shipping.create_shipment/2`, `cancel_shipment/2`, `print_labels/3`,
+  `track/2`): the same isolation and telemetry as `quote/2`, never cached.
+
+    * `create_shipment/2` - register a `PhoenixKitEcommerce.Shipping.ShipmentRequest`;
+      `{:ok, ShipmentResult.t()}` with a `carrier_ref` or a `tracking_number`.
+      The facade waits `ctx.opts[:timeout]`, 30 seconds by default
+    * `cancel_shipment/2` - cancel a `ShipmentRef` at the carrier; `:ok`
+    * `print_labels/3` - the labels of several `ShipmentRef`s of this
+      provider as one document, laid out by `LabelOptions`:
+      `{:ok, %{content_type: "application/pdf", body: binary}}`. Where the
+      carrier hands out a URL, the adapter downloads it itself (from that
+      carrier's hosts only) and returns the whole document
+    * `track/2` - the current state of several `ShipmentRef`s;
+      `{:ok, [TrackingUpdate.t()]}`, one update or none per shipment
+
+  **The errors of `create_shipment/2` decide what the shop does next**, so
+  they must be honest about whether the carrier may have the shipment:
+
+    * `{:error, {:rejected, message}}` - the carrier certainly does not have
+      it: the adapter's own checks refused the request before sending it, or
+      the carrier answered HTTP 400, 401, 403, 404, 422 or 429. The shop
+      marks the attempt failed and lets the admin correct and retry it.
+      `message` is shown to the admin and stored (masked)
+    * `{:error, {:http_status, status}}` or `{:http_status, status, detail}` -
+      the HTTP answer as it is; the shop applies the same rule to `status`
+    * `{:error, :econnrefused}` (or a transport error whose `reason` is
+      `:econnrefused`) - nothing was sent; also a definite failure
+    * anything else - a timeout, a crash, HTTP 408, 409 or 5xx, a transport
+      error after sending, an answer that cannot be read - leaves the shop
+      unsure: the shipment is marked unknown and the admin checks the
+      carrier's portal. It is never retried automatically
+
+  `Shipping.definite_failure?/1` applies this rule. Error reasons are logged
+  by their shape only; the message itself is stored masked on the shipment.
 
   ## Rules for adapters
 
@@ -139,11 +180,16 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
     Context,
     Destination,
     Field,
+    LabelOptions,
     Locality,
     PickupPoint,
     Quote,
     RateRequest,
-    Service
+    Service,
+    ShipmentRef,
+    ShipmentRequest,
+    ShipmentResult,
+    TrackingUpdate
   }
 
   @callback key() :: String.t()
@@ -161,11 +207,13 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
   @callback currencies() :: [String.t()]
   @callback countries() :: [String.t()]
 
-  # Reserved for the next stage (waybills, tracking, printing); not called yet.
-  @callback create_shipment(map(), Context.t()) :: {:ok, map()} | {:error, term()}
-  @callback cancel_shipment(map(), Context.t()) :: :ok | {:error, term()}
-  @callback track(String.t(), Context.t()) :: {:ok, map()} | {:error, term()}
-  @callback label(map(), Context.t()) :: {:ok, binary()} | {:error, term()}
+  @callback create_shipment(ShipmentRequest.t(), Context.t()) ::
+              {:ok, ShipmentResult.t()} | {:error, term()}
+  @callback cancel_shipment(ShipmentRef.t(), Context.t()) :: :ok | {:error, term()}
+  @callback print_labels([ShipmentRef.t()], LabelOptions.t(), Context.t()) ::
+              {:ok, %{content_type: String.t(), body: binary()}} | {:error, term()}
+  @callback track([ShipmentRef.t()], Context.t()) ::
+              {:ok, [TrackingUpdate.t()]} | {:error, term()}
 
   @optional_callbacks search_localities: 2,
                       list_pickup_points: 4,
@@ -175,6 +223,6 @@ defmodule PhoenixKitEcommerce.Shipping.Provider do
                       countries: 0,
                       create_shipment: 2,
                       cancel_shipment: 2,
-                      track: 2,
-                      label: 2
+                      print_labels: 3,
+                      track: 2
 end

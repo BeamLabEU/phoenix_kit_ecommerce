@@ -15,6 +15,11 @@ defmodule PhoenixKitEcommerce.Test.Shipping.StubProvider do
     * `:points` - list, `{:error, reason}` or `fn locality, service, query -> ... end`
       (`fn locality, service, query, ctx -> ... end` to see the context)
     * `:quote` - `Quote`, `{:error, reason}` or `fn request, ctx -> ... end`
+    * `:create` - `ShipmentResult`, `{:error, reason}` or `fn request, ctx -> ... end`
+      (`create_shipment/2`; default: a result with a tracking number)
+    * `:cancel` - `:ok`, `{:error, reason}` or `fn ref, ctx -> ... end`
+    * `:labels` - the answer of `print_labels/3`, or `fn refs, options, ctx -> ... end`
+    * `:track` - the answer of `track/2`, or `fn refs, ctx -> ... end`
     * `:mode` - `:ok` (default), `:crash`, `:hang` or `:bad_return`, for every
       operation; `:modes` is a `%{operation => mode}` override
     * `:notify` - pid that gets `{:stub_called, operation, args}` (defaults to the caller)
@@ -23,6 +28,7 @@ defmodule PhoenixKitEcommerce.Test.Shipping.StubProvider do
   @behaviour PhoenixKitEcommerce.Shipping.Provider
 
   alias PhoenixKitEcommerce.Shipping.{Context, Field, Locality, PickupPoint, Quote, Service}
+  alias PhoenixKitEcommerce.Shipping.ShipmentResult
 
   @key :shipping_stub_config
 
@@ -40,6 +46,10 @@ defmodule PhoenixKitEcommerce.Test.Shipping.StubProvider do
     localities: [],
     points: [],
     quote: nil,
+    create: nil,
+    cancel: :ok,
+    labels: {:ok, %{content_type: "application/pdf", body: "%PDF-stub"}},
+    track: {:ok, []},
     mode: :ok,
     modes: %{},
     notify: nil
@@ -95,6 +105,40 @@ defmodule PhoenixKitEcommerce.Test.Shipping.StubProvider do
       %{points: fun} when is_function(fun, 4) -> fun.(locality, service, query, ctx)
       %{points: {:error, _} = error} -> error
       %{points: list} -> {:ok, list}
+    end)
+  end
+
+  @impl true
+  def create_shipment(request, %Context{} = ctx) do
+    run(:create_shipment, ctx, [request], fn
+      %{create: %ShipmentResult{} = result} -> {:ok, result}
+      %{create: {:error, _} = error} -> error
+      %{create: fun} when is_function(fun, 2) -> fun.(request, ctx)
+      _config -> {:ok, %ShipmentResult{carrier_ref: "C-1", tracking_number: "TRK-1"}}
+    end)
+  end
+
+  @impl true
+  def cancel_shipment(ref, %Context{} = ctx) do
+    run(:cancel_shipment, ctx, [ref], fn
+      %{cancel: fun} when is_function(fun, 2) -> fun.(ref, ctx)
+      %{cancel: answer} -> answer
+    end)
+  end
+
+  @impl true
+  def print_labels(refs, options, %Context{} = ctx) do
+    run(:print_labels, ctx, [refs, options], fn
+      %{labels: fun} when is_function(fun, 3) -> fun.(refs, options, ctx)
+      %{labels: answer} -> answer
+    end)
+  end
+
+  @impl true
+  def track(refs, %Context{} = ctx) do
+    run(:track, ctx, [refs], fn
+      %{track: fun} when is_function(fun, 2) -> fun.(refs, ctx)
+      %{track: answer} -> answer
     end)
   end
 

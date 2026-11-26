@@ -108,14 +108,18 @@ defmodule PhoenixKitEcommerce.Shipping.CredentialsTest do
   test "a system connection of the provider's integration is used" do
     uuid = connection!("shopify")
 
-    assert %{"access_token" => "secret-token", "provider" => "shopify"} =
-             context(%{"integration" => uuid}).credentials
+    ctx = context(%{"integration" => uuid})
+
+    assert %{"access_token" => "secret-token", "provider" => "shopify"} = ctx.credentials
+    assert ctx.integration_uuid == uuid
   end
 
   test "without a chosen connection the first one of the integration is used" do
-    connection!("shopify")
+    uuid = connection!("shopify")
 
-    assert %{"provider" => "shopify"} = context(%{}).credentials
+    ctx = context(%{})
+    assert %{"provider" => "shopify"} = ctx.credentials
+    assert ctx.integration_uuid == uuid
   end
 
   test "a connection of another integration is refused, with a warning that names no secret" do
@@ -123,7 +127,9 @@ defmodule PhoenixKitEcommerce.Shipping.CredentialsTest do
 
     log =
       capture_log(fn ->
-        assert context(%{"integration" => foreign}).credentials == nil
+        ctx = context(%{"integration" => foreign})
+        assert ctx.credentials == nil
+        assert ctx.integration_uuid == nil
       end)
 
     assert log =~ "ignored"
@@ -149,6 +155,43 @@ defmodule PhoenixKitEcommerce.Shipping.CredentialsTest do
   end
 
   test "an unknown uuid leaves the credentials empty" do
-    assert context(%{"integration" => Ecto.UUID.generate()}).credentials == nil
+    ctx = context(%{"integration" => Ecto.UUID.generate()})
+    assert ctx.credentials == nil
+    assert ctx.integration_uuid == nil
+  end
+
+  test "credentials given by the caller name their connection by the option, else by the settings" do
+    named = Ecto.UUID.generate()
+    given = Ecto.UUID.generate()
+
+    ctx =
+      Shipping.context(nil,
+        provider: AcmeProvider,
+        settings: %{"integration" => named},
+        credentials: %{"api_key" => "k"}
+      )
+
+    assert ctx.integration_uuid == named
+
+    ctx =
+      Shipping.context(nil,
+        provider: AcmeProvider,
+        settings: %{"integration" => named},
+        credentials: %{"api_key" => "k"},
+        integration_uuid: given
+      )
+
+    assert ctx.integration_uuid == given
+    refute Keyword.has_key?(ctx.opts, :integration_uuid)
+
+    # A connection named as `provider:name` has no uuid to record.
+    ctx =
+      Shipping.context(nil,
+        provider: AcmeProvider,
+        settings: %{"integration" => "shopify:default"},
+        credentials: %{"api_key" => "k"}
+      )
+
+    assert ctx.integration_uuid == nil
   end
 end

@@ -61,9 +61,17 @@ defmodule PhoenixKitEcommerce.Shipping do
   require Logger
 
   alias PhoenixKit.Integrations
-  alias PhoenixKitEcommerce.Shipping.{Address, Cache, Codec, Context, Destination, Locality}
-  alias PhoenixKitEcommerce.Shipping.MethodConfig
+  alias PhoenixKitEcommerce.Shipping.{Address, Cache, Codec, Context, Destination, LabelOptions}
+  alias PhoenixKitEcommerce.Shipping.{Locality, MethodConfig}
   alias PhoenixKitEcommerce.Shipping.{Parcel, PickupPoint, Quote, RateLimit, RateRequest, Service}
+
+  alias PhoenixKitEcommerce.Shipping.{
+    ShipmentRef,
+    ShipmentRequest,
+    ShipmentResult,
+    TrackingUpdate
+  }
+
   alias PhoenixKitEcommerce.Shipping.Providers.{Fixed, Table}
 
   @builtin_providers [Fixed, Table]
@@ -78,12 +86,16 @@ defmodule PhoenixKitEcommerce.Shipping do
     :locale,
     :currency,
     :country,
-    :credentials
+    :credentials,
+    :integration_uuid
   ]
   @max_query_length 64
   @shopper_lookup [group: :query, list?: true]
   @list_lookup [list?: true]
   @rate_limited_operations [:search_localities, :list_pickup_points]
+  @create_timeout 30_000
+  @shipment_callbacks %{create_shipment: 2, cancel_shipment: 2, print_labels: 3, track: 2}
+  @definite_http_statuses [400, 401, 403, 404, 422, 429]
   @business_errors [
     :too_heavy,
     :too_large,
@@ -176,7 +188,9 @@ defmodule PhoenixKitEcommerce.Shipping do
     * `:currency` - defaults to the currency of the method
     * `:country` - ISO 3166-1 alpha-2 code of the destination country, `nil`
       when it is not known
-    * `:credentials` - use these instead of looking them up in Integrations
+    * `:credentials` - use these instead of looking them up in Integrations;
+      `:integration_uuid` then names their connection (default: the uuid in
+      `settings["integration"]`)
     * everything else is passed through as `ctx.opts` (`:timeout`, `:req_options`...)
 
   Credentials are only loaded when the provider implements `integration/0`:
@@ -184,20 +198,24 @@ defmodule PhoenixKitEcommerce.Shipping do
   connection of the provider. A connection of another integration than the
   provider's own (`integration/0`'s `key`, else the provider key) is refused
   with a warning that names no secret. Any failure leaves `credentials` as
-  `nil`.
+  `nil`. `integration_uuid` is the uuid of the connection the credentials
+  came from (`nil` without one, or when the method names the connection as
+  `provider:name` rather than by its uuid).
   """
   @spec context(term(), keyword()) :: Context.t()
   def context(method, opts \\ []) do
     config = MethodConfig.from_method(method)
     provider = resolve_provider(Keyword.get(opts, :provider, config.provider))
     settings = Keyword.get(opts, :settings, config.settings)
+    {credentials, integration_uuid} = connection(provider, settings, opts)
 
     %Context{
       method: if(is_struct(method), do: method),
       provider: provider,
       service: Keyword.get(opts, :service, config.service),
       settings: settings,
-      credentials: credentials(provider, settings, opts),
+      credentials: credentials,
+      integration_uuid: integration_uuid,
       locale: Keyword.get_lazy(opts, :locale, &current_locale/0),
       currency: Keyword.get(opts, :currency) || method_currency(method),
       country: opts |> Keyword.get(:country) |> Codec.country(),
@@ -227,15 +245,33 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp method_currency(%{currency: currency}) when is_binary(currency), do: currency
   defp method_currency(_method), do: nil
 
-  defp credentials(nil, _settings, _opts), do: nil
+  # `{credentials, integration_uuid}`.
+  defp connection(nil, _settings, _opts), do: {nil, nil}
 
-  defp credentials(provider, settings, opts) do
+  defp connection(provider, settings, opts) do
     cond do
-      not function_exported?(provider, :integration, 0) -> nil
-      Keyword.has_key?(opts, :credentials) -> Keyword.get(opts, :credentials)
-      true -> load_credentials(provider, settings)
+      not function_exported?(provider, :integration, 0) ->
+        {nil, nil}
+
+      Keyword.has_key?(opts, :credentials) ->
+        {Keyword.get(opts, :credentials),
+         Keyword.get_lazy(opts, :integration_uuid, fn ->
+           settings |> Codec.get(:integration) |> uuid_or_nil()
+         end)}
+
+      true ->
+        load_credentials(provider, settings)
     end
   end
+
+  defp uuid_or_nil(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> nil
+    end
+  end
+
+  defp uuid_or_nil(_value), do: nil
 
   # The connection must be a system one (the shop's, not a user's) and belong
   # to the provider's own integration: `settings["integration"]` is a uuid an
@@ -245,9 +281,9 @@ defmodule PhoenixKitEcommerce.Shipping do
     with uuid when is_binary(uuid) <- connection_uuid(provider, settings),
          {:ok, %{} = data} <- Integrations.get_credentials(uuid, owner: :system),
          :ok <- check_connection_provider(provider, data) do
-      data
+      {data, uuid_or_nil(uuid)}
     else
-      _ -> nil
+      _ -> {nil, nil}
     end
   rescue
     error ->
@@ -256,9 +292,9 @@ defmodule PhoenixKitEcommerce.Shipping do
           Exception.message(error)
       )
 
-      nil
+      {nil, nil}
   catch
-    :exit, _reason -> nil
+    :exit, _reason -> {nil, nil}
   end
 
   defp check_connection_provider(provider, data) do
@@ -364,7 +400,8 @@ defmodule PhoenixKitEcommerce.Shipping do
   `query` (`nil` or blank means all).
 
   Options: `:parcels` and `:declared_value` drop the points that cannot accept
-  them (see `fits_point?/3`).
+  them (see `fits_point?/3`); `fresh: true` asks the provider rather than the
+  cache (a shipment checks that its point is still there).
   """
   @spec list_pickup_points(Context.t(), Locality.t(), String.t() | nil, keyword()) ::
           result([PickupPoint.t()])
@@ -382,7 +419,7 @@ defmodule PhoenixKitEcommerce.Shipping do
         ctx
         |> call(
           :list_pickup_points,
-          {:lookups, [locality.id, query && String.downcase(query)], lookup_cache_opts(query)},
+          points_cache(locality, query, opts),
           fn ->
             normalize(
               {:ok_list, PickupPoint},
@@ -464,6 +501,118 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   defp validation_answer(other), do: bad_return(other)
 
+  # -- shipments --------------------------------------------------------
+
+  @doc """
+  Whether the provider (a module, or the provider of a context) implements
+  one of the optional shipment callbacks: `:create_shipment`,
+  `:cancel_shipment`, `:print_labels` or `:track`. The shop asks before it
+  writes anything for a shipment.
+  """
+  @spec supports?(Context.t() | module() | nil, atom()) :: boolean()
+  def supports?(%Context{provider: provider}, operation), do: supports?(provider, operation)
+
+  def supports?(provider, operation) when is_map_key(@shipment_callbacks, operation) do
+    provider_module?(provider) and
+      function_exported?(provider, operation, Map.fetch!(@shipment_callbacks, operation))
+  end
+
+  def supports?(_provider, _operation), do: false
+
+  @doc """
+  Registers a shipment with the carrier (the provider's `create_shipment/2`).
+
+  Never cached, and run in the isolated worker like `quote/2`, with its own
+  timeout: `ctx.opts[:timeout]`, else #{div(@create_timeout, 1000)} seconds. A
+  result without a `carrier_ref` or a `tracking_number` is
+  `{:error, {:bad_return, _}}`. See `definite_failure?/1` for what an error
+  means.
+  """
+  @spec create_shipment(Context.t(), ShipmentRequest.t()) :: result(ShipmentResult.t())
+  def create_shipment(%Context{} = ctx, %ShipmentRequest{} = request) do
+    if supports?(ctx, :create_shipment) do
+      ctx = %{ctx | opts: Keyword.put_new(ctx.opts, :timeout, @create_timeout)}
+
+      call(ctx, :create_shipment, :none, fn ->
+        normalize(:shipment, ctx.provider.create_shipment(request, ctx))
+      end)
+    else
+      unsupported(ctx)
+    end
+  end
+
+  @doc "Cancels a shipment at the carrier (the provider's `cancel_shipment/2`). Never cached."
+  @spec cancel_shipment(Context.t(), ShipmentRef.t()) :: :ok | {:error, term()}
+  def cancel_shipment(%Context{} = ctx, %ShipmentRef{} = ref) do
+    if supports?(ctx, :cancel_shipment) do
+      ctx
+      |> call(:cancel_shipment, :none, fn ->
+        normalize(:cancel, ctx.provider.cancel_shipment(ref, ctx))
+      end)
+      |> cancel_result()
+    else
+      unsupported(ctx)
+    end
+  end
+
+  # The isolated call answers `{:ok, _}` for the telemetry status; the
+  # callback's own answer is `:ok`.
+  defp cancel_result({:ok, :cancelled}), do: :ok
+  defp cancel_result(error), do: error
+
+  @doc """
+  The labels of `refs` as one document (the provider's `print_labels/3`):
+  `{:ok, %{content_type: String.t(), body: binary()}}`. Never cached.
+  """
+  @spec print_labels(Context.t(), [ShipmentRef.t()], LabelOptions.t()) ::
+          result(%{content_type: String.t(), body: binary()})
+  def print_labels(%Context{} = ctx, refs, %LabelOptions{} = options) when is_list(refs) do
+    if supports?(ctx, :print_labels) do
+      call(ctx, :print_labels, :none, fn ->
+        normalize(:labels, ctx.provider.print_labels(refs, options, ctx))
+      end)
+    else
+      unsupported(ctx)
+    end
+  end
+
+  @doc """
+  The current state of `refs` at the carrier (the provider's `track/2`).
+  Never cached; an empty list answers `{:ok, []}` without calling it.
+  """
+  @spec track(Context.t(), [ShipmentRef.t()]) :: result([TrackingUpdate.t()])
+  def track(%Context{} = ctx, refs) when is_list(refs) do
+    cond do
+      not supports?(ctx, :track) ->
+        unsupported(ctx)
+
+      refs == [] ->
+        {:ok, []}
+
+      true ->
+        call(ctx, :track, :none, fn ->
+          normalize({:ok_list, TrackingUpdate}, ctx.provider.track(refs, ctx))
+        end)
+    end
+  end
+
+  @doc """
+  Whether an error of `create_shipment/2` means the carrier certainly does
+  not have the shipment: `{:rejected, message}`, an HTTP status 400, 401,
+  403, 404, 422 or 429 (`{:http_status, status}` or
+  `{:http_status, status, detail}`), or a connection refused before anything
+  was sent (`:econnrefused`, or a transport error with that `reason`).
+  Anything else - a timeout, a crash, another status, a transport error
+  after sending, an answer that cannot be read - leaves it unknown.
+  """
+  @spec definite_failure?(term()) :: boolean()
+  def definite_failure?({:rejected, message}) when is_binary(message), do: true
+  def definite_failure?({:http_status, status}), do: status in @definite_http_statuses
+  def definite_failure?({:http_status, status, _detail}), do: status in @definite_http_statuses
+  def definite_failure?(:econnrefused), do: true
+  def definite_failure?(%{__exception__: true, reason: :econnrefused}), do: true
+  def definite_failure?(_reason), do: false
+
   defp currency_supported?(provider, currency) when is_binary(currency) do
     if provider_module?(provider) and function_exported?(provider, :currencies, 0),
       do: currency in provider.currencies(),
@@ -479,6 +628,12 @@ defmodule PhoenixKitEcommerce.Shipping do
     if provider_module?(provider),
       do: {:error, :not_supported},
       else: {:error, :unknown_provider}
+  end
+
+  defp points_cache(locality, query, opts) do
+    if Keyword.get(opts, :fresh, false),
+      do: :none,
+      else: {:lookups, [locality.id, query && String.downcase(query)], lookup_cache_opts(query)}
   end
 
   # What a shopper's own text asked for is cached in its own, smaller share.
@@ -519,8 +674,22 @@ defmodule PhoenixKitEcommerce.Shipping do
       else: bad_return(ok)
   end
 
+  defp normalize(:shipment, {:ok, %ShipmentResult{} = result} = ok) do
+    if filled?(result.carrier_ref) or filled?(result.tracking_number),
+      do: ok,
+      else: bad_return(ok)
+  end
+
+  defp normalize(:cancel, :ok), do: {:ok, :cancelled}
+
+  defp normalize(:labels, {:ok, %{content_type: type, body: body}} = ok)
+       when is_binary(type) and is_binary(body),
+       do: ok
+
   defp normalize(_kind, {:error, _reason} = error), do: error
   defp normalize(_kind, other), do: bad_return(other)
+
+  defp filled?(value), do: is_binary(value) and value != ""
 
   # A list of anything else would be cached and then crash its readers (the
   # service check, the picker) outside the isolated worker.
@@ -736,7 +905,7 @@ defmodule PhoenixKitEcommerce.Shipping do
   defp log_error({:error, reason}, key, operation, credentials) do
     message =
       "Shipping provider #{key} #{operation} failed: " <>
-        crash_text(inspect(reason, limit: 10), credentials)
+        crash_text(logged_reason(operation, reason), credentials)
 
     cond do
       reason == :rate_limited -> Logger.debug(message)
@@ -746,6 +915,25 @@ defmodule PhoenixKitEcommerce.Shipping do
   end
 
   defp log_error(_ok, _key, _operation, _credentials), do: :ok
+
+  # A shipment's error may quote the recipient (the carrier echoing a name or
+  # a phone back), so only its shape reaches the log; the shipment stores the
+  # text masked.
+  defp logged_reason(operation, reason) when is_map_key(@shipment_callbacks, operation),
+    do: reason_shape(reason)
+
+  defp logged_reason(_operation, reason), do: inspect(reason, limit: 10)
+
+  defp reason_shape(reason) when is_atom(reason), do: inspect(reason)
+
+  defp reason_shape({:http_status, status}) when is_integer(status),
+    do: "{:http_status, #{status}}"
+
+  defp reason_shape({:http_status, status, _detail}) when is_integer(status),
+    do: "{:http_status, #{status}, ...}"
+
+  defp reason_shape({tag, _detail}) when is_atom(tag), do: "{#{inspect(tag)}, ...}"
+  defp reason_shape(reason), do: describe(reason)
 
   @doc """
   Whether an error reason means "this method cannot serve this cart"

@@ -6,12 +6,17 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     Context,
     Destination,
     Field,
+    LabelOptions,
     Locality,
     Parcel,
     PickupPoint,
     Quote,
     RateRequest,
-    Service
+    Service,
+    ShipmentRef,
+    ShipmentRequest,
+    ShipmentResult,
+    TrackingUpdate
   }
 
   alias PhoenixKitEcommerce.Shipping.Providers.{Fixed, Table}
@@ -26,7 +31,12 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     Parcel,
     RateRequest,
     Quote,
-    Context
+    Context,
+    ShipmentRequest,
+    ShipmentResult,
+    ShipmentRef,
+    TrackingUpdate,
+    LabelOptions
   ]
 
   defp locality,
@@ -124,10 +134,46 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
         provider: PhoenixKitEcommerce.Shipping.Providers.Fixed,
         service: "branch",
         settings: %{"sender_city" => %{"id" => "c1"}},
+        integration_uuid: "019b669c-3c9d-7256-8ed1-edbc6ae29703",
         locale: "uk",
         currency: "UAH",
         country: "UA"
-      }
+      },
+      %ShipmentRequest{
+        order_uuid: "019b669c-3c9d-7256-8ed1-edbc6ae29704",
+        reference: "ORD-2026-0001",
+        service: "branch",
+        country: "EE",
+        destination: %Destination{locality: locality(), pickup_point: point()},
+        parcels: [parcel()],
+        recipient: %{name: "Mari Maasikas", email: "mari@example.com", phone: "+37255551234"},
+        payer: :recipient,
+        description: "Vase x2, Lamp",
+        declared_value: Decimal.new("59.90"),
+        currency: "EUR",
+        cod_amount: nil,
+        cod_currency: nil
+      },
+      %ShipmentResult{
+        carrier_ref: "C-1",
+        tracking_number: "CE123456789EE",
+        tracking_url: "https://track.example/CE123456789EE",
+        carrier_label: "Omniva",
+        extra: %{"sender" => %{"phone" => "+3725000000"}}
+      },
+      %ShipmentRef{
+        carrier_ref: "C-1",
+        tracking_number: "CE123456789EE",
+        service: "branch",
+        extra: %{"barcode" => "123"}
+      },
+      %TrackingUpdate{
+        tracking_number: "CE123456789EE",
+        status: :ready_for_pickup,
+        occurred_at: ~U[2026-11-25 10:00:00Z],
+        description: "Arrived at the parcel machine"
+      },
+      %LabelOptions{format: :a6}
     ]
   end
 
@@ -358,6 +404,49 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
     test "from_map ignores providers that are not loaded" do
       assert %Context{provider: nil} = Context.from_map(%{"provider" => "Elixir.Nope.Nothing"})
       assert %Context{provider: nil} = Context.from_map(%{"provider" => "plain"})
+    end
+  end
+
+  describe "shipment structs" do
+    test "a request without a payer, a known status or a format falls back to the defaults" do
+      assert %ShipmentRequest{payer: :shop, parcels: [], cod_amount: nil} =
+               ShipmentRequest.from_map(%{"payer" => "carrier", "parcels" => [nil, "x"]})
+
+      assert %TrackingUpdate{status: nil} = TrackingUpdate.from_map(%{"status" => "lost"})
+      assert %LabelOptions{format: :a4} = LabelOptions.from_map(%{"format" => "letter"})
+    end
+
+    test "the description is cut to 100 characters and blank is nil" do
+      assert String.length(ShipmentRequest.description(String.duplicate("x", 150))) == 100
+      assert ShipmentRequest.description("   ") == nil
+    end
+
+    test "a recipient keeps what it is given, trimmed, and blank values are nil" do
+      assert ShipmentRequest.recipient(%{"name" => " Mari ", "email" => "", phone: "5555"}) ==
+               %{name: "Mari", email: nil, phone: "5555"}
+
+      assert ShipmentRequest.recipient(nil) == %{name: nil, email: nil, phone: nil}
+    end
+  end
+
+  describe "ShipmentRequest.e164_phone/2" do
+    test "a number without a country code takes the destination country's" do
+      assert ShipmentRequest.e164_phone("5555 1234", "EE") == "+37255551234"
+      assert ShipmentRequest.e164_phone("(5555) 12-34", "ee") == "+37255551234"
+      assert ShipmentRequest.e164_phone("6123 4567", "LV") == "+37161234567"
+    end
+
+    test "a number with a country code keeps it" do
+      assert ShipmentRequest.e164_phone("+372 5555 1234", "LV") == "+37255551234"
+      assert ShipmentRequest.e164_phone("00372 5555 1234", nil) == "+37255551234"
+    end
+
+    test "nothing usable is nil" do
+      assert ShipmentRequest.e164_phone("5555 1234", nil) == nil
+      assert ShipmentRequest.e164_phone("call me", "EE") == nil
+      assert ShipmentRequest.e164_phone("+372 12", "EE") == nil
+      assert ShipmentRequest.e164_phone("+0 5555 1234 5678 9", "EE") == nil
+      assert ShipmentRequest.e164_phone(nil, "EE") == nil
     end
   end
 end
