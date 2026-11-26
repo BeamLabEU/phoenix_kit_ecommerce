@@ -367,6 +367,83 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert %Shipment{status: "cancelled", events: []} = reload(shipment)
     end
 
+    test "a shipment the answer leaves out keeps its place at the head of the queue" do
+      answered = shipment!(%{inserted_at: ago(7200)})
+      left_out = shipment!(%{inserted_at: ago(3600)})
+
+      track(fn _refs, _ctx -> {:ok, [report(answered, :created)]} end)
+      Shipments.track_shipments()
+
+      assert %DateTime{} = reload(answered).last_tracked_at
+      assert reload(left_out).last_tracked_at == nil
+
+      # The same answer again: the left-out one is still asked, and first.
+      Shipments.track_shipments()
+      assert_received {:stub_called, :track, [[%ShipmentRef{} = first | _]]}
+      assert_received {:stub_called, :track, [[%ShipmentRef{} = again | _]]}
+      assert first.tracking_number == answered.tracking_number
+      assert again.tracking_number == left_out.tracking_number
+    end
+
+    test "asks at most 1000 shipments a run, those asked longest ago first" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      orders =
+        for n <- 1..1002 do
+          %{
+            uuid: Ecto.UUID.generate(),
+            order_number: "CAP-#{System.unique_integer([:positive])}-#{n}",
+            status: "paid",
+            total: Decimal.new("1"),
+            inserted_at: now,
+            updated_at: now
+          }
+        end
+
+      Repo.insert_all(PhoenixKitBilling.Order, orders)
+
+      # The first two were asked a minute and an hour ago, the rest never.
+      tracked_at = fn
+        1 -> ago(60)
+        2 -> ago(3600)
+        _n -> nil
+      end
+
+      rows =
+        orders
+        |> Enum.with_index(1)
+        |> Enum.map(fn {order, n} ->
+          %{
+            uuid: Ecto.UUID.generate(),
+            order_uuid: order.uuid,
+            provider: "stub",
+            service: "branch",
+            status: "created",
+            tracking_number: "CAP-#{n}",
+            context_snapshot: %{"settings" => %{}, "country" => "EE"},
+            parcels: [],
+            recipient: %{},
+            destination: %{},
+            extra: %{},
+            events: [],
+            last_tracked_at: tracked_at.(n),
+            inserted_at: now,
+            updated_at: now
+          }
+        end)
+
+      Repo.insert_all(Shipment, rows)
+
+      Shipments.track_shipments()
+
+      assert_received {:stub_called, :track, [refs]}
+      numbers = MapSet.new(refs, & &1.tracking_number)
+
+      assert MapSet.size(numbers) == 1000
+      refute MapSet.member?(numbers, "CAP-1")
+      refute MapSet.member?(numbers, "CAP-2")
+    end
+
     test "stops 60 days after the shipment was created" do
       old = shipment!(%{inserted_at: ago(61 * 86_400)})
       young = shipment!(%{inserted_at: ago(59 * 86_400)})

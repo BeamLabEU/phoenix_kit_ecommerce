@@ -206,6 +206,22 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentFacadeTest do
                  Shipping.track(ctx(%{track: {:ok, [%{status: "x"}]}}), [ref()])
       end)
     end
+
+    test "waits ctx.opts[:timeout], and its own 60 seconds otherwise" do
+      capture_log(fn ->
+        assert {:error, :timeout} = Shipping.track(ctx(%{mode: :hang}, timeout: 50), [ref()])
+      end)
+
+      parent = self()
+
+      track = fn _refs, ctx ->
+        send(parent, {:timeout_seen, ctx.opts[:timeout]})
+        {:ok, []}
+      end
+
+      assert {:ok, []} = Shipping.track(ctx(%{track: track}), [ref()])
+      assert_received {:timeout_seen, 60_000}
+    end
   end
 
   describe "definite_failure?/1" do

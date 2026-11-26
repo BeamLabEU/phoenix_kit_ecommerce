@@ -1030,9 +1030,13 @@ defmodule PhoenixKitEcommerce.Shipments do
       Each group is one `Shipping.track/2` call with all its references,
       through the context of a shipment of the group; the adapter decides
       how many carrier calls that makes (a carrier may take one per run).
-      An error of one group (the carrier's, or no context to rebuild) is
-      logged and leaves the other groups alone. Every shipment asked gets
-      `last_tracked_at`.
+      `track/2` must answer for every reference it is given; a shipment
+      the answer says nothing about keeps its `last_tracked_at`, so it is
+      among the first asked next time and a short answer cannot hold the
+      others back. An error of one group (the carrier's, or no context to
+      rebuild) is logged and leaves the other groups alone; the group's
+      shipments are stamped, so a dead carrier does not hold the head of
+      the queue either.
     * An update belongs to the shipment of its group with its tracking
       number or carrier reference.
     * A status never moves backwards: an update must rank above the
@@ -1099,13 +1103,17 @@ defmodule PhoenixKitEcommerce.Shipments do
       with {:ok, ctx} <- group_context(shipments, opts),
            do: Shipping.track(ctx, Enum.map(shipments, &shipment_ref/1))
 
-    stamp_tracked(shipments)
-
     case answer do
       {:ok, updates} ->
-        Enum.count(shipments, &(track_one(&1, updates) == :updated))
+        covered =
+          Enum.filter(shipments, fn shipment -> Enum.any?(updates, &about?(&1, shipment)) end)
+
+        stamp_tracked(covered)
+        Enum.count(covered, &(track_one(&1, updates) == :updated))
 
       {:error, reason} ->
+        stamp_tracked(shipments)
+
         Logger.warning(
           "Shipment tracking: #{first.provider} (#{length(shipments)} shipments) " <>
             "failed: #{track_error_text(reason)}"

@@ -94,6 +94,7 @@ defmodule PhoenixKitEcommerce.Shipping do
   @list_lookup [list?: true]
   @rate_limited_operations [:search_localities, :list_pickup_points]
   @create_timeout 30_000
+  @track_timeout 60_000
   @shipment_callbacks %{create_shipment: 2, cancel_shipment: 2, print_labels: 3, track: 2}
   @definite_http_statuses [400, 401, 403, 404, 422, 429]
   @business_errors [
@@ -578,7 +579,10 @@ defmodule PhoenixKitEcommerce.Shipping do
 
   @doc """
   The current state of `refs` at the carrier (the provider's `track/2`).
-  Never cached; an empty list answers `{:ok, []}` without calling it.
+  Never cached; an empty list answers `{:ok, []}` without calling it. The
+  whole call has its own timeout: `ctx.opts[:timeout]`, else
+  #{div(@track_timeout, 1000)} seconds (the adapter may need several carrier
+  calls for the refs of a group).
   """
   @spec track(Context.t(), [ShipmentRef.t()]) :: result([TrackingUpdate.t()])
   def track(%Context{} = ctx, refs) when is_list(refs) do
@@ -590,6 +594,8 @@ defmodule PhoenixKitEcommerce.Shipping do
         {:ok, []}
 
       true ->
+        ctx = %{ctx | opts: Keyword.put_new(ctx.opts, :timeout, @track_timeout)}
+
         call(ctx, :track, :none, fn ->
           normalize({:ok_list, TrackingUpdate}, ctx.provider.track(refs, ctx))
         end)
