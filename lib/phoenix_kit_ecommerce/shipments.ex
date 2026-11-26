@@ -1287,6 +1287,19 @@ defmodule PhoenixKitEcommerce.Shipments do
     end
   end
 
+  defp store_outcome(shipment, {:error, reason}, actor_uuid) do
+    status = if definite?(reason), do: "failed", else: "unknown"
+    message = shipment |> masked(error_text(reason)) |> cut()
+
+    compare_and_set(
+      shipment.uuid,
+      ["creating"],
+      [status: status, error: message],
+      claim: shipment.submitted_at,
+      event: event("result", status, actor_uuid, message)
+    )
+  end
+
   # The link is rendered to the admin and, later, to the buyer: a carrier's
   # answer that is not a web address is not stored, and not quoted in the log.
   defp carrier_tracking_url(_shipment, nil), do: nil
@@ -1303,19 +1316,6 @@ defmodule PhoenixKitEcommerce.Shipments do
       web_url ->
         web_url
     end
-  end
-
-  defp store_outcome(shipment, {:error, reason}, actor_uuid) do
-    status = if definite?(reason), do: "failed", else: "unknown"
-    message = shipment |> masked(error_text(reason)) |> cut()
-
-    compare_and_set(
-      shipment.uuid,
-      ["creating"],
-      [status: status, error: message],
-      claim: shipment.submitted_at,
-      event: event("result", status, actor_uuid, message)
-    )
   end
 
   # Nothing reached the carrier when the context could not be rebuilt, or the
