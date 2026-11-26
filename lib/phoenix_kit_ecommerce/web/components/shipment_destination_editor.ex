@@ -115,8 +115,15 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
      )}
   end
 
-  def handle_async(:points, _failed, socket),
-    do: {:noreply, assign(socket, points_state: :error, lookup_error: lookup_error())}
+  def handle_async(:points, _failed, socket) do
+    {:noreply,
+     assign(socket,
+       points: [],
+       points_truncated?: false,
+       points_state: :error,
+       lookup_error: lookup_error()
+     )}
+  end
 
   defp lookup_error, do: gettext("The carrier did not answer. Please try again.")
 
@@ -124,7 +131,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     %{context: ctx, locality: locality, point_query: query} = socket.assigns
 
     socket
-    |> assign(points_state: :loading, lookup_error: nil)
+    |> assign(points_state: :loading, points_truncated?: false, lookup_error: nil)
     |> start_async(:points, fn -> Shipping.list_pickup_points(ctx, locality, query) end)
   end
 
@@ -176,7 +183,14 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
   end
 
   defp editor_event("change_locality", _params, socket) do
-    {:noreply, assign(socket, locality: nil, points: [], points_state: :idle, locality_query: "")}
+    {:noreply,
+     assign(socket,
+       locality: nil,
+       points: [],
+       points_truncated?: false,
+       points_state: :idle,
+       locality_query: ""
+     )}
   end
 
   defp editor_event("filter_points", params, socket) do

@@ -412,6 +412,17 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
       assert has_element?(view, "#shipment-editor-destination-point-#{dom("P.1")}", "Dot")
       assert has_element?(view, "#shipment-editor-destination-point-#{dom("P_1")}", "Under")
       assert has_element?(view, "#shipment-editor-destination-points-truncated")
+
+      # A list the carrier could not give does not keep the old notice.
+      stub(%{points: fn _locality, _service, _query -> {:error, :timeout} end})
+
+      view
+      |> form("#shipment-editor-destination-points-form", %{"q" => "again"})
+      |> render_change()
+
+      settle(view)
+
+      refute has_element?(view, "#shipment-editor-destination-points-truncated")
     end
 
     test "closing the editor while it loads is quiet, and a late draft does not reopen it", %{
