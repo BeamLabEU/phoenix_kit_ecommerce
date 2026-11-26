@@ -354,23 +354,34 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingTest do
       assert reload(crashing).status == "created"
     end
 
-    test "an update older than the last one stored is ignored, a newer one is not" do
+    test "a higher status counts even when its time is before the last one stored" do
+      # A carrier that gives the delivery a date only: it sorts before the
+      # last scan of the day.
       shipment =
         shipment!(%{status: "ready_for_pickup", events: [tracked_event("2026-11-20T12:00:00Z")]})
 
       track(fn _refs, _ctx ->
-        {:ok, [report(shipment, :delivered, at: ~U[2026-11-20 11:00:00Z])]}
-      end)
-
-      assert %{updated: 0} = Shipments.track_shipments()
-      assert reload(shipment).status == "ready_for_pickup"
-
-      track(fn _refs, _ctx ->
-        {:ok, [report(shipment, :delivered, at: ~U[2026-11-20 13:00:00Z])]}
+        {:ok, [report(shipment, :delivered, at: ~U[2026-11-20 00:00:00Z])]}
       end)
 
       assert %{updated: 1} = Shipments.track_shipments()
       assert reload(shipment).status == "delivered"
+    end
+
+    test "of two updates of the same status the later time is stored" do
+      shipment = shipment!(%{})
+
+      track(fn _refs, _ctx ->
+        {:ok,
+         [
+           report(shipment, :in_transit, at: ~U[2026-11-21 09:00:00Z]),
+           report(shipment, :in_transit, at: ~U[2026-11-21 15:00:00Z])
+         ]}
+      end)
+
+      Shipments.track_shipments()
+
+      assert [%{"occurred_at" => "2026-11-21T15:00:00Z"}] = reload(shipment).events
     end
 
     test "a later-timed update of a lower status does not move it back" do

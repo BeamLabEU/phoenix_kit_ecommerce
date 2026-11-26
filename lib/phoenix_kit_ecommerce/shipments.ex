@@ -1045,9 +1045,9 @@ defmodule PhoenixKitEcommerce.Shipments do
     * A status never moves backwards: an update must rank above the
       current status (`created < in_transit < ready_for_pickup < delivered
       < returned`, the return leg above the outbound one, the carrier's
-      `cancelled` with `returned`), and one with a time must also be newer
-      than the last time stored. Of the updates that qualify the highest
-      status counts, timed or not.
+      `cancelled` with `returned`). Of the updates that qualify the highest
+      status counts; `occurred_at` only decides between two of the same
+      status, and is stored on the event.
     * The write is conditional on the status the update was weighed
       against, and appends the event: the carrier's text masked, and its
       time.
@@ -1229,15 +1229,15 @@ defmodule PhoenixKitEcommerce.Shipments do
       :error
   end
 
-  # Of the shipment's updates that would move it forward, the highest status,
-  # and of two with the same status the timed one, then the later one.
+  # Of the shipment's updates that would move it forward, the highest status;
+  # times decide only between two of the same status (the timed one, then
+  # the later one). The rank alone keeps a status from moving backwards, and
+  # a carrier's time (a date-only delivery) can sort before its last scan.
   defp best_update(shipment, updates) do
-    last = last_occurred_at(shipment)
-
     updates
     |> Enum.filter(
       &(about?(&1, shipment) and &1.status in TrackingUpdate.statuses() and
-          forward?(shipment, &1, last))
+          rank(&1.status) > rank(shipment.status))
     )
     |> Enum.max_by(&{rank(&1.status), unix(&1.occurred_at)}, fn -> nil end)
   end
@@ -1254,33 +1254,8 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   defp same?(value, stored), do: filled?(value) and value == stored
 
-  # Forward means a higher status (the return leg ranks above the outbound
-  # one); an update with a time must also be newer than the last one stored.
-  defp forward?(shipment, %TrackingUpdate{status: status, occurred_at: at}, last) do
-    rank(status) > rank(shipment.status) and
-      (not match?(%DateTime{}, at) or not match?(%DateTime{}, last) or
-         DateTime.compare(at, last) == :gt)
-  end
-
   defp rank(status) when is_atom(status), do: rank(Atom.to_string(status))
   defp rank(status), do: Map.get(@rank, status, -1)
-
-  # The carrier's time of the last update stored, kept on its event.
-  defp last_occurred_at(%Shipment{events: events}) do
-    events
-    |> List.wrap()
-    |> Enum.flat_map(fn
-      %{"action" => "tracked", "occurred_at" => at} when is_binary(at) ->
-        case DateTime.from_iso8601(at) do
-          {:ok, datetime, _offset} -> [datetime]
-          {:error, _reason} -> []
-        end
-
-      _other ->
-        []
-    end)
-    |> Enum.max(DateTime, fn -> nil end)
-  end
 
   # The status and its e-mail commit together: an e-mail that cannot be
   # queued leaves the status for the next run to find again.
