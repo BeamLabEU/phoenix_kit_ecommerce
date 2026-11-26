@@ -8599,3 +8599,398 @@ msgstr "Перевозчик не подтвердил отмену (%{reason}),
 #, elixir-autogen, elixir-format
 msgid "The recipient details are not valid."
 msgstr "Данные получателя некорректны."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:717
+#, elixir-autogen, elixir-format
+msgid "(%{current} of %{total})"
+msgstr "(%{current} из %{total})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:775
+#, elixir-autogen, elixir-format
+msgid "1 order to ship"
+msgid_plural "%{count} orders to ship"
+msgstr[0] "%{count} заказ к отправке"
+msgstr[1] "%{count} заказа к отправке"
+msgstr[2] "%{count} заказов к отправке"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:858
+#, elixir-autogen, elixir-format
+msgid "1 shipment"
+msgid_plural "%{count} shipments"
+msgstr[0] "%{count} отправление"
+msgstr[1] "%{count} отправления"
+msgstr[2] "%{count} отправлений"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:280
+#, elixir-autogen, elixir-format
+msgid "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."
+msgstr "У выбранного отправления нет этикетки у перевозчика: оно не зарегистрировано или уже доставлено, возвращено или отменено."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1054
+#, elixir-autogen, elixir-format
+msgid "Add a parcel"
+msgstr "Добавить посылку"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:696
+#, elixir-autogen, elixir-format
+msgid "All carriers"
+msgstr "Все перевозчики"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:706
+#, elixir-autogen, elixir-format
+msgid "All statuses"
+msgstr "Все статусы"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:270
+#, elixir-autogen, elixir-format
+msgid "At most 50 labels can be printed at once."
+msgstr "За один раз можно напечатать не более 50 этикеток."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1138
+#, elixir-autogen, elixir-format
+msgid "Cancel the shipment at the carrier?"
+msgstr "Отменить отправление у перевозчика?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1017
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier"
+msgstr "Отменено у перевозчика"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1237
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier by the shop"
+msgstr "Отменено магазином у перевозчика"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1139
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier?"
+msgstr "Отменено у перевозчика?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1136
+#, elixir-autogen, elixir-format
+msgid "Cancelling the shipment of order %{number} at the carrier..."
+msgstr "Отмена отправления заказа %{number} у перевозчика..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:695
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:878
+#, elixir-autogen, elixir-format
+msgid "Carrier"
+msgstr "Перевозчик"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1233
+#, elixir-autogen, elixir-format
+msgid "Carrier's answer"
+msgstr "Ответ перевозчика"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1044
+#, elixir-autogen, elixir-format
+msgid "Company"
+msgstr "Компания"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:794
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1077
+#, elixir-autogen, elixir-format
+msgid "Destination"
+msgstr "Пункт назначения"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:727
+#, elixir-autogen, elixir-format
+msgid "Dismiss"
+msgstr "Скрыть"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1045
+#, elixir-autogen, elixir-format
+msgid "Email"
+msgstr "Эл. почта"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:627
+#, elixir-autogen, elixir-format
+msgid "Enter each parcel's weight in grams, and its sizes in millimetres or nothing."
+msgstr "Укажите вес каждой посылки в граммах, а размеры в миллиметрах или оставьте пустыми."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1106
+#, elixir-autogen, elixir-format
+msgid "Enter the number the carrier's portal shows for this shipment. The shipment is then registered."
+msgstr "Введите номер, который портал перевозчика показывает для этого отправления. После этого отправление считается зарегистрированным."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1104
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number"
+msgstr "Введите номер отслеживания"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:982
+#, elixir-autogen, elixir-format
+msgid "Enter tracking number"
+msgstr "Ввести номер отслеживания"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2313
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2318
+#, elixir-autogen, elixir-format
+msgid "Failed to update the label size"
+msgstr "Не удалось изменить размер этикетки"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:477
+#, elixir-autogen, elixir-format
+msgid "Failed: %{error}"
+msgstr "Ошибка: %{error}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:929
+#, elixir-autogen, elixir-format
+msgid "History"
+msgstr "История"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2310
+#, elixir-autogen, elixir-format
+msgid "Label size updated"
+msgstr "Размер этикетки изменён"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:273
+#, elixir-autogen, elixir-format
+msgid "Labels can be printed together only for shipments of one carrier connection."
+msgstr "Этикетки можно печатать вместе только для отправлений одного подключения перевозчика."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:993
+#, elixir-autogen, elixir-format
+msgid "Mark failed"
+msgstr "Отметить как неудачное"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1235
+#, elixir-autogen, elixir-format
+msgid "Marked failed"
+msgstr "Отмечено как неудачное"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:681
+#, elixir-autogen, elixir-format
+msgid "Needs attention"
+msgstr "Требует внимания"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:923
+#, elixir-autogen, elixir-format
+msgid "No answer for 10 minutes"
+msgstr "Нет ответа 10 минут"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:802
+#, elixir-autogen, elixir-format
+msgid "No paid order is waiting for a shipment."
+msgstr "Нет оплаченных заказов, ожидающих отправки."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1258
+#, elixir-autogen, elixir-format
+msgid "No point of this method takes this order."
+msgstr "Ни один пункт этого способа доставки не принимает этот заказ."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:888
+#, elixir-autogen, elixir-format
+msgid "No shipment is on its way."
+msgstr "Нет отправлений в пути."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:889
+#, elixir-autogen, elixir-format
+msgid "No shipment needs attention."
+msgstr "Нет отправлений, требующих внимания."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:678
+#, elixir-autogen, elixir-format
+msgid "Open"
+msgstr "Открытые"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:792
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:876
+#, elixir-autogen, elixir-format
+msgid "Order"
+msgstr "Заказ"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1052
+#, elixir-autogen, elixir-format
+msgid "Parcels"
+msgstr "Посылки"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1046
+#, elixir-autogen, elixir-format
+msgid "Phone"
+msgstr "Телефон"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:209
+#, elixir-autogen, elixir-format
+msgid "Please enter the point code"
+msgstr "Пожалуйста, введите код пункта"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:444
+#, elixir-autogen, elixir-format
+msgid "Point code"
+msgstr "Код пункта"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:961
+#, elixir-autogen, elixir-format
+msgid "Print label"
+msgstr "Печать этикетки"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:867
+#, elixir-autogen, elixir-format
+msgid "Print labels (%{count})"
+msgstr "Печать этикеток (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:793
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:877
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1041
+#, elixir-autogen, elixir-format
+msgid "Recipient"
+msgstr "Получатель"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Record the shipment as cancelled because it was cancelled in the carrier's portal. The carrier is not contacted."
+msgstr "Отметить отправление как отменённое, потому что оно отменено на портале перевозчика. Перевозчику ничего не отправляется."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1238
+#, elixir-autogen, elixir-format
+msgid "Recorded as cancelled at the carrier"
+msgstr "Отмечено как отменённое у перевозчика"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:839
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1092
+#, elixir-autogen, elixir-format
+msgid "Register"
+msgstr "Зарегистрировать"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:783
+#, elixir-autogen, elixir-format
+msgid "Register selected (%{count})"
+msgstr "Зарегистрировать выбранные (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1036
+#, elixir-autogen, elixir-format
+msgid "Register the shipment of order %{number}"
+msgstr "Регистрация отправления заказа %{number}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:474
+#, elixir-autogen, elixir-format
+msgid "Registered, tracking number %{number}"
+msgstr "Зарегистрировано, номер отслеживания %{number}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1130
+#, elixir-autogen, elixir-format
+msgid "Registering the shipment of order %{number} with the carrier..."
+msgstr "Регистрация отправления заказа %{number} у перевозчика..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1231
+#, elixir-autogen, elixir-format
+msgid "Registration started"
+msgstr "Регистрация начата"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1234
+#, elixir-autogen, elixir-format
+msgid "Retried"
+msgstr "Повторено"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1035
+#, elixir-autogen, elixir-format
+msgid "Retry the shipment of order %{number}"
+msgstr "Повтор отправления заказа %{number}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1133
+#, elixir-autogen, elixir-format
+msgid "Retrying the shipment of order %{number} with the carrier..."
+msgstr "Повторная отправка заказа %{number} перевозчику..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1232
+#, elixir-autogen, elixir-format
+msgid "Sent to the carrier"
+msgstr "Отправлено перевозчику"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:678
+#, elixir-autogen, elixir-format
+msgid "Shipment label size"
+msgstr "Размер этикетки отправления"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:366
+#, elixir-autogen, elixir-format
+msgid "Shipment of order %{number}: %{status}"
+msgstr "Отправление заказа %{number}: %{status}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:56
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:669
+#, elixir-autogen, elixir-format
+msgid "Shipments"
+msgstr "Отправления"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:112
+#, elixir-autogen, elixir-format
+msgid "The carrier did not answer. Please try again."
+msgstr "Перевозчик не ответил. Пожалуйста, попробуйте ещё раз."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:285
+#, elixir-autogen, elixir-format
+msgid "The carrier did not return the labels. Try again later."
+msgstr "Перевозчик не вернул этикетки. Попробуйте позже."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1144
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked to cancel the shipment. This cannot be undone."
+msgstr "Перевозчика попросят отменить отправление. Это нельзя отменить."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:481
+#, elixir-autogen, elixir-format
+msgid "The carrier's answer is not known. Check the carrier's portal, then enter the tracking number or mark it failed."
+msgstr "Ответ перевозчика неизвестен. Проверьте портал перевозчика, затем введите номер отслеживания или отметьте отправление как неудачное."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:334
+#, elixir-autogen, elixir-format
+msgid "The carrier's services could not be loaded, so the destination cannot be changed now."
+msgstr "Не удалось загрузить услуги перевозчика, поэтому сейчас нельзя изменить пункт назначения."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:269
+#, elixir-autogen, elixir-format
+msgid "The list of shipments is not valid."
+msgstr "Список отправлений некорректен."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:680
+#, elixir-autogen, elixir-format
+msgid "The paper size the carrier is asked to print shipment labels in. A carrier that cannot print a size answers with an error."
+msgstr "Формат бумаги, в котором перевозчика просят печатать этикетки отправлений. Перевозчик, который не умеет печатать этот формат, ответит ошибкой."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:290
+#, elixir-autogen, elixir-format
+msgid "The tracking number is recorded."
+msgstr "Номер отслеживания сохранён."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:276
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot print labels from the shop."
+msgstr "Этот перевозчик не может печатать этикетки из магазина."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:677
+#, elixir-autogen, elixir-format
+msgid "To ship"
+msgstr "К отправке"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1110
+#, elixir-autogen, elixir-format
+msgid "Tracking link (optional)"
+msgstr "Ссылка для отслеживания (необязательно)"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:880
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1109
+#, elixir-autogen, elixir-format
+msgid "Tracking number"
+msgstr "Номер отслеживания"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1236
+#, elixir-autogen, elixir-format
+msgid "Tracking number entered"
+msgstr "Номер отслеживания введён"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:470
+#, elixir-autogen, elixir-format
+msgid "Use this address"
+msgstr "Использовать этот адрес"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:447
+#, elixir-autogen, elixir-format
+msgid "Use this point"
+msgstr "Использовать этот пункт"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:351
+#, elixir-autogen, elixir-format
+msgid "Wait until the carrier has answered the current request."
+msgstr "Дождитесь ответа перевозчика на текущий запрос."

@@ -8537,3 +8537,396 @@ msgstr "Vedaja ei kinnitanud tühistamist (%{reason}), kuid võis saadetise tüh
 #, elixir-autogen, elixir-format
 msgid "The recipient details are not valid."
 msgstr "Saaja andmed ei ole korrektsed."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:717
+#, elixir-autogen, elixir-format
+msgid "(%{current} of %{total})"
+msgstr "(%{current}/%{total})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:775
+#, elixir-autogen, elixir-format
+msgid "1 order to ship"
+msgid_plural "%{count} orders to ship"
+msgstr[0] "%{count} tellimus saata"
+msgstr[1] "%{count} tellimust saata"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:858
+#, elixir-autogen, elixir-format
+msgid "1 shipment"
+msgid_plural "%{count} shipments"
+msgstr[0] "%{count} saadetis"
+msgstr[1] "%{count} saadetist"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:280
+#, elixir-autogen, elixir-format
+msgid "A chosen shipment has no label at the carrier: it is not registered, or it is already delivered, returned or cancelled."
+msgstr "Valitud saadetisel pole vedaja juures silti: see pole registreeritud või on juba kohale toimetatud, tagastatud või tühistatud."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1054
+#, elixir-autogen, elixir-format
+msgid "Add a parcel"
+msgstr "Lisa pakk"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:696
+#, elixir-autogen, elixir-format
+msgid "All carriers"
+msgstr "Kõik vedajad"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:706
+#, elixir-autogen, elixir-format
+msgid "All statuses"
+msgstr "Kõik olekud"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:270
+#, elixir-autogen, elixir-format
+msgid "At most 50 labels can be printed at once."
+msgstr "Korraga saab printida kuni 50 silti."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1138
+#, elixir-autogen, elixir-format
+msgid "Cancel the shipment at the carrier?"
+msgstr "Tühistada saadetis vedaja juures?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1017
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier"
+msgstr "Tühistatud vedaja juures"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1237
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier by the shop"
+msgstr "Pood tühistas vedaja juures"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1139
+#, elixir-autogen, elixir-format
+msgid "Cancelled at the carrier?"
+msgstr "Tühistatud vedaja juures?"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1136
+#, elixir-autogen, elixir-format
+msgid "Cancelling the shipment of order %{number} at the carrier..."
+msgstr "Tellimuse %{number} saadetise tühistamine vedaja juures..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:695
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:878
+#, elixir-autogen, elixir-format
+msgid "Carrier"
+msgstr "Vedaja"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1233
+#, elixir-autogen, elixir-format
+msgid "Carrier's answer"
+msgstr "Vedaja vastus"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1044
+#, elixir-autogen, elixir-format
+msgid "Company"
+msgstr "Ettevõte"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:794
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1077
+#, elixir-autogen, elixir-format
+msgid "Destination"
+msgstr "Sihtkoht"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:727
+#, elixir-autogen, elixir-format
+msgid "Dismiss"
+msgstr "Sulge"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1045
+#, elixir-autogen, elixir-format
+msgid "Email"
+msgstr "E-post"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:627
+#, elixir-autogen, elixir-format
+msgid "Enter each parcel's weight in grams, and its sizes in millimetres or nothing."
+msgstr "Sisestage iga paki kaal grammides ja mõõtmed millimeetrites või jätke need tühjaks."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1106
+#, elixir-autogen, elixir-format
+msgid "Enter the number the carrier's portal shows for this shipment. The shipment is then registered."
+msgstr "Sisestage number, mida vedaja portaal selle saadetise kohta näitab. Seejärel loetakse saadetis registreerituks."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1104
+#, elixir-autogen, elixir-format
+msgid "Enter the tracking number"
+msgstr "Sisestage jälgimisnumber"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:982
+#, elixir-autogen, elixir-format
+msgid "Enter tracking number"
+msgstr "Sisesta jälgimisnumber"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2313
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2318
+#, elixir-autogen, elixir-format
+msgid "Failed to update the label size"
+msgstr "Sildi suuruse uuendamine ebaõnnestus"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:477
+#, elixir-autogen, elixir-format
+msgid "Failed: %{error}"
+msgstr "Ebaõnnestus: %{error}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:929
+#, elixir-autogen, elixir-format
+msgid "History"
+msgstr "Ajalugu"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:2310
+#, elixir-autogen, elixir-format
+msgid "Label size updated"
+msgstr "Sildi suurus uuendatud"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:273
+#, elixir-autogen, elixir-format
+msgid "Labels can be printed together only for shipments of one carrier connection."
+msgstr "Silte saab koos printida ainult ühe vedajaühenduse saadetistele."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:993
+#, elixir-autogen, elixir-format
+msgid "Mark failed"
+msgstr "Märgi ebaõnnestunuks"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1235
+#, elixir-autogen, elixir-format
+msgid "Marked failed"
+msgstr "Märgitud ebaõnnestunuks"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:681
+#, elixir-autogen, elixir-format
+msgid "Needs attention"
+msgstr "Vajab tähelepanu"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:923
+#, elixir-autogen, elixir-format
+msgid "No answer for 10 minutes"
+msgstr "10 minutit vastuseta"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:802
+#, elixir-autogen, elixir-format
+msgid "No paid order is waiting for a shipment."
+msgstr "Ükski makstud tellimus ei oota saadetist."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipping_destination_picker.ex:1258
+#, elixir-autogen, elixir-format
+msgid "No point of this method takes this order."
+msgstr "Ükski selle tarneviisi punkt ei võta seda tellimust vastu."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:888
+#, elixir-autogen, elixir-format
+msgid "No shipment is on its way."
+msgstr "Ühtegi saadetist pole teel."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:889
+#, elixir-autogen, elixir-format
+msgid "No shipment needs attention."
+msgstr "Ükski saadetis ei vaja tähelepanu."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:678
+#, elixir-autogen, elixir-format
+msgid "Open"
+msgstr "Avatud"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:792
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:876
+#, elixir-autogen, elixir-format
+msgid "Order"
+msgstr "Tellimus"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1052
+#, elixir-autogen, elixir-format
+msgid "Parcels"
+msgstr "Pakid"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1046
+#, elixir-autogen, elixir-format
+msgid "Phone"
+msgstr "Telefon"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:209
+#, elixir-autogen, elixir-format
+msgid "Please enter the point code"
+msgstr "Palun sisestage punkti kood"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:444
+#, elixir-autogen, elixir-format
+msgid "Point code"
+msgstr "Punkti kood"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:961
+#, elixir-autogen, elixir-format
+msgid "Print label"
+msgstr "Prindi silt"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:867
+#, elixir-autogen, elixir-format
+msgid "Print labels (%{count})"
+msgstr "Prindi sildid (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:793
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:877
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1041
+#, elixir-autogen, elixir-format
+msgid "Recipient"
+msgstr "Saaja"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Record the shipment as cancelled because it was cancelled in the carrier's portal. The carrier is not contacted."
+msgstr "Märgi saadetis tühistatuks, sest see tühistati vedaja portaalis. Vedajaga ühendust ei võeta."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1238
+#, elixir-autogen, elixir-format
+msgid "Recorded as cancelled at the carrier"
+msgstr "Märgitud vedaja juures tühistatuks"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:839
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1092
+#, elixir-autogen, elixir-format
+msgid "Register"
+msgstr "Registreeri"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:783
+#, elixir-autogen, elixir-format
+msgid "Register selected (%{count})"
+msgstr "Registreeri valitud (%{count})"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1036
+#, elixir-autogen, elixir-format
+msgid "Register the shipment of order %{number}"
+msgstr "Registreeri tellimuse %{number} saadetis"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:474
+#, elixir-autogen, elixir-format
+msgid "Registered, tracking number %{number}"
+msgstr "Registreeritud, jälgimisnumber %{number}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1130
+#, elixir-autogen, elixir-format
+msgid "Registering the shipment of order %{number} with the carrier..."
+msgstr "Tellimuse %{number} saadetise registreerimine vedaja juures..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1231
+#, elixir-autogen, elixir-format
+msgid "Registration started"
+msgstr "Registreerimine alustatud"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1234
+#, elixir-autogen, elixir-format
+msgid "Retried"
+msgstr "Uuesti proovitud"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1035
+#, elixir-autogen, elixir-format
+msgid "Retry the shipment of order %{number}"
+msgstr "Proovi tellimuse %{number} saadetist uuesti"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1133
+#, elixir-autogen, elixir-format
+msgid "Retrying the shipment of order %{number} with the carrier..."
+msgstr "Tellimuse %{number} saadetise uus katse vedaja juures..."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1232
+#, elixir-autogen, elixir-format
+msgid "Sent to the carrier"
+msgstr "Saadetud vedajale"
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:678
+#, elixir-autogen, elixir-format
+msgid "Shipment label size"
+msgstr "Saadetise sildi suurus"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:366
+#, elixir-autogen, elixir-format
+msgid "Shipment of order %{number}: %{status}"
+msgstr "Tellimuse %{number} saadetis: %{status}"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:56
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:669
+#, elixir-autogen, elixir-format
+msgid "Shipments"
+msgstr "Saadetised"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:112
+#, elixir-autogen, elixir-format
+msgid "The carrier did not answer. Please try again."
+msgstr "Vedaja ei vastanud. Palun proovige uuesti."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:285
+#, elixir-autogen, elixir-format
+msgid "The carrier did not return the labels. Try again later."
+msgstr "Vedaja ei tagastanud silte. Proovige hiljem uuesti."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1144
+#, elixir-autogen, elixir-format
+msgid "The carrier is asked to cancel the shipment. This cannot be undone."
+msgstr "Vedajalt palutakse saadetis tühistada. Seda ei saa tagasi võtta."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:481
+#, elixir-autogen, elixir-format
+msgid "The carrier's answer is not known. Check the carrier's portal, then enter the tracking number or mark it failed."
+msgstr "Vedaja vastus pole teada. Kontrollige vedaja portaali, seejärel sisestage jälgimisnumber või märkige saadetis ebaõnnestunuks."
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:334
+#, elixir-autogen, elixir-format
+msgid "The carrier's services could not be loaded, so the destination cannot be changed now."
+msgstr "Vedaja teenuseid ei õnnestunud laadida, seega ei saa sihtkohta praegu muuta."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:269
+#, elixir-autogen, elixir-format
+msgid "The list of shipments is not valid."
+msgstr "Saadetiste loend ei ole korrektne."
+
+#: lib/phoenix_kit_ecommerce/web/settings.ex:680
+#, elixir-autogen, elixir-format
+msgid "The paper size the carrier is asked to print shipment labels in. A carrier that cannot print a size answers with an error."
+msgstr "Paberi suurus, milles vedajalt saadetise silte küsitakse. Vedaja, kes seda suurust printida ei saa, vastab veaga."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:290
+#, elixir-autogen, elixir-format
+msgid "The tracking number is recorded."
+msgstr "Jälgimisnumber on salvestatud."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:276
+#, elixir-autogen, elixir-format
+msgid "This carrier cannot print labels from the shop."
+msgstr "See vedaja ei saa poest silte printida."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:677
+#, elixir-autogen, elixir-format
+msgid "To ship"
+msgstr "Saata"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1110
+#, elixir-autogen, elixir-format
+msgid "Tracking link (optional)"
+msgstr "Jälgimislink (valikuline)"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:880
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1109
+#, elixir-autogen, elixir-format
+msgid "Tracking number"
+msgstr "Jälgimisnumber"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1236
+#, elixir-autogen, elixir-format
+msgid "Tracking number entered"
+msgstr "Jälgimisnumber sisestatud"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:470
+#, elixir-autogen, elixir-format
+msgid "Use this address"
+msgstr "Kasuta seda aadressi"
+
+#: lib/phoenix_kit_ecommerce/web/components/shipment_destination_editor.ex:447
+#, elixir-autogen, elixir-format
+msgid "Use this point"
+msgstr "Kasuta seda punkti"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:351
+#, elixir-autogen, elixir-format
+msgid "Wait until the carrier has answered the current request."
+msgstr "Oodake, kuni vedaja on praegusele päringule vastanud."
