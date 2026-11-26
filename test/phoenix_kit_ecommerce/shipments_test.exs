@@ -187,6 +187,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       assert [
                %{"action" => "register", "status" => "creating", "actor_uuid" => ^actor},
+               %{"action" => "submit", "status" => "creating", "actor_uuid" => ^actor},
                %{"action" => "result", "status" => "created"}
              ] = shipment.events
 
@@ -695,6 +696,36 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
                        ]}
 
       assert {:error, :shipment_changed} = Shipments.cancel_shipment(created)
+    end
+
+    test "an event written while the carrier is called is kept" do
+      order = paid_order!(method!())
+      test_pid = self()
+
+      stub(%{
+        create: fn _request, _ctx ->
+          send(test_pid, {:carrier_called, self()})
+
+          receive do
+            :answer -> {:ok, %ShipmentResult{tracking_number: "KEEP-1"}}
+          end
+        end
+      })
+
+      {:ok, shipment} = Shipments.begin_shipment(order)
+      task = Task.async(fn -> Shipments.submit_shipment(shipment) end)
+      assert_receive {:carrier_called, carrier}, 5_000
+
+      # Another writer appends an event meanwhile.
+      Repo.query!(
+        "UPDATE phoenix_kit_shop_shipments SET events = events || $1::text::jsonb WHERE uuid = $2",
+        [~s([{"action": "other"}]), Ecto.UUID.dump!(shipment.uuid)]
+      )
+
+      send(carrier, :answer)
+      assert {:ok, %Shipment{status: "created"} = created} = Task.await(task, 10_000)
+
+      assert Enum.map(created.events, & &1["action"]) == ["register", "submit", "other", "result"]
     end
 
     test "events keep the last 50" do

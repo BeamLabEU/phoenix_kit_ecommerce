@@ -327,20 +327,23 @@ defmodule PhoenixKitEcommerce.Shipments do
         now = DateTime.utc_now()
 
         shipment.uuid
-        |> compare_and_set(["creating"], [submitted_at: now], unclaimed: true)
+        |> compare_and_set(["creating"], [submitted_at: now],
+          unclaimed: true,
+          event: event("submit", "creating", actor_uuid, nil)
+        )
         |> then(fn
           {:ok, claimed} -> {:claimed, claimed, order}
           error -> error
         end)
 
       _not_paid ->
-        changes = [
-          status: "failed",
-          error: "order_not_paid",
-          events: append_event(shipment, "result", "failed", actor_uuid, "order_not_paid")
-        ]
+        changes = [status: "failed", error: "order_not_paid"]
 
-        {:refused, compare_and_set(shipment.uuid, ["creating"], changes, unclaimed: true)}
+        {:refused,
+         compare_and_set(shipment.uuid, ["creating"], changes,
+           unclaimed: true,
+           event: event("result", "failed", actor_uuid, "order_not_paid")
+         )}
     end
   end
 
@@ -381,12 +384,15 @@ defmodule PhoenixKitEcommerce.Shipments do
         |> Map.merge(%{
           status: "creating",
           error: nil,
-          submitted_at: nil,
-          events: append_event(shipment, "retry", "creating", opts[:actor_uuid], nil)
+          submitted_at: nil
         })
         |> Map.to_list()
 
-      under_paid_order(order.uuid, fn -> compare_and_set(shipment.uuid, ["failed"], changes) end)
+      retry = event("retry", "creating", opts[:actor_uuid], nil)
+
+      under_paid_order(order.uuid, fn ->
+        compare_and_set(shipment.uuid, ["failed"], changes, event: retry)
+      end)
     else
       :not_found -> {:error, :not_found}
       %Shipment{} -> {:error, :shipment_changed}
@@ -784,11 +790,13 @@ defmodule PhoenixKitEcommerce.Shipments do
       carrier_ref: result.carrier_ref,
       carrier_label: result.carrier_label,
       extra: Codec.string_map(Codec.dump(result.extra)),
-      error: nil,
-      events: append_event(shipment, "result", "created", actor_uuid, nil)
+      error: nil
     ]
 
-    case compare_and_set(shipment.uuid, ["creating"], changes, claim: shipment.submitted_at) do
+    case compare_and_set(shipment.uuid, ["creating"], changes,
+           claim: shipment.submitted_at,
+           event: event("result", "created", actor_uuid, nil)
+         ) do
       {:ok, stored} ->
         {:ok, stored}
 
@@ -809,12 +817,9 @@ defmodule PhoenixKitEcommerce.Shipments do
     compare_and_set(
       shipment.uuid,
       ["creating"],
-      [
-        status: status,
-        error: message,
-        events: append_event(shipment, "result", status, actor_uuid, message)
-      ],
-      claim: shipment.submitted_at
+      [status: status, error: message],
+      claim: shipment.submitted_at,
+      event: event("result", status, actor_uuid, message)
     )
   end
 
@@ -826,11 +831,10 @@ defmodule PhoenixKitEcommerce.Shipments do
 
   defp resolve(shipment, statuses, stuck?, action, status, changes, opts) do
     with %Shipment{} = shipment <- get_shipment(shipment.uuid) || {:error, :not_found} do
-      changes =
-        changes ++
-          [status: status, events: append_event(shipment, action, status, opts[:actor_uuid], nil)]
-
-      compare_and_set(shipment.uuid, statuses, changes, stuck: stuck?)
+      compare_and_set(shipment.uuid, statuses, [{:status, status} | changes],
+        stuck: stuck?,
+        event: event(action, status, opts[:actor_uuid], nil)
+      )
     end
   end
 
@@ -841,14 +845,17 @@ defmodule PhoenixKitEcommerce.Shipments do
   # The write happens only while the shipment is in one of `statuses` (or, with
   # `stuck: true`, still `creating` after 10 minutes), and, with `unclaimed:
   # true`, no attempt holds it, or with `claim: at`, the attempt of that claim
-  # does: two writers racing for the same transition cannot both win.
-  defp compare_and_set(uuid, statuses, changes, opts \\ []) do
+  # does: two writers racing for the same transition cannot both win. The
+  # `:event` is appended by the same statement, to the events the row has
+  # then, so an event another writer added meanwhile is kept.
+  defp compare_and_set(uuid, statuses, changes, opts) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     query =
       from(s in Shipment, where: s.uuid == ^uuid, select: s)
       |> where_status(statuses, Keyword.get(opts, :stuck, false), now)
       |> where_claim(opts)
+      |> append_event(Keyword.fetch!(opts, :event))
 
     case repo().update_all(query, set: Keyword.put(changes, :updated_at, now)) do
       {1, [shipment]} -> {:ok, shipment}
@@ -881,9 +888,29 @@ defmodule PhoenixKitEcommerce.Shipments do
     end
   end
 
-  defp append_event(shipment, action, status, actor_uuid, message) do
-    ((shipment.events || []) ++ [event(action, status, actor_uuid, message)])
-    |> Enum.take(-@max_events)
+  # The last #{@max_events} of the stored events and the new one.
+  defp append_event(query, event) do
+    added = Jason.encode!([event])
+
+    from(s in query,
+      update: [
+        set: [
+          events:
+            fragment(
+              """
+              (SELECT coalesce(jsonb_agg(t.e ORDER BY t.n), '[]'::jsonb)
+               FROM jsonb_array_elements(? || ?::text::jsonb) WITH ORDINALITY AS t(e, n)
+               WHERE t.n > jsonb_array_length(? || ?::text::jsonb) - ?)
+              """,
+              s.events,
+              ^added,
+              s.events,
+              ^added,
+              ^@max_events
+            )
+        ]
+      ]
+    )
   end
 
   defp event(action, status, actor_uuid, message) do
