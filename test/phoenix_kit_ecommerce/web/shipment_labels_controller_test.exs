@@ -138,6 +138,16 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
     refute_received {:stub_called, :print_labels, _args}
   end
 
+  test "a switched-off shop says so, not that the permission is missing", %{conn: conn} do
+    shipment = shipment!()
+    {:ok, _} = PhoenixKit.Settings.update_setting("shop_enabled", "false")
+
+    conn = labels(conn, [shipment.uuid])
+
+    assert Phoenix.Flash.get(conn.assigns.flash, :error) == "The shop is switched off."
+    refute_received {:stub_called, :print_labels, _args}
+  end
+
   test "more than 50 ids are refused", %{conn: conn} do
     ids = for _ <- 1..51, do: Ecto.UUID.generate()
 

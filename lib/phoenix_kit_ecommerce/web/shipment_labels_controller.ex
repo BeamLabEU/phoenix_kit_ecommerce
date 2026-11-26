@@ -21,15 +21,22 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsController do
 
   @doc "GET: the labels of `ids`, as an attachment."
   def index(conn, _params) do
-    if Shop.enabled?() and Authz.can?(conn, :manage_shipments) do
-      # Read from the query string itself: the ids are never a path segment,
-      # and a host's endpoint may parse no query into `params`.
-      conn = fetch_query_params(conn)
-      print(conn, label_ids(conn.query_params))
-    else
-      conn
-      |> put_flash(:error, gettext("You don't have permission to do that"))
-      |> redirect(to: Routes.path("/admin/shop"))
+    cond do
+      not Shop.enabled?() ->
+        conn
+        |> put_flash(:error, gettext("The shop is switched off."))
+        |> redirect(to: Routes.path("/admin"))
+
+      not Authz.can?(conn, :manage_shipments) ->
+        conn
+        |> put_flash(:error, gettext("You don't have permission to do that"))
+        |> redirect(to: Routes.path("/admin/shop"))
+
+      true ->
+        # Read from the query string itself: the ids are never a path
+        # segment, and a host's endpoint may parse no query into `params`.
+        conn = fetch_query_params(conn)
+        print(conn, label_ids(conn.query_params))
     end
   end
 
