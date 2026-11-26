@@ -5,9 +5,14 @@ defmodule PhoenixKitEcommerce.Workers.ShipmentTrackingWorker do
   (`Shipments.sweep_stuck/0`), then asks the carriers how the open ones are
   doing (`Shipments.track_shipments/1`).
 
-  On `default`, like the shop's other crons: it is short and must not wait
-  behind an import. One attempt: the next run asks again, and a carrier that
-  failed is asked again then. Does nothing while the shop module is disabled.
+  On `default`, like the shop's other crons, so it does not wait behind an
+  import; unlike them it is not short. The carrier groups are asked one after
+  the other, each `track/2` call bounded by its 60-second facade timeout, so a
+  run holds one `default` slot for about a minute per slow carrier (seconds
+  when they answer). Two runs that overlap are harmless: every write is
+  conditional and the shipped email is unique per shipment. One attempt: the
+  next run asks again, and a carrier that failed is asked again then. Does
+  nothing while the shop module is disabled.
   """
 
   use Oban.Worker, queue: :default, max_attempts: 1

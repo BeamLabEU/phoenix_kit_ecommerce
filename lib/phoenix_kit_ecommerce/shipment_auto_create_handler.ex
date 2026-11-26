@@ -25,6 +25,12 @@ defmodule PhoenixKitEcommerce.ShipmentAutoCreateHandler do
   (`Shipments.submit_shipment/2` refuses one), and logs the Activity of the
   registration itself, as the system: the admin page's logging does not run
   here.
+
+  The carrier calls run inside that job and hold one `billing` queue slot
+  while they last: the services and the pickup point check (up to 15 seconds
+  each, the facade's default), then the registration (30 seconds), so about a
+  minute at worst, seconds when the carrier answers. A job of its own would
+  only move that minute to another queue, so it stays in billing's.
   """
 
   require Logger

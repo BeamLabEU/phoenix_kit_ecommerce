@@ -235,7 +235,9 @@ Repo-local aliases:
   and the three public cart API cron workers (`ApiCartSweepWorker`,
   `ApiCartPruneWorker`, `ApiClaimPruneWorker`), on `default`: they are
   short, scheduled through `oban_crons/0`, and must not wait behind an import;
-  `OrderEmailWorker`, also on `default`, for the same reason.
+  `OrderEmailWorker`, also on `default`, for the same reason;
+  `ShipmentTrackingWorker`, on `default` every 30 minutes, NOT short: one
+  `track/2` call per carrier group, up to 60 s each, in a row.
   The Shopify sync runs ONE kind at a
   time: on a catalogue that does not honour `data_owned_paths`, images and
   variants each write an item's whole `data` map from a read taken when the
@@ -270,7 +272,8 @@ Repo-local aliases:
   wrapper adds the module key (`"shop"`) and `actor_role` to core's
   `PhoenixKit.Activity.log/3`, which never raises; the actor and role come
   from `PhoenixKitWeb.Actor`.
-  Rows carry no PII.
+  Rows carry no PII. Exception: `ShipmentAutoCreateHandler` runs in billing's
+  job, where no LiveView logs, and logs as the system (`mode: "auto"`).
 - **The core pin keeps the compound form (`>= 3.5.0 and < 4.0.0`) on
   purpose.** A three-segment `~> 3.5.0` expands to `< 3.6.0` and breaks
   CONSUMERS — a host on a newer core minor gets an unsolvable dependency set
