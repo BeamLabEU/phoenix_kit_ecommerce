@@ -35,6 +35,7 @@ defmodule PhoenixKitEcommerce.Errors do
           | :already_migrated
           | :cancel_not_supported
           | {:cancel_refused, String.t()}
+          | {:cancel_unconfirmed, String.t()}
           | :cart_already_converting
           | :cart_base_unavailable
           | :cart_empty
@@ -210,6 +211,13 @@ defmodule PhoenixKitEcommerce.Errors do
   def message({:cancel_refused, reason}),
     do: gettext("The carrier refused the cancellation: %{reason}", reason: label(reason))
 
+  def message({:cancel_unconfirmed, reason}),
+    do:
+      gettext(
+        "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal.",
+        reason: label(reason)
+      )
+
   def message(:pickup_point_unavailable),
     do: gettext("The chosen pickup point is no longer available. Choose another one.")
 
@@ -241,7 +249,7 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:submit_crashed),
     do:
       gettext(
-        "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
+        "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."
       )
 
   def message(:tracking_number_required), do: gettext("Enter the tracking number.")

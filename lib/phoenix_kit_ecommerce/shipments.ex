@@ -108,6 +108,7 @@ defmodule PhoenixKitEcommerce.Shipments do
           | :shipments_not_supported
           | :cancel_not_supported
           | {:cancel_refused, String.t()}
+          | {:cancel_unconfirmed, String.t()}
           | :invalid_destination
           | :pickup_point_unavailable
           | {:destination_rejected, String.t()}
@@ -485,8 +486,11 @@ defmodule PhoenixKitEcommerce.Shipments do
   Cancels a `created`, `in_transit` or `ready_for_pickup` shipment at the
   carrier (the provider's `cancel_shipment/2`), then records it `cancelled`.
   `{:error, :cancel_not_supported}` for a provider without the callback.
-  The carrier's refusal (or a failed call) writes nothing and is
-  `{:error, {:cancel_refused, text}}`, the text masked like a stored error.
+  A failure writes nothing: the carrier's refusal (a definite failure, see
+  `Shipping.definite_failure?/1`) is `{:error, {:cancel_refused, text}}`, a
+  call whose outcome is not known (a timeout, a crash, HTTP 5xx...) is
+  `{:error, {:cancel_unconfirmed, text}}`; the text is masked like a stored
+  error.
 
   Options: `:actor_uuid`, `:context_opts`.
   """
@@ -511,9 +515,14 @@ defmodule PhoenixKitEcommerce.Shipments do
         :ok
 
       {:error, reason} ->
-        {:error, {:cancel_refused, shipment |> masked(error_text(reason)) |> cut()}}
+        {:error, {cancel_error(reason), shipment |> masked(error_text(reason)) |> cut()}}
     end
   end
+
+  # A definite failure is the carrier's no; a timeout, a crash or an ambiguous
+  # status leaves open whether it cancelled.
+  defp cancel_error(reason),
+    do: if(Shipping.definite_failure?(reason), do: :cancel_refused, else: :cancel_unconfirmed)
 
   # -- the order ---------------------------------------------------------
 

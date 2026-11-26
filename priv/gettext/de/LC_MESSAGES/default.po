@@ -8520,12 +8520,17 @@ msgstr "Dieser Versanddienst ist nicht mehr eingerichtet."
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr "Der Versanddienst bietet die Zustellart dieser Bestellung nicht mehr an."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:239
+#: lib/phoenix_kit_ecommerce/errors.ex:251
 #, elixir-autogen, elixir-format
-msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
-msgstr "Die Sendung konnte nicht an den Versanddienst übergeben werden. Prüfen Sie sie beim Versanddienst, bevor Sie es erneut versuchen."
+msgid "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."
+msgstr "Die Registrierung der Sendung wurde unterbrochen, und der Versanddienst hat sie möglicherweise schon. Prüfen Sie das Portal des Versanddienstes: Nach 10 Minuten können Sie die Sendungsnummer eingeben oder die Sendung als fehlgeschlagen markieren."
 
 #: lib/phoenix_kit_ecommerce/errors.ex:211
 #, elixir-autogen, elixir-format
 msgid "The carrier refused the cancellation: %{reason}"
 msgstr "Der Versanddienst hat die Stornierung abgelehnt: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:216
+#, elixir-autogen, elixir-format
+msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
+msgstr "Der Versanddienst hat die Stornierung nicht bestätigt (%{reason}), möglicherweise hat er die Sendung aber storniert. Prüfen Sie das Portal des Versanddienstes."

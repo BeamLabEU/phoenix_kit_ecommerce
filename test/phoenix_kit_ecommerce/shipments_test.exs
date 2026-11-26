@@ -734,6 +734,24 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       assert %Shipment{status: "created"} = Shipments.get_shipment(created.uuid)
 
+      # A call whose outcome is not known is not a refusal.
+      for {reason, text} <- [{{:http_status, 503}, "HTTP 503"}, {:timeout, "timeout"}] do
+        stub(%{cancel: {:error, reason}})
+
+        capture_log(fn ->
+          assert {:error, {:cancel_unconfirmed, ^text}} = Shipments.cancel_shipment(created)
+        end)
+      end
+
+      stub(%{modes: %{cancel_shipment: :crash}})
+
+      capture_log(fn ->
+        assert {:error, {:cancel_unconfirmed, "crashed: " <> _}} =
+                 Shipments.cancel_shipment(created)
+      end)
+
+      assert %Shipment{status: "created"} = Shipments.get_shipment(created.uuid)
+
       stub(%{})
       assert {:ok, %Shipment{status: "cancelled"}} = Shipments.cancel_shipment(created)
 

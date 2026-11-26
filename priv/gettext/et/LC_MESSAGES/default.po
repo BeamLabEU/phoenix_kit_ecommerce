@@ -8518,12 +8518,17 @@ msgstr "See vedaja ei ole enam seadistatud."
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr "Vedaja ei paku enam selle tellimuse tarneteenust."
 
-#: lib/phoenix_kit_ecommerce/errors.ex:239
+#: lib/phoenix_kit_ecommerce/errors.ex:251
 #, elixir-autogen, elixir-format
-msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
-msgstr "Saadetist ei õnnestunud vedajale üle anda. Kontrollige seda vedaja juures, enne kui uuesti proovite."
+msgid "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."
+msgstr "Saadetise registreerimine katkes ja vedajal võib see juba olla. Kontrollige vedaja portaali: 10 minuti pärast saate sisestada jälgimisnumbri või märkida saadetise ebaõnnestunuks."
 
 #: lib/phoenix_kit_ecommerce/errors.ex:211
 #, elixir-autogen, elixir-format
 msgid "The carrier refused the cancellation: %{reason}"
 msgstr "Vedaja keeldus tühistamisest: %{reason}"
+
+#: lib/phoenix_kit_ecommerce/errors.ex:216
+#, elixir-autogen, elixir-format
+msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
+msgstr "Vedaja ei kinnitanud tühistamist (%{reason}), kuid võis saadetise tühistada. Kontrollige vedaja portaali."

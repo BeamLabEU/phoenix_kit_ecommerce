@@ -8519,12 +8519,17 @@ msgstr ""
 msgid "The carrier no longer offers the delivery service of this order."
 msgstr ""
 
-#: lib/phoenix_kit_ecommerce/errors.ex:239
+#: lib/phoenix_kit_ecommerce/errors.ex:251
 #, elixir-autogen, elixir-format
-msgid "The shipment could not be handed to the carrier. Check it with the carrier before you try again."
+msgid "The registration of the shipment was interrupted, and the carrier may already have it. Check the carrier's portal: after 10 minutes you can enter its tracking number or mark it failed."
 msgstr ""
 
 #: lib/phoenix_kit_ecommerce/errors.ex:211
 #, elixir-autogen, elixir-format
 msgid "The carrier refused the cancellation: %{reason}"
+msgstr ""
+
+#: lib/phoenix_kit_ecommerce/errors.ex:216
+#, elixir-autogen, elixir-format
+msgid "The carrier did not confirm the cancellation (%{reason}), and it may have cancelled the shipment. Check the carrier's portal."
 msgstr ""
