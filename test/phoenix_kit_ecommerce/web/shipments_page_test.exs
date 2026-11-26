@@ -159,6 +159,9 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
   defp open_page(conn, section), do: live(conn, @page <> "?section=" <> section)
 
+  # The editor's DOM id of a carrier's point or city id.
+  defp dom(id), do: Base.url_encode64(id, padding: false)
+
   describe "To ship" do
     test "lists paid orders of a carrier that registers shipments, and no other", %{conn: conn} do
       method = method!()
@@ -364,7 +367,7 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       # The order's city is kept, its points are listed by the carrier.
       assert has_element?(view, "#shipment-editor-destination-locality-selected", "Tallinn")
-      view |> element("#shipment-editor-destination-point-P2") |> render_click()
+      view |> element("#shipment-editor-destination-point-#{dom("P2")}") |> render_click()
 
       assert has_element?(view, "#shipment-editor-destination-summary", "Locker 2")
 
@@ -386,6 +389,29 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       assert has_element?(view, "#shipment-editor-loading")
       refute has_element?(view, "#shipment-editor-form")
+    end
+
+    test "the editor's point list keeps ids that differ only in punctuation apart, and says when it is cut",
+         %{conn: conn} do
+      many = for n <- 1..50, do: %{StubProvider.point("N#{n}") | name: "Locker #{n}"}
+
+      odd = [
+        %{StubProvider.point("P.1") | name: "Dot"},
+        %{StubProvider.point("P_1") | name: "Under"}
+      ]
+
+      stub(%{points: odd ++ many})
+      order = order!(method!())
+
+      {:ok, view, _html} = live(conn, @page)
+      view |> element("#to-ship-register-#{order.uuid}") |> render_click()
+      settle(view)
+      view |> element("#shipment-editor-destination-change") |> render_click()
+      settle(view)
+
+      assert has_element?(view, "#shipment-editor-destination-point-#{dom("P.1")}", "Dot")
+      assert has_element?(view, "#shipment-editor-destination-point-#{dom("P_1")}", "Under")
+      assert has_element?(view, "#shipment-editor-destination-points-truncated")
     end
 
     test "a parcel weight that is not a number is refused in the editor", %{conn: conn} do
@@ -842,6 +868,18 @@ defmodule PhoenixKitEcommerce.Web.ShipmentsPageTest do
 
       refute has_element?(view, "#shipments-print-selected")
       assert has_element?(view, "#shipments-print-refused", "At most 50 labels")
+    end
+
+    test "a ticked value that is not a shipment id never reaches the labels link", %{conn: conn} do
+      shipment = shipment!(method!(), "created")
+      {:ok, view, _html} = open_page(conn, "open")
+
+      render_change(view, "select_shipments", %{"shipment_uuids" => [shipment.uuid, "x&ids=y"]})
+
+      assert has_element?(
+               view,
+               "#shipments-print-selected[href$='/shop-shipments/labels?ids=#{shipment.uuid}']"
+             )
     end
 
     test "the ticked shipments get one labels link", %{conn: conn} do

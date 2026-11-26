@@ -57,6 +57,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
       localities: [],
       localities_state: :idle,
       points: [],
+      points_truncated?: false,
       point_query: "",
       points_state: :idle,
       lookup_error: nil,
@@ -104,9 +105,12 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
     do: {:noreply, assign(socket, localities_state: :error, lookup_error: lookup_error())}
 
   def handle_async(:points, {:ok, {:ok, points}}, socket) do
+    points = Enum.filter(points, &filled?(&1.id))
+
     {:noreply,
      assign(socket,
-       points: points |> Enum.filter(&filled?(&1.id)) |> Enum.take(@max_points),
+       points: Enum.take(points, @max_points),
+       points_truncated?: length(points) > @max_points,
        points_state: :done
      )}
   end
@@ -320,7 +324,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, :label, CartQuote.destination_label(assigns.destination))
+    assigns =
+      assign(assigns,
+        label: CartQuote.destination_label(assigns.destination),
+        max_points_shown: @max_points
+      )
 
     ~H"""
     <div id={@id} class="space-y-3">
@@ -438,6 +446,11 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
               <span :if={point.address} class="block text-xs text-base-content/60">{point.address}</span>
             </button>
           </div>
+          <p :if={@points_truncated?} id={"#{@id}-points-truncated"} class="text-xs text-base-content/60">
+            {gettext("Only the first %{count} points are shown. Narrow the search to see others.",
+              count: @max_points_shown
+            )}
+          </p>
         </div>
 
         <form
@@ -503,5 +516,7 @@ defmodule PhoenixKitEcommerce.Web.Components.ShipmentDestinationEditor do
 
   defp editable?(_service), do: false
 
-  defp dom_id(id), do: String.replace(id, ~r/[^A-Za-z0-9_-]/, "_")
+  # A carrier's id, encoded rather than cleaned: two ids that differ only in
+  # punctuation stay two DOM ids.
+  defp dom_id(id), do: Base.url_encode64(id, padding: false)
 end

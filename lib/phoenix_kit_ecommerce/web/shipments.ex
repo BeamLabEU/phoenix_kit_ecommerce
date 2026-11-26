@@ -389,7 +389,18 @@ defmodule PhoenixKitEcommerce.Web.Shipments do
 
   defp busy_message, do: gettext("Wait until the carrier has answered the current request.")
 
-  defp uuids_param(list) when is_list(list), do: list |> Enum.filter(&is_binary/1) |> Enum.uniq()
+  # Only UUIDs: the ticked values end up in the labels link.
+  defp uuids_param(list) when is_list(list) do
+    list
+    |> Enum.flat_map(fn value ->
+      case Ecto.UUID.cast(value) do
+        {:ok, uuid} -> [uuid]
+        :error -> []
+      end
+    end)
+    |> Enum.uniq()
+  end
+
   defp uuids_param(_other), do: []
 
   # A local resolution: no carrier call.
