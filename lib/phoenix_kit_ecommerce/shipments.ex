@@ -513,7 +513,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   (`Shipping.print_labels/3`): `{:ok, %{content_type, body, shipments}}`.
 
   At most #{@max_labels} ids, each a UUID of a shipment the carrier has a
-  label for (`printable?/1`), all of one provider and one connection.
+  label for (`printable?/1`), all of one provider, connection and environment (test or live).
   Refused with `:invalid_shipment_ids`, `:too_many_labels`, `:not_found`,
   `:label_unavailable`, `:mixed_label_providers` or `:labels_not_supported`;
   a carrier's error is `{:labels_failed, reason}`.
@@ -567,12 +567,19 @@ defmodule PhoenixKitEcommerce.Shipments do
       not Enum.all?(shipments, &printable?/1) ->
         {:error, :label_unavailable}
 
-      shipments |> Enum.uniq_by(&{&1.provider, &1.integration_uuid}) |> length() > 1 ->
+      shipments |> Enum.uniq_by(&label_group/1) |> length() > 1 ->
         {:error, :mixed_label_providers}
 
       true ->
         {:ok, shipments}
     end
+  end
+
+  # One document is printed through one context, the first shipment's: the
+  # others must share its provider, connection and environment.
+  defp label_group(%Shipment{} = shipment) do
+    environment = (shipment.context_snapshot || %{}) |> Codec.get(:environment) |> Codec.string()
+    {shipment.provider, shipment.integration_uuid, environment}
   end
 
   defp label_format(format) do

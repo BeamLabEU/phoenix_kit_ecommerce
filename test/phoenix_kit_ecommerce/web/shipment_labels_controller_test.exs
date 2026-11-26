@@ -7,6 +7,8 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
 
   use PhoenixKitEcommerce.LiveCase, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKitEcommerce, as: Shop
   alias PhoenixKitEcommerce.{OrderFixtures, Shipments}
   alias PhoenixKitEcommerce.Shipping.{Destination, LabelOptions, Locality, Parcel, ShipmentRef}
@@ -160,6 +162,23 @@ defmodule PhoenixKitEcommerce.Web.ShipmentLabelsControllerTest do
     theirs = shipment!("nocancel")
 
     assert labels(conn, [ours.uuid, theirs.uuid]) |> refused_to_shipments() ==
+             "Labels can be printed together only for shipments of one carrier connection."
+
+    refute_received {:stub_called, :print_labels, _args}
+  end
+
+  test "shipments of one carrier made in two environments (test and live) are refused", %{
+    conn: conn
+  } do
+    live = shipment!()
+    sandbox = shipment!()
+
+    PhoenixKitEcommerce.Test.Repo.update_all(
+      from(s in PhoenixKitEcommerce.Shipment, where: s.uuid == ^sandbox.uuid),
+      set: [context_snapshot: Map.put(sandbox.context_snapshot, "environment", "test")]
+    )
+
+    assert labels(conn, [live.uuid, sandbox.uuid]) |> refused_to_shipments() ==
              "Labels can be printed together only for shipments of one carrier connection."
 
     refute_received {:stub_called, :print_labels, _args}
