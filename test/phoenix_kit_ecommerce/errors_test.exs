@@ -417,7 +417,7 @@ defmodule PhoenixKitEcommerce.ErrorsTest do
             {:invalid_destination, "The delivery details are not valid."},
             {:invalid_shipment_ids, "The list of shipments is not valid."},
             {:invalid_tracking_url,
-             "The tracking link must be a web address starting with http:// or https://."},
+             "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."},
             {:too_many_labels, "At most 50 labels can be printed at once."},
             {:mixed_label_providers,
              "Labels can be printed together only for shipments of one carrier connection."},

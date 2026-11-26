@@ -274,7 +274,10 @@ defmodule PhoenixKitEcommerce.Errors do
   def message(:invalid_shipment_ids), do: gettext("The list of shipments is not valid.")
 
   def message(:invalid_tracking_url),
-    do: gettext("The tracking link must be a web address starting with http:// or https://.")
+    do:
+      gettext(
+        "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
+      )
 
   def message(:too_many_labels), do: gettext("At most 50 labels can be printed at once.")
 

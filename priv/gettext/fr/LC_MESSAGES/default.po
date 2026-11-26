@@ -8970,5 +8970,5 @@ msgstr "La boutique est désactivée."
 
 #: lib/phoenix_kit_ecommerce/errors.ex:277
 #, elixir-autogen, elixir-format
-msgid "The tracking link must be a web address starting with http:// or https://."
-msgstr "Le lien de suivi doit être une adresse web commençant par http:// ou https://."
+msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
+msgstr "Le lien de suivi doit être une adresse web commençant par http:// ou https://, de 2048 caractères au plus."

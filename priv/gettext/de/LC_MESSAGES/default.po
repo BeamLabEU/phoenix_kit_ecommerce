@@ -8970,5 +8970,5 @@ msgstr "Der Shop ist ausgeschaltet."
 
 #: lib/phoenix_kit_ecommerce/errors.ex:277
 #, elixir-autogen, elixir-format
-msgid "The tracking link must be a web address starting with http:// or https://."
-msgstr "Der Sendungsverfolgungslink muss eine Webadresse sein, die mit http:// oder https:// beginnt."
+msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
+msgstr "Der Sendungsverfolgungslink muss eine Webadresse sein, die mit http:// oder https:// beginnt, mit höchstens 2048 Zeichen."

@@ -86,7 +86,8 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingUrlTest do
             "track.example/CE1",
             "",
             nil,
-            42
+            42,
+            "https://track.example/" <> String.duplicate("a", 2048)
           ] do
         assert Shipments.web_url(bad) == nil, inspect(bad)
       end
@@ -104,6 +105,20 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingUrlTest do
 
       assert %{status: "unknown", tracking_number: nil, tracking_url: nil} =
                Shipments.get_shipment(shipment.uuid)
+    end
+
+    test "a link longer than 2048 characters is refused" do
+      {shipment, _log} = register!({:error, :timeout})
+      long = "https://track.example/" <> String.duplicate("a", 2048)
+
+      assert {:error, :invalid_tracking_url} =
+               Shipments.enter_tracking_number(shipment, "CE1", tracking_url: long)
+
+      edge = "https://track.example/" <> String.duplicate("a", 2048 - 22)
+      assert String.length(edge) == 2048
+
+      assert {:ok, %{tracking_url: ^edge}} =
+               Shipments.enter_tracking_number(shipment, "CE1", tracking_url: edge)
     end
 
     test "a web address is stored, and no link at all is fine" do
@@ -132,6 +147,18 @@ defmodule PhoenixKitEcommerce.ShipmentsTrackingUrlTest do
       assert %{status: "created", tracking_number: "CE3", tracking_url: nil} = shipment
       assert log =~ "tracking link"
       refute log =~ "javascript"
+    end
+
+    test "a carrier's link longer than 2048 characters is stored as none, and logged" do
+      {shipment, log} =
+        register!(%ShipmentResult{
+          carrier_ref: "C-1",
+          tracking_number: "CE5",
+          tracking_url: "https://track.example/" <> String.duplicate("a", 2048)
+        })
+
+      assert %{status: "created", tracking_url: nil} = shipment
+      assert log =~ "tracking link"
     end
 
     test "a web address from the carrier is kept" do

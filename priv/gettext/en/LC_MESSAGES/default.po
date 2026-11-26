@@ -8969,5 +8969,5 @@ msgstr ""
 
 #: lib/phoenix_kit_ecommerce/errors.ex:277
 #, elixir-autogen, elixir-format
-msgid "The tracking link must be a web address starting with http:// or https://."
+msgid "The tracking link must be a web address starting with http:// or https://, of at most 2048 characters."
 msgstr ""

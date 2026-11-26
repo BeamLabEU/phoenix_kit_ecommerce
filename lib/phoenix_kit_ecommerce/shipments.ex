@@ -109,6 +109,7 @@ defmodule PhoenixKitEcommerce.Shipments do
   @attention_statuses ["unknown", "failed" | @open_statuses]
   @list_limit 200
   @max_labels 50
+  @max_url_length 2048
 
   @type error ::
           :not_found
@@ -275,15 +276,15 @@ defmodule PhoenixKitEcommerce.Shipments do
   def printable?(%Shipment{status: status}), do: status in @cancellable_statuses
 
   @doc """
-  `value` trimmed when it is an `http` or `https` address with a host,
-  otherwise `nil`. A tracking link is stored and rendered only through it, so
+  `value` trimmed when it is an `http` or `https` address with a host, at
+  most #{@max_url_length} characters long, otherwise `nil`. A tracking link is stored and rendered only through it, so
   a `javascript:` or `data:` link never reaches a page.
   """
   @spec web_url(term()) :: String.t() | nil
   def web_url(value) when is_binary(value) do
     url = String.trim(value)
 
-    case URI.parse(url) do
+    case String.length(url) <= @max_url_length and URI.parse(url) do
       %URI{scheme: scheme, host: host}
       when is_binary(scheme) and is_binary(host) and host != "" ->
         if String.downcase(scheme) in ["http", "https"], do: url
