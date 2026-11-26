@@ -8932,3 +8932,43 @@ msgstr "Diese Abholstelle verwenden"
 #, elixir-autogen, elixir-format
 msgid "Wait until the carrier has answered the current request."
 msgstr "Warten Sie, bis der Versanddienst die aktuelle Anfrage beantwortet hat."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:267
+#, elixir-autogen, elixir-format
+msgid "At most %{count} orders can be registered at once."
+msgstr "Es können höchstens %{count} Bestellungen auf einmal registriert werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
+#, elixir-autogen, elixir-format
+msgid "Close"
+msgstr "Abschließen"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1375
+#, elixir-autogen, elixir-format
+msgid "Closed, the order was cancelled or refunded"
+msgstr "Abgeschlossen, die Bestellung wurde storniert oder erstattet"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:842
+#, elixir-autogen, elixir-format
+msgid "Loading the order's shipping details from the carrier..."
+msgstr "Die Versanddaten der Bestellung werden beim Versanddienst geladen..."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "Only a shipment of a cancelled or refunded order can be closed."
+msgstr "Nur die Sendung einer stornierten oder erstatteten Bestellung kann abgeschlossen werden."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Showing the first %{limit} of %{count}. Narrow the list with the filters."
+msgstr "Die ersten %{limit} von %{count} werden angezeigt. Grenzen Sie die Liste mit den Filtern ein."
+
+#: lib/phoenix_kit_ecommerce/web/shipment_labels_controller.ex:27
+#, elixir-autogen, elixir-format
+msgid "The shop is switched off."
+msgstr "Der Shop ist ausgeschaltet."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:277
+#, elixir-autogen, elixir-format
+msgid "The tracking link must be a web address starting with http:// or https://."
+msgstr "Der Sendungsverfolgungslink muss eine Webadresse sein, die mit http:// oder https:// beginnt."

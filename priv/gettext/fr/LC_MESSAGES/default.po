@@ -8932,3 +8932,43 @@ msgstr "Utiliser ce point"
 #, elixir-autogen, elixir-format
 msgid "Wait until the carrier has answered the current request."
 msgstr "Attendez que le transporteur ait répondu à la demande en cours."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:267
+#, elixir-autogen, elixir-format
+msgid "At most %{count} orders can be registered at once."
+msgstr "Au plus %{count} commandes peuvent être enregistrées à la fois."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1085
+#, elixir-autogen, elixir-format
+msgid "Close"
+msgstr "Clôturer"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1375
+#, elixir-autogen, elixir-format
+msgid "Closed, the order was cancelled or refunded"
+msgstr "Clôturé, la commande a été annulée ou remboursée"
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:842
+#, elixir-autogen, elixir-format
+msgid "Loading the order's shipping details from the carrier..."
+msgstr "Chargement des données de livraison de la commande auprès du transporteur..."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:212
+#, elixir-autogen, elixir-format
+msgid "Only a shipment of a cancelled or refunded order can be closed."
+msgstr "Seul l'envoi d'une commande annulée ou remboursée peut être clôturé."
+
+#: lib/phoenix_kit_ecommerce/web/shipments.ex:1150
+#, elixir-autogen, elixir-format
+msgid "Showing the first %{limit} of %{count}. Narrow the list with the filters."
+msgstr "Affichage des %{limit} premiers sur %{count}. Affinez la liste avec les filtres."
+
+#: lib/phoenix_kit_ecommerce/web/shipment_labels_controller.ex:27
+#, elixir-autogen, elixir-format
+msgid "The shop is switched off."
+msgstr "La boutique est désactivée."
+
+#: lib/phoenix_kit_ecommerce/errors.ex:277
+#, elixir-autogen, elixir-format
+msgid "The tracking link must be a web address starting with http:// or https://."
+msgstr "Le lien de suivi doit être une adresse web commençant par http:// ou https://."
