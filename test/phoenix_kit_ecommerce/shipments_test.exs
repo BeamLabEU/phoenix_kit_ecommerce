@@ -530,6 +530,7 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
           send(carrier, :answer)
           assert {:error, :shipment_changed} = Task.await(task, 10_000)
         end)
+
       assert log =~ "LATE-1"
 
       assert %Shipment{status: "unknown", tracking_number: nil} =
@@ -900,6 +901,24 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
       {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
 
+      assert failed.error == "[redacted]: the best service and prints are not available here"
+    end
+
+    test "a company without a contact person is masked as a whole too" do
+      billing = %{
+        "type" => "company",
+        "company_name" => "Best Prints OÜ",
+        "email" => "office@example.com",
+        "country" => "EE"
+      }
+
+      order = paid_order!(method!(), billing: billing)
+      message = "Best Prints OÜ: the best service and prints are not available here"
+      stub(%{create: {:error, {:rejected, message}}})
+
+      {:ok, failed} = capture_log_result(fn -> Shipments.register(order) end)
+
+      assert failed.recipient["name"] == "Best Prints OÜ"
       assert failed.error == "[redacted]: the best service and prints are not available here"
     end
 

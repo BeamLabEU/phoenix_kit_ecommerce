@@ -39,11 +39,12 @@ defmodule PhoenixKitEcommerce.Shipments.Mask do
   # ("Best Prints").
   defp patterns(recipient, destination) do
     name = recipient |> Codec.get(:name) |> Codec.string()
+    company = get(recipient, :company)
     address = destination |> Codec.get(:address) |> address_values()
 
     texts =
-      [name, get(recipient, :company), get(recipient, :email)]
-      |> Kernel.++(name_parts(name))
+      [name, company, get(recipient, :email)]
+      |> Kernel.++(name_parts(name, company))
       |> Kernel.++(address)
       |> Enum.filter(&(is_binary(&1) and String.length(String.trim(&1)) >= @min_length))
       |> Enum.map(&String.trim/1)
@@ -63,8 +64,15 @@ defmodule PhoenixKitEcommerce.Shipments.Mask do
 
   defp get(map, key), do: map |> Codec.get(key) |> Codec.string()
 
-  defp name_parts(name) when is_binary(name), do: String.split(name, ~r/\s+/u, trim: true)
-  defp name_parts(_name), do: []
+  # A company buyer without a contact person is named by the company, whose
+  # words are not split out either.
+  defp name_parts(name, company) when is_binary(name) do
+    if is_binary(company) and String.downcase(name) == String.downcase(company),
+      do: [],
+      else: String.split(name, ~r/\s+/u, trim: true)
+  end
+
+  defp name_parts(_name, _company), do: []
 
   # The last seven or more digits of a number, however the carrier groups
   # them ("5555 1234", "55-55-12-34").
