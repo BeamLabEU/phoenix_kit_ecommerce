@@ -516,6 +516,14 @@ defmodule PhoenixKitEcommerce.Shipping.StructsTest do
       assert ShipmentRequest.e164_phone("+7 495 123 45 67", nil) == "+74951234567"
     end
 
+    test "a 0 after the code of a country whose numbers begin with 0 is kept" do
+      assert ShipmentRequest.e164_phone("+225 07 1234 5678", nil) == "+2250712345678"
+      assert ShipmentRequest.e164_phone("+242 06 123 4567", nil) == "+242061234567"
+      assert ShipmentRequest.e164_phone("+241 06 12 34 56", nil) == "+24106123456"
+      assert ShipmentRequest.e164_phone("+229 01 97 12 34 56", nil) == "+2290197123456"
+      assert ShipmentRequest.e164_phone("07 1234 5678", "CI") == "+2250712345678"
+    end
+
     test "an (0) in Italy, San Marino or the Vatican is part of the number" do
       assert ShipmentRequest.e164_phone("+39 (0)6 1234 5678", nil) == "+390612345678"
       assert ShipmentRequest.e164_phone("+378 (0)549 123456", nil) == "+3780549123456"

@@ -37,9 +37,10 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
   @payers [:shop, :recipient]
   @description_max 100
   # Countries whose leading 0 is part of the number, not a trunk prefix, and
-  # their calling codes (the Vatican shares Italy's +39).
-  @keeps_leading_zero ~w(IT SM VA)
-  @zero_keeping_codes ["39", "378"]
+  # their calling codes: Italy, San Marino and the Vatican (which shares
+  # Italy's +39), Côte d'Ivoire, Congo, Gabon and Benin.
+  @keeps_leading_zero ~w(IT SM VA CI CG GA BJ)
+  @zero_keeping_codes ["39", "378", "225", "242", "241", "229"]
 
   # `{trunk prefixes, lengths of the national number}` by country; the length
   # decides when the trunk digit can also begin a number. Anything else
@@ -172,8 +173,9 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     * `0` in most countries (`"040 123 4567"` for `"FI"` is
       `"+358401234567"`). Where there is no trunk prefix (Estonia, Latvia,
       Poland, Czechia, Portugal...) a 0 typed before the number is dropped
-      the same way: no number there begins with 0. Italy, San Marino and the
-      Vatican keep their leading `0`, which is part of their numbers;
+      the same way: no number there begins with 0. Italy, San Marino, the
+      Vatican, Côte d'Ivoire, Congo, Gabon and Benin keep their leading `0`,
+      which is part of their numbers;
     * `8` or `0` in Lithuania, `8` in Russia and Kazakhstan, `80` in Belarus,
       `0` or `80` in Ukraine, `1` in the US and Canada: these are dropped only
       when what is left has the length of the country's numbers, since the
@@ -182,10 +184,10 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
     * `06` in Hungary.
 
   An `(0)` written next to a country code is the trunk prefix and is dropped,
-  except in Italy, San Marino and the Vatican, where it is the number's own
-  `0`; so is a plain `0` typed right after the code of a country whose trunk
-  is `0` (`"+49 0151 ..."`). A national number that still begins with 0 (outside those three) is
-  `nil`: Hungary's `030 ...` is not its `06` trunk. `nil` also when there is
+  except in those seven countries, where it is the number's own `0`; so is a
+  plain `0` typed right after the code of a country whose trunk is `0`
+  (`"+49 0151 ..."`). A national number that still begins with 0 (outside
+  those seven) is `nil`: Hungary's `030 ...` is not its `06` trunk. `nil` also when there is
   no number, the number has other characters, or it has no country code and
   `country` gives none.
   """
@@ -222,7 +224,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
 
   # A 0 typed right after the country code ("+49 0151 ...") is the trunk
   # prefix of a country whose trunk is 0; for any other code it is left (and
-  # Italy's and San Marino's 0 never reach here).
+  # the 0 of the countries in `@zero_keeping_codes` never reaches here).
   defp without_typed_trunk(digits) do
     codes =
       for %{country_code: code, alpha2: country} <- CountryData.list_countries(),
@@ -258,7 +260,7 @@ defmodule PhoenixKitEcommerce.Shipping.ShipmentRequest do
          do: code <> number
   end
 
-  # Only Italy, San Marino and the Vatican have numbers that begin with 0.
+  # Only the countries in `@keeps_leading_zero` have numbers that begin with 0.
   defp significant("0" <> _rest, country) when country not in @keeps_leading_zero, do: :unsure
   defp significant(_number, _country), do: :ok
 
