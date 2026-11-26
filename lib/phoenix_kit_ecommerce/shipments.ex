@@ -405,12 +405,18 @@ defmodule PhoenixKitEcommerce.Shipments do
     store_outcome(shipment, outcome, actor_uuid)
   rescue
     error ->
-      Logger.error(
-        "Shipment #{shipment.uuid}: storing it failed (#{Exception.message(error)}); " <>
-          outcome_text(outcome)
-      )
-
+      log_lost(shipment, outcome, Exception.message(error))
       reraise error, __STACKTRACE__
+  catch
+    kind, reason ->
+      log_lost(shipment, outcome, Exception.format_banner(kind, reason))
+      :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  defp log_lost(shipment, outcome, why) do
+    Logger.error(
+      "Shipment #{shipment.uuid}: storing it failed (#{why}); " <> outcome_text(outcome)
+    )
   end
 
   @doc """

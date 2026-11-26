@@ -30,6 +30,13 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
 
   alias PhoenixKitEcommerce.Test.Shipping.StubProvider
 
+  defmodule ExitingExtra do
+    @moduledoc false
+    # Its serialisation exits, like a write whose connection goes away.
+    defstruct []
+    def to_map(_extra), do: exit(:store_gone)
+  end
+
   @locality %Locality{id: "L1", name: "Tallinn", country: "EE"}
   @settings %{"sender_city" => %{"id" => "c1", "name" => "Tallinn"}}
 
@@ -516,6 +523,22 @@ defmodule PhoenixKitEcommerce.ShipmentsTest do
       assert log =~ "[error]"
       assert log =~ "storing it failed"
       assert log =~ number
+    end
+
+    test "an answer whose write exits is logged as an error too" do
+      order = paid_order!(method!())
+
+      stub(%{
+        create: %ShipmentResult{tracking_number: "EXIT-1", extra: %{"x" => %ExitingExtra{}}}
+      })
+
+      log =
+        capture_log(fn ->
+          assert {:error, :submit_crashed} = Shipments.register(order)
+        end)
+
+      assert log =~ "storing it failed"
+      assert log =~ "EXIT-1"
     end
 
     test "an order no longer paid is not sent, and the shipment fails" do
